@@ -16,7 +16,7 @@ See `CLAUDE.md` for scope, rules and the build schedule.
 ## 1. Database
 1. Create a Supabase project.
 2. SQL editor: paste `supabase/schema.sql`, run once.
-3. Copy `.env.example` to `.env` and set `DATABASE_URL` (Project Settings > Database > Connection string, session pooler URI).
+3. Copy `.env.example` to `.env` and set `DATABASE_URL` to the full session pooler URI (Connect button in Supabase). Write the password straight into the URI, not as `${VAR}`, and URL-encode special characters in it (`@` is `%40`, `#` is `%23`, `/` is `%2F`).
 
 ## 2. Enter schedule data
 Fill the CSVs in `data/` from each operator's own site or Facebook page (see `data/README.md`), then:
@@ -33,7 +33,7 @@ Re-running is safe: rows are matched and updated, not duplicated.
 ```bash
 cd api
 pip install -r requirements.txt
-uvicorn app.main:app --reload        # http://localhost:8000/docs
+uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
 ```
 
 Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`.
