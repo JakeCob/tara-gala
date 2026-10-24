@@ -18,21 +18,28 @@ See `CLAUDE.md` for scope, rules and the build schedule.
 2. SQL editor: paste `supabase/schema.sql`, run once.
 3. Copy `.env.example` to `.env` and set `DATABASE_URL` to the full session pooler URI (Connect button in Supabase). Write the password straight into the URI, not as `${VAR}`, and URL-encode special characters in it (`@` is `%40`, `#` is `%23`, `/` is `%2F`).
 
-## 2. Enter schedule data
+## 2. Python setup (once)
+From the repo root. On Ubuntu/Debian, install `python3-venv` first if `venv` complains.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate            # run this in every new terminal
+pip install -r api/requirements.txt
+```
+
+## 3. Enter schedule data
 Fill the CSVs in `data/` from each operator's own site or Facebook page (see `data/README.md`), then:
 
 ```bash
-pip install -r api/requirements.txt
 python data/load_data.py --dry-run   # validate only
 python data/load_data.py             # load into Supabase
 ```
 
 Re-running is safe: rows are matched and updated, not duplicated.
 
-## 3. API
+## 4. API
 ```bash
 cd api
-pip install -r requirements.txt
 uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
 ```
 
@@ -42,7 +49,7 @@ Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pyte
 
 Railway: set the service root to `api/`, add `DATABASE_URL` and `ALLOWED_ORIGINS`; the start command is in `api/Procfile`.
 
-## 4. Web
+## 5. Web
 ```bash
 cd web
 cp .env.example .env.local           # set NEXT_PUBLIC_API_URL
