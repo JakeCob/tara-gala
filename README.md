@@ -37,7 +37,26 @@ python data/load_data.py             # load into Supabase
 
 Re-running is safe: rows are matched and updated, not duplicated.
 
-## 4. API
+## 4. Victory Liner scraper
+Pulls the next 14 days of Victory Liner trips (Cubao, Pasay, Caloocan, Sampaloc to Baguio) from their public booking API: 56 requests, 2 seconds apart.
+
+```bash
+python scraper/victory_liner.py --dry-run   # fetch, show what would change, roll back
+python scraper/victory_liner.py             # upsert
+```
+
+- Rows are saved with `source = 'scraped'`. Trips that stop appearing are set inactive (`is_active = false`). Trips with `source = 'manual'` are never touched, and a scraped time that clashes with a manual trip on the same route is skipped.
+- Any failed request, unknown bus type or unexpected response shape writes nothing and exits non-zero.
+- One route per terminal pair + class. Express and Inner Cities share a class, so the route keeps the longest running time and lists each branding's own time in `routes.notes`.
+- Daily at 4am Manila time (VPS clock in UTC, so 20:00 UTC the day before):
+
+```cron
+0 20 * * * cd /root/personal-projects/tara-gala && .venv/bin/python scraper/victory_liner.py >> /var/log/tara-gala-scraper.log 2>&1
+```
+
+  If the VPS clock is already Manila time, use `0 4 * * *` instead. Cron mails or logs the non-zero exit when a run fails.
+
+## 5. API
 ```bash
 cd api
 uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
@@ -49,7 +68,7 @@ Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pyte
 
 Railway: set the service root to `api/`, add `DATABASE_URL` and `ALLOWED_ORIGINS`; the start command is in `api/Procfile`.
 
-## 5. Web
+## 6. Web
 ```bash
 cd web
 cp .env.example .env.local           # set NEXT_PUBLIC_API_URL

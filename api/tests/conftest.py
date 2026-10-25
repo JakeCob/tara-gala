@@ -13,6 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "data"))  # for load_data
+sys.path.insert(0, str(ROOT / "scraper"))  # for victory_liner
 
 TEST_DSN = os.environ.get("TEST_DATABASE_URL")
 
