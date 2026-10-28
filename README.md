@@ -77,7 +77,7 @@ Cron runs `scraper/cron.sh`, installed as `/usr/local/sbin/tara-gala-scrape`. Ea
 
 **Owner steps** (as root on the VPS, once the Railway database exists; nothing here is installed automatically):
 
-1. Create the env file. The value is the Railway Postgres `DATABASE_PUBLIC_URL` (the public proxy URL, which works from the VPS): Railway dashboard → **jacob-rafal's Projects** workspace → `tara-gala` → `Postgres` → Variables → `DATABASE_PUBLIC_URL`. Never take it from a project in another workspace. From the CLI, `railway variables` with that project, service and environment named explicitly shows the same value; it prints raw secrets, so only ever pipe it, never leave it on screen or in a file. Paste it in the editor, never on the command line, so it stays out of your shell history:
+1. Create the env file. The value is the Railway Postgres `DATABASE_PUBLIC_URL` (the public proxy URL, which works from the VPS): Railway dashboard → **jacob-rafal's Projects** workspace → `tara-gala` → `Postgres` → Variables → `DATABASE_PUBLIC_URL`. Never take it from a project in another workspace. Paste it in the editor, never on the command line, so it stays out of your shell history:
    ```sh
    mkdir -p -m 700 /root/.config
    install -m 600 /dev/null /root/.config/tara-gala-scraper.env
@@ -103,13 +103,13 @@ Cron runs `scraper/cron.sh`, installed as `/usr/local/sbin/tara-gala-scrape`. Ea
    ```
    Check with `crontab -l | grep tara-gala`. If the VPS time zone ever changes from UTC (`timedatectl`), recompute the hour.
 
-**Reading the log:** `grep -E 'START|END|FAILED|WARNING|SKIPPED' /var/log/tara-gala-scraper.log | tail`. Every run has a `START sha=…` line and an `END rc=…` line; a failed run ends with `FAILED`. Run one by hand any time with `tara-gala-scrape` (or `tara-gala-scrape --dry-run`), but not within 10 minutes of 20:00 UTC.
+**Reading the log:** `grep -E 'START|END|FAILED|WARNING|SKIPPED' /var/log/tara-gala-scraper.log | tail`. Every run has a `START sha=…` line and an `END rc=…` line; a failed run ends with `FAILED`. Run one by hand any time with `tara-gala-scrape` (or `tara-gala-scrape --dry-run`), but not within 10 minutes of 20:00 UTC. The wrapper accepts only `--dry-run` and `--direction <both|to-baguio|from-baguio>`, spelled out in full.
 
 | Exit | Meaning |
 |---|---|
 | `0` | ok |
 | `1` | the scraper failed (any non-zero exit from the scraper is passed through as-is) |
-| `2` | config or venv: env file missing, wrong mode or owner, no `DATABASE_URL`, a database URL passed on the command line, or `pip install` failed |
+| `2` | config or venv: env file missing, wrong mode or owner, no `DATABASE_URL`, an argument other than exactly `--dry-run` or `--direction` with `both`, `to-baguio` or `from-baguio` (abbreviations and database URLs are refused), or `pip install` failed |
 | `3` | no code: the first fetch from GitHub failed |
 | `75` | skipped: another run holds the lock |
 

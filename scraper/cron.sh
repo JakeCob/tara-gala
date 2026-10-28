@@ -23,16 +23,32 @@ fail() { code=$1; shift; log "FAILED $*"; exit "$code"; }
 exec 9>"$LOCK"
 flock -n 9 || { log "SKIPPED another run is in progress"; exit 75; }
 
-# 2. Never take the DSN on the command line: it would land in ps and in this log (args are logged at START).
-# argparse also accepts any unambiguous prefix (--da, --data=, --database ...), and --database-url is the scraper's
-# only option starting with --da, so refuse every --da* argument.
+# 2. Arguments: exactly --dry-run, --direction <value> or --direction=<value>, nothing else.
+# argparse expands any unambiguous prefix (--dr is --dry-run, --da is --database-url), so only exact spellings are
+# accepted: a --dr run would otherwise be a dry run to the scraper but a success to this wrapper. Never take the DSN
+# on the command line either: it would land in ps and in this log (args are logged at START). Refused arguments are
+# named by position only, since they could hold a secret.
+ALLOWED="allowed: --dry-run, --direction both|to-baguio|from-baguio"
+plain() { case $1 in ''|-*|*[!a-z-]*) return 1 ;; esac; }
 dry_run=no
+want_direction=no
+n=0
 for arg in "$@"; do
+    n=$((n + 1))
+    if [ "$want_direction" = yes ]; then
+        want_direction=no
+        plain "$arg" || fail 2 "config: unexpected argument $n after --direction; $ALLOWED"
+        continue
+    fi
     case $arg in
         --da*) fail 2 "config: --database-url is not allowed; use the env file" ;;
         --dry-run) dry_run=yes ;;
+        --direction) want_direction=yes ;;
+        --direction=*) plain "${arg#--direction=}" || fail 2 "config: unexpected argument $n; $ALLOWED" ;;
+        *) fail 2 "config: unexpected argument $n; $ALLOWED" ;;
     esac
 done
+[ "$want_direction" = no ] || fail 2 "config: unexpected argument $n, --direction needs a value; $ALLOWED"
 
 # 3. The env file: root-only, parsed for its first DATABASE_URL= line
 [ -f "$ENV_FILE" ] || fail 2 "config: $ENV_FILE not found"
