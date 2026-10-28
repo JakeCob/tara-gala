@@ -159,7 +159,7 @@ test("Part B: /terminals only upgrades directions links, so its answers never ch
   // miss replaced "Offline · saved" with "searching needs a connection", though the whole trip was on screen
   const api = "https://api.example.test";
   const a = reduce(initialBanner(false), cached(SAVED));
-  const terminals = (source: "none" | "network" | "cache"): BannerEvent => ({ type: "data", source, savedAt: null, url: `${api}/terminals` });
+  const terminals = (source: "none" | "network" | "cache"): Extract<BannerEvent, { type: "data" }> => ({ type: "data", source, savedAt: null, url: `${api}/terminals` });
   assert.deepEqual(bannerReducer(a, terminals("none")), a);
   assert.equal(bannerVariant(bannerReducer(a, terminals("none"))), "A");
   assert.deepEqual(bannerReducer(a, terminals("network")), a); // a fresh /terminals says nothing about the trip's data
