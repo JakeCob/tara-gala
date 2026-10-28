@@ -246,6 +246,16 @@ test("T22-L2 node sides alternate and turns sit only between a ride and the next
   generated(20).forEach((it, i) => checkSides(worldLayout(it, F), `generated ${i}`));
 });
 
+// Banners are pixel-font SectionTitles (TG-42 T15, narrowed by the manager's decision): the text itself must
+// never carry the glyphs Pixelify Sans lacks (ux-guide 2.2)
+test("T22-L2b banner text never has ₱ or →", async () => {
+  const { worldLayout } = await load();
+  const cases: [string, Itinerary][] = [["fixture", FIXTURE], ...generated(20).map((g, i): [string, Itinerary] => [`generated ${i}`, g])];
+  for (const [label, it] of cases) {
+    for (const b of ofKind(worldLayout(it, F), "banner")) assert.doesNotMatch(b.text, /[₱→\u20b1\u2192]/, `${label}: ${b.text}`);
+  }
+});
+
 // ---- T22-L3 day labels (B3) ----
 
 test("T22-L3 Day 1 uses the day's own date (the overnight arrival), in any time zone", async () => {
@@ -734,4 +744,31 @@ test("T22-B15 the share page shows the map, and the list stays behind the kill s
   assert.ok(list.indexOf("Some of this plan has changed") < map, "the changes notice above the map");
   assert.match(list, /<BusSection\b/, "the list sections stay as the fallback");
   assert.match(list, /Tap a stop or a ride for details\./, "ux 2.5 intro above the world");
+});
+
+// ---- RED audit gaps A to C (tg-test3's prototypes) ----
+
+test("motion classes are motion-safe: prefixed (test-plan S4)", () => {
+  for (const src of both()) {
+    for (const m of src.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+      for (const tok of (m[1] ?? m[2]).split(/\s+/)) {
+        if (/(^|:)(animate-|transition|duration-)/.test(tok)) assert.match(tok, /^motion-safe:/, tok);
+      }
+    }
+  }
+});
+
+test("the bus sheet is TG-23's TripCard (ux 3.2: Checked, confirm note, Book)", () => {
+  const sheet = component(SHEET);
+  assert.match(sheet, /^import TripCard from "@\/components\/TripCard";$/m);
+  assert.match(sheet, /<TripCard\b[^>]*\btrip=\{/);
+});
+
+test("the kill switch reaches the map: flag -> prop -> conditional", () => {
+  const view = read("src/components/ItineraryView.tsx");
+  const list = read("src/components/ItineraryList.tsx");
+  const prop = view.match(/<ItineraryList\b[^>]*\b(\w+)=\{flags\.overworldMap\}/)?.[1];
+  assert.ok(prop, "ItineraryView passes flags.overworldMap as a prop");
+  assert.match(list, new RegExp(`export default function ItineraryList\\(\\{[^)]*\\b${prop}\\b`), "the list takes it");
+  assert.match(list, new RegExp(`\\{\\s*${prop}\\s*\\?[\\s\\S]{0,200}?<OverworldMap itinerary=\\{it\\} \\/>`), "and renders the map only when it's true");
 });

@@ -683,11 +683,16 @@ test("T15 font-pixel only in components/pixel, and never on data", () => {
     if (inPixel(url)) continue;
     assert.doesNotMatch(readFileSync(url, "utf8"), /(?<![\w-])font-pixel(?![\w-])/, relative(url));
   }
+  // Dates and numbers are fine in the pixel font (ux-guide 2.2 allows day banners like "Day 1 · Sat, Nov 7", and
+  // TG-22's banners are {banner.text}); only ₱ and → lack glyphs. Narrowed for TG-22 (manager decision, 2026-10-28):
+  // world.test.ts checks the banner text itself has no ₱ or →.
   for (const url of tsxFiles()) {
     const source = readFileSync(url, "utf8");
     for (const m of source.matchAll(/<(PageTitle|SectionTitle)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
-      assert.doesNotMatch(m[2], /[₱→{\d]|formatPeso/, `${relative(url)}: <${m[1]}>${m[2]}</${m[1]}>`);
+      assert.doesNotMatch(m[2], /[₱→]|\\u20b1|\\u2192|formatPeso/i, `${relative(url)}: <${m[1]}>${m[2]}</${m[1]}>`);
     }
+    // Children go between the tags, where this test can see them
+    assert.doesNotMatch(source, /<(PageTitle|SectionTitle)\b[^>]*\bchildren=/, `${relative(url)}: children prop on a title`);
   }
 });
 
