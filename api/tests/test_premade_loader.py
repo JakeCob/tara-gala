@@ -175,6 +175,7 @@ ERROR_CASES = {
     "empty party": (lambda e: e.update(party=[]), []),
     "missing vibe": (lambda e: e.pop("vibe"), []),
     "negative budget": (lambda e: e.update(budget_php=-1), []),
+    "budget too big for the column": (lambda e: e.update(budget_php=1e8), []),
     "bad time": (lambda e: _stop0(e).update(arrive="1:30 PM"), []),
     "unknown field": (lambda e: e.update(title="x"), []),
 }

@@ -53,7 +53,7 @@ def list_premade() -> list[PremadeSummary]:
                 dropped += 1
                 logger.warning(
                     "premade itinerary dropped share_slug=%s codes=%s",
-                    r["share_slug"], ",".join(sorted({e.code for e in errors})),
+                    r["share_slug"], ",".join(sorted({e.code for e in errors})) or "-",
                 )
                 continue
             names = list(dict.fromkeys(refs.spots[s.spot_id].name for day in plan.days for s in day.stops))

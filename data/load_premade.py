@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "api"))  # for app.plan_validation; imports no FastAPI or pool
 
 import load_data  # noqa: E402
-from app.plan_validation import HHMM, MODEL_PREMADE, validate_plan  # noqa: E402
+from app.plan_validation import HHMM, MODEL_PREMADE, loc_path, validate_plan  # noqa: E402
 from app.schedule import runs_on  # noqa: E402
 
 # TODO(TG-40): after rebasing onto merged TG-40, take the DSN from load_data.database_url(), print
@@ -83,18 +83,11 @@ class AuthoredDay(_Model):
 class Entry(_Model):
     key: Key
     vibe: Annotated[str, StringConstraints(min_length=1, max_length=40)]
-    budget_php: float | None = Field(None, ge=0)
+    budget_php: float | None = Field(None, ge=0, lt=100_000_000)  # itineraries.budget_php is numeric(10,2)
     party: list[Passenger] = Field(min_length=1, max_length=10)
     outbound: TripKey
     return_: TripKey = Field(alias="return")
     days: list[AuthoredDay]
-
-
-def _loc_path(loc) -> str:
-    path = ""
-    for part in loc:
-        path += f"[{part}]" if isinstance(part, int) else (f".{part}" if path else str(part))
-    return path
 
 
 def _plural(n: int) -> str:
@@ -115,13 +108,14 @@ def read_entries(path: Path) -> tuple[list[Entry], list[str]]:
 
     entries, problems, seen = [], [], set()
     for i, raw in enumerate(data["itineraries"]):
-        label = raw.get("key") if isinstance(raw, dict) and isinstance(raw.get("key"), str) and raw.get("key") else f"itineraries[{i}]"
+        key = raw.get("key") if isinstance(raw, dict) else None
+        label = key if isinstance(key, str) and key else f"itineraries[{i}]"  # names the entry in every problem line
         try:
             entry = Entry.model_validate(raw)
         except ValidationError as e:
             # include_input=False: never echo values, e.g. a passenger name that shouldn't be there
             for d in e.errors(include_url=False, include_input=False):
-                problems.append(f"{label}: {_loc_path(d['loc'])}: {d['msg']}")
+                problems.append(f"{label}: {loc_path(d['loc'])}: {d['msg']}")
             continue
         if entry.key in seen:
             problems.append(f"{entry.key}: key: used by more than one itinerary")

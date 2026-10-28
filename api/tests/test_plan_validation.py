@@ -862,3 +862,51 @@ def test_runs_on_agrees_with_trip_search(client, dsn, tmp_path):
         api = {UUID(t["trip_id"]) for t in r.json()}
         py = {tid for tid, days, vf, vt in rows_ if schedule.runs_on(days, vf, vt, d)}
         assert api == py, d
+
+
+def test_dates_at_the_end_of_the_calendar_do_not_raise():
+    """Security pass: validate_plan never raises for bad input, even when the arrival overflows the calendar."""
+    end = date.max.isoformat()
+    raw = p0(outbound="out-night", days=[])
+    raw["outbound"]["date"] = raw["return"]["date"] = end
+    errors = found(check(raw))
+    assert ("bad_days", "days") in errors
+    assert validate_plan(NoDBRows(), raw).ok is False
+
+
+class NoDBRows:
+    """A connection whose queries return no rows (every id unknown)."""
+
+    def cursor(self, **kw):
+        class Cur:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def execute(self, *a, **k):
+                pass
+
+            def fetchall(self):
+                return []
+        return Cur()
+
+
+@pytest.mark.parametrize("hours, warns", [
+    ({"fri": ["8am", "6pm"]}, True),  # present but unreadable: skipped, so say so
+    ({"fri": ["22:00", "02:00"]}, True),
+    (["06:00", "18:00"], True),  # not a dict at all
+    ({"sat": ["10:00", "14:00"]}, False),  # no fri key: unknown, not broken
+    (None, False),
+    ({"fri": ["06:00", "18:00"]}, False),
+])
+def test_unreadable_opening_hours_log_a_warning(caplog, hours, warns):
+    """Log pass: a malformed hours value is skipped like unknown hours, but not silently."""
+    caplog.set_level(logging.WARNING, logger="tara_gala.api")
+    spots = dict(SPOT_REFS)
+    spots["test-market"] = dataclasses.replace(SPOT_REFS["test-market"], opening_hours=hours)
+    assert check(p0(), spots=spots) == []  # day 1 (Fri) at test-market
+    lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.levelno == logging.WARNING]
+    expected = [f"spot opening_hours unreadable spot_id={SPOT_IDS['test-market']} day=fri"] if warns else []
+    assert lines == expected

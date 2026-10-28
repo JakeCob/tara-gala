@@ -135,7 +135,8 @@ class Refs:
 
 # --- parsing -------------------------------------------------------------------------------------
 
-def _loc_path(loc) -> str:
+def loc_path(loc) -> str:
+    """A Pydantic error loc as a path: ("days", 0, "stops", 1, "arrive") -> "days[0].stops[1].arrive"."""
     path = ""
     for part in loc:
         path += f"[{part}]" if isinstance(part, int) else (f".{part}" if path else str(part))
@@ -151,7 +152,7 @@ def parse_plan(raw: Mapping[str, Any] | str | bytes) -> tuple[Plan | None, list[
         details = e.errors(include_url=False, include_input=False)
         if any(d["type"] == "json_invalid" for d in details):
             return None, [PlanError("shape", "", "the plan is not valid JSON")]
-        return None, [PlanError("shape", _loc_path(d["loc"]), d["msg"]) for d in details]
+        return None, [PlanError("shape", loc_path(d["loc"]), d["msg"]) for d in details]
 
 
 # --- loading -------------------------------------------------------------------------------------
@@ -270,22 +271,26 @@ def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_
     arrive_at: int | None = None
     day_dates: list[Date] | None = None
     if outbound is not None:
-        hhmm, offset = schedule.arrival(plan.outbound.date, outbound.departure_time, outbound.travel_minutes)
-        if hhmm is None:
-            errors.add(_Errors.OUTBOUND, "arrival_unknown", "outbound.trip_id",
-                       f"outbound trip {plan.outbound.trip_id} has no travel time, so its arrival is unknown")
+        try:
+            hhmm, offset = schedule.arrival(plan.outbound.date, outbound.departure_time, outbound.travel_minutes)
+            day1 = plan.outbound.date + timedelta(days=offset or 0)
+        except OverflowError:  # arrives after 9999-12-31; bad input must not raise
+            errors.add(_Errors.DAYS, "bad_days", "days", "the dates are out of range")
         else:
-            arrive_at = schedule.to_minutes(hhmm)
-            day1 = plan.outbound.date + timedelta(days=offset)
-            n = (plan.return_.date - day1).days + 1
-            if [d.day for d in plan.days] == list(range(1, n + 1)):
-                day_dates = [day1 + timedelta(days=i) for i in range(n)]
-            elif n >= 1:
-                errors.add(_Errors.DAYS, "bad_days", "days",
-                           f"days must be numbered 1 to {n} ({day1} to {plan.return_.date}), one per day")
+            if hhmm is None:
+                errors.add(_Errors.OUTBOUND, "arrival_unknown", "outbound.trip_id",
+                           f"outbound trip {plan.outbound.trip_id} has no travel time, so its arrival is unknown")
             else:
-                errors.add(_Errors.DAYS, "bad_days", "days",
-                           f"the return on {plan.return_.date} is before the bus arrives on {day1}")
+                arrive_at = schedule.to_minutes(hhmm)
+                n = (plan.return_.date - day1).days + 1
+                if [d.day for d in plan.days] == list(range(1, n + 1)):
+                    day_dates = [day1 + timedelta(days=i) for i in range(n)]
+                elif n >= 1:
+                    errors.add(_Errors.DAYS, "bad_days", "days",
+                               f"days must be numbered 1 to {n} ({day1} to {plan.return_.date}), one per day")
+                else:
+                    errors.add(_Errors.DAYS, "bad_days", "days",
+                               f"the return on {plan.return_.date} is before the bus arrives on {day1}")
 
     numbered = [(di, si, s) for di, day in enumerate(plan.days) for si, s in enumerate(day.stops)]
 
@@ -341,16 +346,16 @@ def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_
                 if arrive < previous_leave:
                     errors.add(pos, "overlap", f"{path}.arrive",
                                f"{label}: arrives at {s.arrive}, before the previous stop ends at {_clock(previous_leave)}")
-                elif arrive < previous_leave + leg_minutes(s):
+                elif arrive < previous_leave + (travel := leg_minutes(s)):
                     errors.add(pos, "not_enough_travel_time", f"{path}.arrive",
-                               f"{label}: the trip here takes {leg_minutes(s)} minutes, so arrive at {_clock(previous_leave + leg_minutes(s))} or later")
+                               f"{label}: the trip here takes {travel} minutes, so arrive at {_clock(previous_leave + travel)} or later")
             previous_leave = leave
 
     # 7. Return: no final leg in the shape, so a fixed buffer stands in for the ride to the terminal
     if ret is not None and plan.days and plan.days[-1].stops:
         di, si = len(plan.days) - 1, len(plan.days[-1].stops) - 1
         last = plan.days[-1].stops[-1]
-        latest = schedule.to_minutes(ret.departure_time.strftime("%H:%M")) - RETURN_BUFFER_MINUTES
+        latest = ret.departure_time.hour * 60 + ret.departure_time.minute - RETURN_BUFFER_MINUTES
         if schedule.to_minutes(last.leave) > latest:
             pos, path, label = where(di, si)
             errors.add(pos, "after_return", f"{path}.leave",
@@ -363,6 +368,11 @@ def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_
             continue
         hours = schedule.hours_on(spot.opening_hours, day_dates[di])
         if hours is None:
+            day_key = schedule.DAY_KEYS[schedule.postgres_dow(day_dates[di])]
+            raw_hours = spot.opening_hours
+            if raw_hours is not None and (not isinstance(raw_hours, dict) or raw_hours.get(day_key) is not None):
+                # present but unreadable, so it's skipped like unknown hours; fix the spot row
+                logger.warning("spot opening_hours unreadable spot_id=%s day=%s", s.spot_id, day_key)
             continue
         pos, path, label = where(di, si)
         if hours == "closed":
