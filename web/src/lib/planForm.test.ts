@@ -2,7 +2,7 @@
 // Run with `npm test`. Itinerary data below is made up for tests only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import {
   BUDGET_MAX,
@@ -846,6 +846,13 @@ test("T21-S1 date inputs use dateBounds, never a hard-coded date", () => {
   const note = tags(fields, "input").filter((t) => /id=\{FIELD_INPUT_ID\.note\}/.test(t));
   assert.equal(note.length, 1, "one note input");
   assert.match(note[0], /maxLength=\{NOTE_MAX\}/);
+  // TG-43 A2: chips are PixelChoice checkboxes; the first keeps FIELD_INPUT_ID.vibe for a failed submit's focus
+  const chips = tags(fields, "PixelChoice");
+  assert.equal(chips.length, 1, "one PixelChoice, rendered from VIBE_CHIPS");
+  assert.match(chips[0], /\btype="checkbox"/);
+  assert.match(chips[0], /inputProps=\{\{[\s\S]*\bid: i === 0 \? FIELD_INPUT_ID\.vibe\b/);
+  assert.match(chips[0], /"aria-disabled": locked/);
+  assert.doesNotMatch(fields, /ChipCursor|<label\b[^>]*className=\{UI\.choice\}/, "PixelChoice's MenuCursor replaces ChipCursor");
 });
 
 test("T21-S2 the payload is built from TG-15's party at submit", () => {
@@ -856,7 +863,7 @@ test("T21-S2 the payload is built from TG-15's party at submit", () => {
 test("T21-S3 one noValidate form; aria-disabled submit; only a fieldset is ever disabled; one status; no loops", () => {
   assert.equal(tags(ui, "form").length, 1);
   assert.match(tags(ui, "form")[0], /\bnoValidate\b/);
-  const submit = tags(ui, "button").filter((t) => /type="submit"/.test(t));
+  const submit = tags(ui, "(?:button|PixelButton)").filter((t) => /type="submit"/.test(t));
   assert.equal(submit.length, 1, "one submit button");
   assert.match(submit[0], /aria-disabled=\{/);
   for (const t of tags(ui, "\\w+")) {
@@ -865,7 +872,8 @@ test("T21-S3 one noValidate form; aria-disabled submit; only a fieldset is ever 
   assert.match(ui, /<fieldset\b[^>]*\bdisabled=\{/);
   assert.equal((ui.match(/role="status"/g) ?? []).length, 1);
   // Always rendered, never removed: only its class switches to sr-only (RUN7)
-  assert.match(form, /<p role="status" className=\{statusShown\(run\) \? UI\.meta : "sr-only"\}>/);
+  assert.match(form, /<p role="status" className=\{statusShown\(run\) \? PX\.meta : "sr-only"\}>/);
+  assert.match(submit[0], /^<PixelButton\b[^>]*\bvariant="primary"/, "the submit is TG-42's primary PixelButton");
   assert.doesNotMatch(ui, /animate-|setInterval|<progress\b|spinner/i);
 });
 
@@ -996,4 +1004,82 @@ test("TG-27 Part B: the offline E2E throws on a non-ready-made label before its 
   assert.ok(guard >= 0, "the strict label check throws");
   assert.ok(click > guard, "the submit click comes after the check");
   assert.equal(script.split("button[type=submit]\").click()").length - 1, 1, "only one submit click in the script");
+});
+
+// --- TG-43 A2: pixel primitives on /plan --------------------------------------------------------------------------
+
+// T43-P2 (manager decision on T15: no digit rule, dates are allowed): copy that reaches a pixel-font title
+test("T43-P2 the copy that reaches a SectionTitle has no ₱ or →", () => {
+  const titled = [PLAN_COPY.labels.dates, PLAN_COPY.labels.budget, PLAN_COPY.hints.budgetSr, PLAN_COPY.labels.vibe, PLAN_COPY.list.heading];
+  for (const s of titled) assert.doesNotMatch(s, /[₱→]/, s);
+});
+
+// T43-P3 (ux §3, the /plan rows): what PageTitle and SectionTitle may hold on these screens, and no raw font-pixel
+test("T43-P3 /plan, the share page header and ShareButton put only static titles in the pixel font", () => {
+  const files: Record<string, string> = {
+    "PlanFields.tsx": fields,
+    "PlanResults.tsx": results,
+    "PlanForm.tsx": form,
+    "PartyPicker.tsx": read("src/components/PartyPicker.tsx"),
+    "plan/page.tsx": read("src/app/plan/page.tsx"),
+    "i/[slug]/page.tsx": read("src/app/i/[slug]/page.tsx"),
+    "ShareButton.tsx": read("src/components/ShareButton.tsx"),
+  };
+  // Whitespace next to a brace or angle bracket is JSX formatting, not content
+  const norm = (x: string) => x.replace(/\s+/g, " ").replace(/\s*([{}<>])\s*/g, "$1").trim();
+  const ALLOWED = new Set([
+    "Plan your trip",
+    "Your trip",
+    "Who&apos;s travelling?",
+    "{\"Who's travelling?\"}",
+    "{L.dates}",
+    "{L.vibe}",
+    '{L.budget}<span className="sr-only">{H.budgetSr}</span>',
+    "{LIST.heading}",
+    "Trip ideas",
+  ].map(norm));
+  const seen = new Set<string>();
+  for (const [file, src] of Object.entries(files)) {
+    assert.doesNotMatch(src, /font-pixel/, `${file}: no raw font-pixel`);
+    for (const m of src.matchAll(/<(PageTitle|SectionTitle)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
+      const children = norm(m[2]);
+      assert.ok(ALLOWED.has(children), `${file}: <${m[1]}>${children}</${m[1]}>`);
+      seen.add(children);
+    }
+  }
+  for (const t of ["Plan your trip", "Your trip", "{L.dates}", "{L.vibe}"]) assert.ok(seen.has(t), `${t} is a title`);
+  assert.ok(seen.has("{LIST.heading}") || seen.has("Trip ideas"), "Trip ideas is a SectionTitle (ux §1.6)");
+  assert.ok([...seen].some((s) => s.startsWith("{L.budget}")), "the budget label is a SectionTitle");
+});
+
+// T43-F4 (review nit 3, manager: in A2): Try again restarts the run, which unmounts its own button, so focus
+// moves to the submit button first. Both Try agains: the plan error box and the failed ready-made list.
+test("T43-F4 both Try again handlers focus the submit button before restarting", () => {
+  const FOCUS = "document.getElementById(SUBMIT_ID)?.focus()";
+  const handler = (component: string) => {
+    const tag = tags(form, component)[0] ?? "";
+    return tag.match(/\bonRetry=\{([\s\S]*?)\}\s*(?:\w+=|\/?>)/)?.[1] ?? "";
+  };
+  const planRetry = handler("PlanErrorBox");
+  assert.ok(planRetry.includes(FOCUS), `PlanErrorBox onRetry: ${planRetry}`);
+  assert.ok(planRetry.indexOf(FOCUS) < planRetry.indexOf("plan(sent.current)"), "focus before plan(sent.current)");
+  const listRetry = handler("PremadeResults");
+  assert.ok(listRetry.includes(FOCUS), `PremadeResults onRetry: ${listRetry}`);
+  assert.ok(listRetry.indexOf(FOCUS) < listRetry.indexOf("loadPremade("), "focus before loadPremade(");
+});
+
+// T43-X1: no dependency, schema or API change (skips without origin/main, like T43-O5)
+test("T43-X1 package files, supabase/ and api/ are unchanged against origin/main", (t) => {
+  let diff: string;
+  try {
+    diff = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/package.json", "web/package-lock.json", "supabase", "api"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    t.skip("skipped: origin/main not fetched; run locally before merging");
+    return;
+  }
+  assert.equal(diff.trim(), "");
 });

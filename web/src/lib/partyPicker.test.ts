@@ -1,10 +1,10 @@
 // Picker UI guards (TG-15): sprite use and static checks on the components, read as text. Run with `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { CHIBI_FRAMES, SPRITES, chibi, spriteSrc, type SpriteName } from "./sprites.ts";
 import { PICKER_TYPES } from "./party.ts";
-import { UI } from "../components/planUi.ts";
+import { PX } from "../components/pixel/classes.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
@@ -15,15 +15,22 @@ const useSpawn = read("src/components/useSpawn.ts");
 const form = read("src/components/PlanForm.tsx");
 const page = read("src/app/plan/page.tsx");
 const home = read("src/app/page.tsx");
-const planUi = read("src/components/planUi.ts");
 const NEW_UI = {
   "PartyPicker.tsx": picker,
   "PartyStage.tsx": stage,
   "useSpawn.ts": useSpawn,
   "PlanForm.tsx": form,
   "plan/page.tsx": page,
-  "planUi.ts": planUi,
 };
+
+function walk(dir: URL, out: URL[] = []): URL[] {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const u = new URL(e.name + (e.isDirectory() ? "/" : ""), dir);
+    if (e.isDirectory()) walk(u, out);
+    else out.push(u);
+  }
+  return out;
+}
 
 // Opening tags of a JSX element, attributes included; skips `>` inside {…} and quotes (e.g. `onClick={() => …}`)
 function tags(src: string, name: string): string[] {
@@ -87,17 +94,19 @@ test("T15-G1 steppers: label helpers, aria-disabled, never disabled", () => {
   assert.match(picker, /aria-disabled=\{[^}]*canAdd\(/);
   assert.match(picker, /aria-disabled=\{[^}]*canRemove\(/);
   assert.doesNotMatch(picker, /(?<![-\w])disabled\s*[={]/, "a real disabled drops focus at the limit");
-  for (const b of tags(picker, "button")) assert.match(b, /\btype="button"/, b);
+  assert.doesNotMatch(picker, /<button\b/, "steppers are PixelButton (TG-43 A2)");
+  for (const b of tags(picker, "PixelButton")) assert.doesNotMatch(b, /\btype="(submit|reset)"/, b);
 });
 
 test("T15-G2 steppers are 44px icon buttons with hidden glyphs", () => {
-  const buttons = tags(picker, "button");
+  const buttons = tags(picker, "PixelButton");
   assert.equal(buttons.length, 2, "a − and a + per row, rendered from PICKER_TYPES");
   for (const b of buttons) {
-    assert.match(b, /className=\{UI\.iconBtn\}/, `one swap point for TG-42's <PixelButton variant="icon">: ${b}`);
+    assert.match(b, /\bvariant="icon"/, b);
+    assert.doesNotMatch(b, /\bclassName=/, `the icon skin and layout stay as TG-42 made them: ${b}`);
   }
-  assert.match(UI.iconBtn, /\bmin-h-11\b/);
-  assert.match(UI.iconBtn, /\bmin-w-11\b/);
+  assert.match(PX.btn.icon.skin, /\bmin-h-11\b/);
+  assert.match(PX.btn.icon.skin, /\bmin-w-11\b/);
   assert.match(picker, /<span[^>]*aria-hidden[^>]*>\s*(−|\{"−"\})\s*<\/span>/, "− is U+2212, hidden");
   assert.match(picker, /<span[^>]*aria-hidden[^>]*>\s*(\+|\{"\+"\})\s*<\/span>/, "+ hidden");
 });
@@ -114,11 +123,12 @@ test("T15-G4 live summary, groups, heading and discount note", () => {
   for (const g of tags(picker, "\\w+").filter((x) => x.includes('role="group"'))) {
     assert.match(g, /aria-labelledby=/, g);
   }
-  const h2 = picker.match(/<h2\b[^>]*\bid=\{([^}]+)\}[^>]*>\s*(\{"Who's travelling\?"\}|Who&apos;s travelling\?)\s*<\/h2>/);
-  assert.ok(h2, "<h2 id={…}>Who's travelling?</h2>");
-  assert.match(picker, new RegExp(`role="group" aria-labelledby=\\{${h2[1].replace(/[$()[\]{}.*+?^|\\]/g, "\\$&")}\\}`), "the list is named by the h2");
-  assert.match(picker, /className=\{UI\.h2\}/);
-  assert.match(picker, /className=\{UI\.box\}/);
+  // The whole id template, not up to the first } (TG-15 Gate 3 S1)
+  const title = picker.match(/<SectionTitle\b[^>]*\bid=\{(`[^`]*`|[\w.]+)\}[^>]*>\s*(\{"Who's travelling\?"\}|Who&apos;s travelling\?)\s*<\/SectionTitle>/);
+  assert.ok(title, "<SectionTitle id={…}>Who's travelling?</SectionTitle>");
+  const list = tags(picker, "ul").find((t) => /role="group"/.test(t)) ?? "";
+  assert.ok(list.includes(`aria-labelledby={${title[1]}}`), `the list is named by the heading: ${list}`);
+  assert.match(picker, /<PixelBox\b[^>]*\bas="section"/);
   assert.match(picker, /\bDISCOUNT_NOTE\b/);
   assert.doesNotMatch(picker, /Some operators don/, "the note comes from party.ts");
 });
@@ -141,7 +151,9 @@ test("T15-G5 stage is decorative and gets sprites only from the manifest", () =>
   assert.match(stage, /isPickerType\([^)]*\)\s*\?\s*spriteSrc\(chibi\(/, "child and unknown types get a tag only (T15-SP5, audit N1)");
   assert.equal((stage.match(/spriteSrc\(chibi\(/g) ?? []).length, 1, "the only chibi src is the guarded one");
   assert.match(stage, /\{src && \(/, "the chibi img renders only with a src");
-  assert.match(stage, /\$\{UI\.screenChip\}/);
+  assert.match(stage, /\bPX\.screenTag\b/);
+  assert.match(root, /pixel-frame bg-screen\b/, "the stage is the fixed game screen (guide 1.3)");
+  assert.doesNotMatch(stage, /\bUI\./);
 });
 
 test("T15-G6 stage grid and sizes", () => {
@@ -153,12 +165,13 @@ test("T15-G6 stage grid and sizes", () => {
 
 // T15-G7: the 1× chibi plate in each row
 test("T15-G7 row chibi is 32px on a screen-paper plate", () => {
-  assert.match(picker, /\$\{UI\.plate\}/);
+  assert.match(picker, /<span className=\{PX\.plate\}>\s*(\{\/\*[^*]*\*\/\}\s*)?<img\b/, "the img sits in a PX.plate span");
   const img = tags(picker, "img");
   assert.ok(img.length >= 1);
   for (const i of img) {
     assert.match(i, /alt=""/, i);
     assert.match(i, /width=\{32\}\s+height=\{32\}/, i);
+    assert.match(i, /className="pixelated block"/, i);
   }
   assert.match(picker, /spriteSrc\(chibi\([^)]*"idle-1"\)\)/);
 });
@@ -186,12 +199,13 @@ test("T15-G9 PlanForm owns the party; /plan page shell; home link gated", () => 
   assert.ok(tags(form, "PartyStage").some((t) => /\bparty=\{party\}/.test(t)), "<PartyStage party={party}>");
   assert.ok(tags(form, "PartyPicker").some((t) => /\bparty=\{party\}/.test(t)), "<PartyPicker party={party}>");
   assert.doesNotMatch(page, /use client/);
-  assert.match(page, /<h1 className=\{UI\.h1\}>Plan your trip<\/h1>/);
-  assert.equal((page.match(/<h1\b/g) ?? []).length, 1);
+  assert.match(page, /<PageTitle>Plan your trip<\/PageTitle>/);
+  assert.doesNotMatch(page, /<h1\b/, "PageTitle is the h1");
   assert.ok(
-    tags(page, "Link").some((t) => /href="\/"/.test(t) && /className=\{UI\.backLink\}/.test(t)),
-    '<Link href="/" className={UI.backLink}>',
+    tags(page, "PixelLink").some((t) => /href="\/"/.test(t) && /variant="secondary"/.test(t)),
+    '<PixelLink variant="secondary" href="/">',
   );
+  assert.ok(tags(form, "PartyStage").some((t) => /\bfixedRows\b/.test(t)), "the picker's stage keeps its fixed rows (TG-15 Gate 3 S2)");
   assert.match(page, /<span aria-hidden(="true")?>←(&nbsp;)?<\/span>\s*Back to bus search/);
   assert.match(page, /title:\s*"Plan your trip · Tara Gala"/);
   assert.match(page, /<PlanForm\s*\/>/);
@@ -199,28 +213,34 @@ test("T15-G9 PlanForm owns the party; /plan page shell; home link gated", () => 
   assert.match(home, /formMode\(flags\) !== "none"/, "the /plan link is gated");
 });
 
-// Review finding 1 (TG-42 guard: font-pixel only inside components/pixel/) and the v2 bans. TG-42 PR A isn't on
-// main, so per the manager the look lives in planUi.ts, one key per PR A primitive, until TG-42 swaps it.
-test("T15-G10 new UI: no font-pixel, v1 shapes or hex; v2 look kept in planUi.ts", () => {
-  for (const [file, src] of Object.entries(NEW_UI)) {
-    assert.doesNotMatch(src, /font-pixel/, `${file}: TG-42's PageTitle / SectionTitle own the pixel font`);
+// TG-43 A2 (ux §0, §4): /plan is on @/components/pixel. No planUi, no hand-written skins, and the v2 bans stay.
+const PLAN_FILES = {
+  ...NEW_UI,
+  "PlanFields.tsx": read("src/components/PlanFields.tsx"),
+  "PlanResults.tsx": read("src/components/PlanResults.tsx"),
+};
+
+test("T15-G10 /plan builds on @/components/pixel: no planUi, no hand-written skins, no font-pixel or v1 shapes", () => {
+  for (const [file, src] of Object.entries(PLAN_FILES)) {
+    assert.doesNotMatch(src, /planUi/, `${file}: planUi is gone from /plan`);
+    assert.doesNotMatch(src, /font-pixel/, `${file}: PageTitle / SectionTitle own the pixel font`);
+    assert.doesNotMatch(src, /\bpixel-btn\b|\bpixel-box\b|border-3 border-frame/, `${file}: skins come from the primitives or PX`);
     assert.doesNotMatch(src, /rounded-(?!none\b)|\bring-|shadow-lg|text-\[#|outline-none|outline-hidden/, file);
     assert.doesNotMatch(src, /#[0-9a-fA-F]{3,8}\b/, `${file}: no hex colours`);
   }
-  for (const [file, src] of Object.entries({ "PartyPicker.tsx": picker, "PartyStage.tsx": stage, "plan/page.tsx": page })) {
-    assert.doesNotMatch(src, /\bborder-\d|\bbg-card\b|\bshadow-\[/, `${file}: frames and fills come from planUi.ts`);
+  for (const file of ["PartyPicker.tsx", "plan/page.tsx", "PlanForm.tsx", "PlanFields.tsx", "PlanResults.tsx"] as const) {
+    assert.match(PLAN_FILES[file], /from "@\/components\/pixel"/, `${file} imports the primitives`);
   }
 });
 
-test("T15-G11 planUi.ts is a plain module of class strings with pixel focus", () => {
-  assert.doesNotMatch(planUi, /^\s*import\b/m);
-  assert.doesNotMatch(planUi, /use client|<\/[A-Za-z]|\/>/);
-  for (const key of ["iconBtn", "backLink"] as const) {
-    assert.match(UI[key], /focus-visible:outline-3/, key);
-    assert.match(UI[key], /\bmin-h-11\b/, key);
-  }
-  assert.match(UI.iconBtn, /aria-disabled:opacity-60/, "dimmed at the limit, like pixel-btn");
-  assert.match(UI.pixelated, /image-rendering:pixelated/);
+// Replaces G11: until PR B, only the two share-page files TG-22 rewrites may still import planUi
+test("T43-P5 planUi's only importers are ItineraryView and ItineraryList", () => {
+  const importers = walk(new URL("src/", WEB))
+    .filter((u) => /\.tsx?$/.test(u.pathname) && !u.pathname.endsWith(".test.ts"))
+    .filter((u) => /from "@\/components\/planUi"|from "\.\/planUi"/.test(readFileSync(u, "utf8")))
+    .map((u) => u.pathname.split("/").pop())
+    .sort();
+  assert.deepEqual(importers, ["ItineraryList.tsx", "ItineraryView.tsx"]);
 });
 
 // T15-X2 (N3): no animation library

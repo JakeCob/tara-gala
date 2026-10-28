@@ -25,6 +25,8 @@ type PXShape = {
   inlineLink: string;
   plate: string; // TG-43 ux §4
   numeral: string; // TG-43 plan §3.2
+  screenTag: string;
+  inputPrefix: string;
 };
 async function loadPixel(): Promise<{ PX: PXShape; cx: (...parts: unknown[]) => string }> {
   return import(new URL(`${PIXEL}classes.ts`, WEB).href);
@@ -326,9 +328,12 @@ const EXPECTED_PX: PXShape = {
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
   inlineLink: "underline underline-offset-2 focus-pixel",
-  // TG-43 ux §4: the sprite plate (stepper rows, stop sprites); plan §3.2: the share page's decorative step numeral
+  // TG-43 ux §4: the sprite plate (stepper rows, stop sprites), the stage tag, the budget's ₱ prefix;
+  // plan §3.2: the share page's decorative step numeral
   plate: "pixel-frame bg-screen-paper p-0.5 inline-flex shrink-0",
   numeral: "font-pixel text-xl font-semibold",
+  screenTag: "pixel-frame bg-screen-paper text-screen-ink px-1 text-xs font-semibold",
+  inputPrefix: "inline-flex items-center border-3 border-r-0 border-frame bg-card px-3 text-base font-bold text-foreground",
 };
 
 // B5
@@ -753,4 +758,23 @@ test("B11 the terminal pills are PixelChoice radios named terminal", () => {
   const lastMile = read("src/components/LastMile.tsx");
   assert.match(lastMile, /<PixelChoice\b[^>]*\bname="terminal"/);
   assert.doesNotMatch(lastMile, /<input\b/, "the radio comes from PixelChoice");
+});
+
+// ---------------------------------------------------------------- TG-43 A2: the three new PX keys
+
+test("T43-P1 the new plate, stage tag and ₱ prefix keys are screen-paper or frame, with no v1 shapes", async () => {
+  const { PX } = await loadPixel();
+  for (const key of ["plate", "screenTag", "inputPrefix"] as const) assert.equal(typeof PX[key], "string", `PX.${key} exists`);
+  for (const key of ["plate", "screenTag"] as const) {
+    const t = tokensOf(PX[key]);
+    assert.ok(t.includes("bg-screen-paper"), `${key} sits on screen-paper (guide 1.3: sprites never on card)`);
+    assert.ok(!t.includes("bg-card"), key);
+    assert.ok(t.includes("pixel-frame"), key);
+  }
+  assert.ok(tokensOf(PX.screenTag).includes("text-screen-ink"), "screen text, fixed in both themes");
+  const prefix = tokensOf(PX.inputPrefix);
+  for (const t of ["border-frame", "border-r-0", "border-3"]) assert.ok(prefix.includes(t), `inputPrefix has ${t}`);
+  for (const key of ["plate", "screenTag", "inputPrefix"] as const) {
+    assert.doesNotMatch(PX[key], /rounded-|\bring-|shadow-(sm|md|lg|xl)|#[0-9a-f]{3,8}\b/i, key);
+  }
 });
