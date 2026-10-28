@@ -149,14 +149,14 @@ test("S1 the update prompt matches ux.md", () => {
   assert.equal(manager.match(/min-h-11/g)?.length, 2, "both buttons at least 44px");
   assert.equal(manager.match(/type="button"/g)?.length, 2);
   assert.match(manager, /<div role="status">\s*\{show &&/, "an always-rendered status wrapper");
-  assert.match(manager, /shadow-lg/);
+  assert.match(manager, /drop-shadow-\[0_6px_0_var\(--color-frame\)\]/);
 });
 
 test("S1 OfflineBanner is an always-rendered status driven by the worker's messages", () => {
   assert.match(banner, /return \(\s*<div role="status" className="sticky top-0 z-10 w-full">\s*\{text &&/);
   assert.match(banner, /parseSwMessage\(/);
   assert.match(banner, /useReducer\(bannerReducer/);
-  assert.match(banner, /bg-accent text-\[#1d2a24\]/);
+  assert.match(banner, /bg-accent text-accent-ink/);
   assert.doesNotMatch(banner, /<button/, "a stale warning can't be dismissed");
 });
 

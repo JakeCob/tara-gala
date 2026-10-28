@@ -593,3 +593,142 @@ test("T22 no animation anywhere in the theme", () => {
     assert.doesNotMatch(source, /transition|animate-|@keyframes|duration-|animation/, where);
   }
 });
+
+// ---- PR B: the restyle of the existing screens (ux.md 2 to 7) ----
+
+const tsxFiles = () => walkFiles(new URL("src/", WEB)).filter((url) => url.pathname.endsWith(".tsx"));
+const relative = (url: URL) => url.pathname.slice(new URL(WEB).pathname.length);
+const inPixel = (url: URL) => relative(url).startsWith(PIXEL);
+// Every quoted or template string literal in a source file (class strings live in these).
+const stringLiterals = (source: string) => [...source.matchAll(/"[^"\n]*"|`[^`]*`/g)].map((m) => m[0]);
+
+// T9 (B9, B10, B15)
+test("T9 every pixel-btn class string also has min-h-11", () => {
+  for (const url of tsxFiles().filter((u) => !inPixel(u))) {
+    for (const literal of stringLiterals(readFileSync(url, "utf8"))) {
+      if (/(?<![\w-])pixel-btn(?![\w-])/.test(literal)) {
+        assert.match(literal, /(?<![\w-])min-h-11(?![\w-])/, `${relative(url)}: ${literal}`);
+      }
+    }
+  }
+});
+
+// T13: a focus outline drawn over Sun or Forest/Leaf is invisible (T7), so controls never sit inside those fills.
+// The control itself may be filled (Book, primary, the checked pill): its outline lands on the card or page.
+function elementsWithFill(source: string): { tag: string; inner: string }[] {
+  const out: { tag: string; inner: string }[] = [];
+  const open = /<([A-Za-z][\w.]*)\b((?:[^>"{]|"[^"]*"|\{[^}]*\})*?)(\/?)>/g;
+  for (const m of source.matchAll(open)) {
+    const [whole, tag, attrs, selfClosing] = m;
+    if (selfClosing || !/(?<![\w:-])bg-(accent|brand)(?![\w-])/.test(attrs)) continue;
+    // Find the matching close tag, counting nested elements with the same name
+    const re = new RegExp(`<${tag}\\b|</${tag}>`, "g");
+    re.lastIndex = m.index! + whole.length;
+    let depth = 1;
+    let end = source.length;
+    for (let t = re.exec(source); t; t = re.exec(source)) {
+      depth += t[0].startsWith("</") ? -1 : 1;
+      if (depth === 0) {
+        end = t.index;
+        break;
+      }
+    }
+    out.push({ tag, inner: source.slice(m.index! + whole.length, end) });
+  }
+  return out;
+}
+
+test("T13 no focusable element sits on an accent or brand surface", () => {
+  for (const url of tsxFiles()) {
+    for (const { tag, inner } of elementsWithFill(readFileSync(url, "utf8"))) {
+      assert.doesNotMatch(
+        inner,
+        /<(a|button|input|select|textarea|Link|PixelButton|PixelLink|PixelCardLink|PixelChoice)\b/,
+        `${relative(url)}: a control inside a bg-accent/bg-brand <${tag}>`,
+      );
+    }
+  }
+});
+
+test("T13 the scan finds the filled elements it should", () => {
+  const found = elementsWithFill('<div className="bg-accent p-2"><p>x</p><a href="/">y</a></div><a className="bg-brand">z</a>');
+  assert.deepEqual(found.map((f) => f.tag), ["div", "a"]);
+  assert.match(found[0].inner, /<a href/);
+  assert.equal(found[1].inner, "z");
+  assert.deepEqual(elementsWithFill('<label className="has-checked:bg-brand">x</label>'), [], "a variant fill isn't a surface");
+});
+
+// T14 (B12)
+test("T14 no v1 classes anywhere", () => {
+  const files = [...tsxFiles(), new URL("src/app/globals.css", WEB), new URL(`${PIXEL}classes.ts`, WEB)];
+  for (const url of files) {
+    const source = readFileSync(url, "utf8");
+    const where = relative(url);
+    assert.doesNotMatch(source, /rounded-(?!none\b)/, where);
+    assert.doesNotMatch(source, /(?<![\w-])ring-/, where);
+    assert.doesNotMatch(source, /(?<![\w-])shadow-(lg|md|sm)\b/, where);
+    assert.doesNotMatch(source, /(?<![\w-])blur(-|\b)/, where);
+    assert.doesNotMatch(source, /(text|bg)-\[#/, where);
+    assert.doesNotMatch(source, /outline-(none|hidden)/, where);
+    assert.doesNotMatch(source, /\bconst FOCUS\b/, where);
+  }
+});
+
+// T15 (B12, guide 2.2): the pixel font has no ₱ or →, so it's for static headings written by us
+test("T15 font-pixel only in components/pixel, and never on data", () => {
+  const sources = walkFiles(new URL("src/", WEB)).filter(
+    (url) => /\.tsx?$/.test(url.pathname) && !url.pathname.endsWith(".test.ts"),
+  );
+  for (const url of sources) {
+    if (inPixel(url)) continue;
+    assert.doesNotMatch(readFileSync(url, "utf8"), /font-pixel/, relative(url));
+  }
+  for (const url of tsxFiles()) {
+    const source = readFileSync(url, "utf8");
+    for (const m of source.matchAll(/<(PageTitle|SectionTitle)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
+      assert.doesNotMatch(m[2], /[₱→{\d]|formatPeso/, `${relative(url)}: <${m[1]}>${m[2]}</${m[1]}>`);
+    }
+  }
+});
+
+// T16 (B12, decision 2)
+test("T16 className on Pixel* elements has no skin classes; PageTitle may add text-balance only", () => {
+  for (const url of tsxFiles()) {
+    const source = readFileSync(url, "utf8");
+    for (const m of source.matchAll(/<(Pixel\w+|DialogBox)\b[^>]*?\bclassName="([^"]*)"/g)) {
+      assert.deepEqual(lookTokens(m[2]), [], `${relative(url)}: <${m[1]} className="${m[2]}">`);
+    }
+    for (const m of source.matchAll(/<PageTitle\b[^>]*?\bclassName="([^"]*)"/g)) {
+      assert.deepEqual(tokensOf(m[1]).filter((t) => t !== "text-balance"), [], `${relative(url)}: PageTitle className`);
+    }
+  }
+});
+
+// T21 (B10, ux.md 4.3): the standalone page duplicates the palette, so pin it to the tokens
+test("T21 offline.html palette equals the tokens, in light and dark", () => {
+  const html = read("public/offline.html");
+  const { lightVars, darkVars } = tokenModes();
+  const allowed = new Set([...Object.values(lightVars), ...Object.values(darkVars), ...Object.values(SCREEN)]);
+  const hexes = [...html.matchAll(/#[0-9a-f]{3,8}\b/gi)].map((m) => m[0].toLowerCase());
+  assert.ok(hexes.length >= 8, "the page sets its own colours");
+  for (const hex of hexes) assert.ok(allowed.has(hex), `offline.html ${hex} isn't a token value`);
+  assert.match(html, /@media \(prefers-color-scheme: dark\)/);
+  for (const hex of ["#121815", "#1b2420", "#5fb36b", "#ffd65c"]) assert.ok(hexes.includes(hex), `dark ${hex}`);
+  assert.doesNotMatch(html, /border-radius:\s*(?!0[;\s}])/, "square corners only");
+});
+
+// T23 (B9, ux.md 3.3): the one copy-level change, so an overnight arrival is hard to miss
+test("T23 the +1 day offset is emphasised", () => {
+  const tripSearch = read("src/components/TripSearch.tsx");
+  assert.match(
+    tripSearch,
+    /<span className="font-semibold text-foreground">\{formatDayOffset\(t\.arrives_day_offset\)\}<\/span>/,
+  );
+});
+
+// B11 (ux.md 5.2): the pills are PixelChoice, so TG-17's :checked focus query still finds a native radio
+test("B11 the terminal pills are PixelChoice radios named terminal", () => {
+  const lastMile = read("src/components/LastMile.tsx");
+  assert.match(lastMile, /<PixelChoice\b[^>]*\bname="terminal"/);
+  assert.doesNotMatch(lastMile, /<input\b/, "the radio comes from PixelChoice");
+});

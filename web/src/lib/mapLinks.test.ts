@@ -250,10 +250,9 @@ test("TerminalLinks: every link opens a new tab safely and is named by the label
   assert.equal(component.match(/<a\b/g)?.length, 2);
   assert.doesNotMatch(component, /aria-live/);
   assert.doesNotMatch(component, /\bconsole\./);
-  // One focus indicator: the brand ring, with the default outline hidden (ux-guide section 8; outline-none breaks forced colours)
-  assert.match(component, /const FOCUS = "focus-visible:outline-hidden focus-visible:ring-2 /);
-  assert.equal(component.match(/\$\{FOCUS\}/g)?.length, 2);
-  assert.doesNotMatch(component, /outline-none/);
+  // One focus indicator: the focus-pixel outline (ux-guide v2 section 3.3), which also shows in forced colours
+  for (const [a] of anchors) assert.match(a, /\bfocus-pixel\b/);
+  assert.doesNotMatch(component, /\bring-|outline-hidden|outline-none/);
 });
 
 test("TerminalLinks: the Sakay link renders only under showSakay", () => {
