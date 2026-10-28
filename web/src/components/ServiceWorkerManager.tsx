@@ -45,7 +45,10 @@ export default function ServiceWorkerManager() {
   };
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
+    if (!("serviceWorker" in navigator)) {
+      console.info("[tg-pwa] service workers not supported; no offline mode");
+      return;
+    }
     if (!flags.serviceWorker) {
       removeServiceWorker().catch((err) => console.warn("[tg-pwa] kill switch failed", err instanceof Error ? err.name : err));
       return;
@@ -85,10 +88,15 @@ export default function ServiceWorkerManager() {
             }
           });
         });
+      } catch (err) {
+        console.warn("[tg-pwa] registration failed", err instanceof Error ? err.name : err);
+        return;
+      }
+      try {
         const persisted = await navigator.storage?.persist?.();
         console.info("[tg-pwa] persist", { persisted });
       } catch (err) {
-        console.warn("[tg-pwa] registration failed", err instanceof Error ? err.name : err);
+        console.warn("[tg-pwa] persist failed", err instanceof Error ? err.name : err);
       }
     };
 
@@ -111,7 +119,10 @@ export default function ServiceWorkerManager() {
     if (!waiting) return reloadOnce();
     waiting.postMessage({ type: MSG_SKIP_WAITING });
     // If controllerchange never comes, reload anyway
-    window.setTimeout(reloadOnce, 3000);
+    window.setTimeout(() => {
+      if (!reloadStarted.current) console.warn("[tg-pwa] no controllerchange after 3 s; reloading anyway");
+      reloadOnce();
+    }, 3000);
   };
 
   const show = prompt !== "none" && !later;

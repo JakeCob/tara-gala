@@ -18,7 +18,8 @@ const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T/;
 const log = (...args) => console.info("[tg-sw]", ...args);
 const warn = (...args) => console.warn("[tg-sw]", ...args);
 const errorName = (err) => (err && err.name) || String(err);
-const reasonOf = (err) => (err && err.message) || errorName(err); // our own "status 404" or the fetch error
+// Our own "status 404", else only the error's name (a fetch error message can carry the URL)
+const reasonOf = (err) => (err && /^status \d+$/.test(err.message) ? err.message.replace(" ", "=") : `error=${errorName(err)}`);
 
 function cacheNames(version) {
   if (typeof version !== "string" || !version.trim()) throw new Error("cacheNames needs a version");
@@ -121,7 +122,7 @@ function networkFirst({ network, readCache, writeCache, timeoutMs, nowIso }) {
     .then(({ copy }) => copy && writeCache(stampSavedAt(copy, nowIso())), () => undefined)
     .then(
       () => undefined,
-      (err) => warn("cache write failed", errorName(err)),
+      (err) => warn(`cache write failed error=${errorName(err)}`),
     );
 
   const fromCache = async () => {
@@ -208,7 +209,7 @@ async function precache() {
       await pages.put(absolute(path), stampSavedAt(res, nowIso()));
       pageCount++;
     } catch (err) {
-      warn("precache miss", path, reasonOf(err));
+      warn(`precache miss url=${path} ${reasonOf(err)}`);
       if (path === "/") throw err; // fails the install; the browser retries later
     }
   }
@@ -221,7 +222,7 @@ async function precache() {
     }),
   );
   results.forEach((r, i) => {
-    if (r.status === "rejected") warn("precache miss", assetList[i], reasonOf(r.reason));
+    if (r.status === "rejected") warn(`precache miss url=${assetList[i]} ${reasonOf(r.reason)}`);
   });
   const staticCount = results.filter((r) => r.status === "fulfilled").length;
   log(`install v=${SW_VERSION} precached pages=${pageCount} static=${staticCount}`);
@@ -259,9 +260,10 @@ async function activate() {
   log(`activate v=${SW_VERSION} deleted=${JSON.stringify(deleted)} carried=${carried}`);
 }
 
-const pathOf = (url) => {
+// API queries hold only cities, dates and slugs, so they're logged; other URLs log the path alone
+const pathOf = (url, kind) => {
   const u = new URL(url);
-  return u.pathname + u.search;
+  return kind === "api" ? u.pathname + u.search : u.pathname;
 };
 
 async function postToClient(clientId, message) {
@@ -279,7 +281,7 @@ function handleNetworkFirst(event, cacheName, kind) {
   const run = networkFirst({
     network: () =>
       fetch(req).catch((err) => {
-        warn("network failure", pathOf(req.url), errorName(err));
+        warn(`network failure kind=${kind} path=${pathOf(req.url, kind)} error=${errorName(err)}`);
         throw err;
       }),
     readCache: () => caches.open(cacheName).then((c) => c.match(req, matchOptions)),
@@ -288,13 +290,20 @@ function handleNetworkFirst(event, cacheName, kind) {
     nowIso,
   });
   const response = run.result.then(async (r) => {
-    if (r.source === "cache") log(`fallback served kind=${kind} source=cache path=${pathOf(req.url)} savedAt=${r.savedAt}`);
+    const path = pathOf(req.url, kind);
+    if (r.source === "cache") log(`fallback served kind=${kind} source=cache path=${path} savedAt=${r.savedAt}`);
+    if (r.source === "none" && r.response) warn(`server failure kind=${kind} path=${path} status=${r.response.status}`);
     if (kind === "api" || r.source !== "none") return r.response ?? Response.error();
     // A page with no copy of its own: the same page under another query, else the offline page
     const near = await caches.match(req, { ignoreSearch: true, ignoreVary: true });
-    if (near) return near;
+    if (near) {
+      log(`fallback served kind=page source=other-query path=${path} savedAt=${readSavedAt(near)}`);
+      return near;
+    }
     if (r.response) return r.response; // a 5xx from the server, passed through
-    return (await caches.match(absolute("/offline.html"))) ?? Response.error();
+    const offline = await caches.match(absolute("/offline.html"));
+    log(`fallback served kind=page source=${offline ? "offline-page" : "none"} path=${path}`);
+    return offline ?? Response.error();
   });
   event.respondWith(response);
   const message =
@@ -313,7 +322,7 @@ function handleCacheFirst(event, cacheName) {
   event.waitUntil(
     answer
       .then(({ copy }) => copy && caches.open(cacheName).then((c) => c.put(req, copy)))
-      .catch((err) => warn("cache-first failed", pathOf(req.url), errorName(err))),
+      .catch((err) => warn(`network failure kind=static path=${pathOf(req.url)} error=${errorName(err)}`)),
   );
 }
 
@@ -324,22 +333,32 @@ function handleStaleWhileRevalidate(event, cacheName) {
   event.waitUntil(
     fresh
       .then(({ copy }) => copy && caches.open(cacheName).then((c) => c.put(req, copy)))
-      .catch((err) => warn("revalidate failed", pathOf(req.url), errorName(err))),
+      .catch((err) => warn(`network failure kind=static path=${pathOf(req.url)} error=${errorName(err)}`)),
   );
 }
 
 self.addEventListener("install", (event) => {
   // No skipWaiting here: the new worker waits until the page's Reload prompt sends SKIP_WAITING
-  event.waitUntil(precache());
+  event.waitUntil(
+    precache().catch((err) => {
+      warn(`install failed v=${SW_VERSION} ${reasonOf(err)}`);
+      throw err;
+    }),
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(activate());
+  event.waitUntil(
+    activate().catch((err) => {
+      warn(`activate failed v=${SW_VERSION} error=${errorName(err)}`);
+      throw err;
+    }),
+  );
 });
 
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === MSG_SKIP_WAITING) {
-    log("skip-waiting");
+    log(`skip-waiting v=${SW_VERSION}`);
     self.skipWaiting();
   }
 });
