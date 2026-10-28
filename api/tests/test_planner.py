@@ -589,7 +589,7 @@ def test_plan_schema_matches_plan_model():
     Plan.model_validate(_sample(PLAN_SCHEMA))  # anything shaped like the schema parses
 
 
-def test_planner_reuses_tg24_validator_and_flags():
+def test_planner_reuses_tg24_validator():
     src = (APP / "planner.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     defined = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
@@ -597,4 +597,23 @@ def test_planner_reuses_tg24_validator_and_flags():
     imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "plan_validation"
                 for a in n.names}
     assert "validate_plan" in imported
-    assert "get_flags" not in src  # reads request.app.state.flags, set once by TG-24's lifespan
+
+
+def _names(tree) -> set[str]:
+    found = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name):
+            found.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            found.add(n.attr)
+        elif isinstance(n, ast.alias):
+            found.add(n.name)
+    return found
+
+
+def test_get_flags_only_in_flags_and_main():
+    # the planner reads request.app.state.flags, set once by TG-24's lifespan; no module adds its own call
+    offenders = {p.name for p in APP.glob("*.py") if p.name not in {"flags.py", "main.py"}
+                 and "get_flags" in _names(ast.parse(p.read_text(encoding="utf-8")))}
+    assert offenders == set()
+    assert (APP / "planner.py").exists()

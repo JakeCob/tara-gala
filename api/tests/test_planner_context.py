@@ -78,7 +78,7 @@ def test_context_empty_reason(dsn, tmp_path, trips, spots, last_mile, reason):
 def test_context_is_capped_with_a_warning(dsn, tmp_path, caplog):
     many_trips = "".join(
         f"victory-liner,vl-cubao,vl-baguio,,regular_aircon,700,360,2x2,yes,{i // 3:02d}:{(i % 3) * 20:02d},daily,,,{SRC},2026-10-24,\n"
-        for i in range(61)
+        for i in range(62)  # 62, not 61: i=30 is 10:00, which load_planner_data marks inactive
     )
     many_trips += TRIPS.split("\n")[6] + "\n"  # one return bus
     many_spots = "".join(f"cap-spot-{i},Cap Spot {i} (made up),other,,,made up,,\n" for i in range(81))

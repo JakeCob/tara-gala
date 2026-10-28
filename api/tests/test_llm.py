@@ -169,7 +169,8 @@ class Stub:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 raw = self.rfile.read(int(self.headers.get("content-length", 0)))
-                stub.requests.append({"path": self.path, "headers": dict(self.headers), "json": json.loads(raw)})
+                stub.requests.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()},
+                                      "json": json.loads(raw)})
                 if stub.delay:
                     time.sleep(stub.delay)
                 payload = json.dumps(stub.body).encode()
@@ -205,11 +206,11 @@ def stub(monkeypatch, caplog):
     s = Stub()
     yield s
     s.close()
-    assert_no_key_in_logs(caplog)
+    assert_no_key_in_logs(caplog.get_records("call"))  # caplog.records at teardown holds only teardown records
 
 
-def assert_no_key_in_logs(caplog):
-    for r in caplog.records:
+def assert_no_key_in_logs(records):
+    for r in records:
         assert MARKER_KEY not in r.getMessage()
         assert MARKER_KEY not in repr(r.args)
         assert MARKER_KEY not in (r.exc_text or "")
@@ -232,7 +233,8 @@ def test_adapter_sends_the_documented_request(stub):
     assert len(stub.requests) == 1
     req = stub.requests[0]
     assert req["path"] == "/v1/messages"
-    assert req["headers"].get("x-api-key") == MARKER_KEY  # from LLM_API_KEY, passed explicitly
+    assert req["headers"].get("authorization") == f"Bearer {MARKER_KEY}"  # SDK 2.x sends api_key= as a Bearer token
+    assert "x-api-key" not in req["headers"]  # sent once, not twice
     body = req["json"]
     assert body["model"] == HAIKU
     assert body["max_tokens"] == 8000
@@ -325,4 +327,4 @@ def test_adapter_connection_refused(monkeypatch, caplog):
     with pytest.raises(LLMUnavailable) as e:
         call(client)
     assert e.value.kind == "connection"
-    assert_no_key_in_logs(caplog)
+    assert_no_key_in_logs(caplog.records)
