@@ -1,5 +1,6 @@
 // The share page's list view (TG-23, ux.md 1 to 3): summary, issues, the two buses and the days.
-// TG-22 adds or swaps in the overworld map here (Part B).
+// With map (TG-22, NEXT_PUBLIC_OVERWORLD_MAP), the overworld map replaces the bus and day sections; the summary,
+// Share and the changes notice stay above it. Without it, this is TG-23's list, which carries the same facts.
 import Link from "next/link";
 import { formatTime } from "@/lib/api";
 import { formatTravelDate } from "@/lib/direction";
@@ -19,6 +20,7 @@ import {
 } from "@/lib/itinerary";
 import { placeSprite, spriteSrc } from "@/lib/sprites";
 import LegCard from "@/components/LegCard";
+import OverworldMap from "@/components/OverworldMap";
 import ShareButton from "@/components/ShareButton";
 import TripCard from "@/components/TripCard";
 import { UI } from "@/components/planUi";
@@ -27,8 +29,9 @@ function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export default function ItineraryList({ itinerary: it }: { itinerary: Itinerary }) {
+export default function ItineraryList({ itinerary: it, map = false }: { itinerary: Itinerary; map?: boolean }) {
   const names = joinNames(it.party);
+  const confirmNote = it.outbound.trip?.confirm_note ?? it.return.trip?.confirm_note;
   const budget = formatPeso(it.budget_php);
   return (
     <>
@@ -53,13 +56,23 @@ export default function ItineraryList({ itinerary: it }: { itinerary: Itinerary 
         </section>
       )}
 
-      <BusSection title="Bus to Baguio" leg={it.outbound} issues={issuesFor("outbound", it.issues)} />
+      {map ? (
+        <>
+          <p className="text-sm">Tap a stop or a ride for details.</p>
+          {confirmNote && <p className={UI.meta}>{confirmNote}</p>}
+          <OverworldMap itinerary={it} />
+        </>
+      ) : (
+        <>
+          <BusSection title="Bus to Baguio" leg={it.outbound} issues={issuesFor("outbound", it.issues)} />
 
-      {it.days.map((day, d) => (
-        <DaySection key={day.day} day={day} index={d} issues={it.issues} />
-      ))}
+          {it.days.map((day, d) => (
+            <DaySection key={day.day} day={day} index={d} issues={it.issues} />
+          ))}
 
-      <BusSection title="Bus to Metro Manila" leg={it.return} issues={issuesFor("return", it.issues)} />
+          <BusSection title="Bus to Metro Manila" leg={it.return} issues={issuesFor("return", it.issues)} />
+        </>
+      )}
     </>
   );
 }

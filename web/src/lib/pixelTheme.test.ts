@@ -674,6 +674,19 @@ test("T14 no v1 classes anywhere", () => {
   }
 });
 
+// Dates and numbers are fine in the pixel font (ux-guide 2.2 allows day banners like "Day 1 · Sat, Nov 7", and
+// TG-22's banners are {banner.text}); only ₱ and → lack glyphs. Narrowed for TG-22 (manager decision, 2026-10-28),
+// then extended to the helpers that return them: formatPeso and formatFare (₱), routeLabel (→).
+// world.test.ts checks the banner text itself has no ₱ or →.
+const PIXEL_TITLE_BAN = /[₱→]|\\u20b1|\\u2192|formatPeso|formatFare|routeLabel/i;
+
+test("T15 the pixel-title ban list catches each glyph and helper, and allows dates", () => {
+  for (const banned of ["Fare ₱50", "Manila → Baguio", '{"\\u20b1"}', '{"\\u2192"}', "{formatPeso(6000)}", "{formatFare(13, 15)}", '{routeLabel("to-baguio")}']) {
+    assert.match(banned, PIXEL_TITLE_BAN, banned);
+  }
+  for (const allowed of ["Day 1 · Sat, Nov 7", "{banner.text}", "Who's travelling?"]) assert.doesNotMatch(allowed, PIXEL_TITLE_BAN, allowed);
+});
+
 // T15 (B12, guide 2.2): the pixel font has no ₱ or →, so it's for static headings written by us
 test("T15 font-pixel only in components/pixel, and never on data", () => {
   const sources = walkFiles(new URL("src/", WEB)).filter(
@@ -686,8 +699,10 @@ test("T15 font-pixel only in components/pixel, and never on data", () => {
   for (const url of tsxFiles()) {
     const source = readFileSync(url, "utf8");
     for (const m of source.matchAll(/<(PageTitle|SectionTitle)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
-      assert.doesNotMatch(m[2], /[₱→{\d]|formatPeso/, `${relative(url)}: <${m[1]}>${m[2]}</${m[1]}>`);
+      assert.doesNotMatch(m[2], PIXEL_TITLE_BAN, `${relative(url)}: <${m[1]}>${m[2]}</${m[1]}>`);
     }
+    // Children go between the tags, where this test can see them
+    assert.doesNotMatch(source, /<(PageTitle|SectionTitle)\b[^>]*\bchildren=/, `${relative(url)}: children prop on a title`);
   }
 });
 

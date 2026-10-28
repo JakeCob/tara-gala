@@ -27,9 +27,9 @@ export function mapsDestination(t: TerminalPlace): string {
     .join(", ");
 }
 
-/** Transit directions from the device's location; with no `origin`, Maps uses where the phone is. */
-export function googleMapsUrl(t: TerminalPlace): string {
-  const q = new URLSearchParams({ api: "1", destination: mapsDestination(t), travelmode: "transit" });
+/** Directions from the device's location; with no `origin`, Maps uses where the phone is. Transit unless asked (TG-22). */
+export function googleMapsUrl(t: TerminalPlace, travelmode: "transit" | "walking" | "driving" = "transit"): string {
+  const q = new URLSearchParams({ api: "1", destination: mapsDestination(t), travelmode });
   return `${MAPS_DIR_BASE}?${q}`;
 }
 

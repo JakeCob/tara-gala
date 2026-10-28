@@ -1,9 +1,21 @@
 // Feature flags from NEXT_PUBLIC_* env vars. See README section 7.
 // Pure TS with no imports so `node --test` can run it with type stripping.
 
-export type Flags = { plannerLive: boolean; premadeItineraries: boolean; realMap: boolean; serviceWorker: boolean };
+export type Flags = {
+  plannerLive: boolean;
+  premadeItineraries: boolean;
+  realMap: boolean;
+  serviceWorker: boolean;
+  overworldMap: boolean;
+};
 
-export const FLAG_DEFAULTS: Flags = { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true };
+export const FLAG_DEFAULTS: Flags = {
+  plannerLive: false,
+  premadeItineraries: true,
+  realMap: false,
+  serviceWorker: true,
+  overworldMap: true,
+};
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
 const FALSE_WORDS = ["0", "false", "no", "off"];
@@ -26,6 +38,7 @@ export function readFlags(): Flags {
     premadeItineraries: parseFlag(process.env.NEXT_PUBLIC_PREMADE_ITINERARIES, FLAG_DEFAULTS.premadeItineraries),
     realMap: parseFlag(process.env.NEXT_PUBLIC_REAL_MAP, FLAG_DEFAULTS.realMap),
     serviceWorker: parseFlag(process.env.NEXT_PUBLIC_SERVICE_WORKER, FLAG_DEFAULTS.serviceWorker),
+    overworldMap: parseFlag(process.env.NEXT_PUBLIC_OVERWORLD_MAP, FLAG_DEFAULTS.overworldMap),
   };
 }
 
