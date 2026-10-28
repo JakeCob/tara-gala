@@ -299,6 +299,7 @@ _DEACTIVATE = """
     from routes r
     where t.route_id = r.id and r.operator_id = %(op)s and t.source = 'scraped' and t.is_active
       and t.id <> all(%(seen)s::uuid[]) and {scope}
+    returning r.origin_terminal_id, r.destination_terminal_id, r.class::text, t.departure_time, t.valid_from
 """
 DEACTIVATE_SQL = {
     "to-baguio": _DEACTIVATE.format(scope="r.destination_terminal_id = %(baguio)s"),
@@ -363,8 +364,13 @@ def apply(
         for dep in sorted(spec.departures()):
             # No is_active filter: an old deactivated row for the same (departure, valid_from) is reused, never
             # re-inserted, because unique (route_id, departure_time, valid_from) bites for dated rows
-            cur.execute("select id, source, valid_from from trips where route_id = %s and departure_time = %s", (route_id, dep))
-            existing = cur.fetchall()
+            cur.execute(
+                "select id, source, valid_from, days_of_week, is_active from trips where route_id = %s and departure_time = %s",
+                (route_id, dep),
+            )
+            found_rows = cur.fetchall()
+            existing = [row[:3] for row in found_rows]
+            old_weekly = {row[0]: (sorted(row[3]), row[4]) for row in found_rows}
             if any(src == "manual" for _, src, _ in existing):
                 res.trips_skipped_manual += 1  # hand-entered rows win, dated or not; never touched
                 continue
@@ -409,6 +415,10 @@ def apply(
                 )
                 res.trips_updated += 1
                 seen.add(ours)
+                if old_weekly[ours] != (days, True):  # quiet on a stable schedule; one line when a weekday changes
+                    old_days, was_active = old_weekly[ours]
+                    log(f"  weekly: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} days {old_days}"
+                        f"{'' if was_active else ' (inactive)'} -> {days}")
             else:
                 cur.execute(
                     """
@@ -423,9 +433,14 @@ def apply(
     # One `seen` set for both directions is safe: trip ids are unique and each update below is limited to its
     # own side of Baguio. Don't split it per direction; a direction whose every departure clashes with a manual
     # row would then pass an empty set and deactivate all of its scraped trips.
+    slugs = {id_: slug for slug, id_ in terminals.items()}  # slug_map ids are strings
     for name in directions:
         cur.execute(DEACTIVATE_SQL[name], {"op": op, "seen": list(seen), "baguio": terminals[BAGUIO[1]]})
-        res.deactivated_by_direction[name] = cur.rowcount
+        gone = [(str(o), str(d), cls, dep, vf) for o, d, cls, dep, vf in cur.fetchall()]
+        res.deactivated_by_direction[name] = len(gone)
+        for origin, dest, cls, dep, valid_from in sorted(gone, key=lambda g: (slugs[g[0]], slugs[g[1]], g[2], g[3])):
+            log(f"  deactivated: {slugs[origin]}->{slugs[dest]} {cls} {dep:%H:%M}"
+                + (f" on {valid_from}" if valid_from else " weekly"))
     res.trips_deactivated = sum(res.deactivated_by_direction.values())
     return res
 
@@ -454,13 +469,16 @@ def run(
         raise ScrapeError(f"{', '.join(stray)}: got trips for a direction that was not fetched (nothing written)")
     verified_at = verified_at or datetime.now(MANILA)
     routes = aggregate(observations, window, verified_at=verified_at)
+    lines: list[str] = []  # row lines wait for the commit, so a failed run never lists rows it didn't write
     with psycopg.connect(dsn, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
-            res = apply(cur, routes, verified_at, directions, log=log)
+            res = apply(cur, routes, verified_at, directions, log=lines.append)
         if dry_run:
             conn.rollback()
         else:
             conn.commit()
+    for line in lines:
+        log(line)
     return res
 
 

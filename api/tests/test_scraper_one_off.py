@@ -436,6 +436,33 @@ def test_t9_14_one_off_log_lines_and_count(dsn):
     assert not any("http" in line or "postgres" in line for line in lines)
 
 
+def test_log_names_weekday_changes_and_deactivations_only_when_they_happen(dsn):
+    """Log pass: the cron log says which weekly trip lost a weekday and which trips were deactivated."""
+    run(dsn, daily() + seen(B, [SAT1, SAT2]) + seen(C, [*FRIDAYS, SAT1, SAT2]))
+    lines = []
+    run(dsn, daily() + seen(B, [SAT1]) + seen(C, [*FRIDAYS, SAT1]), log=lines.append)
+    assert "  weekly: vl-cubao->vl-baguio regular_aircon 15:00 days [5, 6] -> [5]" in lines
+    assert "  deactivated: vl-cubao->vl-baguio regular_aircon 13:00 weekly" in lines
+    assert not any("07:00" in line for line in lines), "an unchanged weekly trip prints nothing"
+    again = []
+    run(dsn, daily() + seen(B, [SAT1]) + seen(C, [*FRIDAYS, SAT1]), log=again.append)
+    assert not [line for line in again if "weekly:" in line or "deactivated:" in line], "a stable rerun is quiet"
+    shifted = [d + timedelta(days=4) for d in WINDOW]
+    gone = []
+    run(dsn, daily(days=shifted), window=shifted, now=datetime(2026, 11, 1, 4, 0, tzinfo=vl.MANILA), log=gone.append)
+    assert "  deactivated: vl-cubao->vl-baguio regular_aircon 13:00 on 2026-10-31" in gone
+
+
+def test_failed_run_prints_no_row_lines(dsn, monkeypatch):
+    """Log pass: row lines are printed after the commit, so a run that fails lists nothing it didn't write."""
+    monkeypatch.setitem(vl.DEACTIVATE_SQL, "to-baguio", "select no_such_column from trips")
+    lines = []
+    with pytest.raises(psycopg.Error):
+        run(dsn, daily() + seen(B, [SAT1]), log=lines.append)
+    assert lines == []
+    assert query(dsn, "select count(*) from trips") == [(0,)]
+
+
 def test_t9_14b_summary_counts_dated_only_departures(capsys):
     obs = daily() + seen(B, [SAT1]) + seen(D, [SUN1, MON1])
     vl.print_summary(obs, agg(obs), TO)

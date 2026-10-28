@@ -63,7 +63,7 @@ python scraper/victory_liner.py --direction to-baguio     # one direction only: 
   - **Today:** today counts only for departures more than 3 hours after the scrape (`TODAY_MARGIN`), because earlier buses may already have left.
   - **Empty dates:** a date on which a route returned no trips at all is ignored, and printed as `WARNING: no trips at all for <leg> on <date>`.
 
-  Any other date a departure was seen on is saved for that date only (`valid_from = valid_to`), so a holiday extra on Sat Oct 31 never shows up on Sat Nov 7. Each one prints a `one-off:` line. Dated rows not seen again are set inactive like any other scraped trip. Known gaps: an early extra (within 3 hours of the scrape) seen only on the same weekday next week is still saved as weekly; and after a manual run at another hour, the next 4am run is the one that counts. Keep the cron at 4am for that reason.
+  Any other date a departure was seen on is saved for that date only (`valid_from = valid_to`), so a holiday extra on Sat Oct 31 never shows up on Sat Nov 7. Each one prints a `one-off:` line, a weekly trip whose weekdays change prints a `weekly:` line, and every trip set inactive prints a `deactivated:` line (after the commit, so a failed run lists nothing). Dated rows not seen again are set inactive like any other scraped trip. Known gaps: an early extra (within 3 hours of the scrape) seen only on the same weekday next week is still saved as weekly; and after a manual run at another hour, the next 4am run is the one that counts. Keep the cron at 4am for that reason.
 - Daily at 4am Manila time (VPS clock in UTC, so 20:00 UTC the day before):
 
 ```cron
