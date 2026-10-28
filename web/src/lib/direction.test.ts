@@ -144,6 +144,14 @@ test("swap clears shown results, and results always match the heading", () => {
       return searchReducer(r.state, { type: "searchDone", requestId: r.requestId, trips: r.trips });
     }],
     ["pick Nov 8", (s) => searchReducer(s, { type: "pickDate", date: "2026-11-08" })],
+    ["search Nov 8", (s) => {
+      // Starting from shown results: while loading, the old Nov 6 trips must not stay on screen
+      const r = start(s, "2026-11-08");
+      assert.equal(r.state.status, "loading");
+      assert.deepEqual(r.state.trips, [], "old results kept while the next search loads");
+      assertConsistent(r.state, "search Nov 8 (loading)");
+      return searchReducer(r.state, { type: "searchDone", requestId: r.requestId, trips: r.trips });
+    }],
     ["swap back", (s) => searchReducer(s, { type: "swap" })],
   ];
   const seen: string[] = [];
@@ -158,8 +166,10 @@ test("swap clears shown results, and results always match the heading", () => {
     "swap: idle from-baguio",
     "search again: done from-baguio",
     "pick Nov 8: done from-baguio",
+    "search Nov 8: done from-baguio",
     "swap back: idle to-baguio",
   ]);
+  assert.equal(s.date, "2026-11-08", "swap back keeps the date");
 });
 
 test("a search with no trips is done and keeps its heading", () => {
@@ -192,10 +202,30 @@ test("late failure for the old direction is ignored", () => {
   assert.equal(searchReducer(swapped, { type: "searchFailed", requestId: r.requestId }), swapped);
 });
 
+test("a stale response is ignored while the newer search is still loading", () => {
+  // Keyed on requestId, not status: the old reply lands while the new search is loading
+  const a = start(initialSearchState<FakeTrip>(), "2026-11-06");
+  const swapped = searchReducer(a.state, { type: "swap" });
+  const b = start(searchReducer(swapped, { type: "pickDate", date: "2026-11-08" }), "2026-11-08");
+  assert.equal(b.state.status, "loading");
+  assert.notEqual(a.requestId, b.requestId);
+
+  assert.equal(searchReducer(b.state, { type: "searchDone", requestId: a.requestId, trips: a.trips }), b.state, "stale searchDone");
+  assert.equal(searchReducer(b.state, { type: "searchFailed", requestId: a.requestId }), b.state, "stale searchFailed");
+
+  const done = searchReducer(b.state, { type: "searchDone", requestId: b.requestId, trips: b.trips });
+  assert.equal(done.status, "done");
+  assert.deepEqual(done.searched, { direction: "from-baguio", date: "2026-11-08" });
+  assert.deepEqual(done.trips, [{ direction: "from-baguio", date: "2026-11-08" }]);
+  assertConsistent(done, "B done");
+});
+
 test("only the latest of two searches is shown", () => {
   const first = start(initialSearchState<FakeTrip>(), "2026-11-06");
   const second = start(searchReducer(first.state, { type: "pickDate", date: "2026-11-07" }), "2026-11-07");
   assert.notEqual(first.requestId, second.requestId);
+  // The first reply arrives before the second one, while the state is still loading
+  assert.equal(searchReducer(second.state, { type: "searchDone", requestId: first.requestId, trips: first.trips }), second.state);
   const done = searchReducer(second.state, { type: "searchDone", requestId: second.requestId, trips: second.trips });
   assert.equal(searchReducer(done, { type: "searchDone", requestId: first.requestId, trips: first.trips }), done);
   assert.deepEqual(done.searched, { direction: "to-baguio", date: "2026-11-07" });
@@ -207,6 +237,34 @@ test("a current failure shows the error and no results", () => {
   assert.equal(s.status, "error");
   assert.deepEqual(s.trips, []);
   assertConsistent(s, "failure");
+});
+
+test("a failure after shown results clears them", () => {
+  const a = start(initialSearchState<FakeTrip>(), "2026-11-06");
+  const shown = searchReducer(a.state, { type: "searchDone", requestId: a.requestId, trips: a.trips });
+  assert.equal(shown.trips.length, 1);
+  const b = start(shown, "2026-11-06");
+  assertConsistent(b.state, "retry (loading)");
+  const failed = searchReducer(b.state, { type: "searchFailed", requestId: b.requestId });
+  assert.equal(failed.status, "error");
+  assert.deepEqual(failed.trips, [], "old results kept under the error");
+  assertConsistent(failed, "failure after results");
+});
+
+test("searchFailed clears trips on its own", () => {
+  // searchStarted already empties trips, so build a loading state that still has some: searchFailed must not
+  // rely on that to keep old results out from under the error message
+  const loading: State = {
+    direction: "to-baguio",
+    date: "2026-11-06",
+    status: "loading",
+    trips: [{ direction: "to-baguio", date: "2026-11-06" }],
+    searched: { direction: "to-baguio", date: "2026-11-06" },
+    requestId: 3,
+  };
+  const failed = searchReducer(loading, { type: "searchFailed", requestId: 3 });
+  assert.equal(failed.status, "error");
+  assert.deepEqual(failed.trips, []);
 });
 
 // T31-9 (B5)
