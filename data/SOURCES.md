@@ -73,3 +73,11 @@ Not used:
 - `tam-awanvillage.com` (with a hyphen) now hosts contractor and kitchen-remodel pages, so the domain has changed hands. The official site is `tamawanvillage.com` (linked from OSM), and it has no fees or hours.
 - `campjohnhay.ph` redirects to John Hay Hotels, not the park's management.
 - Travel blogs and aggregators with conflicting fee figures.
+
+## Taxi mesh (`data/last_mile_routes.csv`, branch DATA-taxi-mesh), generated 2026-10-29
+
+155 generated taxi legs, one for every ordered pair of the 13 spots, minus `baguio-city-market` → `la-trinidad-strawberry-farm`, which a sourced jeep leg already covers (the reverse direction is included). Legs to and from the lodging already exist as taxi legs, so none are added here. Fare and minutes are empty. Each leg's note reads "generic metered taxi between Baguio-area spots (manager-approved generated leg, not a sourced route); owner to verify". tg-manager approved this on 2026-10-29 because the planner validator chains each leg from the previous stop. It is a separate PR so the owner can drop it with one revert.
+
+No source URL:
+- `last_mile_routes.csv` has no `source_url` column, so a source could only be cited here.
+- A search on 2026-10-29 found no official city or tourism page saying metered taxis serve these areas. Results were news reports about LTFRB taxi fare changes (Inquirer, SunStar, PTV, 2010 to 2018 plus one undated P50 flag-down report), which don't state coverage and aren't current fare sources, so none is cited.
