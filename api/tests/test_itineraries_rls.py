@@ -141,18 +141,22 @@ def test_connecting_role_still_reads_itinerary_by_slug(conn):
 
 
 # T32-5b (B5), guard: Supabase's postgres user reads as table owner, not as superuser
-def test_non_superuser_table_owner_still_reads(conn):
+def owner_reads_by_slug(conn, slug):
     ensure_role(conn, "tg32_owner")
     conn.execute("grant usage on schema public to tg32_owner")
     conn.execute("alter table itineraries owner to tg32_owner")
+    return scalar_as(conn, "tg32_owner", "select count(*) from itineraries where share_slug = %s", (slug,)) == 1
+
+
+def test_non_superuser_table_owner_still_reads(conn):
     slug = insert_itinerary(conn)
-    assert scalar_as(conn, "tg32_owner", "select count(*) from itineraries where share_slug = %s", (slug,)) == 1
+    assert owner_reads_by_slug(conn, slug)
 
 
 # T32-6 (B6), plus review should-fix 1: old install + migration == fresh install from schema.sql
 def test_migration_fixes_an_old_install(conn):
     fresh_policies = policy_set(conn)  # the dsn fixture built this schema from schema.sql only
-    insert_itinerary(conn)
+    slug = insert_itinerary(conn)
 
     conn.execute(
         f"""do $$ begin
@@ -168,6 +172,10 @@ def test_migration_fixes_an_old_install(conn):
     assert scalar_as(conn, "anon", "select count(*) from itineraries") == 0
     assert conn.execute("select count(*) from pg_policies where tablename = 'itineraries'").fetchone()[0] == 0
     assert policy_set(conn) == fresh_policies
+    # the API's owner connection must still read after the migration (no force row level security)
+    force = conn.execute("select relforcerowsecurity from pg_class where oid = 'public.itineraries'::regclass")
+    assert force.fetchone()[0] is False
+    assert owner_reads_by_slug(conn, slug)
 
 
 # T32-7 (B7)
@@ -201,7 +209,7 @@ def test_migration_filenames_follow_convention():
 # T32-9 (B1)
 def test_schema_sql_text():
     schema = SCHEMA.read_text(encoding="utf-8")
-    policy = re.search(r"create\s+policy\s+\w+\s+on\s+(public\.)?itineraries\b", schema, re.I)
+    policy = re.search(r"create\s+policy\s+(\"[^\"]+\"|\w+)\s+on\s+(public\.)?itineraries\b", schema, re.I)
     assert policy is None, f"schema.sql still has: {policy and policy.group(0)}"
     assert re.search(r"alter\s+table\s+itineraries\s+enable\s+row\s+level\s+security", schema, re.I)
     for f in (ROOT / "supabase").rglob("*.sql"):
