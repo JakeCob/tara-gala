@@ -592,14 +592,55 @@ def messy_plan() -> dict:
 
 
 def test_every_error_comes_back_in_plan_order():
+    # Manager decision (ticket.md): plan position first (outbound, the days, then return)
     errors = check(messy_plan())
     assert found(errors) == [
         ("trip_not_running", "outbound.trip_id"),
-        ("trip_not_running", "return.trip_id"),
         ("unknown_leg", at(0, 1, LEG_PATH)),
         ("overlap", at(1, 1, "arrive")),
+        ("trip_not_running", "return.trip_id"),
     ]
     assert check(messy_plan()) == check(messy_plan())
+
+
+def test_errors_sort_by_plan_position_then_check_order():
+    """An earlier stop's timing error comes before a later stop's id error. Within one stop the
+    fixed check order holds (ids, then times, then the return, then hours), whatever the sub-path."""
+    raw = p0(outbound="out-weekends", ret="ret-weekdays")
+    stop(raw, 0, 1)["arrive"] = "14:00"  # timing (overlap) on day 1, stop 2
+    stop(raw, 1, 0)["leg"]["last_mile_route_id"] = str(uuid4())  # id error on day 2, stop 1
+    last = stop(raw, 2, 0)  # Sun at test-park, open 09:00 to 17:00; return bus at 21:00
+    last["leg"]["last_mile_route_id"] = str(uuid4())
+    last["arrive"], last["leave"] = "08:00", "20:45"
+    assert found(check(raw)) == [
+        ("trip_not_running", "outbound.trip_id"),
+        ("overlap", at(0, 1, "arrive")),
+        ("unknown_leg", at(1, 0, LEG_PATH)),
+        ("unknown_leg", at(2, 0, LEG_PATH)),
+        ("after_return", at(2, 0, "leave")),
+        ("closed", at(2, 0)),
+        ("trip_not_running", "return.trip_id"),
+    ]
+
+
+def test_day_list_errors_sit_between_outbound_and_the_stops():
+    raw = p0(outbound="out-inactive")
+    raw["days"].pop()  # bad_days, at "days"
+    stop(raw, 0, 1)["leg"]["last_mile_route_id"] = str(uuid4())
+    assert found(check(raw, return_date=SAT)) == [
+        ("trip_inactive", "outbound.trip_id"),
+        ("bad_days", "days"),
+        ("unknown_leg", at(0, 1, LEG_PATH)),
+        ("wrong_date", "return.date"),
+    ]
+
+
+def test_return_errors_keep_check_order_within_the_return():
+    raw = p0(ret="ret-inactive", ret_date=date(2026, 11, 5))
+    errors = found(check(raw, return_date=SUN))
+    tail = [e for e in errors if e[1].startswith("return")]
+    assert tail == [("trip_inactive", "return.trip_id"), ("wrong_date", "return.date"), ("dates_out_of_order", "return.date")]
+    assert errors[-3:] == tail  # the return is last
 
 
 def test_errors_are_safe_to_log_and_send_to_the_model():
