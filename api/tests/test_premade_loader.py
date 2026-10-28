@@ -71,16 +71,25 @@ def expected_plans(dsn) -> dict[str, dict]:
 
 # --- B18 the committed template ----------------------------------------------------------------
 
-def test_committed_file_is_a_template(rows, capsys):
+def test_committed_file_is_well_formed():
+    # Structure only: the committed entries reference real Victory Liner trips that the test DB doesn't have,
+    # so loading them here would fail. The loader's own dry run against the live DB checks the references.
     path = ROOT / "data" / "premade_itineraries.json"
     text = path.read_text(encoding="utf-8")
     assert not UUID_RE.search(text)  # authored by slug, and no real-looking ids
     data = json.loads(text)
-    assert data["itineraries"] == []
+    assert isinstance(data.get("itineraries"), list)
     assert all(k.startswith("_") for k in data if k != "itineraries")
-    assert run(rows, path) == 0
-    assert "Loaded 0 pre-made itineraries" in capsys.readouterr().out
-    assert premade_rows(rows) == []
+    itineraries = data["itineraries"]
+    for raw in itineraries:
+        assert {"key", "vibe", "party", "outbound", "return", "days"} <= raw.keys(), raw.get("key")
+        assert raw["outbound"].get("date") and raw["return"].get("date"), raw["key"]
+        assert raw["days"], raw["key"]
+    keys = [raw["key"] for raw in itineraries]
+    assert len(keys) == len(set(keys))
+    entries, problems = load_premade.read_entries(path)  # the loader's schema: extra keys forbidden, slugs only
+    assert problems == []
+    assert [e.key for e in entries] == keys
 
 
 # --- B19 resolve and save ------------------------------------------------------------------------
