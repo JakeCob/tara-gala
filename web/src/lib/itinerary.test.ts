@@ -15,6 +15,7 @@ import {
   nextShareStep,
   partySummary,
   runShare,
+  shareDeps,
   shareMethod,
   shareText,
   shareUrl,
@@ -136,6 +137,40 @@ test("runShare: a rejected copy goes to the manual field", async () => {
 
 test("runShare: nothing available goes to the manual field", async () => {
   assert.equal(await runShare({}, PAYLOAD), "manual");
+});
+
+// --- shareDeps: which browser APIs runShare gets (RED re-audit 2, gap C) ---------------------------
+
+test("shareDeps: missing or non-function APIs are undefined, never assumed", () => {
+  for (const nav of [{}, { clipboard: {} }, { share: "not a function" }, { clipboard: { writeText: 7 } }]) {
+    const deps = shareDeps(nav);
+    assert.equal(deps.share, undefined, JSON.stringify(nav));
+    assert.equal(deps.writeText, undefined, JSON.stringify(nav));
+  }
+});
+
+test("shareDeps: each API is bound to its owner (no Illegal invocation)", async () => {
+  const seen: unknown[] = [];
+  const clipboard = { writeText(this: unknown, _s: string) { seen.push(this); return Promise.resolve(); } };
+  const nav = { share(this: unknown, _p: unknown) { seen.push(this); return Promise.resolve(); }, clipboard };
+  const deps = shareDeps(nav);
+  await deps.share!(PAYLOAD);
+  await deps.writeText!(PAYLOAD.url);
+  assert.equal(seen[0], nav);
+  assert.equal(seen[1], clipboard);
+});
+
+test("shareDeps: Web Share and clipboard are both passed when present", () => {
+  const deps = shareDeps({ share: () => Promise.resolve(), clipboard: { writeText: () => Promise.resolve() } });
+  assert.equal(typeof deps.share, "function");
+  assert.equal(typeof deps.writeText, "function");
+});
+
+test("shareDeps + runShare: no Web Share copies the link once", async () => {
+  const written: string[] = [];
+  const nav = { clipboard: { writeText: (s: string) => { written.push(s); return Promise.resolve(); } } };
+  assert.equal(await runShare(shareDeps(nav), PAYLOAD), "copied");
+  assert.deepEqual(written, [PAYLOAD.url]);
 });
 
 // --- T23-W6 party and names (ux.md section 4; the same rules as TG-15's partySummary) ----------------
@@ -325,12 +360,12 @@ test("share page is noindex and sends no referrer (review nit 3)", () => {
   assert.match(page, /referrer:\s*"no-referrer"/);
 });
 
-test("ShareButton hands the whole tap to runShare (RED re-audit gap B)", () => {
+test("ShareButton hands the tap to runShare with shareDeps(navigator) (RED re-audits B and C)", () => {
   const src = readFileSync(new URL("src/components/ShareButton.tsx", WEB), "utf8");
-  assert.match(src, /runShare\(/);
+  assert.match(src, /runShare\(\s*shareDeps\(navigator\)\s*,/);
   assert.match(src, /shareText\(/); // the payload text has dates only
-  // the browser APIs are passed in (bound), never called here, so the fallback logic can't be bypassed
-  assert.doesNotMatch(src, /navigator\.share\(/);
+  // the component never builds or calls the browser APIs itself, so the fallbacks can't be bypassed
+  assert.doesNotMatch(src, /navigator\.share|navigator\.clipboard/);
   assert.doesNotMatch(src, /\.writeText\(/);
 });
 
