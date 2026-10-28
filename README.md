@@ -78,3 +78,20 @@ cp .env.example .env.local           # set NEXT_PUBLIC_API_URL
 npm install
 npm run dev                          # http://localhost:3000
 ```
+
+## 7. Feature flags
+Each flag is an environment variable on both sides: the API reads it from `os.environ` (`api/app/flags.py`), the web app from a `NEXT_PUBLIC_` variable (`web/src/lib/flags.ts`).
+
+| Flag | API (Railway) | Web (Vercel) | Default | Turns on |
+|---|---|---|---|---|
+| Live AI planner | `PLANNER_LIVE` | `NEXT_PUBLIC_PLANNER_LIVE` | `false` | TG-25 live planner |
+| Pre-made itineraries | `PREMADE_ITINERARIES` | `NEXT_PUBLIC_PREMADE_ITINERARIES` | `true` | TG-24 pre-made itineraries |
+| Real-map toggle | `REAL_MAP` | `NEXT_PUBLIC_REAL_MAP` | `false` | TG-26 real map (cut) |
+
+Values are trimmed and case-insensitive. `1`, `true`, `yes`, `on` mean on; `0`, `false`, `no`, `off` mean off. Unset or empty uses the default. Anything else also uses the default: the API logs a warning naming the variable, the web app falls back silently.
+
+- Set both sides together (e.g. `PLANNER_LIVE` on Railway and `NEXT_PUBLIC_PLANNER_LIVE` on Vercel). The API value decides server behaviour; the web value decides what the UI shows.
+- The API reads flags once per process and logs them at startup, so changing a flag on Railway takes effect when the API restarts (Railway redeploys on a variable change).
+- Web flags are baked in at `next build`: change them in Vercel and redeploy.
+
+Tests: the API flag tests run with the normal pytest command (section 5). The web tests run with `cd web && npm test`, which uses Node's built-in `node --test` and needs Node 22.18 or later for TypeScript type stripping. They use `node:test`, not Vitest, so TG-18 must port `web/src/lib/flags.test.ts` to Vitest or exclude it.
