@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { CHIBI_FRAMES, SPRITES, chibi, spriteSrc, type SpriteName } from "./sprites.ts";
 import { PICKER_TYPES } from "./party.ts";
-import { PX } from "../components/pixel/classes.ts";
+import { UI } from "../components/planUi.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
@@ -15,7 +15,15 @@ const useSpawn = read("src/components/useSpawn.ts");
 const form = read("src/components/PlanForm.tsx");
 const page = read("src/app/plan/page.tsx");
 const home = read("src/app/page.tsx");
-const NEW_UI = { "PartyPicker.tsx": picker, "PartyStage.tsx": stage, "useSpawn.ts": useSpawn, "PlanForm.tsx": form, "plan/page.tsx": page };
+const planUi = read("src/components/planUi.ts");
+const NEW_UI = {
+  "PartyPicker.tsx": picker,
+  "PartyStage.tsx": stage,
+  "useSpawn.ts": useSpawn,
+  "PlanForm.tsx": form,
+  "plan/page.tsx": page,
+  "planUi.ts": planUi,
+};
 
 // Opening tags of a JSX element, attributes included; skips `>` inside {…} and quotes (e.g. `onClick={() => …}`)
 function tags(src: string, name: string): string[] {
@@ -79,19 +87,17 @@ test("T15-G1 steppers: label helpers, aria-disabled, never disabled", () => {
   assert.match(picker, /aria-disabled=\{[^}]*canAdd\(/);
   assert.match(picker, /aria-disabled=\{[^}]*canRemove\(/);
   assert.doesNotMatch(picker, /(?<![-\w])disabled\s*[={]/, "a real disabled drops focus at the limit");
-  assert.doesNotMatch(picker, /<button\b/, "steppers are PixelButton (TG-42 primitives)");
+  for (const b of tags(picker, "button")) assert.match(b, /\btype="button"/, b);
 });
 
 test("T15-G2 steppers are 44px icon buttons with hidden glyphs", () => {
-  const buttons = tags(picker, "PixelButton");
-  assert.ok(buttons.length >= 2, "a − and a + PixelButton");
+  const buttons = tags(picker, "button");
+  assert.equal(buttons.length, 2, "a − and a + per row, rendered from PICKER_TYPES");
   for (const b of buttons) {
-    assert.match(b, /variant="icon"/, b);
-    assert.doesNotMatch(b, /\bclassName=/, `the icon skin and layout stay as TG-42 made them: ${b}`);
-    assert.doesNotMatch(b, /\btype="(submit|reset)"/, b);
+    assert.match(b, /className=\{UI\.iconBtn\}/, `one swap point for TG-42's <PixelButton variant="icon">: ${b}`);
   }
-  assert.match(PX.btn.icon.skin, /\bmin-h-11\b/);
-  assert.match(PX.btn.icon.skin, /\bmin-w-11\b/);
+  assert.match(UI.iconBtn, /\bmin-h-11\b/);
+  assert.match(UI.iconBtn, /\bmin-w-11\b/);
   assert.match(picker, /<span[^>]*aria-hidden[^>]*>\s*(−|\{"−"\})\s*<\/span>/, "− is U+2212, hidden");
   assert.match(picker, /<span[^>]*aria-hidden[^>]*>\s*(\+|\{"\+"\})\s*<\/span>/, "+ hidden");
 });
@@ -108,8 +114,11 @@ test("T15-G4 live summary, groups, heading and discount note", () => {
   for (const g of tags(picker, "\\w+").filter((x) => x.includes('role="group"'))) {
     assert.match(g, /aria-labelledby=/, g);
   }
-  assert.match(picker, /<SectionTitle\b[^>]*>\s*(\{"Who's travelling\?"\}|Who&apos;s travelling\?)\s*<\/SectionTitle>/);
-  assert.match(picker, /<PixelBox\b/);
+  const h2 = picker.match(/<h2\b[^>]*\bid=\{([^}]+)\}[^>]*>\s*(\{"Who's travelling\?"\}|Who&apos;s travelling\?)\s*<\/h2>/);
+  assert.ok(h2, "<h2 id={…}>Who's travelling?</h2>");
+  assert.match(picker, new RegExp(`role="group" aria-labelledby=\\{${h2[1].replace(/[$()[\]{}.*+?^|\\]/g, "\\$&")}\\}`), "the list is named by the h2");
+  assert.match(picker, /className=\{UI\.h2\}/);
+  assert.match(picker, /className=\{UI\.box\}/);
   assert.match(picker, /\bDISCOUNT_NOTE\b/);
   assert.doesNotMatch(picker, /Some operators don/, "the note comes from party.ts");
 });
@@ -129,9 +138,10 @@ test("T15-G5 stage is decorative and gets sprites only from the manifest", () =>
   assert.match(stage, /spriteSrc\("tile-grass"\)/);
   assert.match(stage, /spriteSrc\("ui-star"\)/);
   assert.doesNotMatch(stage, /\/sprites\//);
-  assert.match(stage, /\bisPickerType\(/, "child and unknown types get a tag only (T15-SP5)");
-  assert.match(stage, /\bbg-screen\b/);
-  assert.match(stage, /bg-screen-paper text-screen-ink|PX\.screenChip/);
+  assert.match(stage, /isPickerType\([^)]*\)\s*\?\s*spriteSrc\(chibi\(/, "child and unknown types get a tag only (T15-SP5, audit N1)");
+  assert.equal((stage.match(/spriteSrc\(chibi\(/g) ?? []).length, 1, "the only chibi src is the guarded one");
+  assert.match(stage, /\{src && \(/, "the chibi img renders only with a src");
+  assert.match(stage, /\$\{UI\.screenChip\}/);
 });
 
 test("T15-G6 stage grid and sizes", () => {
@@ -143,7 +153,7 @@ test("T15-G6 stage grid and sizes", () => {
 
 // T15-G7: the 1× chibi plate in each row
 test("T15-G7 row chibi is 32px on a screen-paper plate", () => {
-  assert.match(picker, /bg-screen-paper/);
+  assert.match(picker, /\$\{UI\.plate\}/);
   const img = tags(picker, "img");
   assert.ok(img.length >= 1);
   for (const i of img) {
@@ -176,10 +186,11 @@ test("T15-G9 PlanForm owns the party; /plan page shell; not linked from home", (
   assert.ok(tags(form, "PartyStage").some((t) => /\bparty=\{party\}/.test(t)), "<PartyStage party={party}>");
   assert.ok(tags(form, "PartyPicker").some((t) => /\bparty=\{party\}/.test(t)), "<PartyPicker party={party}>");
   assert.doesNotMatch(page, /use client/);
-  assert.match(page, /<PageTitle>Plan your trip<\/PageTitle>/);
+  assert.match(page, /<h1 className=\{UI\.h1\}>Plan your trip<\/h1>/);
+  assert.equal((page.match(/<h1\b/g) ?? []).length, 1);
   assert.ok(
-    tags(page, "PixelLink").some((t) => /variant="secondary"/.test(t) && /href="\/"/.test(t)),
-    '<PixelLink variant="secondary" href="/">',
+    tags(page, "Link").some((t) => /href="\/"/.test(t) && /className=\{UI\.backLink\}/.test(t)),
+    '<Link href="/" className={UI.backLink}>',
   );
   assert.match(page, /<span aria-hidden(="true")?>←(&nbsp;)?<\/span>\s*Back to bus search/);
   assert.match(page, /title:\s*"Plan your trip · Tara Gala"/);
@@ -187,13 +198,28 @@ test("T15-G9 PlanForm owns the party; /plan page shell; not linked from home", (
   assert.doesNotMatch(home, /["'`]\/plan\b/, "TG-21 adds the link");
 });
 
-// Review finding 1: TG-42 guard (font-pixel only inside components/pixel/) and the v2 bans
-test("T15-G10 new UI builds on TG-42 primitives: no font-pixel or v1 shapes", () => {
+// Review finding 1 (TG-42 guard: font-pixel only inside components/pixel/) and the v2 bans. TG-42 PR A isn't on
+// main, so per the manager the look lives in planUi.ts, one key per PR A primitive, until TG-42 swaps it.
+test("T15-G10 new UI: no font-pixel, v1 shapes or hex; v2 look kept in planUi.ts", () => {
   for (const [file, src] of Object.entries(NEW_UI)) {
-    assert.doesNotMatch(src, /font-pixel/, `${file}: use PageTitle / SectionTitle`);
+    assert.doesNotMatch(src, /font-pixel/, `${file}: TG-42's PageTitle / SectionTitle own the pixel font`);
     assert.doesNotMatch(src, /rounded-(?!none\b)|\bring-|shadow-lg|text-\[#|outline-none|outline-hidden/, file);
+    assert.doesNotMatch(src, /#[0-9a-fA-F]{3,8}\b/, `${file}: no hex colours`);
   }
-  assert.match(page + picker, /from "@\/components\/pixel"/);
+  for (const [file, src] of Object.entries({ "PartyPicker.tsx": picker, "PartyStage.tsx": stage, "plan/page.tsx": page })) {
+    assert.doesNotMatch(src, /\bborder-\d|\bbg-card\b|\bshadow-\[/, `${file}: frames and fills come from planUi.ts`);
+  }
+});
+
+test("T15-G11 planUi.ts is a plain module of class strings with pixel focus", () => {
+  assert.doesNotMatch(planUi, /^\s*import\b/m);
+  assert.doesNotMatch(planUi, /use client|<\/[A-Za-z]|\/>/);
+  for (const key of ["iconBtn", "backLink"] as const) {
+    assert.match(UI[key], /focus-visible:outline-3/, key);
+    assert.match(UI[key], /\bmin-h-11\b/, key);
+  }
+  assert.match(UI.iconBtn, /aria-disabled:opacity-60/, "dimmed at the limit, like pixel-btn");
+  assert.match(UI.pixelated, /image-rendering:pixelated/);
 });
 
 // T15-X2 (N3): no animation library
