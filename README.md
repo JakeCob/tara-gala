@@ -75,7 +75,7 @@ uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
 
 Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`), `GET /premade-itineraries` (404 when `PREMADE_ITINERARIES=false`), `POST /plan` (live AI planner; 404 unless `PLANNER_LIVE=true`, see below).
 
-Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pytest` (tests are skipped without it).
+Tests run against a throwaway Postgres: `cd api && TEST_DATABASE_URL=postgresql://... python -m pytest` (use `python -m`: a bare `pytest` can't import `app`). Without `TEST_DATABASE_URL` the run is skipped and exits non-zero.
 
 Deployed on Railway: see section 8. `api/Procfile` is the start command for local runs and other hosts; on Railway, `api/railway.json` overrides it.
 
@@ -132,6 +132,14 @@ npm install
 npm run dev                          # http://localhost:3000
 ```
 
+Checks (same as CI):
+```bash
+npx next typegen && npx tsc --noEmit   # a fresh checkout needs typegen first, or tsc fails on LayoutProps
+npm run lint
+npm test                               # node:test, Node 22.18+
+npm run build
+```
+
 ### Offline and install (TG-27)
 The service worker (`web/public/sw.js`, hand-written) registers only in a production build (`npm run build && npm start`), never under `next dev`. It keeps the app shell, trip searches and last-mile routes on the phone, and shows a yellow banner with the saved time when it serves them from there. Bump `SW_VERSION` in `sw.js` on every change to it; open tabs then show "A new version of Tara Gala is ready." with a Reload button.
 
@@ -156,7 +164,7 @@ Values are trimmed and case-insensitive. `1`, `true`, `yes`, `on` mean on; `0`, 
 - The API reads flags once per process and logs them at startup, so changing a flag on Railway takes effect when the API restarts (Railway redeploys on a variable change).
 - Web flags are baked in at `next build`: change the `web` service variable on Railway, then rebuild web with `railway up` (section 8). A restart or `railway redeploy` reuses the old build and keeps the old value.
 
-Tests: the API flag tests run with the normal pytest command (section 5). The web tests run with `cd web && npm test`, which uses Node's built-in `node --test` and needs Node 22.18 or later for TypeScript type stripping. They use `node:test`, not Vitest, so TG-18 must port `web/src/lib/flags.test.ts` to Vitest or exclude it.
+Tests: the API flag tests run with the normal pytest command (section 5). The web tests run with `cd web && npm test`, which uses Node's built-in `node --test` and needs Node 22.18 or later for TypeScript type stripping. CI runs them as they are (section 9).
 
 ## 8. Deploy (Railway)
 One Railway project with three services in its `production` environment: `Postgres` (Railway's Postgres), `api` (FastAPI) and `web` (`next start`). Both app services get a generated `*.up.railway.app` domain on port 8080.
@@ -169,3 +177,38 @@ One Railway project with three services in its `production` environment: `Postgr
 - `DATABASE_PUBLIC_URL` (Postgres' TCP proxy) is used only from the VPS, for the schema, the migrations and the scraper and loader runs (sections 1, 3 and 4). It is never set on `api`.
 - Redeploy after a merge to `main`: export a clean copy of `main` (`git archive`), apply `supabase/schema.sql` if new and every file in `supabase/migrations/` (safe to re-run), run the loaders if `data/` changed, then `railway up <export>/api --path-as-root` and `railway up <export>/web --path-as-root`, then the smoke test (`/health`, `/terminals`, `/trips` for both directions, CORS from the web origin, the pages at 380px).
 - Project and service IDs, hostnames, the exact commands and the rollback steps are in the ops notes, which live outside the repo.
+
+## 9. CI
+GitHub Actions (`.github/workflows/ci.yml`, workflow `CI`) runs on every pull request and every push to `main`. It has two jobs:
+- **web:** Node 24, in `web/`: `npm ci`, `npx next typegen`, `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`.
+- **api:** Python 3.12 with a `postgres:16` service container, in `api/`: `pip install -r requirements.txt`, then `python -m pytest -q -rs` with `TEST_DATABASE_URL` pointed at the container.
+
+npm and pip are cached. A new push to a pull request cancels that PR's older run. Runs on `main` are never cancelled.
+
+CI uses no secrets: the token is read-only, and no `LLM_API_KEY` or `DATABASE_URL` is set. The Postgres password in `ci.yml` belongs to the throwaway service container. CI doesn't deploy either: deploys are manual (`railway up`, section 8).
+
+Reading a failure: the red step's name says which check failed (tsc, lint, `npm test`, build or pytest), and the same command runs locally (sections 5 and 6). For `api` failures, the Postgres service log is in the job's "Stop containers" step. `-rs` prints the reason for any skipped test.
+
+### Branch protection (not switched on yet; owner decision)
+It needs one finished CI run first, so the `web` and `api` check names exist. Don't rename the jobs without updating this section. With a repo-admin token:
+```bash
+gh api -X PUT repos/JakeCob/tara-gala/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": false, "contexts": ["web", "api"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
+```
+- Check: `gh api repos/JakeCob/tara-gala/branches/main/protection --jq '.required_status_checks.contexts, .enforce_admins.enabled'`
+- Undo: `gh api -X DELETE repos/JakeCob/tara-gala/branches/main/protection`
+- Emergency bypass that keeps the checks: `gh api -X DELETE repos/JakeCob/tara-gala/branches/main/protection/enforce_admins`, merge, then put it back with `gh api -X POST repos/JakeCob/tara-gala/branches/main/protection/enforce_admins`.
+
+Or click through: repo **Settings** → **Branches** → **Add classic branch protection rule**, with branch name pattern `main`. Tick **Require status checks to pass before merging** and add `web` and `api`. Leave **Require branches to be up to date** off. Tick **Do not allow bypassing the above settings**, then click **Create**.
+
+Why these values:
+- **`enforce_admins: true`:** every merge here uses an admin token, so without it a red check could be merged anyway.
+- **`strict: false`:** PRs are rebased before merge already, so forcing up-to-date branches would only add re-runs.
+- **No required reviews:** reviews happen outside GitHub.
+- **Rulesets:** if this moves to a ruleset later, the same names go under `required_status_checks[].context`.
