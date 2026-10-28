@@ -986,3 +986,14 @@ test("TG-27 Part B: the offline E2E's ready-made guard uses the real ready-made 
   assert.equal(label, PLAN_COPY.premade.submit);
   assert.notEqual(label, PLAN_COPY.live.submit);
 });
+
+// TG-27 Part B audit S2: pins the guard's placement, so a refactor can't move the submit click ahead of it
+test("TG-27 Part B: the offline E2E throws on a non-ready-made label before its only /plan submit click", () => {
+  const script = readFileSync(new URL("../../scripts/offline-e2e.mjs", import.meta.url), "utf8");
+  const body = script.slice(script.indexOf("const loadTripIdeas"), script.indexOf("const SIGNS"));
+  const guard = body.search(/if \(label !== PREMADE_SUBMIT\) \{\s*throw new Error\(/);
+  const click = body.indexOf('document.querySelector("form button[type=submit]").click()');
+  assert.ok(guard >= 0, "the strict label check throws");
+  assert.ok(click > guard, "the submit click comes after the check");
+  assert.equal(script.split("button[type=submit]\").click()").length - 1, 1, "only one submit click in the script");
+});
