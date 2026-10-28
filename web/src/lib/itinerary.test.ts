@@ -404,3 +404,73 @@ test("no new web dependency (T23-G1)", (t) => {
   };
   assert.deepEqual(deps(now), deps(base));
 });
+
+// ---------------------------------------------------------------- TG-43 PR B: the share page on the pixel primitives
+// ux.md §2.2 and §2.4; plan §3.2 and §3.5. Static source guards (no component runner yet), as in TG-15/TG-21/TG-22.
+
+const VIEW_SRC = () => readFileSync(new URL("src/components/ItineraryView.tsx", WEB), "utf8");
+const LIST_SRC = () => readFileSync(new URL("src/components/ItineraryList.tsx", WEB), "utf8");
+
+test("T43-P5b the share page files are on @/components/pixel and no longer use planUi", () => {
+  for (const [name, src] of [["ItineraryView", VIEW_SRC()], ["ItineraryList", LIST_SRC()]] as const) {
+    assert.doesNotMatch(src, /planUi|\bUI\./, `${name}: planUi`);
+    assert.match(src, /from "@\/components\/pixel"/, `${name}: imports the primitives`);
+    // no hand-written skins, v1 shapes or raw pixel font (ux §0 rule 1)
+    assert.doesNotMatch(src, /pixel-btn|pixel-box|border-3|font-pixel|rounded-|\bring-|#[0-9a-f]{3,6}\b/i, name);
+  }
+});
+
+test("T43-B1 ItineraryView: the 404 and error boxes, Search buses and Try again use the primitives (ux §2.2)", () => {
+  const src = VIEW_SRC();
+  assert.equal(src.match(/<PixelBox className="p-4 flex flex-col items-start gap-3">/g)?.length, 2, "the 404 and error boxes");
+  assert.match(src, /<PixelLink variant="secondary" href="\/">\s*Search buses\s*<\/PixelLink>/);
+  assert.match(src, /<PixelButton\s+variant="secondary"\s+aria-disabled=\{state\.retrying \|\| undefined\}\s+onClick=\{retry\}\s*>/);
+  assert.doesNotMatch(src, /<button\b|<Link\b/, "no raw button or link left");
+  assert.match(src, /<p role="status" className="sr-only">/, "the announced status is unchanged");
+  assert.match(src, /map=\{flags\.overworldMap\}/, "the overworld kill switch is kept");
+});
+
+test("T43-B2 ItineraryList: summary, notice, sections and stops use the primitives and PX keys (ux §2.4)", () => {
+  const src = LIST_SRC();
+  assert.match(src, /<PixelBox as="section" aria-label="Trip summary" className="p-4 flex flex-col gap-3">/);
+  assert.match(src, /<p className=\{PX\.dataHeading\}>\{dateRange\(/, "the date range is body font");
+  assert.match(src, /className=\{`\$\{PX\.chip\} min-w-0 break-words`\}>\{it\.vibe\}/, "the vibe chip");
+  assert.match(src, /<span className=\{PX\.chip\}>Pre-made plan<\/span>/);
+  assert.match(src, /className=\{`\$\{PX\.meta\} tabular-nums`\}>Budget /);
+  assert.match(src, /<PixelBox as="section" aria-label="Plan changes" className="p-4 flex flex-col gap-1">/);
+  assert.match(src, /<PixelBox className="p-4 flex flex-col items-start gap-3">[\s\S]*?<PixelLink variant="secondary" href="\/">\s*Search buses/, "the bus-gone box");
+  assert.match(src, /<PixelBox as="p" className="p-4 text-sm">Free time\. No stops planned for this day\.<\/PixelBox>/);
+  assert.match(src, /<PixelBox as="p" className="p-4 text-sm">\{issueNotice\("unknown_leg"\)\}<\/PixelBox>/);
+  assert.match(src, /<PixelBox className="p-4 flex flex-col gap-1">/, "the stop box");
+  assert.match(src, /<h3 className=\{`\$\{PX\.dataHeading\} min-w-0 break-words`\}>/, "the stop name is body font");
+  assert.match(src, /<p className=\{PX\.meta\}>Entrance \{fee\}<\/p>/);
+  assert.match(src, /<p className=\{PX\.meta\}>Tap a stop or a ride for details\.<\/p>/, "plan §3.2: TG-22's intro line is PX.meta");
+  assert.doesNotMatch(src, /<Link\b|<h2\b/, "no raw link or h2 left");
+});
+
+test("T43-P3 the share page's pixel-font titles hold only the two dated headings", () => {
+  const titles = [...LIST_SRC().matchAll(/<SectionTitle\b[^>]*>([\s\S]*?)<\/SectionTitle>/g)].map((m) => m[1].replace(/\s+/g, " ").trim());
+  assert.deepEqual(titles.sort(), ["{dayHeading(day)}", "{title} · {formatTravelDate(leg.date)}"].sort());
+  assert.doesNotMatch(LIST_SRC(), /<(PageTitle|SectionTitle)\b[^>]*\bchildren=/);
+  // The helpers that fill them never produce a glyph Pixelify Sans lacks (ux-guide 2.2)
+  for (const date of ["2026-11-06", "2026-11-08", "2026-12-31", "2027-01-01"]) {
+    for (const text of [formatTravelDate(date), dayHeading({ day: 1, date, stops: [] }), dayHeading({ day: 12, date: null, stops: [] })]) {
+      assert.doesNotMatch(text, /[₱→]/, text);
+    }
+  }
+  for (const title of ["Bus to Baguio", "Bus to Metro Manila"]) {
+    assert.match(LIST_SRC(), new RegExp(`title="${title}"`), `${title} stays the static phrase`);
+  }
+});
+
+test("T43-P6 the stop sprite draws at a true 24px on a PX.plate wrapper; the step numeral is PX.numeral", () => {
+  const src = LIST_SRC();
+  const plate = src.match(/<span className=\{PX\.plate\}>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<img\b([\s\S]*?)\/>\s*<\/span>/);
+  assert.ok(plate, "the <img> sits inside <span className={PX.plate}> (TG-23 review S1)");
+  assert.match(plate[1], /width=\{24\}/);
+  assert.match(plate[1], /height=\{24\}/);
+  assert.match(plate[1], /className="pixelated block"/, "the plate is on the wrapper, not the image");
+  assert.match(plate[1], /src=\{spriteSrc\(placeSprite\(spot\.category\)\)\}/);
+  assert.match(plate[1], /alt=""/);
+  assert.match(src, /<span aria-hidden="true" className=\{`\$\{PX\.numeral\} w-6 shrink-0 text-center`\}>\s*\{n\}\s*<\/span>/);
+});
