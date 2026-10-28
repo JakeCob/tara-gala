@@ -21,6 +21,43 @@ if not TEST_DSN:
     pytest.skip("TEST_DATABASE_URL not set; skipping database tests", allow_module_level=True)
 
 
+LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+
+
+@pytest.fixture(autouse=True)
+def no_real_llm_calls(monkeypatch):
+    """Block any request the Anthropic SDK sends to a non-local host (TG-20).
+
+    Guards the send, not client construction, so adapter tests can still point a real
+    client at a 127.0.0.1 stub. Blocked hosts are recorded, and the test fails at teardown
+    even if the SDK turned the error into something the code under test swallowed.
+    """
+    import httpx2
+
+    blocked: list[str] = []
+
+    def guard(original):
+        def send(self, request, *args, **kwargs):
+            if request.url.host not in LOCAL_HOSTS:
+                blocked.append(request.url.host)
+                raise RuntimeError(f"tests must not call the network: {request.url.host}")
+            return original(self, request, *args, **kwargs)
+        return send
+
+    def aguard(original):
+        async def send(self, request, *args, **kwargs):
+            if request.url.host not in LOCAL_HOSTS:
+                blocked.append(request.url.host)
+                raise RuntimeError(f"tests must not call the network: {request.url.host}")
+            return await original(self, request, *args, **kwargs)
+        return send
+
+    monkeypatch.setattr(httpx2.Client, "send", guard(httpx2.Client.send))
+    monkeypatch.setattr(httpx2.AsyncClient, "send", aguard(httpx2.AsyncClient.send))
+    yield blocked
+    assert not blocked, f"a test tried to reach {blocked}"
+
+
 @pytest.fixture()
 def dsn():
     schema = (ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8")
