@@ -14,6 +14,7 @@ import {
   joinNames,
   nextShareStep,
   partySummary,
+  runShare,
   shareMethod,
   shareText,
   shareUrl,
@@ -81,6 +82,60 @@ test("share steps: cancel is silent, other share errors copy, copy errors go man
   assert.equal(nextShareStep("copy", err("TypeError")), "manual");
   // a cancelled share sheet never falls through to copying
   assert.ok(!["copy", "manual"].includes(nextShareStep("share", err("AbortError"))));
+});
+
+// --- runShare: the whole Share tap, with fake browser APIs (RED re-audit gap B) -------------------
+
+const PAYLOAD = { title: "Tara Gala trip plan", text: "Our Baguio trip, Fri, Nov 6 – Sun, Nov 8", url: "https://example.test/i/a1b2c3d4e5f6" };
+
+function fakes(opts: { share?: Error | "ok"; copy?: Error | "ok" }) {
+  const calls = { share: [] as unknown[], copy: [] as string[] };
+  const fail = (e: Error) => Promise.reject(e);
+  const deps: { share?: (p: typeof PAYLOAD) => Promise<void>; writeText?: (s: string) => Promise<void> } = {};
+  if (opts.share) deps.share = (p) => { calls.share.push(p); return opts.share === "ok" ? Promise.resolve() : fail(opts.share as Error); };
+  if (opts.copy) deps.writeText = (u) => { calls.copy.push(u); return opts.copy === "ok" ? Promise.resolve() : fail(opts.copy as Error); };
+  return { deps, calls };
+}
+const named = (name: string) => Object.assign(new Error(name), { name });
+
+test("runShare: share works, nothing is copied", async () => {
+  const { deps, calls } = fakes({ share: "ok", copy: "ok" });
+  assert.equal(await runShare(deps, PAYLOAD), "done");
+  assert.deepEqual(calls.share, [PAYLOAD]);
+  assert.deepEqual(calls.copy, []);
+});
+
+test("runShare: a cancelled share sheet is silent and copies nothing", async () => {
+  const { deps, calls } = fakes({ share: named("AbortError"), copy: "ok" });
+  assert.equal(await runShare(deps, PAYLOAD), "silent");
+  assert.deepEqual(calls.copy, []);
+});
+
+test("runShare: any other share error falls back to copying the link once", async () => {
+  const { deps, calls } = fakes({ share: named("NotAllowedError"), copy: "ok" });
+  assert.equal(await runShare(deps, PAYLOAD), "copied");
+  assert.deepEqual(calls.copy, [PAYLOAD.url]);
+});
+
+test("runShare: a share error with no clipboard goes to the manual field", async () => {
+  const { deps } = fakes({ share: named("NotAllowedError") });
+  assert.equal(await runShare(deps, PAYLOAD), "manual");
+});
+
+test("runShare: without Web Share it copies and never calls share", async () => {
+  const { deps, calls } = fakes({ copy: "ok" });
+  assert.equal(await runShare(deps, PAYLOAD), "copied");
+  assert.deepEqual(calls.copy, [PAYLOAD.url]);
+  assert.deepEqual(calls.share, []);
+});
+
+test("runShare: a rejected copy goes to the manual field", async () => {
+  const { deps } = fakes({ copy: named("NotAllowedError") });
+  assert.equal(await runShare(deps, PAYLOAD), "manual");
+});
+
+test("runShare: nothing available goes to the manual field", async () => {
+  assert.equal(await runShare({}, PAYLOAD), "manual");
 });
 
 // --- T23-W6 party and names (ux.md section 4; the same rules as TG-15's partySummary) ----------------
@@ -270,14 +325,13 @@ test("share page is noindex and sends no referrer (review nit 3)", () => {
   assert.match(page, /referrer:\s*"no-referrer"/);
 });
 
-test("ShareButton is wired to the share helpers (RED audit gap 2)", () => {
+test("ShareButton hands the whole tap to runShare (RED re-audit gap B)", () => {
   const src = readFileSync(new URL("src/components/ShareButton.tsx", WEB), "utf8");
-  assert.match(src, /shareMethod\(/);
-  assert.match(src, /typeof navigator\.share === "function"/);
-  assert.match(src, /navigator\.clipboard/);
-  assert.match(src, /nextShareStep\(/);
-  assert.match(src, /writeText\(/);
+  assert.match(src, /runShare\(/);
   assert.match(src, /shareText\(/); // the payload text has dates only
+  // the browser APIs are passed in (bound), never called here, so the fallback logic can't be bypassed
+  assert.doesNotMatch(src, /navigator\.share\(/);
+  assert.doesNotMatch(src, /\.writeText\(/);
 });
 
 test("no new web dependency (T23-G1)", () => {

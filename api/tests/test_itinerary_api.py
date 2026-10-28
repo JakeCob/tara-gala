@@ -292,22 +292,23 @@ def test_no_listing_and_read_only(client, planner):
     assert paths == {"/itineraries/{share_slug}", "/premade-itineraries"}
 
 
-# Every GET route the API serves, including include_in_schema=False ones. A new read route must be added
-# here on purpose, after checking it can't list or enumerate itineraries (TG-23 RED audit gap 1).
+# Every route the API serves, including include_in_schema=False ones. A new route of any method must be
+# added here on purpose, after checking it can't list or enumerate itineraries (TG-23 RED audits).
 GET_ROUTES = {
     "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc",  # FastAPI's own
     "/health", "/terminals", "/trips", "/spots", "/last-mile",
     "/premade-itineraries",  # TG-24: model = 'premade' rows only
     "/itineraries/{share_slug}",  # TG-23: one row by exact slug
 }
+OTHER_ROUTES = {("POST", "/plan")}  # TG-20: inserts a planner row, never reads the table
 
 
 def test_no_hidden_or_renamed_listing_route():
-    """RED audit gap 1: walk app.routes, so a list route at any path, or hidden from OpenAPI, fails."""
+    """RED audits: walk app.routes, so a list route at any path, of any method, or hidden from OpenAPI, fails."""
     from app.main import app
 
-    served = {r.path for r in app.routes if "GET" in (getattr(r, "methods", None) or set())}
-    assert served == GET_ROUTES
+    served = {(m, r.path) for r in app.routes for m in (getattr(r, "methods", None) or set()) if m != "HEAD"}
+    assert served == {("GET", p) for p in GET_ROUTES} | OTHER_ROUTES
     takes_slug = [r.path for r in app.routes if "{" in getattr(r, "path", "")]
     assert takes_slug == ["/itineraries/{share_slug}"]  # the only parameterised path is the exact-slug read
 
