@@ -397,9 +397,9 @@ test("T27-12 saved-at stamp round trip, in any device time zone", async () => {
     assert.equal(stamped.statusText, "OK");
     assert.equal(stamped.headers.get("Content-Type"), "application/json");
     assert.equal(sw.readSavedAt(stamped), OLD_ISO);
-    assert.deepEqual(await stamped.json(), [{ id: 1 }]);
     // The stamp is on the stored response itself, so reading it later gives the same instant
     assert.equal(Date.parse(sw.readSavedAt(stamped.clone())), Date.parse("2026-10-30T13:12:00Z"));
+    assert.deepEqual(await stamped.json(), [{ id: 1 }]);
     assert.equal(original.headers.get("X-TG-Saved-At"), null, "stamping must not change the response it was given");
   }
 });
