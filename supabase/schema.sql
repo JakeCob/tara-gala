@@ -236,7 +236,8 @@ for each row execute function touch_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- Row level security
--- Reference data is public read. Writes go through the FastAPI service role.
+-- Reference data is public read; itineraries and trip_reports are API-only.
+-- Writes go through the FastAPI service role.
 -- ---------------------------------------------------------------------------
 alter table operators          enable row level security;
 alter table terminals          enable row level security;
@@ -255,8 +256,8 @@ create policy public_read on routes             for select using (true);
 create policy public_read on trips              for select using (true);
 create policy public_read on spots              for select using (true);
 create policy public_read on last_mile_routes   for select using (true);
-create policy public_read on itineraries        for select using (true); -- share links are unguessable slugs
 -- trip_reports: no public policy yet (service role only)
+-- itineraries: no public policy (TG-32). Party names are private; share links are served by the API.
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP
