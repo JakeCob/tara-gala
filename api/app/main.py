@@ -15,6 +15,7 @@ from .logging_setup import RequestLogMiddleware, configure_logging
 from .models import Terminal, Trip
 from .flags import get_flags
 from .last_mile import router as last_mile_router
+from .planner import router as planner_router
 from .premade import router as premade_router
 from .schedule import arrival as _arrival  # re-exported: TG-12 tests use main._arrival
 
@@ -48,7 +49,7 @@ app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],  # POST for /plan (TG-20)
     allow_headers=["*"],
 )
 
@@ -158,3 +159,4 @@ def search_trips(
 
 app.include_router(last_mile_router)
 app.include_router(premade_router)
+app.include_router(planner_router)

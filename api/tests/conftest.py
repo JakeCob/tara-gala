@@ -21,6 +21,48 @@ if not TEST_DSN:
     pytest.skip("TEST_DATABASE_URL not set; skipping database tests", allow_module_level=True)
 
 
+LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+
+
+@pytest.fixture(autouse=True)
+def no_real_llm_calls(monkeypatch):
+    """Block real network requests to non-local hosts (TG-20): httpx2 (Anthropic SDK) and httpx (OpenRouter).
+
+    Patches the network transports, not client construction or Client.send, so adapter tests can
+    point a real client at a 127.0.0.1 stub, and MockTransport and Starlette's TestClient are untouched.
+    A blocked request raises the library's ConnectError, as a real network failure would. Blocked hosts
+    are recorded, and the test fails at teardown even if the code under test swallowed the error.
+    """
+    import httpx
+    import httpx2
+
+    blocked: list[str] = []
+
+    def guard(module, original):
+        def handle_request(self, request):
+            if request.url.host not in LOCAL_HOSTS:
+                blocked.append(request.url.host)
+                raise module.ConnectError(f"tests must not call the network: {request.url.host}", request=request)
+            return original(self, request)
+        return handle_request
+
+    def aguard(module, original):
+        async def handle_async_request(self, request):
+            if request.url.host not in LOCAL_HOSTS:
+                blocked.append(request.url.host)
+                raise module.ConnectError(f"tests must not call the network: {request.url.host}", request=request)
+            return await original(self, request)
+        return handle_async_request
+
+    for module in (httpx, httpx2):
+        monkeypatch.setattr(module.HTTPTransport, "handle_request",
+                            guard(module, module.HTTPTransport.handle_request))
+        monkeypatch.setattr(module.AsyncHTTPTransport, "handle_async_request",
+                            aguard(module, module.AsyncHTTPTransport.handle_async_request))
+    yield blocked
+    assert not blocked, f"a test tried to reach {blocked}"
+
+
 @pytest.fixture()
 def dsn():
     schema = (ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8")

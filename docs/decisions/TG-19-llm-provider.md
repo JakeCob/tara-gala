@@ -75,3 +75,25 @@ Prices are USD per 1M tokens on the standard paid tier, as published on 2026-10-
 - Gemini rate limits: https://ai.google.dev/gemini-api/docs/rate-limits
 - SDK dependencies: `pip install --dry-run anthropic`, 2026-10-28
 - Full comparison: tg-arch's decision note for TG-19 (team files, outside the repo)
+
+## Follow-up: spike results (TG-20, 2026-10-28)
+- **Route.** The owner chose to use an **OpenRouter** key for now. So the calls went through OpenRouter (`LLM_PROVIDER=openrouter`, model `anthropic/claude-haiku-5.5`), not straight to Anthropic.
+  - OpenRouter adds a hop of its own, so these latencies are an upper bound for a direct Anthropic call.
+  - The Anthropic adapter stays in place for a personal Anthropic key later.
+- **OpenRouter facts, checked in its docs and models endpoint on 2026-10-28:**
+  - The slugs are `anthropic/claude-haiku-5.5` and `anthropic/claude-sonnet-5.5`. Both list `response_format` and `structured_outputs`, and both are priced the same as Anthropic direct ($0.10/$0.50 and $2/$10 per MTok).
+  - Structured outputs use `response_format: {type: "json_schema", json_schema: {name, strict: true, schema}}`, together with `provider.require_parameters: true`.
+  - Effort is set with `reasoning.effort`.
+- **Setup.** The real `SYSTEM_PROMPT`, `PLAN_SCHEMA` and user message, with 150 made-up rows (20 outbound trips, 20 return trips, 30 spots, 80 legs; about 19.4k input tokens), `max_tokens` 8000, 10 sequential calls per effort. Validity was scored with TG-24's `parse_plan` and `check_plan`.
+
+| Effort | Valid on first try | p50 | p95 | Output tokens (median / max) | Output tok/s (median) | Cost (10 calls) |
+|---|---|---|---|---|---|---|
+| `low` | 10/10 | 19.0 s | 23.1 s | 4054 / 5466 | 219 | $0.041 |
+| `medium` | 10/10 | 25.8 s | 35.8 s | 6066 / 7953 | 225 | $0.050 |
+
+- **Every call** stopped with `end_turn`, with no errors and no refusals. Sending `effort` and a json_schema format together works.
+- **Keep `low`.** It's just as valid as `medium`, faster, and about $0.004 a plan, so the $1.00 daily cap covers roughly 250 plans.
+- **`medium` came close to the token limit.** Its largest reply used 7953 of 8000 tokens, so `medium` would need a higher `LLM_MAX_TOKENS`.
+- **Timeout and token ceiling.** At about 220 output tokens a second, the 40-second per-call timeout fits roughly 8,800 tokens. The truncated-retry ceiling of 16,000 tokens couldn't finish within 40 seconds. Revisit `LLM_TIMEOUT_SECONDS` and the ceiling together in Part C, with real data.
+- **Party names no longer reach the model.** The planner sends only passenger types and counts. This supersedes the earlier note above.
+- **Still open:** quality on real data (TG-16) and retry rates. That's Part C.

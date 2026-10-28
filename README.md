@@ -73,11 +73,49 @@ cd api
 uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
 ```
 
-Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`), `GET /premade-itineraries` (404 when `PREMADE_ITINERARIES=false`).
+Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`), `GET /premade-itineraries` (404 when `PREMADE_ITINERARIES=false`), `POST /plan` (live AI planner; 404 unless `PLANNER_LIVE=true`, see below).
 
 Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pytest` (tests are skipped without it).
 
 Deployed on Railway: see section 8. `api/Procfile` is the start command for local runs and other hosts; on Railway, `api/railway.json` overrides it.
+
+### Live planner (`POST /plan`)
+- The body is `{"date", "return_date", "party": [{"type", "name"?}], "budget_php"?, "vibe"}`.
+- It returns `201 {"share_slug", "model", "attempts", "plan"}`, where `plan` is the CLAUDE.md planner shape, saved to `itineraries`.
+- The model sees only DB rows for the dates. Passenger names are stored with the plan but never sent to the model. Every answer is checked by the plan validator (TG-24), and an invalid one is retried with the errors fed back.
+- Input limits (422, no model call):
+  - `vibe` is 1 to 60 letters, digits, spaces and `, . ' & ! ? -`
+  - 1 to 10 passengers
+  - `budget_php` is 500 to 200000
+  - `date` is from today (Manila) to a year ahead
+  - `return_date` is up to 6 days after `date`
+- Errors are `{"detail": {"code", "message"}}`:
+  - `rate_limited` 429, with `Retry-After` and `retry_after_s`
+  - `no_data` 422
+  - `no_valid_plan` and `refused` 502
+  - `llm_unavailable`, `daily_cap` and `not_configured` 503
+  - `deadline` 504
+- Railway env:
+
+| Var | Default | Notes |
+|---|---|---|
+| `PLANNER_LIVE` | `false` | Feature flag (section 7); off gives 404 |
+| `LLM_PROVIDER` | `anthropic` | `anthropic` or `openrouter` |
+| `LLM_API_KEY` | (empty) | Required when the planner is on; Railway only, never committed |
+| `LLM_MODEL` / `LLM_FALLBACK_MODEL` | `claude-haiku-5-5` / `claude-sonnet-5-5` (OpenRouter: `anthropic/claude-haiku-5.5` / `anthropic/claude-sonnet-5.5`) | Empty fallback means no fallback on a refusal |
+| `LLM_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `LLM_MAX_TOKENS` | `8000` | Includes thinking; capped at 16000; doubled once per cut-off reply |
+| `LLM_TIMEOUT_SECONDS` | `40` | Per model call |
+| `PLANNER_MAX_ATTEMPTS` | `3` | Model calls per request, refusals included |
+| `PLANNER_DEADLINE_SECONDS` | `100` | Whole request |
+| `PLANNER_DAILY_SPEND_CAP_USD` | `1.00` | Estimated from token counts; resets at Manila midnight |
+| `PLANNER_RATE_LIMIT_PER_HOUR` | `10` | Per client IP |
+
+- A bad number falls back to its default with a warning. That warning names the variable, never the value.
+- **Limits are in memory.** The rate limit and spend cap reset on every restart or redeploy, and would be per-instance with more than one instance.
+  - The cap is checked before each model call, so it can overshoot by up to one call per request in flight.
+  - Keep a monthly spend limit at the provider as the backstop.
+- **Client IP.** It's the last `X-Forwarded-For` entry (the one Railway's edge writes), else the peer address. Logs show only an 8-character hash of it, salted per process so it can't be reversed.
 
 ### Logging
 - Everything goes to stdout as `<time> <LEVEL> <logger> <message>`. Timestamps are the server clock, which is UTC on Railway.
