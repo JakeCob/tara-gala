@@ -233,14 +233,14 @@ test("T15-G10 /plan builds on @/components/pixel: no planUi, no hand-written ski
   }
 });
 
-// Replaces G11: until PR B, only the two share-page files TG-22 rewrites may still import planUi
-test("T43-P5 planUi's only importers are ItineraryView and ItineraryList", () => {
+// Replaces G11: PR B moved the share page off planUi, so the file is deleted and nothing refers to it
+test("T43-P5 planUi.ts is deleted and nothing imports it", () => {
+  assert.equal(existsSync(new URL("src/components/planUi.ts", WEB)), false, "planUi.ts is deleted");
   const importers = walk(new URL("src/", WEB))
     .filter((u) => /\.tsx?$/.test(u.pathname) && !u.pathname.endsWith(".test.ts"))
-    .filter((u) => /from "@\/components\/planUi"|from "\.\/planUi"/.test(readFileSync(u, "utf8")))
-    .map((u) => u.pathname.split("/").pop())
-    .sort();
-  assert.deepEqual(importers, ["ItineraryList.tsx", "ItineraryView.tsx"]);
+    .filter((u) => /\bplanUi\b/.test(readFileSync(u, "utf8")))
+    .map((u) => u.pathname.split("/").pop());
+  assert.deepEqual(importers, []);
 });
 
 // T43-P6 (A2 RED audit): G10's old frames-and-fills ban stays (plan G10) and covers every A2 file; the share page

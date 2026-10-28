@@ -778,3 +778,14 @@ test("T43-P1 the new plate, stage tag and ₱ prefix keys are screen-paper or fr
     assert.doesNotMatch(PX[key], /rounded-|\bring-|shadow-(sm|md|lg|xl)|#[0-9a-f]{3,8}\b/i, key);
   }
 });
+
+// TG-43 UX review S2: the date input's calendar-button Tab stop matches neither :focus nor :focus-visible on the
+// input (focus is in Chrome's shadow DOM), so focus-pixel can't draw there. :focus-within can, for every date input.
+test("T43-U2 globals.css outlines a date input whenever focus is inside it", () => {
+  const rule = blocks(read("src/app/globals.css")).find((b) => b.path[b.path.length - 1] === "input[type=date]:focus-within");
+  assert.ok(rule, "an input[type=date]:focus-within rule");
+  assert.equal(rule.path.length, 1, "top level, not inside a media query");
+  const d = decls(rule.body);
+  assert.equal(d.outline, "3px solid var(--focus)");
+  assert.equal(d["outline-offset"], "2px");
+});

@@ -799,7 +799,8 @@ test("T21-C1 every pinned string from ux §8", () => {
     dates: "When are you going?",
     date: "Travel date",
     returnDate: "Return date",
-    budget: "Budget (optional)",
+    budget: "Budget",
+    optional: " (optional)",
     vibe: "What's the vibe?",
     note: "Anything else? (optional)",
   });
@@ -838,6 +839,7 @@ test("T21-S1 date inputs use dateBounds, never a hard-coded date", () => {
   for (const t of dates) {
     assert.match(t, /\bmin=\{/, t);
     assert.match(t, /\bmax=\{/, t);
+    assert.doesNotMatch(t, /placeholder:/, `a date input has no placeholder (UX review N1): ${t}`);
   }
   assert.match(ui, /dateBounds\(/);
   assert.doesNotMatch(ui, /["'`]\d{4}-\d{2}-\d{2}["'`]/);
@@ -1034,7 +1036,7 @@ test("T43-P3 /plan, the share page header and ShareButton put only static titles
     "{\"Who's travelling?\"}",
     "{L.dates}",
     "{L.vibe}",
-    '{L.budget}<span className="sr-only">{H.budgetSr}</span>',
+    '{L.budget}<span className="font-sans text-base font-semibold">{L.optional}</span><span className="sr-only">{H.budgetSr}</span>',
     "{LIST.heading}",
     "Trip ideas",
   ].map(norm));
@@ -1082,4 +1084,16 @@ test("T43-X1 package files, supabase/ and api/ are unchanged against origin/main
     return;
   }
   assert.equal(diff.trim(), "");
+});
+
+// UX review S1: Pixelify draws ( ) as curly braces, so a pixel-font title carries no brackets. The budget heading
+// is "Budget" in the pixel font plus " (optional)" in the body font; its accessible name doesn't change.
+test("T43-U1 the budget heading keeps its name but puts only 'Budget' in the pixel font", () => {
+  const L: Record<string, string> = PLAN_COPY.labels; // C1 pins the keys; a Record view keeps RED type-clean
+  assert.equal(L.budget + L.optional + PLAN_COPY.hints.budgetSr, "Budget (optional) in pesos", "the label's accessible name");
+  const titled = [L.dates, L.budget, L.vibe, PLAN_COPY.list.heading];
+  for (const s of titled) assert.doesNotMatch(s, /[()]/, `no brackets in pixel-font copy: ${s}`);
+  const label = fields.match(/<SectionTitle\b[^>]*\bas="label"[^>]*>([\s\S]*?)<\/SectionTitle>/)?.[1] ?? "";
+  const flat = label.replace(/\s+/g, " ").replace(/\s*([{}<>])\s*/g, "$1").trim();
+  assert.equal(flat, '{L.budget}<span className="font-sans text-base font-semibold">{L.optional}</span><span className="sr-only">{H.budgetSr}</span>');
 });
