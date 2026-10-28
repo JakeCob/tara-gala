@@ -69,7 +69,14 @@ Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila
 
 Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pytest` (tests are skipped without it).
 
-Railway: set the service root to `api/`, add `DATABASE_URL` and `ALLOWED_ORIGINS`; the start command is in `api/Procfile`.
+Railway: set the service root to `api/`, add `DATABASE_URL` and `ALLOWED_ORIGINS` (optionally `LOG_LEVEL`); the start command is in `api/Procfile`.
+
+### Logging
+- Everything goes to stdout as `<time> <LEVEL> <logger> <message>`. Timestamps are the server clock, which is UTC on Railway.
+- `LOG_LEVEL` is `DEBUG`, `INFO` (default), `WARNING`, `ERROR` or `CRITICAL`, in any case. A bad value logs a warning and uses INFO.
+- One `request method=... path=... status=... duration_ms=...` line per request (no query string, headers or body). Uvicorn's own access log is turned off on purpose, so there is one line, not two.
+- An unhandled error logs a stack trace at ERROR and returns a generic `500 {"detail": "Internal server error"}`.
+- Secrets are masked as `***`: the `DATABASE_URL` value and its password, values of `*KEY*`, `*SECRET*`, `*TOKEN*` and `*PASSWORD*` vars (8+ characters), and any `scheme://user:password@` or `password=` text.
 
 ## 6. Web
 ```bash

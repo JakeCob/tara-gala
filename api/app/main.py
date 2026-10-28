@@ -11,14 +11,10 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import db
+from .logging_setup import RequestLogMiddleware, configure_logging
 from .models import Terminal, Trip
 
-# Minimal root config so app INFO logs reach stdout; TG-13 replaces this.
-_log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(
-    level=_log_level if isinstance(logging.getLevelName(_log_level), int) else "INFO",  # bad value must not stop boot
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging()  # the API's only logging setup; must run before anything logs
 logger = logging.getLogger("tara_gala.api")
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
@@ -42,6 +38,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Tara Gala API", version="0.1.0", lifespan=lifespan)
 
+# added before CORS so CORS wraps it and our 500s carry CORS headers
+app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
