@@ -154,6 +154,27 @@ test("B11 a miss keeps the earlier saved-at and flags", () => {
   assert.deepEqual(after, { ...before, kind: "miss" });
 });
 
+test("Part B: /terminals only upgrades directions links, so its answers never change the banner", () => {
+  // Offline on a saved itinerary, opening the bus sheet fetched /terminals (never saved by the README steps): its
+  // miss replaced "Offline · saved" with "searching needs a connection", though the whole trip was on screen
+  const api = "https://api.example.test";
+  const a = reduce(initialBanner(false), cached(SAVED));
+  const terminals = (source: "none" | "network" | "cache"): BannerEvent => ({ type: "data", source, savedAt: null, url: `${api}/terminals` });
+  assert.deepEqual(bannerReducer(a, terminals("none")), a);
+  assert.equal(bannerVariant(bannerReducer(a, terminals("none"))), "A");
+  assert.deepEqual(bannerReducer(a, terminals("network")), a); // a fresh /terminals says nothing about the trip's data
+  assert.deepEqual(bannerReducer(a, terminals("cache")), a);
+  // The screen's own data still drives it: a trip search miss is variant C, as before
+  const tripsMiss: BannerEvent = { type: "data", source: "none", savedAt: null, url: `${api}/trips?origin_city=Baguio` };
+  assert.equal(bannerVariant(bannerReducer(a, tripsMiss)), "C");
+  assert.equal(bannerVariant(reduce(initialBanner(false), terminals("none"))), null);
+});
+
+test("Part B: OfflineBanner passes the message's url to the reducer", () => {
+  const source = readFileSync(new URL("../components/OfflineBanner.tsx", import.meta.url), "utf8");
+  assert.match(source, /dispatch\(\{ type: "data", source: msg\.source, savedAt: msg\.savedAt, url: msg\.url \}\)/);
+});
+
 test("B12 back online with cached data on screen: variant D until a fresh response", () => {
   const a = reduce(initialBanner(false), cached(SAVED));
   const d = bannerReducer(a, { type: "online" });
