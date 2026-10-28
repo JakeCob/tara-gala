@@ -10,13 +10,15 @@ Fetches the next 14 days for 4 Manila terminals in both directions (112 requests
 If any request fails, returns an unexpected shape, or a fetched direction comes back with no trips at all,
 nothing is written and the exit code is non-zero.
 Reads DATABASE_URL from the environment or from the repo-root .env file (same as data/load_data.py).
+--database-url still works but warns: it shows the password in the process list (ps).
+A missing operator or terminal seed, or any database error, writes nothing; errors are printed with the password
+and DSN masked.
 """
 
 from __future__ import annotations
 
 import argparse
 import functools
-import os
 import sys
 import time as clock
 from collections import Counter, defaultdict
@@ -29,7 +31,9 @@ import psycopg
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "data"))
-from load_data import MANILA, _dotenv_database_url, slug_map  # noqa: E402
+from load_data import (  # noqa: E402
+    DATABASE_URL_FLAG_HELP, MANILA, database_url, db_failure, missing_seed_message, slug_map,
+)
 
 API_URL = "https://tickets.victoryliner.com/api/v1/trips"
 SOURCE_URL = "https://tickets.victoryliner.com"
@@ -238,6 +242,12 @@ def apply(cur, routes: dict[tuple[str, str, str], RouteSpec], verified_at: datet
     res = Result()
     operators = slug_map(cur, "operators")
     terminals = slug_map(cur, "terminals")
+    # Seeds first, before any write: a missing seed is a setup error, even for a terminal with no trips this run
+    if OPERATOR not in operators:
+        raise ScrapeError(missing_seed_message("operator", [OPERATOR]))
+    needed = {slug for name in directions for leg in DIRECTIONS[name] for slug in (leg.origin, leg.destination)}
+    if missing := needed - terminals.keys():
+        raise ScrapeError(missing_seed_message("terminal", missing))
     op = operators[OPERATOR]
 
     cur.execute(
@@ -368,10 +378,10 @@ def main() -> int:
     p.add_argument("--dry-run", action="store_true", help="fetch and report, write nothing")
     p.add_argument("--direction", choices=["both", *DIRECTIONS], default="both",
                    help="which direction(s) to fetch and deactivate (default: both)")
-    p.add_argument("--database-url", default=None, help="defaults to DATABASE_URL or the repo .env")
+    p.add_argument("--database-url", default=None, help=DATABASE_URL_FLAG_HELP)
     args = p.parse_args()
 
-    dsn = args.database_url or os.environ.get("DATABASE_URL") or _dotenv_database_url()
+    dsn = database_url(args.database_url)
     if not dsn:
         print("DATABASE_URL is not set (env var or repo-root .env).", file=sys.stderr)
         return 2
@@ -391,7 +401,7 @@ def main() -> int:
         print(f"\nFAILED, nothing was written: {e}", file=sys.stderr)
         return 1
     except psycopg.Error as e:
-        print(f"\nFAILED, nothing was written (database error): {e}", file=sys.stderr)
+        print(f"\n{db_failure(e, dsn)}", file=sys.stderr)
         return 1
 
     verb = "Would change" if args.dry_run else "Changed"

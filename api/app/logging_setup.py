@@ -6,22 +6,16 @@ stack trace and turned into a generic 500 JSON. See README section 5.
 
 import logging
 import os
-import re
 import sys
 import time
 from collections.abc import Iterable, Mapping
-from urllib.parse import unquote, urlsplit
 
 from starlette.responses import JSONResponse
 
+from .redact import KV_PASSWORD, MIN_SECRET_LEN, SECRET_NAME, URL_PASSWORD, redact, secret_values  # noqa: F401 (re-exported)
+
 LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
-
-# Env vars whose values are masked; shorter values are too likely to match ordinary text
-SECRET_NAME = re.compile(r"KEY|SECRET|TOKEN|PASSWORD", re.I)
-MIN_SECRET_LEN = 8
-URL_PASSWORD = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s@]+@", re.I)
-KV_PASSWORD = re.compile(r"\b(password=)('(?:[^'\\]|\\.)*'|\S+)", re.I)  # libpq quotes values with spaces
 
 request_log = logging.getLogger("tara_gala.request")
 
@@ -34,24 +28,7 @@ class RedactingFormatter(logging.Formatter):
         self._secrets = sorted(set(secrets), key=len, reverse=True)
 
     def format(self, record: logging.LogRecord) -> str:
-        text = super().format(record)  # includes exc_text and stack_info
-        for s in self._secrets:
-            text = text.replace(s, "***")
-        text = URL_PASSWORD.sub(r"\1***@", text)
-        return KV_PASSWORD.sub(r"\1***", text)
-
-
-def secret_values(env: Mapping[str, str]) -> list[str]:
-    """DATABASE_URL, its password (raw and URL-decoded), and any *KEY*/*SECRET*/*TOKEN*/*PASSWORD* var, longest first."""
-    values = [v for k, v in env.items() if k == "DATABASE_URL" or SECRET_NAME.search(k)]
-    if dsn := env.get("DATABASE_URL"):
-        try:
-            password = urlsplit(dsn).password
-        except ValueError:
-            password = None
-        if password:
-            values += [password, unquote(password)]
-    return sorted({v for v in values if v and len(v) >= MIN_SECRET_LEN}, key=len, reverse=True)
+        return redact(super().format(record), self._secrets)  # includes exc_text and stack_info
 
 
 def configure_logging(env: Mapping[str, str] = os.environ) -> None:
