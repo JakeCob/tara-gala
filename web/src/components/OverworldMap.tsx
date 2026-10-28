@@ -228,8 +228,16 @@ export default function OverworldMap({ itinerary }: { itinerary: Itinerary }) {
         <div
           ref={worldRef}
           className="pixelated bg-screen text-screen-ink flex flex-col gap-0 pb-4"
-          // The screen stays light in dark mode, so its focus outline stays Ink rather than the theme's Sun
-          style={{ ...tile("tile-grass"), "--focus": "var(--color-screen-ink)" } as CSSProperties}
+          // The screen stays light in dark mode, so frames, text and the focus outline on it stay Ink rather than
+          // the theme's Mint, Cream and Sun (which would vanish on Mint)
+          style={
+            {
+              ...tile("tile-grass"),
+              "--frame": "var(--color-screen-ink)",
+              "--foreground": "var(--color-screen-ink)",
+              "--focus": "var(--color-screen-ink)",
+            } as CSSProperties
+          }
         >
           <div className="px-2 pt-3 pb-2 flex flex-col gap-2">
             <p className={SIGN}>Your party · {party}</p>
