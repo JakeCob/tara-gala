@@ -259,6 +259,15 @@ def test_empty_leg_on_one_side_does_not_affect_the_other_leg():
     assert spec.one_off[t("10:00")] == {TUE1}
 
 
+def test_empty_forward_leg_date_is_no_evidence_even_when_another_leg_answered():
+    """RED audit S1: evidence is per leg. Cubao->Baguio is empty on Tue Nov 10 while Baguio->Cubao has trips that
+    day; a Cubao 10:00 seen on Tue Nov 3 stays regular {2} (global evidence would demote it to a one-off)."""
+    obs = daily(days=[d for d in WINDOW if d != TUE2]) + seen("10:00", [TUE1]) + daily(A_FROM, FROM_LEG)
+    spec = agg(obs)[KEY]
+    assert spec.trips[t("10:00")] == {2}
+    assert t("10:00") not in spec.one_off
+
+
 def test_empty_leg_dates_lists_only_gaps_on_legs_with_data():
     legs = vl.DIRECTIONS["to-baguio"]
     obs = daily(days=[d for d in WINDOW if d != TUE2])
@@ -628,6 +637,16 @@ def test_t9_d1_main_takes_today_from_the_seam(dsn, monkeypatch, capsys):
     assert "  one-off: vl-cubao->vl-baguio regular_aircon 13:00 on 2026-11-07 (Sat)" in out
     assert ", 1 one-off" in out
     assert {r[7] for r in rows(dsn, A)} == {datetime(2026, 11, 1, 4, 0, tzinfo=vl.MANILA)}, "verified_at comes from the seam"
+
+
+def test_main_writes_with_the_window_and_the_today_margin(dsn, monkeypatch, capsys):
+    """RED audit S2: main() must pass window= and verified_at= to run(). A 05:00 bus already gone at the 04:00
+    scrape (missing today, seen Nov 2 to 14) is one weekly row, not a one-off."""
+    obs = daily(days=FROZEN) + seen("05:00", FROZEN[1:]) + daily(A_FROM, FROM_LEG, FROZEN)
+    rc, out, err, _ = run_main(monkeypatch, capsys, dsn, obs)
+    assert rc == 0, err
+    [(_, days, vf, vt, active, *_)] = rows(dsn, "05:00")
+    assert (sorted(days), vf, vt, active) == (sorted(ALL_WEEK), None, None, True)
 
 
 def test_t9_d2_manila_now_is_the_manila_date_in_any_device_tz(dsn, monkeypatch, capsys):

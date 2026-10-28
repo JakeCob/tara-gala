@@ -71,8 +71,7 @@ def _frozen_scraper_clock(monkeypatch):
     import victory_liner as vl  # scraper/ is on sys.path above
     from load_data import MANILA
 
-    # raising=False only until manila_now exists (TG-9 RED); GREEN drops it so a rename fails loudly
-    monkeypatch.setattr(vl, "manila_now", lambda: datetime(2026, 11, 1, 4, 0, tzinfo=MANILA), raising=False)
+    monkeypatch.setattr(vl, "manila_now", lambda: datetime(2026, 11, 1, 4, 0, tzinfo=MANILA))
 
 
 @pytest.fixture()

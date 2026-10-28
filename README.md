@@ -59,6 +59,11 @@ python scraper/victory_liner.py --direction to-baguio     # one direction only: 
 - If a fetched direction comes back with no trips at all, the whole run aborts with nothing written (both directions) and exits non-zero. If the reverse direction keeps failing, run with `--direction to-baguio` until it's fixed. While runs abort, outbound `last_verified_at` stops advancing.
 - The Baguio to Pasay, Caloocan and Sampaloc API codes are assumed to match the outbound ones; only Baguio to Cubao was checked live. The first live `--dry-run` confirms them: a wrong code fails the run, or prints `WARNING: no trips at all for BAGUIO->...`.
 - One route per terminal pair + class. Express and Inner Cities share a class, so the route keeps the longest running time and lists each branding's own time in `routes.notes`.
+- **One-off trips.** A departure is saved as weekly only for weekdays it was seen on *every* time in the 14-day window. Two exceptions:
+  - **Today:** today counts only for departures more than 3 hours after the scrape (`TODAY_MARGIN`), because earlier buses may already have left.
+  - **Empty dates:** a date on which a route returned no trips at all is ignored, and printed as `WARNING: no trips at all for <leg> on <date>`.
+
+  Any other date a departure was seen on is saved for that date only (`valid_from = valid_to`), so a holiday extra on Sat Oct 31 never shows up on Sat Nov 7. Each one prints a `one-off:` line. Dated rows not seen again are set inactive like any other scraped trip. Known gaps: an early extra (within 3 hours of the scrape) seen only on the same weekday next week is still saved as weekly; and after a manual run at another hour, the next 4am run is the one that counts. Keep the cron at 4am for that reason.
 - Daily at 4am Manila time (VPS clock in UTC, so 20:00 UTC the day before):
 
 ```cron
