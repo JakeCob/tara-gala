@@ -1227,5 +1227,6 @@ test("T22-L18 a stored sprite survives a service worker update", async () => {
 });
 
 test("T22-L18 SW_VERSION is bumped for this change", () => {
-  assert.notEqual(tg().SW_VERSION, "2026-10-28.1");
+  // Main was at 2026-10-29.1 (TG-43) when TG-22 rebased onto it; T43-O5 checks every later change against main
+  assert.notEqual(tg().SW_VERSION, "2026-10-29.1");
 });

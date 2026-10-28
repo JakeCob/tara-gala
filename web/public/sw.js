@@ -3,7 +3,7 @@
 // self.TG_SW and the event handlers. Bump SW_VERSION on every change so old static and page caches rotate.
 // Nothing at the top level may touch caches or fetch.
 
-const SW_VERSION = "2026-10-29.1"; // bump on every edit of this file
+const SW_VERSION = "2026-10-29.2"; // bump on every edit of this file
 const DATA_VERSION = "1"; // bump only if the stored data format changes
 const NETWORK_TIMEOUT_MS = 4000;
 const SAVED_AT_HEADER = "X-TG-Saved-At";
