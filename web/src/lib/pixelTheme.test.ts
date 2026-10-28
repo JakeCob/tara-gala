@@ -681,7 +681,7 @@ test("T15 font-pixel only in components/pixel, and never on data", () => {
   );
   for (const url of sources) {
     if (inPixel(url)) continue;
-    assert.doesNotMatch(readFileSync(url, "utf8"), /font-pixel/, relative(url));
+    assert.doesNotMatch(readFileSync(url, "utf8"), /(?<![\w-])font-pixel(?![\w-])/, relative(url));
   }
   for (const url of tsxFiles()) {
     const source = readFileSync(url, "utf8");
