@@ -67,7 +67,7 @@ cd api
 uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
 ```
 
-Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`.
+Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`).
 
 Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pytest` (tests are skipped without it).
 
