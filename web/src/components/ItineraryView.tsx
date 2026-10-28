@@ -1,0 +1,92 @@
+"use client";
+
+// Loads one saved plan in the browser (so the TG-27 service worker caches it) and shows its state:
+// loading, found, not found, or error with Try again (TG-23, ux.md 5 and 6).
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { fetchItinerary } from "@/lib/api";
+import { isValidSlug, type Itinerary } from "@/lib/itinerary";
+import ItineraryList from "@/components/ItineraryList";
+import { UI } from "@/components/planUi";
+
+type State =
+  | { kind: "loading" }
+  | { kind: "found"; itinerary: Itinerary }
+  | { kind: "notfound" }
+  | { kind: "error"; retrying: boolean };
+
+const LOADING = "Loading your trip...";
+const NOT_FOUND = "We couldn't find that trip plan.";
+const NOT_FOUND_BODY = "The link may be mistyped, or the plan was removed. Check the link with whoever sent it.";
+const ERROR = "Could not load this trip plan. Check your connection and try again.";
+
+async function loadState(slug: string): Promise<State> {
+  try {
+    const itinerary = await fetchItinerary(slug);
+    return itinerary ? { kind: "found", itinerary } : { kind: "notfound" };
+  } catch (e) {
+    console.warn("[tg-itinerary] load failed", e instanceof Error ? e.message : "error"); // "API error 503", never the URL
+    return { kind: "error", retrying: false };
+  }
+}
+
+export default function ItineraryView({ slug }: { slug: string }) {
+  const valid = isValidSlug(slug);
+  const [state, setState] = useState<State>(valid ? { kind: "loading" } : { kind: "notfound" });
+
+  useEffect(() => {
+    if (!valid) return; // an invalid slug shows the 404 without a request
+    let live = true;
+    loadState(slug).then((next) => {
+      if (live) setState(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [slug, valid]);
+
+  function retry() {
+    if (state.kind === "error" && state.retrying) return; // aria-disabled, not disabled: focus stays on the button
+    setState({ kind: "error", retrying: true });
+    loadState(slug).then(setState);
+  }
+
+  const announce =
+    state.kind === "loading" ? LOADING
+    : state.kind === "found" ? "Trip plan loaded."
+    : state.kind === "notfound" ? NOT_FOUND
+    : state.retrying ? LOADING
+    : ERROR;
+
+  return (
+    <>
+      <p role="status" className="sr-only">
+        {announce}
+      </p>
+      {state.kind === "loading" && <p className="text-sm text-muted">{LOADING}</p>}
+      {state.kind === "found" && <ItineraryList itinerary={state.itinerary} />}
+      {state.kind === "notfound" && (
+        <div className={UI.box}>
+          <p className="text-sm font-bold">{NOT_FOUND}</p>
+          <p className="text-sm">{NOT_FOUND_BODY}</p>
+          <Link href="/" className={UI.secondaryBtn}>
+            Search buses
+          </Link>
+        </div>
+      )}
+      {state.kind === "error" && (
+        <div className={UI.box}>
+          <p className="text-sm">{ERROR}</p>
+          <button
+            type="button"
+            onClick={retry}
+            aria-disabled={state.retrying || undefined}
+            className={UI.secondaryBtn}
+          >
+            {state.retrying ? "Loading..." : "Try again"}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}

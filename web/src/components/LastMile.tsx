@@ -2,19 +2,11 @@
 
 import { useRef, useState } from "react";
 import { PixelBox, PixelButton, PixelChoice } from "@/components/pixel";
-import { fetchLastMile, formatVerified } from "@/lib/api";
-import {
-  BAGUIO_TERMINALS,
-  formatFare,
-  formatMinutes,
-  groupByDestination,
-  modeLabel,
-  type LastMileLeg,
-} from "@/lib/lastMile";
+import { fetchLastMile } from "@/lib/api";
+import { BAGUIO_TERMINALS, groupByDestination, type LastMileLeg } from "@/lib/lastMile";
+import LegCard from "@/components/LegCard";
 
 type Status = "idle" | "loading" | "done" | "error";
-
-const line = "text-sm min-w-0 break-words";
 
 export default function LastMile() {
   const [terminal, setTerminal] = useState<string | null>(null);
@@ -95,28 +87,5 @@ export default function LastMile() {
         </section>
       ))}
     </div>
-  );
-}
-
-function LegCard({ leg }: { leg: LastMileLeg }) {
-  const fare = formatFare(leg.fare_min_php, leg.fare_max_php);
-  const minutes = formatMinutes(leg.minutes);
-  return (
-    <PixelBox as="li" className="p-4 flex flex-col gap-1.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-bold">{modeLabel(leg.mode)}</span>
-        {fare && <span className="font-bold tabular-nums">{fare}</span>}
-      </div>
-      {leg.signboard && (
-        <p className={line}>
-          Signboard: <span className="font-semibold">{leg.signboard}</span>
-        </p>
-      )}
-      {leg.boarding_point && <p className={line}>Board at {leg.boarding_point}</p>}
-      {leg.alighting_point && <p className={line}>Get off at {leg.alighting_point}</p>}
-      {minutes && <p className={line}>{minutes}</p>}
-      {leg.notes && <p className={`${line} text-muted`}>{leg.notes}</p>}
-      <p className="pt-1 text-xs text-muted">{formatVerified(leg.last_verified_at)}</p>
-    </PixelBox>
   );
 }

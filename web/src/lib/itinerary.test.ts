@@ -23,6 +23,7 @@ import {
 } from "./itinerary.ts";
 import { API_URL, fetchItinerary } from "./api.ts";
 import { formatTravelDate } from "./direction.ts";
+import { partySummary as pickerPartySummary } from "./party.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const REPO = new URL("../", WEB);
@@ -151,8 +152,8 @@ test("shareDeps: missing or non-function APIs are undefined, never assumed", () 
 
 test("shareDeps: each API is bound to its owner (no Illegal invocation)", async () => {
   const seen: unknown[] = [];
-  const clipboard = { writeText(this: unknown, _s: string) { seen.push(this); return Promise.resolve(); } };
-  const nav = { share(this: unknown, _p: unknown) { seen.push(this); return Promise.resolve(); }, clipboard };
+  const clipboard = { writeText(this: unknown) { seen.push(this); return Promise.resolve(); } };
+  const nav = { share(this: unknown) { seen.push(this); return Promise.resolve(); }, clipboard };
   const deps = shareDeps(nav);
   await deps.share!(PAYLOAD);
   await deps.writeText!(PAYLOAD.url);
@@ -199,6 +200,20 @@ test("party summary never shows names, and an empty party never reads broken", (
   const empty = partySummary([]); // the exact text is TG-15's open Q3
   assert.ok(empty.trim().length > 0);
   assert.doesNotMatch(empty, /undefined|null|NaN|Party of 0/);
+});
+
+test("party summary matches TG-15's, except the picker-only 'Party is full' sentence (ux.md section 4)", () => {
+  const parties = [
+    [],
+    [member("adult")],
+    [member("student"), member("adult"), member("adult")],
+    [member("pwd"), member("pwd"), member("senior"), member("child")],
+    [member("infant"), member("child"), member("constructor")],
+  ];
+  for (const p of parties) assert.equal(partySummary(p), pickerPartySummary(p), JSON.stringify(p));
+  const ten = Array.from({ length: 10 }, () => member("adult"));
+  assert.equal(partySummary(ten), "Party of 10: 10 adults.");
+  assert.match(pickerPartySummary(ten), /^Party of 10: 10 adults\. Party is full/);
 });
 
 test("names join without an Oxford comma, blanks skipped", () => {
