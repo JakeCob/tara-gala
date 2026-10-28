@@ -270,6 +270,16 @@ test("share page is noindex and sends no referrer (review nit 3)", () => {
   assert.match(page, /referrer:\s*"no-referrer"/);
 });
 
+test("ShareButton is wired to the share helpers (RED audit gap 2)", () => {
+  const src = readFileSync(new URL("src/components/ShareButton.tsx", WEB), "utf8");
+  assert.match(src, /shareMethod\(/);
+  assert.match(src, /typeof navigator\.share === "function"/);
+  assert.match(src, /navigator\.clipboard/);
+  assert.match(src, /nextShareStep\(/);
+  assert.match(src, /writeText\(/);
+  assert.match(src, /shareText\(/); // the payload text has dates only
+});
+
 test("no new web dependency (T23-G1)", () => {
   const base = execFileSync("git", ["show", "origin/main:web/package.json"], { cwd: new URL(".", WEB), encoding: "utf8" });
   const now = readFileSync(new URL("package.json", WEB), "utf8");

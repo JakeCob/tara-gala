@@ -292,6 +292,37 @@ def test_no_listing_and_read_only(client, planner):
     assert paths == {"/itineraries/{share_slug}", "/premade-itineraries"}
 
 
+# Every GET route the API serves, including include_in_schema=False ones. A new read route must be added
+# here on purpose, after checking it can't list or enumerate itineraries (TG-23 RED audit gap 1).
+GET_ROUTES = {
+    "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc",  # FastAPI's own
+    "/health", "/terminals", "/trips", "/spots", "/last-mile",
+    "/premade-itineraries",  # TG-24: model = 'premade' rows only
+    "/itineraries/{share_slug}",  # TG-23: one row by exact slug
+}
+
+
+def test_no_hidden_or_renamed_listing_route():
+    """RED audit gap 1: walk app.routes, so a list route at any path, or hidden from OpenAPI, fails."""
+    from app.main import app
+
+    served = {r.path for r in app.routes if "GET" in (getattr(r, "methods", None) or set())}
+    assert served == GET_ROUTES
+    takes_slug = [r.path for r in app.routes if "{" in getattr(r, "path", "")]
+    assert takes_slug == ["/itineraries/{share_slug}"]  # the only parameterised path is the exact-slug read
+
+
+def test_only_exact_slug_and_premade_reads_touch_itineraries():
+    """RED audit gap 1: no other module reads the itineraries table, whatever its route is called."""
+    readers = {}
+    for p in sorted(APP.glob("*.py")):
+        n = len(re.findall(r"\b(?:from|join)\s+(?:public\.)?itineraries\b", p.read_text(encoding="utf-8"), re.I))
+        if n:
+            readers[p.name] = n
+    assert readers == {"itineraries.py": 1, "premade.py": 1}
+    assert "where model = %s" in (APP / "premade.py").read_text(encoding="utf-8")
+
+
 def test_premade_list_never_includes_planner_rows(client, planner, tmp_path):
     """T23-A8 (guard)"""
     dsn, slug, _ = planner
