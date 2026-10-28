@@ -108,7 +108,10 @@ def scrape(monkeypatch, capsys, *args, obs=OBS + REVERSE_OBS):
 
 def load(monkeypatch, capsys, data_dir, *args):
     monkeypatch.setattr(sys, "argv", ["load_data.py", "--data-dir", str(data_dir), *args])
-    rc = load_data.main()
+    try:
+        rc = load_data.main()
+    except psycopg.Error as e:  # class only: the message may hold the DSN, and pytest would print it
+        pytest.fail(f"{type(e).__name__} raised out of load_data.main()", pytrace=False)
     out = capsys.readouterr()
     return rc, out.out, out.err
 
@@ -182,6 +185,21 @@ def test_loader_malformed_dsn_is_clean_and_redacted(dsn, tmp_path):
     assert rc != 0
     assert "Traceback" not in err, "loader printed a traceback"
     assert "FAILED, nothing was written" in err and "database error" in err
+    assert not leaks(out + err, MARK, NO_SCHEME), "password or DSN leaked"
+
+
+@pytest.mark.parametrize("source", ["flag", "dotenv"])
+def test_loader_masks_dsn_in_use_not_only_env(dsn, monkeypatch, capsys, no_dotenv, tmp_path, source):
+    """T40-1e for the loader (B3; RED audit addition 1)"""
+    write_csvs(tmp_path, TRIP_ROW)
+    if source == "flag":
+        rc, out, err = load(monkeypatch, capsys, tmp_path, "--database-url", NO_SCHEME)
+    else:
+        no_dotenv(NO_SCHEME)
+        rc, out, err = load(monkeypatch, capsys, tmp_path)
+    assert rc != 0
+    assert "FAILED, nothing was written" in err and "database error" in err
+    assert "Traceback" not in err
     assert not leaks(out + err, MARK, NO_SCHEME), "password or DSN leaked"
 
 
@@ -297,6 +315,15 @@ def test_loader_flag_warns_and_env_does_not(dsn, monkeypatch, capsys, no_dotenv,
         assert not leaks(lines[0], dsn), "warning contains the DSN"
 
 
+def test_loader_flag_warning_never_contains_the_value(marker_dsn, monkeypatch, capsys, no_dotenv, tmp_path):
+    """T40-2d with a marker (B5; RED audit addition 2): the warning can't carry the password either"""
+    write_csvs(tmp_path, TRIP_ROW)
+    rc, out, err = load(monkeypatch, capsys, tmp_path, "--dry-run", "--database-url", marker_dsn)
+    assert rc == 0
+    assert len(warning_lines(err)) == 1, "expected exactly one --database-url warning"
+    assert not leaks(out + err, MARK, marker_dsn), "password or DSN leaked"
+
+
 @pytest.mark.parametrize("module", [vl, load_data], ids=["scraper", "loader"])
 def test_help_marks_flag_deprecated(monkeypatch, capsys, module):
     """T40-2e (B7)"""
@@ -407,7 +434,27 @@ def test_loader_typo_still_lists_known_slugs(dsn, monkeypatch, capsys, no_dotenv
 
 # --- Reuse and scope guards ------------------------------------------------------------------
 
-PASSWORD_REGEX = re.compile(r"re\.compile\(.*(://|password)", re.I)
+RE_FUNCS = {"compile", "sub", "subn", "search", "match", "fullmatch", "findall", "finditer", "split"}
+PASSWORD_HINT = re.compile(r"@|://|password", re.I)
+
+
+def _password_regex_lines(path: Path) -> list[int]:
+    """Lines of `re.<fn>(pattern, ...)` calls whose literal pattern looks for a password (@, :// or password)."""
+    lines = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "re"
+            and node.func.attr in RE_FUNCS
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+            and PASSWORD_HINT.search(node.args[0].value)
+        ):
+            lines.append(node.lineno)
+    return lines
 
 
 def _imports_from(path: Path) -> dict[str, set[str]]:
@@ -421,11 +468,11 @@ def _imports_from(path: Path) -> dict[str, set[str]]:
 
 def test_one_masking_source():
     """T40-4a (B13): no second password regex; both scripts mask through the shared stdlib-only helper"""
-    tracked = subprocess.run(["git", "ls-files", "*.py"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
-    with_regex = sorted(
-        f for f in tracked
-        if not f.startswith("api/tests/") and PASSWORD_REGEX.search((ROOT / f).read_text(encoding="utf-8"))
-    )
+    files = subprocess.run(  # tracked plus new, not ignored (.venv, node_modules)
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "*.py"],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    with_regex = sorted(f for f in files if not f.startswith("api/tests/") and _password_regex_lines(ROOT / f))
     assert len(with_regex) == 1 and with_regex[0].startswith("api/app/"), with_regex
     home = Path(with_regex[0]).stem  # logging_setup today, redact after the move
 
