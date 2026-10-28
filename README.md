@@ -16,6 +16,8 @@ See `CLAUDE.md` for scope, rules and the build schedule.
 ## 1. Database
 1. Create a Supabase project.
 2. SQL editor: paste `supabase/schema.sql`, run once.
+
+   **Migrations.** A fresh project needs only `schema.sql`. An existing database (one that already ran `schema.sql`) also needs each file in `supabase/migrations/` that it hasn't had yet, pasted into the SQL editor in filename order (`YYYY-MM-DD_tgNN_name.sql`). Each one is safe to re-run. When you change the schema, update `schema.sql` *and* add a migration.
 3. Copy `.env.example` to `.env` and set `DATABASE_URL` to the full session pooler URI (Connect button in Supabase). Write the password straight into the URI, not as `${VAR}`, and URL-encode special characters in it (`@` is `%40`, `#` is `%23`, `/` is `%2F`).
 
 ## 2. Python setup (once)
