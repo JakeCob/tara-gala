@@ -4,7 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import date as Date
-from datetime import datetime, time, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Query
@@ -13,7 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import db
 from .logging_setup import RequestLogMiddleware, configure_logging
 from .models import Terminal, Trip
+from .flags import get_flags
 from .last_mile import router as last_mile_router
+from .premade import router as premade_router
+from .schedule import arrival as _arrival  # re-exported: TG-12 tests use main._arrival
 
 configure_logging()  # the API's only logging setup; must run before anything logs
 logger = logging.getLogger("tara_gala.api")
@@ -33,6 +36,7 @@ CONFIRM_NOTE = "Schedules can change. Confirm with the operator before you trave
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.open_pool()
+    app.state.flags = get_flags()  # once per process, after logging is configured; routers read this
     yield
     db.close_pool()
 
@@ -55,14 +59,6 @@ def _cities(city: str | None) -> list[str] | None:
     if city.strip().lower() in {"metro manila", "manila area", "ncr"}:
         return METRO_MANILA_CITIES
     return [city.strip()]
-
-
-def _arrival(travel_date: Date, departure: time, minutes: int | None) -> tuple[str | None, int | None]:
-    """Rough arrival as ("HH:MM", days after travel_date). Manila has no DST, so naive maths is fine."""
-    if not minutes:
-        return None, None
-    at = datetime.combine(travel_date, departure) + timedelta(minutes=minutes)
-    return at.strftime("%H:%M"), (at.date() - travel_date).days
 
 
 @app.get("/health")
@@ -161,3 +157,4 @@ def search_trips(
 
 
 app.include_router(last_mile_router)
+app.include_router(premade_router)

@@ -1,0 +1,19 @@
+{
+  "_readme": "Pre-made itineraries (TG-24). Author by slugs; load with: python data/load_premade.py --dry-run. Keys starting with _ are ignored. The _example only shows the shape: its values are placeholders, so replace every field. Only add real trips, spots and legs that are already in the database. See data/README.md.",
+  "_example": {
+    "key": "example-food-trip",
+    "vibe": "Food trip",
+    "budget_php": 6000,
+    "party": [{"type": "adult"}, {"type": "student"}],
+    "outbound": {"operator": "victory-liner", "origin": "vl-cubao", "departure": "HH:MM", "date": "YYYY-MM-DD",
+                 "destination": "vl-baguio", "class": "regular_aircon", "via": null},
+    "return":   {"operator": "victory-liner", "origin": "vl-baguio", "departure": "HH:MM", "date": "YYYY-MM-DD"},
+    "days": [
+      {"day": 1, "stops": [
+        {"spot": "example-spot", "arrive": "HH:MM", "leave": "HH:MM",
+         "leg": {"from": "vl-baguio", "to": "example-spot", "mode": "jeep", "signboard": null}}
+      ]}
+    ]
+  },
+  "itineraries": []
+}

@@ -41,6 +41,8 @@ Re-running is safe: rows are matched and updated, not duplicated.
 
 `--database-url` still works but warns: it shows the password in `ps`. Prefer `DATABASE_URL` (env or repo `.env`).
 
+Pre-made itineraries (the planner fallback) load the same way from `data/premade_itineraries.json`: `python data/load_premade.py --dry-run`, then without `--dry-run`. See `data/README.md`.
+
 ## 4. Victory Liner scraper
 Pulls the next 14 days of Victory Liner trips in both directions (Cubao, Pasay, Caloocan, Sampaloc to Baguio, and Baguio back to each) from their public booking API: 112 requests, one at a time, 2 seconds apart, so a run takes about 4 to 5 minutes. That's kept on purpose: it's an unattended 4am cron job, and 2s is the polite rate for a public API.
 
@@ -71,7 +73,7 @@ cd api
 uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
 ```
 
-Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`).
+Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`), `GET /premade-itineraries` (404 when `PREMADE_ITINERARIES=false`).
 
 Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pytest` (tests are skipped without it).
 
