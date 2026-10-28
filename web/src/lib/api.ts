@@ -55,10 +55,11 @@ export function formatTime(hhmm: string): string {
   return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-/** " +1 day" style suffix for arrivals after midnight; empty for same day, unknown, or an older API without the field. */
+/** " +1 day" style suffix for arrivals after midnight; empty for same day, unknown, or an older API without the field.
+ * Starts with a non-breaking space so it never wraps away from the arrival time. */
 export function formatDayOffset(offset: number | null | undefined): string {
   if (!offset) return "";
-  return offset === 1 ? " +1 day" : ` +${offset} days`;
+  return offset === 1 ? "\u00a0+1 day" : `\u00a0+${offset} days`;
 }
 
 export function formatVerified(iso: string | null): string {
