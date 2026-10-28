@@ -94,12 +94,17 @@ def restore_logging():
 
 @pytest.fixture()
 def marker_dsn(dsn):
-    """A DSN for a login role whose password is a marker. Grants are re-made because dsn rebuilds the schema."""
+    """A DSN for a login role whose password is a marker. Grants are re-made because dsn rebuilds the schema.
+
+    The role is cluster-wide in tg-pg but has no privileges outside this test DB. To remove it, run
+    `drop owned by tg13_marker` in each DB that has grants, then `drop role tg13_marker`.
+    """
     with psycopg.connect(dsn, autocommit=True) as conn:
+        # Race-safe create, then reset attributes and password every run so a changed marker never goes stale
         conn.execute(
-            "do $$ begin if not exists (select 1 from pg_roles where rolname = 'tg13_marker') then "
-            f"create role tg13_marker login password '{DSN_PASSWORD}'; end if; end $$"
+            "do $$ begin create role tg13_marker; exception when duplicate_object then null; end $$"
         )
+        conn.execute(f"alter role tg13_marker with login nosuperuser nocreatedb nocreaterole password '{DSN_PASSWORD}'")
         conn.execute("grant usage on schema public to tg13_marker")
         conn.execute("grant select on all tables in schema public to tg13_marker")
     parts = urlsplit(dsn)
