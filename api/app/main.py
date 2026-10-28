@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import db
 from .logging_setup import RequestLogMiddleware, configure_logging
 from .models import Terminal, Trip
+from .last_mile import router as last_mile_router
 
 configure_logging()  # the API's only logging setup; must run before anything logs
 logger = logging.getLogger("tara_gala.api")
@@ -157,3 +158,6 @@ def search_trips(
         sum(1 for t in trips if t.arrives_around is None),
     )
     return trips
+
+
+app.include_router(last_mile_router)
