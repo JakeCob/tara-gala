@@ -166,8 +166,8 @@ def test_leg_shape(client, data):
 
     walk = by_key[("vl-baguio", "test-market", "walk")]
     assert walk["mode"] == "walk"
-    for key in ("signboard", "boarding_point", "alighting_point", "fare_min_php", "fare_max_php", "minutes", "notes"):
-        assert walk[key] is None, key  # nulls stay null, never 0 or ""
+    for field in ("signboard", "boarding_point", "alighting_point", "fare_min_php", "fare_max_php", "minutes", "notes"):
+        assert walk[field] is None, field  # nulls stay null, never 0 or ""
 
     back = by_key[("test-cafe", "vl-baguio", "jeep")]
     assert back["origin"]["kind"] == "spot"
