@@ -12,7 +12,7 @@ import {
 } from "@/lib/mapLinks";
 import { getTerminals } from "@/lib/terminals";
 
-const FOCUS = "focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card";
+const FOCUS = "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card";
 
 /** Directions to the trip's origin terminal. Renders from the trip's fields first, then upgrades from /terminals. */
 export default function TerminalLinks({ slug, name, city }: { slug: string; name: string; city: string }) {

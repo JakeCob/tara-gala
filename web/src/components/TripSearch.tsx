@@ -105,8 +105,9 @@ export default function TripSearch() {
         </button>
       </form>
 
-      {/* Status lines are announced; the cards stay outside so a screen reader doesn't read every one */}
-      <div aria-live="polite" className="flex flex-col gap-1">
+      {/* Status lines are announced; the cards stay outside so a screen reader doesn't read every one.
+          empty:-mt-4 cancels its gap before the first status without hiding it (display:none would drop the live region) */}
+      <div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">
         {status === "error" && (
           <p className="rounded-xl border border-border bg-card p-4 text-sm">
             Could not reach the schedule server. Check your connection and try again.

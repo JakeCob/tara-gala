@@ -250,6 +250,10 @@ test("TerminalLinks: every link opens a new tab safely and is named by the label
   assert.equal(component.match(/<a\b/g)?.length, 2);
   assert.doesNotMatch(component, /aria-live/);
   assert.doesNotMatch(component, /\bconsole\./);
+  // One focus indicator: the brand ring, with the default outline hidden (ux-guide section 8; outline-none breaks forced colours)
+  assert.match(component, /const FOCUS = "focus-visible:outline-hidden focus-visible:ring-2 /);
+  assert.equal(component.match(/\$\{FOCUS\}/g)?.length, 2);
+  assert.doesNotMatch(component, /outline-none/);
 });
 
 test("TerminalLinks: the Sakay link renders only under showSakay", () => {
@@ -289,4 +293,10 @@ test("footer points to the cards, with no homepage links; the /baguio link stays
   assert.equal(footer[1].trim(), "Directions to your terminal are on each trip.");
   assert.doesNotMatch(page, /maps\.google\.com|sakay\.ph/);
   assert.match(page, /href="\/baguio"/);
+});
+
+test("the empty results live region stays rendered but takes no gap", () => {
+  // ux-review nit 2: display:none (empty:hidden) would drop it from the accessibility tree before its first update
+  assert.match(tripSearch, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">/);
+  assert.doesNotMatch(tripSearch, /empty:hidden/);
 });
