@@ -75,6 +75,8 @@ TRIP_REFS = {
     "ret-manila-loop": trip_ref("vl-cubao", "vl-pasay", "21:00", 60),
     "ret-baguio-loop": trip_ref("vl-baguio", "gen-baguio", "21:00", 30),
     "ret-genesis": trip_ref("gen-baguio", "gen-pasay", "18:00", 300),
+    "ret-1329": trip_ref("vl-baguio", "vl-cubao", "13:29"),  # 29 min after out-day arrives
+    "ret-1330": trip_ref("vl-baguio", "vl-cubao", "13:30"),
 }
 
 PARK_HOURS = {"sun": ["09:00", "17:00"], "fri": ["08:00", "18:00"], "sat": ["08:00", "18:00"]}
@@ -910,3 +912,35 @@ def test_unreadable_opening_hours_log_a_warning(caplog, hours, warns):
     lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.levelno == logging.WARNING]
     expected = [f"spot opening_hours unreadable spot_id={SPOT_IDS['test-market']} day=fri"] if warns else []
     assert lines == expected
+
+
+# --- audit F1: a return that leaves before the party can arrive ------------------------------------
+
+def test_return_before_the_bus_arrives_with_no_days_is_bad_days():
+    """Probe A: 22:00 Fri arrives 04:00 Sat, but the return is the 21:00 Fri bus and days is []."""
+    errors = check(p0(outbound="out-night", ret="ret", ret_date=FRI, days=[]))
+    assert found(errors) == [("bad_days", "days")]
+    assert "before the bus arrives" in errors[0].message
+
+
+def test_return_before_the_bus_arrives_with_days_listed_is_bad_days():
+    errors = check(p0(outbound="out-night", ret="ret", ret_date=FRI, days=[(1, [])]))
+    assert found(errors) == [("bad_days", "days")]
+
+
+@pytest.mark.parametrize("ret, ok", [
+    ("ret-early", False),  # Probe B: 06:00 Fri, before the 13:00 Fri arrival
+    ("ret-1329", False),  # inside the 30-minute buffer
+    ("ret-1330", True),
+    ("ret", True),
+])
+def test_return_after_arrival_when_the_last_day_has_no_stops(ret, ok):
+    errors = check(p0(ret=ret, ret_date=FRI, days=[(1, [])]))
+    assert found(errors) == ([] if ok else [("after_return", "return.trip_id")])
+
+
+def test_return_check_without_stops_ignores_earlier_days():
+    """Only an empty last day needs the trip-level check; stops on it are checked as before."""
+    raw = p0(ret="ret-early")
+    raw["days"][2]["stops"] = []
+    assert check(raw) == []  # Sun 06:00 is long after the Fri arrival

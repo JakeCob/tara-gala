@@ -8,14 +8,14 @@ Usage:
 Entries are authored by slugs and natural keys, never ids. Each one is resolved against the
 database, checked with the same validator the planner uses, and saved as an ordinary
 `itineraries` row with model = 'premade' and share_slug = 'premade-<key>'. Any problem rolls
-back the whole run. Reads DATABASE_URL like data/load_data.py. See data/README.md.
+back the whole run. Reads DATABASE_URL and reports problems and database errors like
+data/load_data.py, through its helpers (TG-40). See data/README.md.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import date as Date
 from datetime import time
@@ -32,10 +32,6 @@ sys.path.insert(0, str(HERE.parent / "api"))  # for app.plan_validation; imports
 import load_data  # noqa: E402
 from app.plan_validation import HHMM, MODEL_PREMADE, loc_path, validate_plan  # noqa: E402
 from app.schedule import runs_on  # noqa: E402
-
-# TODO(TG-40): after rebasing onto merged TG-40, take the DSN from load_data.database_url(), print
-# load_data.missing_seed_message() when operators/terminals aren't seeded, and report connection
-# and query failures through load_data.db_failure() / app.redact instead of a raw psycopg traceback.
 
 DEFAULT_FILE = HERE / "premade_itineraries.json"
 SLUG_PREFIX = "premade-"
@@ -128,7 +124,20 @@ def read_entries(path: Path) -> tuple[list[Entry], list[str]]:
 # ---------------------------------------------------------------------------
 # Resolving slugs and natural keys to ids
 # ---------------------------------------------------------------------------
-def _resolve_trip(cur, ref: TripKey) -> tuple[str | None, str | None]:
+def _unknown_seed(what: str, slug: str, known: dict[str, str]) -> str:
+    """Operators and terminals are seeds: a typo and a deleted seed look the same, so hint at both (as load_data)."""
+    return f"unknown {what} {slug!r}; known: {', '.join(sorted(known)) or '(none)'} (if it should exist, {load_data.SEEDS_HINT})"
+
+
+def _resolve_trip(cur, ref: TripKey, operators: dict[str, str], terminals: dict[str, str]) -> tuple[str | None, list[str]]:
+    """The trip id, or problems as "<field>: <message>"."""
+    seeds = [(field, what, slug, known) for field, what, slug, known in (
+        ("operator", "operator", ref.operator, operators),
+        ("origin", "terminal", ref.origin, terminals),
+        ("destination", "terminal", ref.destination, terminals),
+    ) if slug is not None and slug not in known]
+    if seeds:
+        return None, [f"{field}: {_unknown_seed(what, slug, known)}" for field, what, slug, known in seeds]
     cur.execute(
         """
         select t.id, r.class::text, r.via, d.slug, t.days_of_week, t.valid_from, t.valid_to
@@ -150,11 +159,11 @@ def _resolve_trip(cur, ref: TripKey) -> tuple[str | None, str | None]:
         and runs_on(row[4], row[5], row[6], ref.date)
     ]
     if not matches:
-        return None, f"no active {ref.operator} trip from {ref.origin} at {ref.departure} running on {ref.date}"
+        return None, [f"trip_id: no active {ref.operator} trip from {ref.origin} at {ref.departure} running on {ref.date}"]
     if len(matches) > 1:
         options = ", ".join(f"{cls} via {via or '-'} to {dest}" for _, cls, via, dest, *_ in matches)
-        return None, f"{len(matches)} trips match; add class, via or destination: {options}"
-    return str(matches[0][0]), None
+        return None, [f"trip_id: {len(matches)} trips match; add class, via or destination: {options}"]
+    return str(matches[0][0]), []
 
 
 def _place(slug: str, terminals: dict[str, str], spots: dict[str, str]) -> tuple[tuple[str | None, str | None] | None, str | None]:
@@ -165,7 +174,7 @@ def _place(slug: str, terminals: dict[str, str], spots: dict[str, str]) -> tuple
         return (terminals[slug], None), None
     if slug in spots:
         return (None, spots[slug]), None
-    return None, f"unknown place {slug!r}: not a terminal or spot slug"
+    return None, f"unknown place {slug!r}: not a terminal or spot slug (if it's a terminal that should exist, {load_data.SEEDS_HINT})"
 
 
 def _resolve_leg(cur, leg: LegKey, terminals, spots) -> tuple[str | None, str | None]:
@@ -195,14 +204,14 @@ def _resolve_leg(cur, leg: LegKey, terminals, spots) -> tuple[str | None, str | 
 
 def resolve(cur, entry: Entry) -> tuple[dict | None, list[str]]:
     """The entry as the CLAUDE.md planner output shape, or the problems ("<path>: <message>")."""
+    operators = load_data.slug_map(cur, "operators")
     terminals = load_data.slug_map(cur, "terminals")
     spots = load_data.slug_map(cur, "spots")
     problems = []
     trip_ids = {}
     for name, ref in (("outbound", entry.outbound), ("return", entry.return_)):
-        trip_ids[name], err = _resolve_trip(cur, ref)
-        if err:
-            problems.append(f"{name}: {err}")
+        trip_ids[name], errs = _resolve_trip(cur, ref, operators, terminals)
+        problems += [f"{name}.{e}" for e in errs]
     days = []
     for di, day in enumerate(entry.days):
         stops = []
@@ -284,13 +293,13 @@ def run(dsn: str, path: Path, *, dry_run: bool, prune: bool) -> int:
 
         if problems:
             conn.rollback()
-            print(f"{len(problems)} problem(s) found, nothing was saved:\n")
+            print(f"FAILED, nothing was written: {len(problems)} problem(s) found:\n", file=sys.stderr)
             for p in problems:
-                print(f"  - {p}")
+                print(f"  - {p}", file=sys.stderr)
             return 1
 
         if stale and prune:
-            print(f"Pruned {_plural(len(stale))} ({', '.join(stale)})")
+            print(f"{'Would prune' if dry_run else 'Pruned'} {_plural(len(stale))} ({', '.join(stale)})")
         elif stale:
             verb, them = ("is", "it") if len(stale) == 1 else ("are", "them")
             print(f"{_plural(len(stale))} in the database {verb} not in the file ({', '.join(stale)}); run with --prune to delete {them}")
@@ -307,15 +316,19 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dry-run", action="store_true", help="resolve and validate, then roll back")
     p.add_argument("--file", type=Path, default=DEFAULT_FILE, help="itineraries file (default: data/premade_itineraries.json)")
-    p.add_argument("--database-url", default=None, help="defaults to DATABASE_URL or the repo .env")
+    p.add_argument("--database-url", default=None, help=load_data.DATABASE_URL_FLAG_HELP)
     p.add_argument("--prune", action="store_true", help="delete pre-made rows that are not in the file")
     args = p.parse_args()
 
-    dsn = args.database_url or os.environ.get("DATABASE_URL") or load_data._dotenv_database_url()  # TODO(TG-40): database_url()
+    dsn = load_data.database_url(args.database_url)
     if not dsn:
         print("DATABASE_URL is not set (env var or repo-root .env).", file=sys.stderr)
         return 2
-    return run(dsn, args.file, dry_run=args.dry_run, prune=args.prune)
+    try:
+        return run(dsn, args.file, dry_run=args.dry_run, prune=args.prune)
+    except psycopg.Error as e:  # one redacted line, no traceback: the message can hold the DSN
+        print(load_data.db_failure(e, dsn), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

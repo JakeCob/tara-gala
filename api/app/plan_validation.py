@@ -283,14 +283,14 @@ def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_
             else:
                 arrive_at = schedule.to_minutes(hhmm)
                 n = (plan.return_.date - day1).days + 1
-                if [d.day for d in plan.days] == list(range(1, n + 1)):
-                    day_dates = [day1 + timedelta(days=i) for i in range(n)]
-                elif n >= 1:
-                    errors.add(_Errors.DAYS, "bad_days", "days",
-                               f"days must be numbered 1 to {n} ({day1} to {plan.return_.date}), one per day")
-                else:
+                if n < 1:  # checked first: with no days, [] would match range(1, 1)
                     errors.add(_Errors.DAYS, "bad_days", "days",
                                f"the return on {plan.return_.date} is before the bus arrives on {day1}")
+                elif [d.day for d in plan.days] == list(range(1, n + 1)):
+                    day_dates = [day1 + timedelta(days=i) for i in range(n)]
+                else:
+                    errors.add(_Errors.DAYS, "bad_days", "days",
+                               f"days must be numbered 1 to {n} ({day1} to {plan.return_.date}), one per day")
 
     numbered = [(di, si, s) for di, day in enumerate(plan.days) for si, s in enumerate(day.stops)]
 
@@ -352,14 +352,22 @@ def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_
             previous_leave = leave
 
     # 7. Return: no final leg in the shape, so a fixed buffer stands in for the ride to the terminal
-    if ret is not None and plan.days and plan.days[-1].stops:
-        di, si = len(plan.days) - 1, len(plan.days[-1].stops) - 1
-        last = plan.days[-1].stops[-1]
-        latest = ret.departure_time.hour * 60 + ret.departure_time.minute - RETURN_BUFFER_MINUTES
-        if schedule.to_minutes(last.leave) > latest:
-            pos, path, label = where(di, si)
-            errors.add(pos, "after_return", f"{path}.leave",
-                       f"{label}: the return bus leaves at {ret.departure_time:%H:%M}, so leave by {_clock(latest)}")
+    if ret is not None:
+        departs = ret.departure_time.hour * 60 + ret.departure_time.minute
+        if plan.days[-1].stops:
+            di, si = len(plan.days) - 1, len(plan.days[-1].stops) - 1
+            last = plan.days[-1].stops[-1]
+            if schedule.to_minutes(last.leave) > departs - RETURN_BUFFER_MINUTES:
+                pos, path, label = where(di, si)
+                errors.add(pos, "after_return", f"{path}.leave",
+                           f"{label}: the return bus leaves at {ret.departure_time:%H:%M}, "
+                           f"so leave by {_clock(departs - RETURN_BUFFER_MINUTES)}")
+        else:  # nothing on the last day, so the return bus itself must leave after the party arrives
+            leaves = (plan.return_.date - day1).days * 1440 + departs  # minutes since day 1 began
+            if leaves - RETURN_BUFFER_MINUTES < arrive_at:
+                errors.add(_Errors.RETURN, "after_return", "return.trip_id",
+                           f"the return bus leaves at {ret.departure_time:%H:%M} on {plan.return_.date}, but the "
+                           f"outbound bus only arrives around {_clock(arrive_at)} on {day1}")
 
     # 8. Opening hours, when known
     for di, si, s in numbered:

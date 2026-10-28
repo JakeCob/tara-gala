@@ -13,17 +13,19 @@ import sys
 import psycopg
 import pytest
 from psycopg.rows import dict_row
+from urllib.parse import urlsplit
 
 import load_premade
 from app.plan_validation import validate_plan
-from conftest import ROOT
+import load_data
+from conftest import ROOT, TEST_DSN
 from premade_data import (
     FRI, NIGHT_DAYS, P0_DAYS, SPOTS, SUN, THU, TRIPS, build_plan, chill_entry, db_ids, load_rows, night_entry,
     write_premade,
 )
 
 UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-PROBLEMS = "problem(s) found, nothing was saved"
+PROBLEMS = "FAILED, nothing was written"  # matches data/load_data.py (TG-40); on stderr
 
 
 @pytest.fixture()
@@ -152,7 +154,11 @@ def test_dry_run_writes_nothing(rows, tmp_path, capsys):
     before = premade_rows(rows)
     edited = chill_entry()
     edited["vibe"] = "Changed (made up)"
+    capsys.readouterr()
     assert run(rows, write_premade(tmp_path, [edited]), dry_run=True, prune=True) == 0
+    out = capsys.readouterr().out
+    assert "Would prune 1 pre-made itinerary (premade-test-night)" in out  # audit F2: not "Pruned"
+    assert "Pruned" not in out
     assert premade_rows(rows) == before
 
 
@@ -187,7 +193,9 @@ def test_any_error_saves_nothing(rows, tmp_path, capsys, case):
     bad = chill_entry()
     edit(bad)
     assert run(rows, write_premade(tmp_path, [night_entry(), bad])) == 1
-    out = capsys.readouterr().out
+    printed = capsys.readouterr()
+    assert PROBLEMS not in printed.out  # problems go to stderr, like data/load_data.py
+    out = printed.err
     assert PROBLEMS in out
     assert "  - test-chill: " in out  # every problem line names the entry key
     for text in expected:
@@ -199,7 +207,7 @@ def test_party_names_are_rejected_and_never_printed(rows, tmp_path, capsys):
     bad = chill_entry()
     bad["party"] = [{"type": "adult", "name": "Juan Test (made up)"}]
     assert run(rows, write_premade(tmp_path, [bad])) == 1
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert PROBLEMS in out and "test-chill" in out
     assert "Juan Test" not in out
     assert premade_rows(rows) == []
@@ -210,7 +218,7 @@ def test_bad_key(rows, tmp_path, capsys, key):
     bad = chill_entry()
     bad["key"] = key
     assert run(rows, write_premade(tmp_path, [bad])) == 1
-    assert PROBLEMS in capsys.readouterr().out
+    assert PROBLEMS in capsys.readouterr().err
     assert premade_rows(rows) == []
 
 
@@ -218,7 +226,7 @@ def test_duplicate_key(rows, tmp_path, capsys):
     other = night_entry()
     other["key"] = "test-chill"
     assert run(rows, write_premade(tmp_path, [chill_entry(), other])) == 1
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert PROBLEMS in out and "test-chill" in out
     assert premade_rows(rows) == []
 
@@ -233,7 +241,7 @@ def test_bad_file_shape(rows, tmp_path, capsys, text):
     path = tmp_path / "premade.json"
     path.write_text(text, encoding="utf-8")
     assert run(rows, path) == 1
-    assert PROBLEMS in capsys.readouterr().out
+    assert PROBLEMS in capsys.readouterr().err
     assert premade_rows(rows) == []
 
 
@@ -257,7 +265,7 @@ AMBIGUOUS_TRIPS = TRIPS + (
 def test_ambiguous_trip_lists_candidates_and_class_resolves_it(dsn, tmp_path, capsys):
     load_rows(dsn, tmp_path / "csv", trips=AMBIGUOUS_TRIPS)
     assert run(dsn, write_premade(tmp_path, [chill_entry()])) == 1
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert PROBLEMS in out and "test-chill" in out
     assert "2 trips match" in out and "regular_aircon" in out and "deluxe" in out
     assert premade_rows(dsn) == []
@@ -290,7 +298,7 @@ def test_via_disambiguates_a_trip(dsn, tmp_path, capsys):
     """Audit N1: same operator, origin, time and class; only the route variant differs."""
     load_rows(dsn, tmp_path / "csv", trips=VIA_TRIPS)
     assert run(dsn, write_premade(tmp_path, [chill_entry()])) == 1
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert "3 trips match" in out and "TPLEX" in out and "Gerona" in out
     entry = chill_entry()
     entry["outbound"]["via"] = "TPLEX"
@@ -306,7 +314,7 @@ def test_slug_that_is_both_a_terminal_and_a_spot_is_ambiguous(dsn, tmp_path, cap
     spots = SPOTS + "vl-baguio,Clashing Spot (made up),other,,,made up for tests only,,\n"
     load_rows(dsn, tmp_path / "csv", spots=spots)
     assert run(dsn, write_premade(tmp_path, [chill_entry()])) == 1
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert PROBLEMS in out and "test-chill" in out and "ambiguous" in out
     assert premade_rows(dsn) == []
 
@@ -339,7 +347,7 @@ def test_user_row_with_a_clashing_slug_is_never_overwritten(rows, tmp_path, caps
     insert_user_row(rows, share_slug="premade-test-chill")
     users = user_snapshot(rows)
     assert run(rows, write_premade(tmp_path, [chill_entry(), night_entry()])) == 1
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert PROBLEMS in out and "  - test-chill: " in out
     assert user_snapshot(rows) == users
     assert [r["model"] for r in premade_rows(rows)] == ["claude-haiku-5-5"]  # night rolled back too
@@ -355,6 +363,8 @@ def test_cli_dry_run_from_repo_root(rows, tmp_path):
         cwd=ROOT, env=env, capture_output=True, text=True, timeout=60,
     )
     assert out.returncode == 0, out.stdout + out.stderr
+    warnings = [line for line in out.stderr.splitlines() if line.startswith("WARNING") and "--database-url" in line]
+    assert len(warnings) == 1 and "process list (ps)" in warnings[0]  # TG-40's flag warning, once
     assert re.search(r"Dry run OK, nothing saved\. Would load 1 pre-made itinerar(y|ies)\b", out.stdout), out.stdout
     assert rows not in out.stdout + out.stderr  # never prints the DSN
     assert premade_rows(rows) == []
@@ -379,3 +389,94 @@ def test_data_readme_documents_the_file_and_the_recheck():
     # review should-fix 4: re-validate after trip data changes and before the trip
     section = text.split("## premade_itineraries.json", 1)[1]
     assert "scraper" in section and "Nov 5" in section
+
+
+# --- TG-40 helpers: redacted database errors and missing seeds -------------------------------------
+
+MARK = "TGSECRETPW24"  # made-up password; leak checks are bools so pytest can't echo it
+
+
+def leaks(text: str, *secrets: str) -> bool:
+    return any(s in text for s in secrets)
+
+
+def cli(tmp_path, database_url, *args):
+    """python data/load_premade.py with only PATH and DATABASE_URL set (no inherited env, no repo .env read)."""
+    path = write_premade(tmp_path, [])
+    env = {"PATH": "/usr/bin:/bin", "DATABASE_URL": database_url}
+    p = subprocess.run(
+        [sys.executable, str(ROOT / "data" / "load_premade.py"), "--file", str(path), *args],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60,
+    )
+    return p.returncode, p.stdout, p.stderr
+
+
+def _host_port():
+    parts = urlsplit(TEST_DSN)
+    return parts.hostname, parts.port
+
+
+@pytest.mark.parametrize("case", ["auth-failed", "refused", "no-scheme"])
+def test_database_errors_are_one_redacted_line(dsn, tmp_path, case):
+    host, port = _host_port()
+    database_url = {
+        "auth-failed": f"postgresql://postgres:{MARK}@{host}:{port}/postgres",
+        "refused": f"postgresql://postgres:{MARK}@127.0.0.1:1/x",
+        "no-scheme": f"postgres:{MARK}@{host}:{port}/x",
+    }[case]
+    rc, out, err = cli(tmp_path, database_url, "--dry-run")
+    assert rc == 1
+    assert "Traceback" not in err, "printed a traceback"
+    failed = [line for line in err.splitlines() if line.startswith("FAILED, nothing was written (database error): ")]
+    assert len(failed) == 1, "expected one FAILED line"
+    if case == "auth-failed":
+        assert 'password authentication failed for user "postgres"' in err
+    assert not leaks(out + err, MARK, database_url), "password or DSN leaked"
+
+
+def test_schema_not_applied_is_a_clean_failure(dsn, tmp_path):
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute("drop table itineraries cascade")
+    rc, out, err = cli(tmp_path, dsn)
+    assert rc == 1
+    assert "Traceback" not in err
+    assert 'relation "itineraries" does not exist' in err and "supabase/schema.sql" in err
+
+
+def test_flag_value_is_never_printed(dsn, tmp_path):
+    host, port = _host_port()
+    marked = f"postgresql://postgres:{MARK}@{host}:{port}/postgres"
+    rc, out, err = cli(tmp_path, "", "--dry-run", "--database-url", marked)
+    assert rc == 1
+    assert len([line for line in err.splitlines() if line.startswith("WARNING") and "--database-url" in line]) == 1
+    assert not leaks(out + err, MARK, marked), "password or DSN leaked"
+
+
+def test_help_marks_the_flag_deprecated(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["load_premade.py", "--help"])
+    with pytest.raises(SystemExit):
+        load_premade.main()
+    assert " ".join(load_data.DATABASE_URL_FLAG_HELP.split()) in " ".join(capsys.readouterr().out.split())
+
+
+@pytest.mark.parametrize("statement, slug", [
+    ("delete from operators where slug = 'victory-liner'", "'victory-liner'"),
+    ("delete from terminals where slug = 'vl-baguio'", "'vl-baguio'"),
+    ("delete from terminals where slug = 'vl-cubao'", "'vl-cubao'"),
+])
+def test_missing_seed_is_a_clean_exit_naming_the_slug(dsn, tmp_path, capsys, statement, slug):
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute(statement)  # before any rows reference it
+    assert run(dsn, write_premade(tmp_path, [chill_entry()])) == 1
+    err = capsys.readouterr().err
+    assert PROBLEMS in err and "  - test-chill: " in err
+    assert slug in err and load_data.SEEDS_HINT in err
+    assert premade_rows(dsn) == []
+
+
+def test_unknown_operator_lists_the_known_ones(rows, tmp_path, capsys):
+    bad = chill_entry()
+    bad["outbound"]["operator"] = "victory-linr"
+    assert run(rows, write_premade(tmp_path, [bad])) == 1
+    err = capsys.readouterr().err
+    assert "test-chill: outbound.operator: unknown operator 'victory-linr'; known: genesis, solid-north, victory-liner" in err
