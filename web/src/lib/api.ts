@@ -89,3 +89,45 @@ export async function fetchItinerary(slug: string): Promise<Itinerary | null> {
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
+
+/** POST /plan body (TG-20 PlanRequest, extra="forbid"): only these keys. TG-15's party never carries names. */
+export type PlanRequestBody = {
+  date: string; // YYYY-MM-DD
+  return_date: string;
+  party: { type: "adult" | "student" | "senior" | "pwd" | "child" }[]; // 1 to 10
+  budget_php?: number; // 500 to 200,000, left out when not set
+  vibe: string; // 1 to 60 characters, ^[\w ,.'&!?-]+$
+};
+
+export type PostPlanResult =
+  | { kind: "ok"; slug: string }
+  | { kind: "response"; status: number; body: unknown }
+  | { kind: "network" }
+  | { kind: "timeout" }
+  | { kind: "aborted" };
+
+/** One row of GET /premade-itineraries (api/app/premade.py PremadeSummary). */
+export type PremadeSummary = {
+  share_slug: string;
+  vibe: string | null;
+  trip_date: string;
+  return_date: string | null;
+  budget_php: number | null;
+  day_count: number;
+  stop_count: number;
+  spot_names: string[];
+};
+
+export type PremadeResult = { kind: "ok"; list: PremadeSummary[] } | { kind: "unavailable" } | { kind: "failed" };
+
+// RED stubs (TG-21): bodies until GREEN
+export async function postPlan(
+  _body: PlanRequestBody,
+  _opts: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<PostPlanResult> {
+  throw new Error("TG-21: not implemented");
+}
+
+export async function fetchPremade(_opts: { fetchImpl?: typeof fetch } = {}): Promise<PremadeResult> {
+  throw new Error("TG-21: not implemented");
+}
