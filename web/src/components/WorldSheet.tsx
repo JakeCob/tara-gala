@@ -105,10 +105,14 @@ export default function WorldSheet({ itinerary: it, rowId, f, dialogRef, onClose
     const t = data.trip;
     title = `${t.operator_name} · ${t.origin_name} → ${t.destination_name}`;
     // The same card as the search page: times, +1 day, fare, Checked, terminal links and Book
+    // TripCard leaves confirm_note to the list on search, so the sheet adds it: Checked plus confirm, as on every trip
     body = (
-      <ul className="flex flex-col">
-        <TripCard trip={t} />
-      </ul>
+      <>
+        <ul className="flex flex-col">
+          <TripCard trip={t} />
+        </ul>
+        <p className="text-xs text-muted">{t.confirm_note}</p>
+      </>
     );
   } else if (data?.kind === "terminal") {
     const t = data.trip;
