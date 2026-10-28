@@ -160,6 +160,7 @@ export function VibeBox(props: {
                   checked={checked}
                   aria-disabled={locked || undefined}
                   aria-invalid={i === 0 && vibeError ? true : undefined}
+                  aria-describedby={i === 0 && vibeError ? errorId("vibe") : undefined}
                   onClick={(e) => locked && e.preventDefault()}
                   onChange={() => !locked && props.onToggle(chip)}
                 />

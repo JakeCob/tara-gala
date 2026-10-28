@@ -112,7 +112,7 @@ export default function PlanForm() {
       <PartyStage party={party} spawning={spawn.active} step={spawn.step} fixedRows />
       <PartyPicker party={party} onChange={setParty} onAdd={(i) => spawn.start([i])} />
       {/* Locked while a request runs; the picker and the submit button stay out, so focus never drops */}
-      <fieldset disabled={busy} className="contents">
+      <fieldset disabled={busy} role="none" className="contents">
         <DatesBox
           values={values}
           bounds={dateBounds(today, values.date)}
