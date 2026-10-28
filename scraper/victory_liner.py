@@ -15,6 +15,7 @@ Reads DATABASE_URL from the environment or from the repo-root .env file (same as
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 import sys
 import time as clock
@@ -330,7 +331,10 @@ def run(
     found = Counter(direction_of(o) for o in observations)
     for name in directions:
         if not found[name]:
-            raise ScrapeError(f"{name}: the site returned no trips; refusing to deactivate that direction (nothing written)")
+            raise ScrapeError(
+                f"{name}: every request came back with no trips (check the API codes in DIRECTIONS); "
+                "refusing to deactivate that direction (nothing written)"
+            )
     stray = sorted(str(name) for name in found if name not in directions)
     if stray:
         raise ScrapeError(f"{', '.join(stray)}: got trips for a direction that was not fetched (nothing written)")
@@ -377,10 +381,10 @@ def main() -> int:
     days = [today + timedelta(days=i) for i in range(DAYS)]
     n = sum(len(DIRECTIONS[name]) for name in directions) * len(days)
     print(f"Fetching {n} requests ({', '.join(directions)}), {DELAY_SECONDS:g}s apart, "
-          f"about {n * DELAY_SECONDS / 60:.0f}+ min ({days[0]} to {days[-1]})")
+          f"about {n * DELAY_SECONDS / 60:.0f}+ min ({days[0]} to {days[-1]})", flush=True)
     try:
         with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=20, follow_redirects=False) as client:
-            observations = fetch_all(client, days, directions)
+            observations = fetch_all(client, days, directions, log=functools.partial(print, flush=True))  # cron log keeps up
         print_summary(observations, aggregate(observations), directions)
         res = run(dsn, observations, args.dry_run, directions=directions)
     except ScrapeError as e:
