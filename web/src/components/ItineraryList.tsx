@@ -57,7 +57,7 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
 
       {map ? (
         <>
-          <p className={PX.meta}>Tap a stop or a ride for details.</p>
+          <p className="text-sm">Tap a stop or a ride for details.</p>
           {confirmNote && <p className={PX.meta}>{confirmNote}</p>}
           <OverworldMap itinerary={it} />
         </>
