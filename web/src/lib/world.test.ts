@@ -772,3 +772,11 @@ test("the kill switch reaches the map: flag -> prop -> conditional", () => {
   assert.match(list, new RegExp(`export default function ItineraryList\\(\\{[^)]*\\b${prop}\\b`), "the list takes it");
   assert.match(list, new RegExp(`\\{\\s*${prop}\\s*\\?[\\s\\S]{0,200}?<OverworldMap itinerary=\\{it\\} \\/>`), "and renders the map only when it's true");
 });
+
+// UX review finding 1 (ux 3.2, the CLAUDE.md trust pair): TripCard has no confirm_note (search shows it once per
+// list), so the bus sheet adds it under the card, next to TripCard's Checked line
+test("the bus sheet shows the trip's confirm note under TripCard", () => {
+  const sheet = component(SHEET);
+  const bus = sheet.slice(sheet.indexOf('data?.kind === "bus"'), sheet.indexOf('data?.kind === "terminal"'));
+  assert.match(bus, /<TripCard\b[^>]*\/>\s*<\/ul>\s*<p className="text-xs text-muted">\{t\.confirm_note\}<\/p>/);
+});
