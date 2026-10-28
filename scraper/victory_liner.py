@@ -48,6 +48,9 @@ MANILA_TERMINALS = {  # API code -> terminal slug
 BAGUIO = ("BAGUIO", "vl-baguio")
 DAYS = 14
 DELAY_SECONDS = 2.0
+# Today counts as a required date only for departures at least this long after the scrape: earlier buses may
+# already have left or closed online sales. A guess until a few real 04:00 runs are compared (TG-9).
+TODAY_MARGIN = timedelta(hours=3)
 CLASS_MAP = {
     "REGULAR AIRCON": "regular_aircon",
     "DELUXE": "deluxe",
@@ -93,10 +96,18 @@ class Observation:
 
 @dataclass
 class RouteSpec:
+    """One route's aggregate. trips holds only departures with at least one REGULAR weekday (the recurring row);
+    a departure seen only on one-off dates is absent from trips and present only in one_off.
+    Use departures() for every departure on the route."""
+
     fare: float
     minutes: int
     notes: str
-    trips: dict[time, set[int]] = field(default_factory=dict)  # departure -> weekdays (0 = Sunday)
+    trips: dict[time, set[int]] = field(default_factory=dict)  # departure -> regular weekdays (0 = Sunday)
+    one_off: dict[time, set[date]] = field(default_factory=dict)  # departure -> dated-only days
+
+    def departures(self) -> set[time]:
+        return self.trips.keys() | self.one_off.keys()
 
 
 # Parsing
@@ -185,10 +196,39 @@ def _mode_lowest(values: list[float]) -> float:
     return min(v for v, c in counts.items() if c == top)
 
 
-def aggregate(observations: list[Observation]) -> dict[tuple[str, str, str], RouteSpec]:
-    """One route per (origin terminal, destination terminal, class); one trip per departure time with the weekdays seen."""
+def _dow(d: date) -> int:
+    """0 = Sunday, as trips.days_of_week (Python's weekday() has Monday = 0)."""
+    return (d.weekday() + 1) % 7
+
+
+def aggregate(
+    observations: list[Observation], window: list[date] | None = None, *, verified_at: datetime | None = None
+) -> dict[tuple[str, str, str], RouteSpec]:
+    """One route per (origin terminal, destination terminal, class).
+
+    The one-off rule (TG-9; README section 4): a departure is weekly only on weekdays it was seen on every
+    required date in the window. Any other date it was seen on is a one-off, saved for that date only
+    (valid_from = valid_to), so a holiday extra never repeats the next week.
+    - Evidence is per leg: a date on which the leg returned no trips at all is not required.
+    - window[0] is today. Today is required only for departures at least TODAY_MARGIN after verified_at;
+      earlier ones may already be gone, so today can add evidence but never removes it.
+    - A weekday needs at least one required date to be regular, so one exempt sighting today stays a one-off.
+    Without a window (tests, ad hoc calls) the observed dates are the window and every one is required.
+    """
+    if window is not None:
+        if verified_at is None:
+            raise TypeError("verified_at is required with window (the today rule must not read the real clock)")
+        allowed = set(window)
+        for o in observations:
+            if o.day not in allowed:
+                raise ScrapeError(f"{o.day}: observation outside the scrape window {window[0]}..{window[-1]}")
+    days = sorted(window if window is not None else {o.day for o in observations})
+    today = days[0] if window is not None and days else None
+
+    observed: dict[tuple[str, str], set[date]] = defaultdict(set)  # leg -> dates it returned any trip
     grouped: dict[tuple[str, str, str], list[Observation]] = defaultdict(list)
     for o in observations:
+        observed[(o.origin, o.destination)].add(o.day)
         grouped[(o.origin, o.destination, o.service_class)].append(o)
 
     routes: dict[tuple[str, str, str], RouteSpec] = {}
@@ -204,10 +244,38 @@ def aggregate(observations: list[Observation]) -> dict[tuple[str, str, str], Rou
             minutes=max(by_branding.values()),
             notes=notes,
         )
+        leg_days = observed[key[:2]]
+        seen: dict[time, set[date]] = defaultdict(set)
         for o in obs:
-            spec.trips.setdefault(o.departure, set()).add((o.day.weekday() + 1) % 7)  # Python Mon=0 -> Sun=0
+            seen[o.departure].add(o.day)
+        for dep, dep_days in seen.items():
+            required = {d for d in days if d != today and d in leg_days}
+            if today in leg_days and datetime.combine(today, dep, MANILA) >= verified_at + TODAY_MARGIN:
+                required.add(today)
+            required_by_dow: dict[int, set[date]] = defaultdict(set)
+            for d in required:
+                required_by_dow[_dow(d)].add(d)
+            regular = {w for w in map(_dow, dep_days) if required_by_dow[w] and required_by_dow[w] <= dep_days}
+            if regular:
+                spec.trips[dep] = regular
+            if one_off := {d for d in dep_days if _dow(d) not in regular}:
+                spec.one_off[dep] = one_off
         routes[key] = spec
     return routes
+
+
+def empty_leg_dates(observations: list[Observation], legs: list[Leg], days: list[date]) -> list[tuple[Leg, date]]:
+    """(leg, date) pairs with no trips at all, for legs that have trips on some other date. A leg empty for the
+    whole window is reported once elsewhere (print_summary)."""
+    observed: dict[tuple[str, str], set[date]] = defaultdict(set)
+    for o in observations:
+        observed[(o.origin, o.destination)].add(o.day)
+    out = []
+    for leg in legs:
+        got = observed.get((leg.origin, leg.destination), set())
+        if got & set(days):
+            out += [(leg, d) for d in days if d not in got]
+    return out
 
 
 # Database
@@ -218,6 +286,7 @@ class Result:
     trips_new: int = 0
     trips_updated: int = 0
     trips_skipped_manual: int = 0
+    trips_one_off: int = 0  # dated rows written this run (inserted plus updated); also counted in new/updated
     trips_deactivated: int = 0
     deactivated_by_direction: dict[str, int] = field(default_factory=dict)
     booking_url_set: bool = False
@@ -230,6 +299,7 @@ _DEACTIVATE = """
     from routes r
     where t.route_id = r.id and r.operator_id = %(op)s and t.source = 'scraped' and t.is_active
       and t.id <> all(%(seen)s::uuid[]) and {scope}
+    returning r.origin_terminal_id, r.destination_terminal_id, r.class::text, t.departure_time, t.valid_from
 """
 DEACTIVATE_SQL = {
     "to-baguio": _DEACTIVATE.format(scope="r.destination_terminal_id = %(baguio)s"),
@@ -237,7 +307,9 @@ DEACTIVATE_SQL = {
 }
 
 
-def apply(cur, routes: dict[tuple[str, str, str], RouteSpec], verified_at: datetime, directions: list[str]) -> Result:
+def apply(
+    cur, routes: dict[tuple[str, str, str], RouteSpec], verified_at: datetime, directions: list[str], log=print
+) -> Result:
     """Upsert into the open transaction. Matching keys follow data/load_data.py."""
     res = Result()
     operators = slug_map(cur, "operators")
@@ -289,13 +361,48 @@ def apply(cur, routes: dict[tuple[str, str, str], RouteSpec], verified_at: datet
             route_id = cur.fetchone()[0]
             res.routes_new += 1
 
-        for dep, weekdays in sorted(spec.trips.items()):
-            days = sorted(weekdays)
-            cur.execute("select id, source, valid_from from trips where route_id = %s and departure_time = %s", (route_id, dep))
-            existing = cur.fetchall()
+        for dep in sorted(spec.departures()):
+            # No is_active filter: an old deactivated row for the same (departure, valid_from) is reused, never
+            # re-inserted, because unique (route_id, departure_time, valid_from) bites for dated rows
+            cur.execute(
+                "select id, source, valid_from, days_of_week, is_active from trips where route_id = %s and departure_time = %s",
+                (route_id, dep),
+            )
+            found_rows = cur.fetchall()
+            existing = [row[:3] for row in found_rows]
+            old_weekly = {row[0]: (sorted(row[3]), row[4]) for row in found_rows}
             if any(src == "manual" for _, src, _ in existing):
-                res.trips_skipped_manual += 1  # hand-entered rows win; never touched
+                res.trips_skipped_manual += 1  # hand-entered rows win, dated or not; never touched
                 continue
+            for d in sorted(spec.one_off.get(dep, ())):
+                dated = next((id_ for id_, src, vf in existing if src == "scraped" and vf == d), None)
+                if dated:
+                    cur.execute(
+                        """
+                        update trips set days_of_week = %s, valid_to = %s, is_active = true, source_url = %s,
+                          last_verified_at = %s, updated_at = now()
+                        where id = %s
+                        """,
+                        ([_dow(d)], d, SOURCE_URL, verified_at, dated),
+                    )
+                    res.trips_updated += 1
+                else:
+                    cur.execute(
+                        """
+                        insert into trips (route_id, departure_time, days_of_week, valid_from, valid_to, source,
+                                           source_url, last_verified_at)
+                        values (%s, %s, %s, %s, %s, 'scraped', %s, %s) returning id
+                        """,
+                        (route_id, dep, [_dow(d)], d, d, SOURCE_URL, verified_at),
+                    )
+                    dated = cur.fetchone()[0]
+                    res.trips_new += 1
+                res.trips_one_off += 1
+                seen.add(dated)
+                log(f"  one-off: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} on {d} ({d:%a})")
+            if dep not in spec.trips:
+                continue
+            days = sorted(spec.trips[dep])
             ours = next((id_ for id_, src, vf in existing if src == "scraped" and vf is None), None)
             if ours:
                 cur.execute(
@@ -308,6 +415,10 @@ def apply(cur, routes: dict[tuple[str, str, str], RouteSpec], verified_at: datet
                 )
                 res.trips_updated += 1
                 seen.add(ours)
+                if old_weekly[ours] != (days, True):  # quiet on a stable schedule; one line when a weekday changes
+                    old_days, was_active = old_weekly[ours]
+                    log(f"  weekly: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} days {old_days}"
+                        f"{'' if was_active else ' (inactive)'} -> {days}")
             else:
                 cur.execute(
                     """
@@ -322,9 +433,14 @@ def apply(cur, routes: dict[tuple[str, str, str], RouteSpec], verified_at: datet
     # One `seen` set for both directions is safe: trip ids are unique and each update below is limited to its
     # own side of Baguio. Don't split it per direction; a direction whose every departure clashes with a manual
     # row would then pass an empty set and deactivate all of its scraped trips.
+    slugs = {id_: slug for slug, id_ in terminals.items()}  # slug_map ids are strings
     for name in directions:
         cur.execute(DEACTIVATE_SQL[name], {"op": op, "seen": list(seen), "baguio": terminals[BAGUIO[1]]})
-        res.deactivated_by_direction[name] = cur.rowcount
+        gone = [(str(o), str(d), cls, dep, vf) for o, d, cls, dep, vf in cur.fetchall()]
+        res.deactivated_by_direction[name] = len(gone)
+        for origin, dest, cls, dep, valid_from in sorted(gone, key=lambda g: (slugs[g[0]], slugs[g[1]], g[2], g[3])):
+            log(f"  deactivated: {slugs[origin]}->{slugs[dest]} {cls} {dep:%H:%M}"
+                + (f" on {valid_from}" if valid_from else " weekly"))
     res.trips_deactivated = sum(res.deactivated_by_direction.values())
     return res
 
@@ -336,8 +452,11 @@ def run(
     *,
     directions: list[str],
     verified_at: datetime | None = None,
+    window: list[date] | None = None,
+    log=print,
 ) -> Result:
-    """`directions` is what was fetched; only those directions are deactivated."""
+    """`directions` is what was fetched; only those directions are deactivated. `window` is the dates fetched,
+    today first (see aggregate); main() always passes it."""
     found = Counter(direction_of(o) for o in observations)
     for name in directions:
         if not found[name]:
@@ -348,29 +467,37 @@ def run(
     stray = sorted(str(name) for name in found if name not in directions)
     if stray:
         raise ScrapeError(f"{', '.join(stray)}: got trips for a direction that was not fetched (nothing written)")
-    routes = aggregate(observations)
     verified_at = verified_at or datetime.now(MANILA)
+    routes = aggregate(observations, window, verified_at=verified_at)
+    lines: list[str] = []  # row lines wait for the commit, so a failed run never lists rows it didn't write
     with psycopg.connect(dsn, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
-            res = apply(cur, routes, verified_at, directions)
+            res = apply(cur, routes, verified_at, directions, log=lines.append)
         if dry_run:
             conn.rollback()
         else:
             conn.commit()
+    for line in lines:
+        log(line)
     return res
 
 
 # Entry point
 def print_summary(observations: list[Observation], routes: dict[tuple[str, str, str], RouteSpec], directions: list[str]) -> None:
     print(f"\nScraped {len(observations)} trip rows -> {len(routes)} routes, "
-          f"{sum(len(r.trips) for r in routes.values())} distinct departures\n")
+          f"{sum(len(r.departures()) for r in routes.values())} distinct departures\n")
     print(f"  {'origin':<13}{'destination':<13}{'class':<16}{'fare':>7}{'min':>5}{'trips':>6}  notes")
     for (origin, dest, cls), r in sorted(routes.items()):
-        print(f"  {origin:<13}{dest:<13}{cls:<16}{r.fare:>7.0f}{r.minutes:>5}{len(r.trips):>6}  {r.notes}")
+        print(f"  {origin:<13}{dest:<13}{cls:<16}{r.fare:>7.0f}{r.minutes:>5}{len(r.departures()):>6}  {r.notes}")
     for name in directions:
         for leg in DIRECTIONS[name]:
             if not any((o, d) == (leg.origin, leg.destination) for o, d, _ in routes):
                 print(f"  WARNING: no trips at all for {leg} in the whole window")
+
+
+def manila_now() -> datetime:
+    """The one clock main() reads. Tests freeze it (api/tests/conftest.py)."""
+    return datetime.now(MANILA)
 
 
 def main() -> int:
@@ -387,7 +514,8 @@ def main() -> int:
         return 2
 
     directions = list(DIRECTIONS) if args.direction == "both" else [args.direction]
-    today = datetime.now(MANILA).date()
+    now = manila_now()
+    today = now.date()
     days = [today + timedelta(days=i) for i in range(DAYS)]
     n = sum(len(DIRECTIONS[name]) for name in directions) * len(days)
     print(f"Fetching {n} requests ({', '.join(directions)}), {DELAY_SECONDS:g}s apart, "
@@ -395,8 +523,12 @@ def main() -> int:
     try:
         with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=20, follow_redirects=False) as client:
             observations = fetch_all(client, days, directions, log=functools.partial(print, flush=True))  # cron log keeps up
-        print_summary(observations, aggregate(observations), directions)
-        res = run(dsn, observations, args.dry_run, directions=directions)
+        legs = [leg for name in directions for leg in DIRECTIONS[name]]
+        for leg, d in empty_leg_dates(observations, legs, days):  # stdout, like the whole-window WARNING
+            print(f"  WARNING: no trips at all for {leg} on {d}", flush=True)
+        print_summary(observations, aggregate(observations, days, verified_at=now), directions)
+        res = run(dsn, observations, args.dry_run, directions=directions, verified_at=now, window=days,
+                  log=functools.partial(print, flush=True))
     except ScrapeError as e:
         print(f"\nFAILED, nothing was written: {e}", file=sys.stderr)
         return 1
@@ -407,7 +539,8 @@ def main() -> int:
     verb = "Would change" if args.dry_run else "Changed"
     by_direction = ", ".join(f"{name} {count}" for name, count in res.deactivated_by_direction.items())
     print(f"\n{verb}: routes +{res.routes_new} new / {res.routes_existing} existing; "
-          f"trips +{res.trips_new} new, {res.trips_updated} updated, {res.trips_deactivated} deactivated ({by_direction}), "
+          f"trips +{res.trips_new} new, {res.trips_updated} updated, {res.trips_one_off} one-off, "
+          f"{res.trips_deactivated} deactivated ({by_direction}), "
           f"{res.trips_skipped_manual} skipped (manual rows win)"
           + ("; operator booking_url set" if res.booking_url_set else ""))
     if args.dry_run:
