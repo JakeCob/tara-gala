@@ -25,7 +25,7 @@ export function initialBanner(online: boolean): BannerState {
 
 // Answers that only add to a screen, never its own data: /terminals upgrades directions links and falls back to the
 // trip's own fields, so a miss there (on a saved itinerary, offline) mustn't read as "nothing saved" (TG-27 Part B)
-const SUPPLEMENTARY = /\/terminals$/;
+const SUPPLEMENTARY = /^\/terminals$/; // the whole pathname: not an itinerary slugged "terminals"
 
 function supplementary(url: string | undefined): boolean {
   if (!url) return false;

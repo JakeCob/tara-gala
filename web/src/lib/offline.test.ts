@@ -172,6 +172,8 @@ test("Part B: /terminals only upgrades directions links, so its answers never ch
   }
   assert.deepEqual(bannerReducer(a, { ...terminals("none"), url: `${api}/terminals?fresh=1` }), a);
   assert.equal(bannerVariant(bannerReducer(a, { type: "data", source: "none", savedAt: null, url: "not a url" })), "C");
+  // Only the /terminals endpoint itself: an itinerary whose slug happens to be "terminals" is the screen's own data
+  assert.equal(bannerVariant(bannerReducer(a, { type: "data", source: "none", savedAt: null, url: `${api}/itineraries/terminals` })), "C");
   assert.equal(bannerVariant(reduce(initialBanner(false), terminals("none"))), null);
 });
 
