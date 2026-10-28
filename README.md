@@ -94,6 +94,14 @@ npm install
 npm run dev                          # http://localhost:3000
 ```
 
+### Offline and install (TG-27)
+The service worker (`web/public/sw.js`, hand-written) registers only in a production build (`npm run build && npm start`), never under `next dev`. It keeps the app shell, trip searches and last-mile routes on the phone, and shows a yellow banner with the saved time when it serves them from there. Bump `SW_VERSION` in `sw.js` on every change to it; open tabs then show "A new version of Tara Gala is ready." with a Reload button.
+
+Installing, for testers:
+- Android: Chrome menu ⋮ → Install app (or Add to Home screen).
+- iPhone: Safari → Share → Add to Home Screen. On iPhone, install it and open your saved itinerary at least once before the trip. Safari may clear a site's saved data after about a week without use, and the installed app is the reliable way to keep it.
+- Open the app once online (search your dates, open the Baguio page) before going somewhere without signal.
+
 ## 7. Feature flags
 Each flag is an environment variable on both sides: the API reads it from `os.environ` (`api/app/flags.py`), the web app from a `NEXT_PUBLIC_` variable (`web/src/lib/flags.ts`).
 
@@ -102,6 +110,7 @@ Each flag is an environment variable on both sides: the API reads it from `os.en
 | Live AI planner | `PLANNER_LIVE` | `NEXT_PUBLIC_PLANNER_LIVE` | `false` | TG-25 live planner |
 | Pre-made itineraries | `PREMADE_ITINERARIES` | `NEXT_PUBLIC_PREMADE_ITINERARIES` | `true` | TG-24 pre-made itineraries |
 | Real-map toggle | `REAL_MAP` | `NEXT_PUBLIC_REAL_MAP` | `false` | TG-26 real map (cut) |
+| Offline service worker | - | `NEXT_PUBLIC_SERVICE_WORKER` | `true` | TG-27 offline caching. Web only. Setting `false` is the kill switch: on the next online load each phone unregisters the worker and deletes its `tg-*` caches, **saved trips and itineraries included** |
 
 Values are trimmed and case-insensitive. `1`, `true`, `yes`, `on` mean on; `0`, `false`, `no`, `off` mean off. Unset or empty uses the default. Anything else also uses the default: the API logs a warning naming the variable, the web app falls back silently.
 
