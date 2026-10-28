@@ -189,7 +189,7 @@ npm run lint
 npm test                               # node:test, Node 22.18+
 npm run build
 ```
-`npm test` runs with `--test-force-exit`, so a test that leaks a timer or socket finishes instead of hanging CI, and passes quietly. When code under test starts a timer, assert it's cleared yourself (`mock.timers`, as T21-N9 does).
+`npm test` gives each test 60 s (`--test-timeout=60000`): a hung test fails by name instead of hanging forever. It doesn't use `--test-force-exit`, which could end the run before every test had registered, so tests went missing while the run still passed. A timer the code under test leaves running can still keep the run alive after its test fails (in CI, until the job's timeout), so when code starts a timer, assert it's cleared (`mock.timers`, as T21-N9 does).
 
 ### Offline and install (TG-27)
 The service worker (`web/public/sw.js`, hand-written) registers only in a production build (`npm run build && npm start`), never under `next dev`. It keeps the app shell, trip searches, last-mile routes, the ready-made trip list and the `/plan` page on the phone, and shows a yellow banner with the saved time when it serves them from there. Bump `SW_VERSION` in `sw.js` on every change to it; open tabs then show "A new version of Tara Gala is ready." with a Reload button.
