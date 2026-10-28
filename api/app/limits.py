@@ -6,6 +6,7 @@ if Railway ever ran two. Fine for one instance; move them to Postgres if that ch
 
 import hashlib
 import logging
+import secrets
 import threading
 import time
 from collections import deque
@@ -119,6 +120,9 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+_IP_SALT = secrets.token_bytes(16)  # per process: hashes correlate within a deploy but can't be brute-forced back
+
+
 def ip_hash(ip: str) -> str:
-    """Short hash for logs; raw IPs are never logged."""
-    return hashlib.sha256(ip.encode()).hexdigest()[:8]
+    """Short salted hash for logs; raw IPs are never logged."""
+    return hashlib.sha256(_IP_SALT + ip.encode()).hexdigest()[:8]

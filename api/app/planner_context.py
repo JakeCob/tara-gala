@@ -6,13 +6,14 @@ The model only ever sees these rows, and FastAPI validates its answer against th
 import logging
 from dataclasses import dataclass
 from datetime import date as Date
-from datetime import datetime, time, timedelta
 
 from psycopg.rows import dict_row
 
+from .plan_validation import BAGUIO
+from .schedule import arrival
+
 logger = logging.getLogger("tara_gala.api")
 
-BAGUIO = "Baguio"
 MAX_TRIPS = 60  # per direction
 MAX_SPOTS = 80
 MAX_LEGS = 400  # keeps the prompt far below Haiku 5.5's 100k-token price boundary
@@ -25,14 +26,6 @@ class PlannerContext:
     spots: list[dict]
     legs: list[dict]
     empty_reason: str | None  # set when there's nothing to plan with; no model call is made
-
-
-def _arrival(travel_date: Date, departure: time, minutes: int | None) -> tuple[str | None, int | None]:
-    # TODO(TG-24 rebase): use schedule.arrival (same maths as main._arrival; importing main here is circular)
-    if not minutes:
-        return None, None
-    at = datetime.combine(travel_date, departure) + timedelta(minutes=minutes)
-    return at.strftime("%H:%M"), (at.date() - travel_date).days
 
 
 # Same day and validity filter as main.search_trips; trip_search already drops inactive trips.
@@ -90,7 +83,7 @@ def _trips(cur, d: Date, direction: str) -> list[dict]:
     total = rows[0]["total"] if rows else 0
     trips = []
     for r in rows:
-        arrives, offset = _arrival(d, r["departure_time"], r["travel_minutes"])
+        arrives, offset = arrival(d, r["departure_time"], r["travel_minutes"])
         trips.append({
             "trip_id": str(r["trip_id"]),
             "operator": r["operator_slug"],

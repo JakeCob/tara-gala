@@ -39,6 +39,8 @@ class OpenRouterClient:
             raise LLMUnavailable("timeout") from e
         except httpx.TransportError as e:
             raise LLMUnavailable("connection") from e
+        except httpx.HTTPError as e:  # e.g. too many redirects
+            raise LLMUnavailable("api_error") from e
 
         # Error bodies are never read into messages: they can echo request data.
         if resp.status_code == 403:  # moderation flag or provider-reported refusal
@@ -56,7 +58,8 @@ class OpenRouterClient:
         if not isinstance(body, dict) or not body.get("choices"):
             error = body.get("error") if isinstance(body, dict) else None
             code = error.get("code") if isinstance(error, dict) else None
-            raise LLMUnavailable("api_error", code if isinstance(code, int) else resp.status_code)
+            request_id = body.get("id") if isinstance(body, dict) else None
+            raise LLMUnavailable("api_error", code if isinstance(code, int) else resp.status_code, request_id)
 
         choice = body["choices"][0]
         message = choice.get("message") or {}

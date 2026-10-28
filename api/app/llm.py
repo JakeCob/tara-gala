@@ -127,4 +127,4 @@ def make_llm_client(cfg: LLMConfig) -> LLMClient:
         from .llm_openrouter import OpenRouterClient
 
         return OpenRouterClient(api_key=cfg.api_key, effort=cfg.effort)
-    raise LLMConfigError(f"LLM_PROVIDER={cfg.provider!r} is not implemented (anthropic or openrouter)")
+    raise LLMConfigError("LLM_PROVIDER is not one of anthropic, openrouter")  # value not echoed: it could be a pasted key
