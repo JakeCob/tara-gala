@@ -207,6 +207,37 @@ def test_no_other_scraper_option_starts_with_da():
     assert [o for o in options if o.startswith("--da")] == ["--database-url"]
 
 
+@pytest.mark.parametrize("args", [
+    ["--dr"], ["--dry"], ["--dry-r"],  # argparse would expand these to --dry-run (delta review nit 1)
+    ["--dir", "to-baguio"], ["--direc=from-baguio"],  # ...and these to --direction
+    ["-h"], ["--help"], ["--force"], [DSN],  # unknown options and positionals
+    ["--direction"], ["--direction", "--dry-run"],  # --direction with no value
+    [f"--direction={DSN}"], ["--direction", DSN], ["--direction", "To-Baguio"],  # values must be plain [a-z-]
+])
+def test_only_exact_known_arguments_are_allowed(h, args):
+    h.run()
+    stamp = last_success(h).stat().st_mtime_ns
+    os.utime(last_success(h), ns=(stamp - 10**9, stamp - 10**9))
+    stamp = last_success(h).stat().st_mtime_ns
+    cp = h.run(*args)
+    assert cp.returncode == 2
+    msg = "\n".join(lines(cp))
+    assert "FAILED config: unexpected argument" in msg
+    assert "START" not in msg
+    assert not h.ran()
+    assert last_success(h).stat().st_mtime_ns == stamp  # a refused --dr never counts as a success
+
+
+@pytest.mark.parametrize("args", [
+    [], ["--dry-run"], ["--direction", "to-baguio"], ["--direction=from-baguio"], ["--dry-run", "--direction", "both"],
+    ["--direction", "to-baguio", "--dry-run"],
+])
+def test_exact_known_arguments_pass(h, args):
+    cp = h.run(*args)
+    assert cp.returncode == 0, cp.stdout
+    assert h.argv() == ["scraper/victory_liner.py", *args]
+
+
 def test_every_wrapper_line_has_the_log_format(h):
     for cp in (h.run(), h.run(rc=1), h.run("--database-url", "x")):
         out = lines(cp)
@@ -478,6 +509,7 @@ def test_readme_owner_steps():
     assert "/tmp/" not in s  # no predictable temp path for root to write through (code review 2)
     assert "DATABASE_PUBLIC_URL" in s and "jacob-rafal's Projects" in s  # which Railway project (code review 3)
     assert "trailing space" in s
+    assert "railway variables" not in s  # the dashboard path is enough; no half-explained CLI pipe (delta nit 2)
     assert "chmod 600" in s or "install -m 600" in s
     assert not re.search(r"\bcat\b[^\n]*tara-gala-scraper\.env", s)
     assert "install -m 755" in s and "/usr/local/sbin/tara-gala-scrape" in s
