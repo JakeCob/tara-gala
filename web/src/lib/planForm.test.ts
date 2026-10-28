@@ -978,3 +978,11 @@ test("T43-F3 the submit button sits outside the busy fieldset", () => {
   const slice = form.slice(start, form.indexOf("</fieldset>", start));
   assert.doesNotMatch(slice, /type="submit"/);
 });
+
+test("TG-27 Part B: the offline E2E's ready-made guard uses the real ready-made submit label", () => {
+  // scripts/offline-e2e.mjs submits /plan only when the button reads this, so it can never send POST /plan
+  const script = readFileSync(new URL("../../scripts/offline-e2e.mjs", import.meta.url), "utf8");
+  const label = script.match(/const PREMADE_SUBMIT = "([^"]+)"/)?.[1];
+  assert.equal(label, PLAN_COPY.premade.submit);
+  assert.notEqual(label, PLAN_COPY.live.submit);
+});

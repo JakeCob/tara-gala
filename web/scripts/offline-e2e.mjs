@@ -5,11 +5,13 @@
 //
 // It follows the four "before the trip" steps online in a fresh profile, then takes both the page and the
 // service worker offline and reloads the saved itinerary and /plan. Exits 1 on the first run with any FAIL.
-// Read-only against the app: it only loads pages and opens a sheet. Chrome: $CHROME_BIN, or Playwright's
-// cached chrome-headless-shell under ~/.cache/ms-playwright.
+// Read-only against the app: it loads pages and opens a sheet, and it submits /plan only in ready-made mode, so it
+// never sends POST /plan (it stops with a FAIL if the site has the live planner on). Chrome: $CHROME_BIN, or
+// Playwright's cached chrome-headless-shell under ~/.cache/ms-playwright.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -26,6 +28,7 @@ const { values: args } = parseArgs({
 const W = args.origin.replace(/\/$/, "");
 const [FROM, TO] = args.dates.split(",");
 const WIDTH = 380;
+const PREMADE_SUBMIT = "Tara, show trip ideas"; // PLAN_COPY.premade.submit (src/lib/planForm.ts); live mode would POST /plan
 
 function chromeBin() {
   if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
@@ -46,9 +49,36 @@ const check = (cond, label) => {
   return cond;
 };
 
+// A port someone else's browser already holds would have us drive that browser: refuse instead
+await new Promise((resolve) => {
+  const probe = createServer();
+  probe.once("error", () => {
+    console.log(`FAIL CDP port ${args.port} is already in use: pick a free one with --port`);
+    process.exit(1);
+  });
+  probe.listen(Number(args.port), "127.0.0.1", () => probe.close(resolve));
+});
+
 const profile = mkdtempSync(join(tmpdir(), "tg-offline-e2e-"));
 const chrome = spawn(chromeBin(), [`--remote-debugging-port=${args.port}`, `--user-data-dir=${profile}`, "--no-sandbox", "--disable-gpu", "about:blank"], { stdio: "ignore" });
 console.log(`chrome pid ${chrome.pid}, CDP port ${args.port}, fresh profile`);
+
+/** Stop our own Chrome (by its handle, never by name), wait for it to exit, then remove its profile. */
+async function stopChrome() {
+  if (chrome.exitCode === null && chrome.signalCode === null) {
+    const exited = new Promise((resolve) => chrome.once("exit", resolve));
+    chrome.kill();
+    await Promise.race([exited, sleep(5000)]);
+  }
+  rmSync(profile, { recursive: true, force: true });
+  console.log(`stopped chrome pid ${chrome.pid}`);
+}
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, async () => {
+    await stopChrome();
+    process.exit(130);
+  });
+}
 
 /** One browser-level connection; page and service worker each get a flattened session on it. */
 async function connect() {
@@ -135,6 +165,11 @@ async function main() {
       }
     })()`);
   const loadTripIdeas = async () => {
+    // Never submit the live planner: that POST /plan spends on the LLM and saves an itinerary
+    const label = String(await evaluate(`(document.querySelector("form button[type=submit]") || {}).innerText || ""`)).trim();
+    if (label !== PREMADE_SUBMIT) {
+      throw new Error(`/plan is in live-planner mode (submit "${label}", not "${PREMADE_SUBMIT}"): stopped before submitting, no POST /plan`);
+    }
     await setDates(FROM, TO);
     await sleep(300);
     await evaluate(`document.querySelector("form button[type=submit]").click()`);
@@ -265,10 +300,8 @@ async function main() {
 
 main()
   .catch((e) => check(false, e.message))
-  .finally(() => {
-    chrome.kill();
-    rmSync(profile, { recursive: true, force: true });
-    console.log(`stopped chrome pid ${chrome.pid}`);
+  .finally(async () => {
+    await stopChrome();
     console.log(fails.length ? `offline e2e: FAIL (${fails.length})` : "offline e2e: PASS");
     process.exit(fails.length ? 1 : 0);
   });
