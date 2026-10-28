@@ -439,22 +439,33 @@ PASSWORD_HINT = re.compile(r"@|://|password", re.I)
 
 
 def _password_regex_lines(path: Path) -> list[int]:
-    """Lines of `re.<fn>(pattern, ...)` calls whose literal pattern looks for a password (@, :// or password)."""
-    lines = []
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "re"
-            and node.func.attr in RE_FUNCS
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-            and PASSWORD_HINT.search(node.args[0].value)
-        ):
-            lines.append(node.lineno)
-    return lines
+    """Lines of re-function calls whose literal pattern looks for a password (@, :// or password).
+
+    Covers `re.<fn>(...)`, `import re as rx; rx.<fn>(...)` and `from re import <fn>; <fn>(...)`.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    modules, funcs = {"re"}, set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules |= {a.asname or a.name for a in node.names if a.name == "re"}
+        elif isinstance(node, ast.ImportFrom) and node.module == "re":
+            funcs |= {a.asname or a.name for a in node.names if a.name in RE_FUNCS}
+
+    def is_re_call(func):
+        if isinstance(func, ast.Attribute):
+            return isinstance(func.value, ast.Name) and func.value.id in modules and func.attr in RE_FUNCS
+        return isinstance(func, ast.Name) and func.id in funcs
+
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and is_re_call(node.func)
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+        and PASSWORD_HINT.search(node.args[0].value)
+    ]
 
 
 def _imports_from(path: Path) -> dict[str, set[str]]:
