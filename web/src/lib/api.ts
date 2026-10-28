@@ -14,6 +14,7 @@ export type Trip = {
   travel_minutes: number | null;
   departure_time: string;
   arrives_around: string | null;
+  arrives_day_offset: number | null;
   booking_url: string | null;
   source: string;
   source_url: string | null;
@@ -52,6 +53,13 @@ export function formatTime(hhmm: string): string {
   const suffix = h < 12 ? "AM" : "PM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
+/** " +1 day" style suffix for arrivals after midnight; empty for same day, unknown, or an older API without the field.
+ * Starts with a non-breaking space so it never wraps away from the arrival time. */
+export function formatDayOffset(offset: number | null | undefined): string {
+  if (!offset) return "";
+  return offset === 1 ? "\u00a0+1 day" : `\u00a0+${offset} days`;
 }
 
 export function formatVerified(iso: string | null): string {
