@@ -18,7 +18,7 @@ test("T27-1 manifest has what Chrome and iOS need to install", () => {
   assert.equal(m.id, "/", "a stable id so a later start_url change doesn't make a second app");
   assert.equal(m.name, "Tara Gala");
   assert.equal(m.short_name, "Tara Gala");
-  assert.equal(m.background_color, "#fbf7ee");
+  assert.equal(m.background_color, "#cfe8c4", "the install splash matches the Mint page (TG-42)");
   assert.equal(m.theme_color, "#167856");
   const themeColor = layout.match(/themeColor:\s*"([^"]+)"/)?.[1];
   assert.equal(m.theme_color, themeColor, "manifest and viewport theme colours must match");
