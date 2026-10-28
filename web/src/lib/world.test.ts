@@ -677,7 +677,7 @@ test("T22-S3 one native dialog, Close first, and the Maps link opens a new tab s
   assert.match(sheet, /<dialog\b[^>]*aria-labelledby=/);
   assert.match(component(MAP) + sheet, /\.showModal\(\)/);
   const inside = sheet.slice(sheet.indexOf("<dialog"));
-  const first = inside.match(/<(button|PixelButton|a|PixelLink|Link|input)\b[^>]*>/)?.[0] ?? "";
+  const first = inside.match(/<(button|PixelButton|a|PixelLink|Link|input|MapsLink|TripCard)\b[^>]*>/)?.[0] ?? "";
   assert.match(first, /^<PixelButton\b[^>]*variant="secondary"/, "Close is the first focusable element");
   assert.match(inside, /Close/);
   assert.match(sheet, /<PixelLink\b[^>]*variant="primary"[^>]*\bexternal\b/, "Maps is a primary external PixelLink (TG-42)");
