@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createSpawner, type SpawnState, type SpawnStep } from "@/lib/spawn";
+import { SPAWN_MS, createSpawner, frameAt, type SpawnState, type SpawnStep } from "@/lib/spawn";
 
-const REST: SpawnState = { active: [], step: { at: 0, frame: "idle-1", stars: false } };
+const REST: SpawnState = { active: [], step: frameAt(SPAWN_MS) };
 
 /**
  * The chibi spawn as React state (TG-15; TG-22 reuses it for the map party). A thin wrapper around createSpawner:
