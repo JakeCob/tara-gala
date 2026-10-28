@@ -1,0 +1,19 @@
+# tile-mountain: 16x16. I=Ink F=Forest L=Leaf M=Mint C=Cream S=Sun .=transparent
+# a rounded Leaf hill with Forest shade, a small Cream cloud with an Ink outline
+size=16x16
+................
+..........IIII..
+.........ICCCCI.
+.........ICCCCI.
+..........IIII..
+................
+......MLLL......
+.....MLLLLF.....
+....LLLLLLFF....
+...LLLLLLLFFF...
+..LLLLLLLLFFFF..
+.LLLLLLLLLFFFFF.
+.LLLLLLLLLFFFFF.
+.LLLLLLLLLFFFFF.
+.LLLLLLLLLFFFFF.
+.LLLLLLLLLFFFFF.

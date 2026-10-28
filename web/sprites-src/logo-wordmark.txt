@@ -1,0 +1,16 @@
+# logo-wordmark: 192x48. I=Ink F=Forest L=Leaf M=Mint C=Cream S=Sun .=transparent
+# "Tara Gala" in Forest pixel letters with an Ink shadow, a small Sun bus and a pine
+size=192x48
+scale=4
+................................................
+..............................................I.
+.FFFFF...................FFF.......F.........IFI
+..IFIII.................F.IIF......FI.......IFFF
+...FI...FF..F.FF..FF....FI...I.FF..FI..FF....IFI
+...FI....IF.FF.II..IF...FIFFF...IF.FI...IF..IFFF
+...FI...FFFIFII...FFFI..FI.IFI.FFFIFI..FFFI.IFFF
+...FI..F.IFIFI...F.IFI..FI..FIF.IFIFI.F.IFI..III
+...FI...FFFIFI....FFFI...FFF.I.FFFI.F..FFFI...I.
+....I....III.I.....III....IIIIIIIII..I..III...I.
+.........................ISCSCSCSI............I.
+...........................II..II...............
