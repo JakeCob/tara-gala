@@ -34,6 +34,7 @@ export function googleMapsUrl(t: TerminalPlace): string {
 }
 
 /** Home page only: Sakay's documented `?to=lat,lng` link loses its query on the sakay.ph redirect (TG-14 plan). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the place is for the coordinate deep link after TG-7
 export function sakayUrl(_t: TerminalPlace): string {
   return SAKAY_HOME;
 }
