@@ -1,7 +1,6 @@
 // The share page's list view (TG-23, ux.md 1 to 3): summary, issues, the two buses and the days.
 // With map (TG-22, NEXT_PUBLIC_OVERWORLD_MAP), the overworld map replaces the bus and day sections; the summary,
 // Share and the changes notice stay above it. Without it, this is TG-23's list, which carries the same facts.
-import Link from "next/link";
 import { formatTime } from "@/lib/api";
 import { formatTravelDate } from "@/lib/direction";
 import {
@@ -23,7 +22,7 @@ import LegCard from "@/components/LegCard";
 import OverworldMap from "@/components/OverworldMap";
 import ShareButton from "@/components/ShareButton";
 import TripCard from "@/components/TripCard";
-import { UI } from "@/components/planUi";
+import { PX, PixelBox, PixelLink, SectionTitle } from "@/components/pixel";
 
 function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -35,31 +34,31 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
   const budget = formatPeso(it.budget_php);
   return (
     <>
-      <section className={UI.box} aria-label="Trip summary">
-        <p className="text-base font-bold">{dateRange(it.trip_date, it.return_date)}</p>
+      <PixelBox as="section" aria-label="Trip summary" className="p-4 flex flex-col gap-3">
+        <p className={PX.dataHeading}>{dateRange(it.trip_date, it.return_date)}</p>
         <p className="text-sm">{partySummary(it.party)}</p>
         {names && <p className="text-sm min-w-0 break-words">{names}</p>}
         {(it.vibe || it.premade) && (
           <div className="flex flex-wrap gap-2">
-            {it.vibe && <span className={`${UI.chip} min-w-0 break-words`}>{it.vibe}</span>}
-            {it.premade && <span className={UI.chip}>Pre-made plan</span>}
+            {it.vibe && <span className={`${PX.chip} min-w-0 break-words`}>{it.vibe}</span>}
+            {it.premade && <span className={PX.chip}>Pre-made plan</span>}
           </div>
         )}
-        {budget && <p className={`${UI.meta} tabular-nums`}>Budget {budget}</p>}
+        {budget && <p className={`${PX.meta} tabular-nums`}>Budget {budget}</p>}
         <ShareButton slug={it.share_slug} tripDate={it.trip_date} returnDate={it.return_date} />
-      </section>
+      </PixelBox>
 
       {it.issues.length > 0 && (
-        <section className={UI.textBox} aria-label="Plan changes">
+        <PixelBox as="section" aria-label="Plan changes" className="p-4 flex flex-col gap-1">
           <p className="text-sm font-bold">Some of this plan has changed since it was saved.</p>
           <p className="text-sm">Check the marked buses and stops before you go.</p>
-        </section>
+        </PixelBox>
       )}
 
       {map ? (
         <>
           <p className="text-sm">Tap a stop or a ride for details.</p>
-          {confirmNote && <p className={UI.meta}>{confirmNote}</p>}
+          {confirmNote && <p className={PX.meta}>{confirmNote}</p>}
           <OverworldMap itinerary={it} />
         </>
       ) : (
@@ -80,23 +79,23 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
 function BusSection({ title, leg, issues }: { title: string; leg: BusLegOut; issues: PlanIssue[] }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className={UI.h2}>
+      <SectionTitle>
         {title} · {formatTravelDate(leg.date)}
-      </h2>
+      </SectionTitle>
       {leg.trip ? (
         <>
           <ul className="flex flex-col gap-3">
             <TripCard trip={leg.trip} notice={issues[0] ? issueNotice(issues[0].code) : undefined} />
           </ul>
-          <p className={UI.meta}>{leg.trip.confirm_note}</p>
+          <p className={PX.meta}>{leg.trip.confirm_note}</p>
         </>
       ) : (
-        <div className={UI.box}>
+        <PixelBox className="p-4 flex flex-col items-start gap-3">
           <p className="text-sm">{issueNotice("unknown_trip")}</p>
-          <Link href="/" className={UI.secondaryBtn}>
+          <PixelLink variant="secondary" href="/">
             Search buses
-          </Link>
-        </div>
+          </PixelLink>
+        </PixelBox>
       )}
     </section>
   );
@@ -106,12 +105,12 @@ function DaySection({ day, index, issues }: { day: DayOut; index: number; issues
   const legNote = day.stops.find((s) => s.leg)?.leg?.confirm_note; // the API's last-mile note, once per day
   return (
     <section className="flex flex-col gap-3">
-      <h2 className={UI.h2}>{dayHeading(day)}</h2>
+      <SectionTitle>{dayHeading(day)}</SectionTitle>
       {day.stops.length === 0 ? (
-        <p className={`${UI.textBox} text-sm`}>Free time. No stops planned for this day.</p>
+        <PixelBox as="p" className="p-4 text-sm">Free time. No stops planned for this day.</PixelBox>
       ) : (
         <>
-          {legNote && <p className={UI.meta}>{legNote}</p>}
+          {legNote && <p className={PX.meta}>{legNote}</p>}
           <ol className="flex flex-col gap-4">
             {day.stops.map((stop, s) => (
               <StopItem key={`${s}-${stop.spot_id}`} n={s + 1} stop={stop} issues={issuesFor(`days[${index}].stops[${s}]`, issues)} />
@@ -130,7 +129,7 @@ function StopItem({ n, stop, issues }: { n: number; stop: StopOut; issues: PlanI
   const fee = spot ? formatPeso(spot.entrance_fee_php) : null;
   return (
     <li className="flex gap-3">
-      <span aria-hidden="true" className="w-6 shrink-0 text-center text-xl font-semibold">
+      <span aria-hidden="true" className={`${PX.numeral} w-6 shrink-0 text-center`}>
         {n}
       </span>
       <div className="min-w-0 flex-1 flex flex-col gap-2">
@@ -139,31 +138,34 @@ function StopItem({ n, stop, issues }: { n: number; stop: StopOut; issues: PlanI
             <LegCard leg={stop.leg} notice={legIssues[0] ? issueNotice(legIssues[0].code) : undefined} />
           </ul>
         ) : (
-          <p className={`${UI.textBox} text-sm`}>{issueNotice("unknown_leg")}</p>
+          <PixelBox as="p" className="p-4 text-sm">{issueNotice("unknown_leg")}</PixelBox>
         )}
-        <div className={UI.textBox}>
+        <PixelBox className="p-4 flex flex-col gap-1">
           {stopNotice && <p className="text-sm font-semibold">{issueNotice(stopNotice.code)}</p>}
           <div className="flex items-start gap-2">
             {spot && (
-              // eslint-disable-next-line @next/next/no-img-element -- pixel art: next/image would resample it
-              <img
-                src={spriteSrc(placeSprite(spot.category))}
-                width={24}
-                height={24}
-                alt=""
-                className={`${UI.plate} ${UI.pixelated} shrink-0`}
-                draggable={false}
-                decoding="async"
-              />
+              // The plate is on the wrapper, so the art draws at a true 24px (TG-23 review S1)
+              <span className={PX.plate}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- pixel art: next/image would resample it */}
+                <img
+                  src={spriteSrc(placeSprite(spot.category))}
+                  width={24}
+                  height={24}
+                  alt=""
+                  className="pixelated block"
+                  draggable={false}
+                  decoding="async"
+                />
+              </span>
             )}
-            <h3 className="text-base font-bold min-w-0 break-words">{spot ? spot.name : issueNotice("unknown_spot")}</h3>
+            <h3 className={`${PX.dataHeading} min-w-0 break-words`}>{spot ? spot.name : issueNotice("unknown_spot")}</h3>
           </div>
           <p className="text-sm tabular-nums">
             {formatTime(stop.arrive)} – {formatTime(stop.leave)}
             {spot && spot.category !== "other" ? ` · ${capitalise(spot.category)}` : ""}
           </p>
-          {fee && <p className={UI.meta}>Entrance {fee}</p>}
-        </div>
+          {fee && <p className={PX.meta}>Entrance {fee}</p>}
+        </PixelBox>
       </div>
     </li>
   );

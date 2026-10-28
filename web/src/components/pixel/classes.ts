@@ -33,6 +33,10 @@ export const PX = {
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
   inlineLink: "underline underline-offset-2 focus-pixel",
+  // TG-43 ux §4: the sprite plate (stepper rows, stop sprites); plan §3.2: the share page's decorative step numeral,
+  // so font-pixel stays inside components/pixel
+  plate: "pixel-frame bg-screen-paper p-0.5 inline-flex shrink-0",
+  numeral: "font-pixel text-xl font-semibold",
 } as const;
 
 export type ButtonVariant = keyof typeof PX.btn;

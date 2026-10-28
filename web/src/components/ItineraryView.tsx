@@ -3,12 +3,11 @@
 // Loads one saved plan in the browser (so the TG-27 service worker caches it) and shows its state:
 // loading, found, not found, or error with Try again (TG-23, ux.md 5 and 6).
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { fetchItinerary } from "@/lib/api";
 import { isValidSlug, type Itinerary } from "@/lib/itinerary";
 import ItineraryList from "@/components/ItineraryList";
 import { flags } from "@/lib/flags";
-import { UI } from "@/components/planUi";
+import { PixelBox, PixelButton, PixelLink } from "@/components/pixel";
 
 type State =
   | { kind: "loading" }
@@ -70,26 +69,21 @@ export default function ItineraryView({ slug }: { slug: string }) {
       {state.kind === "loading" && <p className="text-sm text-muted">{LOADING}</p>}
       {state.kind === "found" && <ItineraryList itinerary={state.itinerary} map={flags.overworldMap} />}
       {state.kind === "notfound" && (
-        <div className={UI.box}>
+        <PixelBox className="p-4 flex flex-col items-start gap-3">
           <p className="text-sm font-bold">{NOT_FOUND}</p>
           <p className="text-sm">{NOT_FOUND_BODY}</p>
-          <Link href="/" className={UI.secondaryBtn}>
+          <PixelLink variant="secondary" href="/">
             Search buses
-          </Link>
-        </div>
+          </PixelLink>
+        </PixelBox>
       )}
       {state.kind === "error" && (
-        <div className={UI.box}>
+        <PixelBox className="p-4 flex flex-col items-start gap-3">
           <p className="text-sm">{ERROR}</p>
-          <button
-            type="button"
-            onClick={retry}
-            aria-disabled={state.retrying || undefined}
-            className={UI.secondaryBtn}
-          >
+          <PixelButton variant="secondary" aria-disabled={state.retrying || undefined} onClick={retry}>
             {state.retrying ? "Loading..." : "Try again"}
-          </button>
-        </div>
+          </PixelButton>
+        </PixelBox>
       )}
     </>
   );
