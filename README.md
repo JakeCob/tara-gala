@@ -77,19 +77,19 @@ Cron runs `scraper/cron.sh`, installed as `/usr/local/sbin/tara-gala-scrape`. Ea
 
 **Owner steps** (as root on the VPS, once the Railway database exists; nothing here is installed automatically):
 
-1. Create the env file. Paste the Railway Postgres `DATABASE_PUBLIC_URL` in the editor, never on the command line, so it stays out of your shell history:
+1. Create the env file. The value is the Railway Postgres `DATABASE_PUBLIC_URL` (the public proxy URL, which works from the VPS): Railway dashboard → **jacob-rafal's Projects** workspace → `tara-gala` → `Postgres` → Variables → `DATABASE_PUBLIC_URL`. Never take it from a project in another workspace. From the CLI, `railway variables` with that project, service and environment named explicitly shows the same value; it prints raw secrets, so only ever pipe it, never leave it on screen or in a file. Paste it in the editor, never on the command line, so it stays out of your shell history:
    ```sh
-   mkdir -p /root/.config && chmod 700 /root/.config
+   mkdir -p -m 700 /root/.config
    install -m 600 /dev/null /root/.config/tara-gala-scraper.env
-   nano /root/.config/tara-gala-scraper.env      # exactly one line, unquoted: DATABASE_URL=postgresql://...
+   nano /root/.config/tara-gala-scraper.env      # exactly one line: DATABASE_URL=postgresql://...
    stat -c '%a %U %s bytes' /root/.config/tara-gala-scraper.env   # expect 600 root and a size above 0; don't print the file
    ```
+   Write the line with no quotes and no trailing space: the wrapper uses everything after `DATABASE_URL=` as-is (it strips only a Windows line ending), so a quote or a trailing space would end up inside the URL and the run would fail late with `rc=1`.
 2. Install the wrapper and the log rotation from `main` (not from whatever branch the checkout is on):
    ```sh
    cd /root/projects/personal/tara-gala && git fetch -q origin main
-   git show origin/main:scraper/cron.sh > /tmp/tara-gala-scrape
-   install -m 755 /tmp/tara-gala-scrape /usr/local/sbin/tara-gala-scrape && rm /tmp/tara-gala-scrape
-   git show origin/main:scraper/logrotate.conf > /etc/logrotate.d/tara-gala-scraper && chmod 644 /etc/logrotate.d/tara-gala-scraper
+   git show origin/main:scraper/cron.sh | install -m 755 /dev/stdin /usr/local/sbin/tara-gala-scrape
+   git show origin/main:scraper/logrotate.conf | install -m 644 /dev/stdin /etc/logrotate.d/tara-gala-scraper
    ```
    The scraper code updates itself every run, but the wrapper doesn't: after a merged change to `scraper/cron.sh`, run this step again.
 3. Try it: a dry run fetches everything (about 5 minutes), builds the venv and writes nothing:

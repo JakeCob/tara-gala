@@ -23,11 +23,13 @@ fail() { code=$1; shift; log "FAILED $*"; exit "$code"; }
 exec 9>"$LOCK"
 flock -n 9 || { log "SKIPPED another run is in progress"; exit 75; }
 
-# 2. Never take the DSN on the command line: it would land in ps and in this log (args are logged at START)
+# 2. Never take the DSN on the command line: it would land in ps and in this log (args are logged at START).
+# argparse also accepts any unambiguous prefix (--da, --data=, --database ...), and --database-url is the scraper's
+# only option starting with --da, so refuse every --da* argument.
 dry_run=no
 for arg in "$@"; do
     case $arg in
-        --database-url|--database-url=*) fail 2 "config: --database-url is not allowed; use the env file" ;;
+        --da*) fail 2 "config: --database-url is not allowed; use the env file" ;;
         --dry-run) dry_run=yes ;;
     esac
 done
@@ -58,8 +60,8 @@ if git -C "$MIRROR" fetch -q "$GIT_URL" "+refs/heads/$REF:refs/heads/$REF" >/dev
     tar -xf "$STATE/code.tar" -C "$STATE/code.new" &&
     git -C "$MIRROR" rev-parse --short=12 "refs/heads/$REF" > "$STATE/code.new/.sha"; then
     rm -rf "$STATE/code.old"
-    [ -d "$CODE" ] && mv "$CODE" "$STATE/code.old"
-    mv "$STATE/code.new" "$CODE"
+    { [ ! -d "$CODE" ] || mv "$CODE" "$STATE/code.old"; } && mv "$STATE/code.new" "$CODE" ||
+        fail 3 "could not swap in the new export"
 else
     rm -rf "$STATE/code.new"
     [ -d "$CODE" ] || fail 3 "no code"
