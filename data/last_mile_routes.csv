@@ -1,1 +1,7 @@
 from_terminal,from_spot,to_terminal,to_spot,mode,signboard,boarding_point,alighting_point,fare_min_php,fare_max_php,minutes,verified_on,notes
+vl-baguio,,,finteo-skylands-premium,taxi,,,,,,,2026-10-29,"agent-researched (tg-data), owner to verify. No sourced jeep route, fare or travel time; take a taxi."
+,finteo-skylands-premium,vl-baguio,,taxi,,,,,,,2026-10-29,"agent-researched (tg-data), owner to verify. No sourced jeep route, fare or travel time; take a taxi."
+gen-baguio,,,finteo-skylands-premium,taxi,,,,,,,2026-10-29,"agent-researched (tg-data), owner to verify. No sourced jeep route, fare or travel time; take a taxi."
+,finteo-skylands-premium,gen-baguio,,taxi,,,,,,,2026-10-29,"agent-researched (tg-data), owner to verify. No sourced jeep route, fare or travel time; take a taxi."
+sn-baguio,,,finteo-skylands-premium,taxi,,,,,,,2026-10-29,"agent-researched (tg-data), owner to verify. No sourced jeep route, fare or travel time; take a taxi."
+,finteo-skylands-premium,sn-baguio,,taxi,,,,,,,2026-10-29,"agent-researched (tg-data), owner to verify. No sourced jeep route, fare or travel time; take a taxi."

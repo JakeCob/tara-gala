@@ -26,3 +26,12 @@ Not used:
 - `genesistransport.com.ph`: robots.txt disallows all crawling.
 - `solidnorth.com.ph`: the domain did not resolve.
 - The Victory Liner "Terminal Directory" loads by script and isn't in the static page, so only the Caloocan footer address was used.
+
+## Lodging (`data/spots.csv`, `data/last_mile_routes.csv`), checked 2026-10-29
+| Row | Source | Note |
+| `finteo-skylands-premium` name, address, lat/lng | https://www.gites.fr/gites_finteo-skylands-premium_baguio_h5844590_en.htm | Lists "Finteo Skylands Premium, 96 Doctor Carino Street - 2600 BAGUIO" and "GPS coordinates : 16.40823, 120.59035". Read with WebFetch; a direct request got a CloudFront 403, which I didn't work around. |
+| `finteo-skylands-premium` address | https://www.laterooms.com/en-us/hotel/baguio/finteo-skylands-premium | Same address, "96 Doctor Carino Street, Baguio, 2600". No coordinates. |
+| Cross-check | https://www.openstreetmap.org/way/299949902 | OSM maps a separate listing, "Finteo Skylands" (apartments, Dr. Jose Cariño Street), about 42 m from the Premium GPS point. https://m.hotele.pl/en/philippines/baguio/finteo-skylands gives that one as "99 Finteo Skylands, Dr. Cariño". The two are different listings on the same street, so the owner should check the booking to confirm which one it is. |
+| 6 taxi legs, each Baguio terminal to and from the lodging | none | No source gave a jeep signboard, fare or travel time, so these are taxi legs with fare and minutes left empty. Straight-line distances (not travel times) are 1.3 km to `vl-baguio`, 0.9 km to `gen-baguio` and 0.85 km to `sn-baguio`. |
+- Booking.com (`/hotel/ph/finteo-skylands-premium.html`): returns an empty page without JavaScript.
+- tophotels.com: 404.
