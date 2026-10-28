@@ -8,9 +8,11 @@ import {
   type FieldId,
   type FormValues,
 } from "@/lib/planForm";
-import { UI } from "./planUi";
+import { PX, PixelBox, PixelChoice, SectionTitle } from "@/components/pixel";
 
 const L = PLAN_COPY.labels;
+// A box that holds a fieldset: the frame goes on the PixelBox around it, so it stays off the legend (a reset, not a look)
+const FIELDSET = "m-0 min-w-0 border-0 p-0 flex flex-col gap-3";
 const H = PLAN_COPY.hints;
 
 const errorOf = (errors: readonly FieldError[], f: FieldId) => errors.find((e) => e.field === f)?.message;
@@ -42,9 +44,11 @@ export function DatesBox(props: {
   const dateError = errorOf(errors, "date");
   const returnError = errorOf(errors, "returnDate");
   return (
-    <div className={UI.box}>
-      <fieldset className={UI.fieldset}>
-        <legend className={`${UI.h2} mb-3`}>{L.dates}</legend>
+    <PixelBox className="p-4 flex flex-col gap-3">
+      <fieldset className={FIELDSET}>
+        <SectionTitle as="legend" className="mb-3">
+          {L.dates}
+        </SectionTitle>
         <label htmlFor={FIELD_INPUT_ID.date} className="text-sm font-semibold">
           {L.date}
         </label>
@@ -57,7 +61,7 @@ export function DatesBox(props: {
           onChange={(e) => props.onDate(e.target.value)}
           aria-invalid={dateError ? true : undefined}
           aria-describedby={describedBy(dateError && errorId("date"))}
-          className={UI.formInput}
+          className={`${PX.input} w-full min-w-0 placeholder:text-muted`}
         />
         <FieldMessage field="date" message={dateError} />
         <label htmlFor={FIELD_INPUT_ID.returnDate} className="text-sm font-semibold">
@@ -72,12 +76,12 @@ export function DatesBox(props: {
           onChange={(e) => props.onReturn(e.target.value)}
           aria-invalid={returnError ? true : undefined}
           aria-describedby={describedBy(returnError && errorId("returnDate"))}
-          className={UI.formInput}
+          className={`${PX.input} w-full min-w-0 placeholder:text-muted`}
         />
         <FieldMessage field="returnDate" message={returnError} />
-        {hint && <p className={UI.meta}>{hint}</p>}
+        {hint && <p className={PX.meta}>{hint}</p>}
       </fieldset>
-    </div>
+    </PixelBox>
   );
 }
 
@@ -86,13 +90,13 @@ export function BudgetBox(props: { value: string; errors: readonly FieldError[];
   const error = errorOf(props.errors, "budget");
   const hintId = `${FIELD_INPUT_ID.budget}-hint`;
   return (
-    <div className={UI.box}>
-      <label htmlFor={FIELD_INPUT_ID.budget} className={UI.h2}>
+    <PixelBox className="p-4 flex flex-col gap-3">
+      <SectionTitle as="label" htmlFor={FIELD_INPUT_ID.budget}>
         {L.budget}
         <span className="sr-only">{H.budgetSr}</span>
-      </label>
+      </SectionTitle>
       <div className="flex items-stretch">
-        <span aria-hidden="true" className={UI.prefix}>
+        <span aria-hidden="true" className={PX.inputPrefix}>
           ₱
         </span>
         <input
@@ -105,24 +109,14 @@ export function BudgetBox(props: { value: string; errors: readonly FieldError[];
           onBlur={props.onBlur}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy(hintId, error && errorId("budget"))}
-          className={`${UI.formInput} flex-1`}
+          className={`${PX.input} w-full min-w-0 flex-1`}
         />
       </div>
       <FieldMessage field="budget" message={error} />
-      <p id={hintId} className={UI.meta}>
+      <p id={hintId} className={PX.meta}>
         {H.budget}
       </p>
-    </div>
-  );
-}
-
-// The checked chip's cursor: an 8×8 pixel arrow in currentColor, so it takes the chip's text colour.
-// TG-42 swap: <PixelChoice>'s MenuCursor. Not the ▶ character, which iOS can draw as an emoji.
-function ChipCursor() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 8 8" width="8" height="8" shapeRendering="crispEdges" className="shrink-0">
-      <path d="M2 1h2v1h1v1h1v2h-1v1h-1v1h-2z" fill="currentColor" />
-    </svg>
+    </PixelBox>
   );
 }
 
@@ -140,10 +134,12 @@ export function VibeBox(props: {
   const hintId = `${FIELD_INPUT_ID.vibe}-hint`;
   const limitId = `${FIELD_INPUT_ID.note}-limit`;
   return (
-    <div className={UI.box}>
-      <fieldset className={UI.fieldset} aria-describedby={describedBy(hintId, vibeError && errorId("vibe"))}>
-        <legend className={`${UI.h2} mb-1`}>{L.vibe}</legend>
-        <p id={hintId} className={UI.meta}>
+    <PixelBox className="p-4 flex flex-col gap-3">
+      <fieldset className={FIELDSET} aria-describedby={describedBy(hintId, vibeError && errorId("vibe"))}>
+        <SectionTitle as="legend" className="mb-1">
+          {L.vibe}
+        </SectionTitle>
+        <p id={hintId} className={PX.meta}>
           {H.vibe}
         </p>
         <FieldMessage field="vibe" message={vibeError} />
@@ -152,21 +148,24 @@ export function VibeBox(props: {
             const checked = chips.includes(chip);
             const locked = chipLocked(chips, chip);
             return (
-              <label key={chip} className={UI.choice}>
-                <input
-                  type="checkbox"
-                  id={i === 0 ? FIELD_INPUT_ID.vibe : undefined}
-                  className="sr-only"
-                  checked={checked}
-                  aria-disabled={locked || undefined}
-                  aria-invalid={i === 0 && vibeError ? true : undefined}
-                  aria-describedby={i === 0 && vibeError ? errorId("vibe") : undefined}
-                  onClick={(e) => locked && e.preventDefault()}
-                  onChange={() => !locked && props.onToggle(chip)}
-                />
-                {checked && <ChipCursor />}
+              // PixelChoice's MenuCursor marks a checked chip; a 3rd chip is aria-disabled and its click does nothing
+              <PixelChoice
+                key={chip}
+                type="checkbox"
+                name="vibe"
+                value={chip}
+                checked={checked}
+                onChange={() => !locked && props.onToggle(chip)}
+                inputProps={{
+                  id: i === 0 ? FIELD_INPUT_ID.vibe : undefined,
+                  "aria-disabled": locked || undefined,
+                  "aria-invalid": i === 0 && vibeError ? true : undefined,
+                  "aria-describedby": i === 0 && vibeError ? errorId("vibe") : undefined,
+                  onClick: (e) => locked && e.preventDefault(),
+                }}
+              >
                 {chip}
-              </label>
+              </PixelChoice>
             );
           })}
         </div>
@@ -183,16 +182,16 @@ export function VibeBox(props: {
           onChange={(e) => props.onNote(e.target.value)}
           aria-invalid={noteError ? true : undefined}
           aria-describedby={describedBy(limitId, noteError && errorId("note"))}
-          className={UI.formInput}
+          className={`${PX.input} w-full min-w-0 placeholder:text-muted`}
         />
         <span id={limitId} className="sr-only">
           {H.noteLimit}
         </span>
-        <span aria-hidden="true" className={`${UI.meta} self-end tabular-nums`}>
+        <span aria-hidden="true" className={`${PX.meta} self-end tabular-nums`}>
           {note.length}/{NOTE_MAX}
         </span>
         <FieldMessage field="note" message={noteError} />
       </fieldset>
-    </div>
+    </PixelBox>
   );
 }

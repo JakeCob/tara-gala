@@ -33,10 +33,12 @@ export const PX = {
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
   inlineLink: "underline underline-offset-2 focus-pixel",
-  // TG-43 ux §4: the sprite plate (stepper rows, stop sprites); plan §3.2: the share page's decorative step numeral,
-  // so font-pixel stays inside components/pixel
+  // TG-43: a sprite plate (stepper-row chibis, stop sprites), the stage's name tags, the budget's ₱ prefix, and
+  // the share page's decorative step numeral (plan §3.2), so font-pixel stays inside components/pixel
   plate: "pixel-frame bg-screen-paper p-0.5 inline-flex shrink-0",
   numeral: "font-pixel text-xl font-semibold",
+  screenTag: "pixel-frame bg-screen-paper text-screen-ink px-1 text-xs font-semibold",
+  inputPrefix: "inline-flex items-center border-3 border-r-0 border-frame bg-card px-3 text-base font-bold text-foreground",
 } as const;
 
 export type ButtonVariant = keyof typeof PX.btn;

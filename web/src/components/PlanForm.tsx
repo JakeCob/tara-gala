@@ -1,7 +1,6 @@
 "use client";
 
 import { useReducer, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchPremade, manilaToday, postPlan, type PlanRequestBody } from "@/lib/api";
 import { formatTravelDate } from "@/lib/direction";
@@ -30,7 +29,7 @@ import PartyPicker from "./PartyPicker";
 import PartyStage from "./PartyStage";
 import { BudgetBox, DatesBox, VibeBox } from "./PlanFields";
 import { PlanErrorBox, PremadeResults } from "./PlanResults";
-import { UI } from "./planUi";
+import { PX, PixelBox, PixelButton, PixelLink } from "@/components/pixel";
 import { usePlanRequests } from "./usePlanRequests";
 import { useSpawn } from "./useSpawn";
 
@@ -140,18 +139,18 @@ export default function PlanForm() {
         />
       </fieldset>
       {mode === "none" ? (
-        <div className={UI.box}>
+        <PixelBox className="p-4 flex flex-col items-start gap-3">
           <p className="text-sm">{PLAN_COPY.none}</p>
-          <Link href="/" className={UI.secondaryBtn}>
+          <PixelLink variant="secondary" href="/">
             {PLAN_COPY.actions.searchBuses}
-          </Link>
-        </div>
+          </PixelLink>
+        </PixelBox>
       ) : (
-        <button type="submit" id={SUBMIT_ID} className={`${UI.submitBtn} w-full`} aria-disabled={busy}>
+        <PixelButton variant="primary" type="submit" id={SUBMIT_ID} className="w-full px-4 py-3" aria-disabled={busy}>
           {label}
-        </button>
+        </PixelButton>
       )}
-      <p role="status" className={statusShown(run) ? UI.meta : "sr-only"}>
+      <p role="status" className={statusShown(run) ? PX.meta : "sr-only"}>
         {statusText(run, mode, values)}
       </p>
       {run.error && (
@@ -159,7 +158,11 @@ export default function PlanForm() {
           view={run.error}
           flags={flags}
           busy={busy}
-          onRetry={() => sent.current && plan(sent.current)}
+          onRetry={() => {
+            // Try again restarts the run, which unmounts this box and the focused button (TG-21 review nit 3)
+            document.getElementById(SUBMIT_ID)?.focus();
+            if (sent.current) plan(sent.current);
+          }}
           onPremade={() => loadPremade(values)}
         />
       )}
@@ -170,7 +173,10 @@ export default function PlanForm() {
           date={values.date}
           returnDate={values.returnDate}
           busy={busy}
-          onRetry={() => loadPremade(values)}
+          onRetry={() => {
+            document.getElementById(SUBMIT_ID)?.focus(); // the failed box unmounts when the list reloads
+            loadPremade(values);
+          }}
         />
       )}
     </form>
