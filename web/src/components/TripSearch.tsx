@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useSyncExternalStore } from "react";
+import { useReducer, useState, useSyncExternalStore } from "react";
 import {
   formatClass,
   formatDayOffset,
@@ -25,8 +25,11 @@ export default function TripSearch() {
   // Today in Manila, read on the client only so the prerendered shell does not bake in a date
   const today = useSyncExternalStore(subscribeNothing, manilaToday, () => "");
   const [state, dispatch] = useReducer(searchReducer<Trip>, undefined, initialSearchState<Trip>);
+  // Once the user empties the field (Chrome does that mid-edit, one segment at a time), stop falling back to
+  // today, or React writes today back in and the keyboard edit is lost
+  const [cleared, setCleared] = useState(false);
   const { direction, status, trips, searched } = state;
-  const date = state.date || today;
+  const date = state.date || (cleared ? "" : today);
   const { originCity, destinationCity } = endpoints(direction);
 
   async function onSearch(e: React.FormEvent) {
@@ -55,7 +58,7 @@ export default function TripSearch() {
             onClick={() => dispatch({ type: "swap" })}
             disabled={status === "loading"}
             aria-label={swapLabel(direction)}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-brand text-xl leading-none text-brand disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-brand text-xl leading-none text-brand disabled:opacity-60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card"
           >
             <span aria-hidden>⇄</span>
           </button>
@@ -73,7 +76,10 @@ export default function TripSearch() {
           <input
             type="date"
             value={date}
-            onChange={(e) => dispatch({ type: "pickDate", date: e.target.value })}
+            onChange={(e) => {
+              setCleared(e.target.value === "");
+              dispatch({ type: "pickDate", date: e.target.value });
+            }}
             className="rounded-lg border border-border bg-background px-3 py-2 text-base"
             required
           />
