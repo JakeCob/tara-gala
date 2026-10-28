@@ -8,6 +8,7 @@ const ENV_KEYS: Record<keyof Flags, string> = {
   plannerLive: "NEXT_PUBLIC_PLANNER_LIVE",
   premadeItineraries: "NEXT_PUBLIC_PREMADE_ITINERARIES",
   realMap: "NEXT_PUBLIC_REAL_MAP",
+  serviceWorker: "NEXT_PUBLIC_SERVICE_WORKER",
 };
 
 // [raw, fallback, expected]. Keep identical to CASES in api/tests/test_flags.py.
@@ -50,7 +51,7 @@ afterEach(() => {
 
 test("defaults when unset", () => {
   clearFlagEnv();
-  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false });
+  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true });
   assert.deepEqual(readFlags(), FLAG_DEFAULTS);
 });
 
@@ -89,6 +90,18 @@ test("reads each flag with a literal process.env access", () => {
   assert.doesNotMatch(source, /process\.env\s*\[/);
   assert.doesNotMatch(source, /=\s*process\.env\s*[;,)]/);
   assert.doesNotMatch(source, /\}\s*=\s*process\.env\b/);
+});
+
+test("the service worker kill switch is documented (TG-27)", () => {
+  // Web-only flag, so api/tests/test_flags.py doesn't cover it
+  const root = new URL("../../../", import.meta.url);
+  const readme = readFileSync(new URL("README.md", root), "utf8");
+  const section = readme.slice(readme.indexOf("## 7."));
+  const row = section.split("\n").find((line) => line.includes("`NEXT_PUBLIC_SERVICE_WORKER`"));
+  assert.ok(row, "README section 7 has a row for NEXT_PUBLIC_SERVICE_WORKER");
+  assert.ok(row.includes("`true`"), "default true");
+  const webEnv = readFileSync(new URL("web/.env.example", root), "utf8");
+  assert.match(webEnv, /^NEXT_PUBLIC_SERVICE_WORKER=true$/m);
 });
 
 test("flags.ts is a plain module", () => {
