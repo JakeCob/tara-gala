@@ -47,4 +47,28 @@ export const UI = {
     "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-foreground",
   // pixel-frame bg-card chip (TG-23 vibe, Pre-made plan); not a button
   chip: "border-3 border-foreground bg-card px-2 py-1 text-sm",
+  // TG-21 planner form. TG-23's secondaryBtn is shared; keys that differ from TG-23's have their own names.
+  // a box that is a fieldset keeps its border off the legend: the frame goes on a wrapper with UI.box
+  fieldset: "m-0 min-w-0 border-0 p-0 flex flex-col gap-3",
+  // PX.input, with placeholder colour and min-w-0 for the ₱ row
+  formInput:
+    "min-h-11 w-full min-w-0 border-3 border-foreground bg-card px-3 py-2 text-base text-foreground placeholder:text-muted " +
+    "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-foreground",
+  // the ₱ prefix glued to the budget input
+  prefix: "inline-flex items-center border-3 border-r-0 border-foreground bg-card px-3 text-base font-bold",
+  // <PixelButton variant="primary">, dimmed while a request runs (aria-disabled)
+  submitBtn:
+    "min-h-11 px-4 py-3 border-3 border-foreground bg-brand text-brand-ink font-bold shadow-[0_3px_0_0_var(--foreground)] " +
+    "active:translate-y-[3px] active:shadow-none aria-disabled:opacity-60 aria-disabled:shadow-none aria-disabled:active:translate-y-0 " +
+    "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-foreground",
+  // <PixelChoice type="checkbox">: a label around an sr-only checkbox; dimmed when its input is aria-disabled
+  choice:
+    "inline-flex items-center gap-1 min-h-11 px-3 text-sm font-semibold cursor-pointer border-3 border-foreground bg-card " +
+    "shadow-[0_3px_0_0_var(--foreground)] has-checked:bg-brand has-checked:text-brand-ink has-checked:translate-y-[3px] " +
+    "has-checked:shadow-none has-[[aria-disabled=true]]:opacity-60 has-[[aria-disabled=true]]:shadow-none " +
+    "has-focus-visible:outline-3 has-focus-visible:outline-offset-2 has-focus-visible:outline-foreground",
+  // PX.chip, small: "Matches your dates" on a trip card
+  matchChip: "self-start border-3 border-foreground bg-card px-2 py-1 text-xs font-semibold",
+  // PX.dataHeading
+  dataHeading: "text-base font-bold",
 } as const;

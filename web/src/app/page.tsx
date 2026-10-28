@@ -1,5 +1,7 @@
 import { PageTitle, PixelLink } from "@/components/pixel";
 import TripSearch from "@/components/TripSearch";
+import { flags } from "@/lib/flags";
+import { formMode } from "@/lib/planForm";
 
 export default function Home() {
   return (
@@ -14,6 +16,13 @@ export default function Home() {
           In Baguio? Jeeps, taxis and walks from the terminal <span aria-hidden>→</span>
         </span>
       </PixelLink>
+      {formMode(flags) !== "none" && (
+        <PixelLink variant="secondary" href="/plan" className="flex items-center px-4 py-3 text-sm">
+          <span>
+            Plan a Baguio trip <span aria-hidden>→</span>
+          </span>
+        </PixelLink>
+      )}
       <footer className="mt-auto pt-6 text-xs text-muted">Directions to your terminal are on each trip.</footer>
     </main>
   );

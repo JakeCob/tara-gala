@@ -180,7 +180,7 @@ test("T15-G8 useSpawn wraps createSpawner; frame swaps only; skip on capture", (
 });
 
 // T15-G9: page and form wiring
-test("T15-G9 PlanForm owns the party; /plan page shell; not linked from home", () => {
+test("T15-G9 PlanForm owns the party; /plan page shell; home link gated", () => {
   assert.match(form, /^"use client";/);
   assert.match(form, /useState(<[^>]+>)?\(DEFAULT_PARTY\)/);
   assert.ok(tags(form, "PartyStage").some((t) => /\bparty=\{party\}/.test(t)), "<PartyStage party={party}>");
@@ -195,7 +195,8 @@ test("T15-G9 PlanForm owns the party; /plan page shell; not linked from home", (
   assert.match(page, /<span aria-hidden(="true")?>←(&nbsp;)?<\/span>\s*Back to bus search/);
   assert.match(page, /title:\s*"Plan your trip · Tara Gala"/);
   assert.match(page, /<PlanForm\s*\/>/);
-  assert.doesNotMatch(home, /["'`]\/plan\b/, "TG-21 adds the link");
+  // TG-21 adds the home link, shown only when a planner mode is on (T21-S5)
+  assert.match(home, /formMode\(flags\) !== "none"/, "the /plan link is gated");
 });
 
 // Review finding 1 (TG-42 guard: font-pixel only inside components/pixel/) and the v2 bans. TG-42 PR A isn't on

@@ -89,3 +89,88 @@ export async function fetchItinerary(slug: string): Promise<Itinerary | null> {
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
+
+/** POST /plan body (TG-20 PlanRequest, extra="forbid"): only these keys. TG-15's party never carries names. */
+export type PlanRequestBody = {
+  date: string; // YYYY-MM-DD
+  return_date: string;
+  party: { type: "adult" | "student" | "senior" | "pwd" | "child" }[]; // 1 to 10
+  budget_php?: number; // 500 to 200,000, left out when not set
+  vibe: string; // 1 to 60 characters, ^[\w ,.'&!?-]+$
+};
+
+export type PostPlanResult =
+  | { kind: "ok"; slug: string }
+  | { kind: "response"; status: number; body: unknown }
+  | { kind: "network" }
+  | { kind: "timeout" }
+  | { kind: "aborted" };
+
+/** One row of GET /premade-itineraries (api/app/premade.py PremadeSummary). */
+export type PremadeSummary = {
+  share_slug: string;
+  vibe: string | null;
+  trip_date: string;
+  return_date: string | null;
+  budget_php: number | null;
+  day_count: number;
+  stop_count: number;
+  spot_names: string[];
+};
+
+export type PremadeResult = { kind: "ok"; list: PremadeSummary[] } | { kind: "unavailable" } | { kind: "failed" };
+
+/**
+ * POST /plan (TG-20). Never throws: every outcome is a result. Our own 120 s timer is longer than the API's
+ * 100 s deadline, so the API's `deadline` answer normally arrives first. The caller's signal aborts on unmount.
+ */
+export async function postPlan(
+  body: PlanRequestBody,
+  opts: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<PostPlanResult> {
+  const { signal, timeoutMs = 120_000 } = opts;
+  const doFetch = opts.fetchImpl ?? globalThis.fetch; // read per call, so tests can block the real fetch
+  if (signal?.aborted) return { kind: "aborted" };
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, timeoutMs);
+  const onAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", onAbort);
+  try {
+    const res = await doFetch(`${API_URL}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    const data: unknown = await res.json().catch(() => null); // Railway's proxy answers HTML on a crash
+    const slug = (data as { share_slug?: unknown } | null)?.share_slug;
+    if (res.status === 201 && typeof slug === "string") return { kind: "ok", slug };
+    return { kind: "response", status: res.status, body: data };
+  } catch {
+    if (timedOut) return { kind: "timeout" };
+    if (signal?.aborted) return { kind: "aborted" };
+    return { kind: "network" };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+/** GET /premade-itineraries (TG-24). A plain GET, so TG-27's service worker can cache it for offline use. */
+export async function fetchPremade(opts: { fetchImpl?: typeof fetch } = {}): Promise<PremadeResult> {
+  const doFetch = opts.fetchImpl ?? globalThis.fetch;
+  try {
+    const res = await doFetch(`${API_URL}/premade-itineraries`);
+    if (res.status === 404) return { kind: "unavailable" }; // the API's PREMADE_ITINERARIES flag is off
+    if (!res.ok) return { kind: "failed" };
+    const data: unknown = await res.json();
+    return Array.isArray(data) ? { kind: "ok", list: data as PremadeSummary[] } : { kind: "failed" };
+  } catch {
+    return { kind: "failed" };
+  }
+}
