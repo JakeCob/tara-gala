@@ -6,6 +6,7 @@ Never point TEST_DATABASE_URL at Supabase: the fixture drops the schema.
 
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -61,6 +62,17 @@ def no_real_llm_calls(monkeypatch):
                             aguard(module, module.AsyncHTTPTransport.handle_async_request))
     yield blocked
     assert not blocked, f"a test tried to reach {blocked}"
+
+
+@pytest.fixture(autouse=True)
+def _frozen_scraper_clock(monkeypatch):
+    """victory_liner.main() reads the time only through manila_now(); freeze it so the suite never depends on the
+    real date (TG-9). Tests that need another 'now' monkeypatch it again."""
+    import victory_liner as vl  # scraper/ is on sys.path above
+    from load_data import MANILA
+
+    # raising=False only until manila_now exists (TG-9 RED); GREEN drops it so a rename fails loudly
+    monkeypatch.setattr(vl, "manila_now", lambda: datetime(2026, 11, 1, 4, 0, tzinfo=MANILA), raising=False)
 
 
 @pytest.fixture()
