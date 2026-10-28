@@ -15,5 +15,77 @@
       ]}
     ]
   },
-  "itineraries": []
+  "itineraries": [
+    {"key": "food-trip", "vibe": "Food trip", "budget_php": null, "party": [{"type": "adult"}],
+     "outbound": {"operator": "victory-liner", "origin": "vl-cubao", "destination": "vl-baguio", "departure": "07:00", "date": "2026-11-06", "class": "deluxe", "via": null},
+     "return":   {"operator": "victory-liner", "origin": "vl-baguio", "destination": "vl-cubao", "departure": "16:15", "date": "2026-11-08", "class": "first_class", "via": null},
+     "days": [
+       {"day": 1, "stops": [
+         {"spot": "finteo-skylands-premium", "arrive": "12:30", "leave": "13:00", "leg": {"from": "vl-baguio", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}},
+         {"spot": "session-road", "arrive": "13:20", "leave": "15:30", "leg": {"from": "finteo-skylands-premium", "to": "session-road", "mode": "taxi", "signboard": null}},
+         {"spot": "baguio-city-market", "arrive": "15:45", "leave": "17:30", "leg": {"from": "session-road", "to": "baguio-city-market", "mode": "taxi", "signboard": null}},
+         {"spot": "finteo-skylands-premium", "arrive": "18:00", "leave": "23:59", "leg": {"from": "baguio-city-market", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}}
+       ]},
+       {"day": 2, "stops": [
+         {"spot": "baguio-city-market", "arrive": "07:30", "leave": "08:30", "leg": {"from": "finteo-skylands-premium", "to": "baguio-city-market", "mode": "taxi", "signboard": null}},
+         {"spot": "la-trinidad-strawberry-farm", "arrive": "09:15", "leave": "11:00", "leg": {"from": "baguio-city-market", "to": "la-trinidad-strawberry-farm", "mode": "jeep", "signboard": "La Trinidad"}},
+         {"spot": "good-shepherd-convent", "arrive": "12:00", "leave": "13:00", "leg": {"from": "la-trinidad-strawberry-farm", "to": "good-shepherd-convent", "mode": "taxi", "signboard": null}},
+         {"spot": "mines-view-park", "arrive": "13:15", "leave": "14:30", "leg": {"from": "good-shepherd-convent", "to": "mines-view-park", "mode": "taxi", "signboard": null}},
+         {"spot": "session-road", "arrive": "15:15", "leave": "19:00", "leg": {"from": "mines-view-park", "to": "session-road", "mode": "taxi", "signboard": null}},
+         {"spot": "finteo-skylands-premium", "arrive": "19:30", "leave": "23:59", "leg": {"from": "session-road", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}}
+       ]},
+       {"day": 3, "stops": [
+         {"spot": "baguio-city-market", "arrive": "08:00", "leave": "10:00", "leg": {"from": "finteo-skylands-premium", "to": "baguio-city-market", "mode": "taxi", "signboard": null}},
+         {"spot": "burnham-park", "arrive": "10:15", "leave": "12:00", "leg": {"from": "baguio-city-market", "to": "burnham-park", "mode": "taxi", "signboard": null}},
+         {"spot": "session-road", "arrive": "12:15", "leave": "15:30", "leg": {"from": "burnham-park", "to": "session-road", "mode": "taxi", "signboard": null}}
+       ]}
+     ]},
+    {"key": "chill", "vibe": "Chill", "budget_php": null, "party": [{"type": "adult"}],
+     "outbound": {"operator": "victory-liner", "origin": "vl-cubao", "destination": "vl-baguio", "departure": "08:15", "date": "2026-11-06", "class": "first_class", "via": null},
+     "return":   {"operator": "victory-liner", "origin": "vl-baguio", "destination": "vl-cubao", "departure": "14:15", "date": "2026-11-08", "class": "first_class", "via": null},
+     "days": [
+       {"day": 1, "stops": [
+         {"spot": "finteo-skylands-premium", "arrive": "12:45", "leave": "14:00", "leg": {"from": "vl-baguio", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}},
+         {"spot": "burnham-park", "arrive": "14:15", "leave": "16:30", "leg": {"from": "finteo-skylands-premium", "to": "burnham-park", "mode": "taxi", "signboard": null}},
+         {"spot": "baguio-cathedral", "arrive": "16:45", "leave": "17:30", "leg": {"from": "burnham-park", "to": "baguio-cathedral", "mode": "taxi", "signboard": null}},
+         {"spot": "session-road", "arrive": "17:40", "leave": "20:00", "leg": {"from": "baguio-cathedral", "to": "session-road", "mode": "taxi", "signboard": null}},
+         {"spot": "finteo-skylands-premium", "arrive": "20:30", "leave": "23:59", "leg": {"from": "session-road", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}}
+       ]},
+       {"day": 2, "stops": [
+         {"spot": "wright-park", "arrive": "09:00", "leave": "10:00", "leg": {"from": "finteo-skylands-premium", "to": "wright-park", "mode": "taxi", "signboard": null}},
+         {"spot": "the-mansion", "arrive": "10:10", "leave": "11:00", "leg": {"from": "wright-park", "to": "the-mansion", "mode": "taxi", "signboard": null}},
+         {"spot": "baguio-botanical-garden", "arrive": "11:15", "leave": "12:30", "leg": {"from": "the-mansion", "to": "baguio-botanical-garden", "mode": "taxi", "signboard": null}},
+         {"spot": "camp-john-hay", "arrive": "13:00", "leave": "16:30", "leg": {"from": "baguio-botanical-garden", "to": "camp-john-hay", "mode": "taxi", "signboard": null}},
+         {"spot": "finteo-skylands-premium", "arrive": "17:00", "leave": "23:59", "leg": {"from": "camp-john-hay", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}}
+       ]},
+       {"day": 3, "stops": [
+         {"spot": "bencab-museum", "arrive": "09:15", "leave": "12:00", "leg": {"from": "finteo-skylands-premium", "to": "bencab-museum", "mode": "taxi", "signboard": null}},
+         {"spot": "burnham-park", "arrive": "12:40", "leave": "13:40", "leg": {"from": "bencab-museum", "to": "burnham-park", "mode": "taxi", "signboard": null}}
+       ]}
+     ]},
+    {"key": "nature", "vibe": "Nature", "budget_php": null, "party": [{"type": "adult"}],
+     "outbound": {"operator": "victory-liner", "origin": "vl-cubao", "destination": "vl-baguio", "departure": "06:15", "date": "2026-11-06", "class": "first_class", "via": null},
+     "return":   {"operator": "victory-liner", "origin": "vl-baguio", "destination": "vl-cubao", "departure": "15:15", "date": "2026-11-08", "class": "royal_class", "via": null},
+     "days": [
+       {"day": 1, "stops": [
+         {"spot": "finteo-skylands-premium", "arrive": "10:45", "leave": "11:15", "leg": {"from": "vl-baguio", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}},
+         {"spot": "camp-john-hay", "arrive": "11:45", "leave": "16:00", "leg": {"from": "finteo-skylands-premium", "to": "camp-john-hay", "mode": "taxi", "signboard": null}},
+         {"spot": "burnham-park", "arrive": "16:30", "leave": "18:00", "leg": {"from": "camp-john-hay", "to": "burnham-park", "mode": "taxi", "signboard": null}},
+         {"spot": "finteo-skylands-premium", "arrive": "18:30", "leave": "23:59", "leg": {"from": "burnham-park", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}}
+       ]},
+       {"day": 2, "stops": [
+         {"spot": "baguio-botanical-garden", "arrive": "08:00", "leave": "09:30", "leg": {"from": "finteo-skylands-premium", "to": "baguio-botanical-garden", "mode": "taxi", "signboard": null}},
+         {"spot": "wright-park", "arrive": "09:45", "leave": "10:45", "leg": {"from": "baguio-botanical-garden", "to": "wright-park", "mode": "taxi", "signboard": null}},
+         {"spot": "the-mansion", "arrive": "10:50", "leave": "11:30", "leg": {"from": "wright-park", "to": "the-mansion", "mode": "taxi", "signboard": null}},
+         {"spot": "mines-view-park", "arrive": "11:50", "leave": "13:00", "leg": {"from": "the-mansion", "to": "mines-view-park", "mode": "taxi", "signboard": null}},
+         {"spot": "good-shepherd-convent", "arrive": "13:10", "leave": "13:45", "leg": {"from": "mines-view-park", "to": "good-shepherd-convent", "mode": "taxi", "signboard": null}},
+         {"spot": "la-trinidad-strawberry-farm", "arrive": "14:30", "leave": "16:30", "leg": {"from": "good-shepherd-convent", "to": "la-trinidad-strawberry-farm", "mode": "taxi", "signboard": null}},
+         {"spot": "finteo-skylands-premium", "arrive": "17:15", "leave": "23:59", "leg": {"from": "la-trinidad-strawberry-farm", "to": "finteo-skylands-premium", "mode": "taxi", "signboard": null}}
+       ]},
+       {"day": 3, "stops": [
+         {"spot": "tam-awan-village", "arrive": "08:30", "leave": "11:00", "leg": {"from": "finteo-skylands-premium", "to": "tam-awan-village", "mode": "taxi", "signboard": null}},
+         {"spot": "bencab-museum", "arrive": "11:30", "leave": "14:15", "leg": {"from": "tam-awan-village", "to": "bencab-museum", "mode": "taxi", "signboard": null}}
+       ]}
+     ]}
+  ]
 }

@@ -81,3 +81,12 @@ Not used:
 No source URL:
 - `last_mile_routes.csv` has no `source_url` column, so a source could only be cited here.
 - A search on 2026-10-29 found no official city or tourism page saying metered taxis serve these areas. Results were news reports about LTFRB taxi fare changes (Inquirer, SunStar, PTV, 2010 to 2018 plus one undated P50 flag-down report), which don't state coverage and aren't current fare sources, so none is cited.
+
+## Pre-made itineraries (`data/premade_itineraries.json`), authored 2026-10-29
+
+Three plans for the owner's trip (Victory Liner from Cubao on Fri 2026-11-06, back to Cubao on Sun 2026-11-08): `food-trip`, `chill` and `nature`. They use only rows already in the database:
+- Trips: from a run of `scraper/victory_liner.py` against the public Victory Liner API (https://tickets.victoryliner.com) on 2026-10-29, which fetches the next 14 days. Outbound trips are deluxe 07:00, first class 08:15 and first class 06:15 (arriving 10:15 to 12:15). Returns are first class 16:15, first class 14:15 and royal class 15:15 (arriving in Cubao 18:15 to 20:15). Each plan's last stop leaves at least 30 minutes before its return bus.
+- Spots and legs: the merged rows in this file's sections above. Every leg is a generated taxi leg except the sourced La Trinidad jeep (market to Strawberry Farm) in `food-trip`.
+- Day 1 starts with the taxi from `vl-baguio` to the lodging, and days 1 and 2 end at the lodging, so days 2 and 3 start there.
+
+Not sourced (the owner should adjust): the stop times are planning choices, not travel times, because no leg has minutes. The party (one adult) and the empty budget are placeholders. BenCab visits are within its official Tuesday to Sunday 9:00 to 18:00 hours. Re-run `python data/load_premade.py --dry-run` after each scraper run, because a deactivated trip breaks a plan.
