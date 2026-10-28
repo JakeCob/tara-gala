@@ -8,6 +8,5 @@ export function PixelButton({
   className,
   ...rest
 }: { variant: ButtonVariant } & ComponentPropsWithoutRef<"button">) {
-  const v = PX.btn[variant];
-  return <button type={type} className={cx(v.skin, className ?? PX.btn[variant].layout)} {...rest} />;
+  return <button type={type} className={cx(PX.btn[variant].skin, className ?? PX.btn[variant].layout)} {...rest} />;
 }
