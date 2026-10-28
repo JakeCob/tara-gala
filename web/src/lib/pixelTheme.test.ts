@@ -718,10 +718,12 @@ test("T21 offline.html palette equals the tokens, in light and dark", () => {
 });
 
 // T23 (B9, ux.md 3.3): the one copy-level change, so an overnight arrival is hard to miss
+// TG-23 moved the bus card out of TripSearch.tsx into TripCard.tsx (shared with the share page)
 test("T23 the +1 day offset is emphasised", () => {
-  const tripSearch = read("src/components/TripSearch.tsx");
+  const tripCard = read("src/components/TripCard.tsx");
+  assert.match(read("src/components/TripSearch.tsx"), /<TripCard\b/, "search renders the shared card");
   assert.match(
-    tripSearch,
+    tripCard,
     /<span className="font-semibold text-foreground">\{formatDayOffset\(t\.arrives_day_offset\)\}<\/span>/,
   );
 });

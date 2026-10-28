@@ -66,16 +66,22 @@ def _place(r: dict, terminal: str, spot: str) -> Place:
     return Place(kind=kind, id=r[f"{p}_id"], slug=r[f"{p}_slug"], name=r[f"{p}_name"], lat=r[f"{p}_lat"], lng=r[f"{p}_lng"])
 
 
+_SPOT_SELECT = """
+    select id as spot_id, slug, name, city, category::text as category, lat, lng, description,
+           visit_minutes, opening_hours, entrance_fee_php
+    from spots
+"""
+
+
+def _spot_from_row(r: dict) -> Spot:
+    return Spot(**{**r, "entrance_fee_php": _float(r["entrance_fee_php"])})
+
+
 @router.get("/spots", response_model=list[Spot])
 def list_spots() -> list[Spot]:
-    sql = """
-        select id as spot_id, slug, name, city, category::text as category, lat, lng, description,
-               visit_minutes, opening_hours, entrance_fee_php
-        from spots order by name, slug
-    """
     with db.get_conn() as conn:
-        rows = conn.execute(sql).fetchall()
-    spots = [Spot(**{**r, "entrance_fee_php": _float(r["entrance_fee_php"])}) for r in rows]
+        rows = conn.execute(_SPOT_SELECT + " order by name, slug").fetchall()
+    spots = [_spot_from_row(r) for r in rows]
     logger.info("spots list results=%d", len(spots))
     return spots
 
@@ -84,6 +90,35 @@ _PLACE_COLS = ", ".join(
     f"{a}.id as {a}_id, {a}.slug as {a}_slug, {a}.name as {a}_name, {a}.lat as {a}_lat, {a}.lng as {a}_lng"
     for a in ("ft", "fs", "tt", "ts")
 )
+_LEG_SELECT = f"""
+    select l.id, l.mode::text as mode, l.signboard, l.boarding_point, l.alighting_point,
+           l.fare_min_php, l.fare_max_php, l.minutes, l.notes, l.source::text as source, l.last_verified_at,
+           {_PLACE_COLS}
+    from last_mile_routes l
+    left join terminals ft on ft.id = l.from_terminal_id
+    left join spots fs on fs.id = l.from_spot_id
+    left join terminals tt on tt.id = l.to_terminal_id
+    left join spots ts on ts.id = l.to_spot_id
+"""
+
+
+def _leg_from_row(r: dict) -> LastMileLeg:
+    return LastMileLeg(
+        last_mile_route_id=r["id"],
+        origin=_place(r, "ft", "fs"),
+        destination=_place(r, "tt", "ts"),
+        mode=r["mode"],
+        signboard=r["signboard"],
+        boarding_point=r["boarding_point"],
+        alighting_point=r["alighting_point"],
+        fare_min_php=_float(r["fare_min_php"]),
+        fare_max_php=_float(r["fare_max_php"]),
+        minutes=r["minutes"],
+        notes=r["notes"],
+        source=r["source"],
+        last_verified_at=r["last_verified_at"],
+        confirm_note=LAST_MILE_NOTE,
+    )
 
 
 @router.get("/last-mile", response_model=list[LastMileLeg])
@@ -101,38 +136,25 @@ def list_last_mile(
         params["spot"] = spot
 
     sql = f"""
-        select l.id, l.mode::text as mode, l.signboard, l.boarding_point, l.alighting_point,
-               l.fare_min_php, l.fare_max_php, l.minutes, l.notes, l.source::text as source, l.last_verified_at,
-               {_PLACE_COLS}
-        from last_mile_routes l
-        left join terminals ft on ft.id = l.from_terminal_id
-        left join spots fs on fs.id = l.from_spot_id
-        left join terminals tt on tt.id = l.to_terminal_id
-        left join spots ts on ts.id = l.to_spot_id
+        {_LEG_SELECT}
         {"where " + " and ".join(where) if where else ""}
         order by coalesce(ts.name, tt.name), l.minutes nulls last, l.mode, l.id
     """
     with db.get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
 
-    legs = [
-        LastMileLeg(
-            last_mile_route_id=r["id"],
-            origin=_place(r, "ft", "fs"),
-            destination=_place(r, "tt", "ts"),
-            mode=r["mode"],
-            signboard=r["signboard"],
-            boarding_point=r["boarding_point"],
-            alighting_point=r["alighting_point"],
-            fare_min_php=_float(r["fare_min_php"]),
-            fare_max_php=_float(r["fare_max_php"]),
-            minutes=r["minutes"],
-            notes=r["notes"],
-            source=r["source"],
-            last_verified_at=r["last_verified_at"],
-            confirm_note=LAST_MILE_NOTE,
-        )
-        for r in rows
-    ]
+    legs = [_leg_from_row(r) for r in rows]
     logger.info("last-mile search terminal=%r spot=%r results=%d", terminal, spot, len(legs))
     return legs
+
+
+# --- lookups by id for the share page (TG-23); same columns and models as the lists above -------------
+
+def spots_by_id(conn, ids) -> dict[UUID, Spot]:
+    rows = conn.execute(_SPOT_SELECT + " where id = any(%s)", (list(ids),)).fetchall()
+    return {r["spot_id"]: _spot_from_row(r) for r in rows}
+
+
+def legs_by_id(conn, ids) -> dict[UUID, LastMileLeg]:
+    rows = conn.execute(_LEG_SELECT + " where l.id = any(%s)", (list(ids),)).fetchall()
+    return {r["id"]: _leg_from_row(r) for r in rows}

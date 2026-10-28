@@ -1,3 +1,4 @@
+import type { Itinerary } from "@/lib/itinerary";
 import type { LastMileLeg } from "@/lib/lastMile";
 
 export type Trip = {
@@ -76,6 +77,15 @@ export async function fetchLastMile(params: { terminal?: string; spot?: string }
   if (params.terminal) q.set("terminal", params.terminal);
   if (params.spot) q.set("spot", params.spot);
   const res = await fetch(`${API_URL}/last-mile?${q}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+/** One saved plan by its share slug (TG-23); null when there's no such plan. Runs in the browser, so the TG-27
+    service worker caches it for offline use. Network errors propagate: the page shows "try again", not the 404. */
+export async function fetchItinerary(slug: string): Promise<Itinerary | null> {
+  const res = await fetch(`${API_URL}/itineraries/${encodeURIComponent(slug)}`, { cache: "no-store" });
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }

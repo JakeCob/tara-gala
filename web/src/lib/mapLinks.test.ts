@@ -267,7 +267,9 @@ test("TerminalLinks: the Sakay link renders only under showSakay", () => {
 });
 
 // Step 2 wiring guards (manual M1/M2 check the rendered result).
-const tripSearch = readFileSync(new URL("../components/TripSearch.tsx", import.meta.url), "utf8");
+// TripCard moved to its own file for the share page (TG-23); search renders that same component
+const tripSearch = readFileSync(new URL("../components/TripCard.tsx", import.meta.url), "utf8");
+const searchPage = readFileSync(new URL("../components/TripSearch.tsx", import.meta.url), "utf8");
 const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
 test("TripCard links to the trip's origin terminal, between the route line and the Book row", () => {
@@ -278,6 +280,11 @@ test("TripCard links to the trip's origin terminal, between the route line and t
   const at = card.indexOf("<TerminalLinks");
   assert.ok(card.indexOf("{t.origin_name} → {t.destination_name}") < at, "after the route line");
   assert.ok(at < card.indexOf("formatVerified("), "before the Checked/Book row");
+});
+
+test("search results use the shared TripCard", () => {
+  assert.match(searchPage, /^import TripCard from "@\/components\/TripCard";$/m);
+  assert.match(searchPage, /<TripCard key=\{t\.trip_id\} trip=\{t\} \/>/);
 });
 
 test("Book is a 44px target (manager decision)", () => {
@@ -296,6 +303,6 @@ test("footer points to the cards, with no homepage links; the /baguio link stays
 
 test("the empty results live region stays rendered but takes no gap", () => {
   // ux-review nit 2: display:none (empty:hidden) would drop it from the accessibility tree before its first update
-  assert.match(tripSearch, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">/);
-  assert.doesNotMatch(tripSearch, /empty:hidden/);
+  assert.match(searchPage, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">/);
+  assert.doesNotMatch(searchPage, /empty:hidden/);
 });

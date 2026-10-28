@@ -73,7 +73,7 @@ cd api
 uvicorn app.main:app --reload --env-file ../.env   # http://localhost:8000/docs
 ```
 
-Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`), `GET /premade-itineraries` (404 when `PREMADE_ITINERARIES=false`), `POST /plan` (live AI planner; 404 unless `PLANNER_LIVE=true`, see below).
+Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila&destination_city=Baguio&date=2026-11-06`, `GET /spots`, `GET /last-mile?terminal=vl-baguio` (or `?spot=<slug>`), `GET /premade-itineraries` (404 when `PREMADE_ITINERARIES=false`), `GET /itineraries/{share_slug}` (one saved plan by its share link), `POST /plan` (live AI planner; 404 unless `PLANNER_LIVE=true`, see below).
 
 Tests run against a throwaway Postgres: `cd api && TEST_DATABASE_URL=postgresql://... python -m pytest` (use `python -m`: a bare `pytest` can't import `app`). Without `TEST_DATABASE_URL` the run is skipped and exits non-zero.
 
