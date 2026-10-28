@@ -14,10 +14,12 @@ from . import db
 from .logging_setup import RequestLogMiddleware, configure_logging
 from .models import Terminal, Trip
 from .flags import get_flags
+from .itineraries import router as itineraries_router
 from .last_mile import router as last_mile_router
 from .planner import router as planner_router
 from .premade import router as premade_router
-from .schedule import arrival as _arrival  # re-exported: TG-12 tests use main._arrival
+from .schedule import arrival as _arrival  # noqa: F401  re-exported: TG-12 tests use main._arrival
+from .trip_rows import CONFIRM_NOTE, trip_from_row  # noqa: F401  CONFIRM_NOTE re-exported
 
 configure_logging()  # the API's only logging setup; must run before anything logs
 logger = logging.getLogger("tara_gala.api")
@@ -30,8 +32,6 @@ METRO_MANILA_CITIES = [
     "Marikina", "Muntinlupa", "Navotas", "Paranaque", "Pasay", "Pasig",
     "Pateros", "Quezon City", "San Juan", "Taguig", "Valenzuela",
 ]
-
-CONFIRM_NOTE = "Schedules can change. Confirm with the operator before you travel."
 
 
 @asynccontextmanager
@@ -119,35 +119,7 @@ def search_trips(
     with db.get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
 
-    trips = []
-    for r in rows:
-        dep = r["departure_time"]
-        arrives, day_offset = _arrival(travel_date, dep, r["travel_minutes"])
-        trips.append(
-            Trip(
-                trip_id=r["trip_id"],
-                operator_slug=r["operator_slug"],
-                operator_name=r["operator_name"],
-                origin_slug=r["origin_slug"],
-                origin_name=r["origin_name"],
-                origin_city=r["origin_city"],
-                destination_slug=r["destination_slug"],
-                destination_name=r["destination_name"],
-                destination_city=r["destination_city"],
-                via=r["via"],
-                service_class=r["class"],
-                fare_php=float(r["fare_php"]) if r["fare_php"] is not None else None,
-                travel_minutes=r["travel_minutes"],
-                departure_time=dep.strftime("%H:%M"),
-                arrives_around=arrives,
-                arrives_day_offset=day_offset,
-                booking_url=r["booking_url"],
-                source=r["source"],
-                source_url=r["source_url"],
-                last_verified_at=r["last_verified_at"],
-                confirm_note=CONFIRM_NOTE,
-            )
-        )
+    trips = [trip_from_row(r, travel_date) for r in rows]
     logger.info(
         "trips search date=%s origin_city=%r destination_city=%r origin=%r destination=%r results=%d next_day=%d no_travel_time=%d",
         travel_date, origin_city, destination_city, origin, destination, len(trips),
@@ -160,3 +132,4 @@ def search_trips(
 app.include_router(last_mile_router)
 app.include_router(premade_router)
 app.include_router(planner_router)
+app.include_router(itineraries_router)
