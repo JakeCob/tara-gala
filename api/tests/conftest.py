@@ -26,34 +26,39 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
 @pytest.fixture(autouse=True)
 def no_real_llm_calls(monkeypatch):
-    """Block any request the Anthropic SDK sends to a non-local host (TG-20).
+    """Block real network requests to non-local hosts (TG-20): httpx2 (Anthropic SDK) and httpx (OpenRouter).
 
-    Guards the send, not client construction, so adapter tests can still point a real
-    client at a 127.0.0.1 stub. Blocked hosts are recorded, and the test fails at teardown
-    even if the SDK turned the error into something the code under test swallowed.
+    Patches the network transports, not client construction or Client.send, so adapter tests can
+    point a real client at a 127.0.0.1 stub, and MockTransport and Starlette's TestClient are untouched.
+    A blocked request raises the library's ConnectError, as a real network failure would. Blocked hosts
+    are recorded, and the test fails at teardown even if the code under test swallowed the error.
     """
+    import httpx
     import httpx2
 
     blocked: list[str] = []
 
-    def guard(original):
-        def send(self, request, *args, **kwargs):
+    def guard(module, original):
+        def handle_request(self, request):
             if request.url.host not in LOCAL_HOSTS:
                 blocked.append(request.url.host)
-                raise RuntimeError(f"tests must not call the network: {request.url.host}")
-            return original(self, request, *args, **kwargs)
-        return send
+                raise module.ConnectError(f"tests must not call the network: {request.url.host}", request=request)
+            return original(self, request)
+        return handle_request
 
-    def aguard(original):
-        async def send(self, request, *args, **kwargs):
+    def aguard(module, original):
+        async def handle_async_request(self, request):
             if request.url.host not in LOCAL_HOSTS:
                 blocked.append(request.url.host)
-                raise RuntimeError(f"tests must not call the network: {request.url.host}")
-            return await original(self, request, *args, **kwargs)
-        return send
+                raise module.ConnectError(f"tests must not call the network: {request.url.host}", request=request)
+            return await original(self, request)
+        return handle_async_request
 
-    monkeypatch.setattr(httpx2.Client, "send", guard(httpx2.Client.send))
-    monkeypatch.setattr(httpx2.AsyncClient, "send", aguard(httpx2.AsyncClient.send))
+    for module in (httpx, httpx2):
+        monkeypatch.setattr(module.HTTPTransport, "handle_request",
+                            guard(module, module.HTTPTransport.handle_request))
+        monkeypatch.setattr(module.AsyncHTTPTransport, "handle_async_request",
+                            aguard(module, module.AsyncHTTPTransport.handle_async_request))
     yield blocked
     assert not blocked, f"a test tried to reach {blocked}"
 

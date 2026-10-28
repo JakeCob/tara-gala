@@ -123,7 +123,8 @@ def _anthropic_imports(path: Path) -> list[str]:
 
 
 def test_only_the_adapter_imports_anthropic():
-    for name in ("llm.py", "llm_anthropic.py", "limits.py", "planner.py", "planner_prompt.py", "planner_context.py"):
+    for name in ("llm.py", "llm_anthropic.py", "llm_openrouter.py", "limits.py", "planner.py", "planner_prompt.py",
+                 "planner_context.py"):
         assert (APP / name).exists(), f"missing app/{name}"
     assert _anthropic_imports(APP / "llm_anthropic.py")
     offenders = {p.name for p in APP.glob("*.py") if p.name != "llm_anthropic.py" and _anthropic_imports(p)}
