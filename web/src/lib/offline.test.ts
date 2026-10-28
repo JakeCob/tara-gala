@@ -66,6 +66,15 @@ test("T27-13 the time uses a plain space before AM/PM, like the trip cards", () 
   assert.match(s, /^Oct 30, 9:12 PM$/);
 });
 
+test("T27-13 the hour comes from 24-hour parts, not Intl's 12-hour output", () => {
+  // Node's ICU puts a plain space before PM where Chrome puts U+202F, so the format test above can't catch
+  // Intl 12-hour output here; guard the source instead (RED audit N2)
+  const source = readFileSync(new URL("./offline.ts", import.meta.url), "utf8");
+  assert.match(source, /hourCycle: "h23"/);
+  assert.doesNotMatch(source, /hour: "numeric"/);
+  assert.doesNotMatch(source, /hour12: true|hourCycle: "h12"/);
+});
+
 test("T27-13b the year is never shown", () => {
   for (const iso of ["2025-12-31T15:30:00Z", "2026-01-01T00:00:00Z", "2027-03-01T02:00:00Z"]) {
     assert.doesNotMatch(formatSavedAt(iso), /\b(19|20)\d\d\b/, iso);

@@ -294,6 +294,7 @@ test("T27-6 RSC and prefetch requests and other /_next paths are bypassed", () =
     req(`${APP}/baguio`, { headers: { "next-router-prefetch": "1" } }),
     req(`${APP}/baguio`, { headers: new Headers({ RSC: "1" }) }),
     req(`${APP}/`, { mode: "navigate", headers: { rsc: "1" } }),
+    req(`${APP}/baguio?_rsc=abc`, { mode: "navigate" }), // the _rsc param alone (RED audit N1)
     req(`${APP}/_next/image?url=%2Ficon-192.png&w=64&q=75`),
     req(`${APP}/_next/data/build/index.json`),
   ];
@@ -734,6 +735,10 @@ test("fetch: bypassed requests get no respondWith and no fetch", () => {
   const env = swEnv(async () => json([]));
   for (const r of [
     new Request(`${API}/plan`, { method: "POST", body: "{}" }),
+    // POSTs to allow-listed API paths and a same-origin form post (RED audit S2)
+    new Request(`${API}/trips`, { method: "POST", body: "{}" }),
+    new Request(`${API}/itineraries/abc`, { method: "POST", body: "{}" }),
+    new NavRequest(`${APP}/`, { method: "POST", body: "x=1" }),
     new Request(`${APP}/sw.js`),
     new Request(`${API}/health`),
     new Request("https://sakay.ph/"),
@@ -900,11 +905,27 @@ test("fetch static: cache-first finds a chunk in any cache, else fetches and sto
 
   ev = fetchEvent(new Request(`${APP}/_next/static/chunks/new.js`));
   ev.dispatch(env.handlers.fetch);
+  // The store on a miss is registered in the handler too (RED audit S3)
+  assert.ok(ev.log.waits.length >= 1 && ev.log.waits.every((w) => w.duringDispatch));
   assert.equal(await (await responded(ev.log)).text(), "fetched();");
   await ev.allWaits();
   await flush();
   assert.deepEqual(ev.log.errors, []);
   assert.ok(await (await env.caches.open(env.names.static)).match(`${APP}/_next/static/chunks/new.js`));
+});
+
+// RED audit S4: a missing hashed chunk cached under cache-first would be served until the next SW_VERSION
+test("fetch static: cache-first passes a 404 or 500 through and doesn't store it", async () => {
+  for (const status of [404, 500]) {
+    const env = swEnv(async () => new Response("missing", { status }));
+    const url = `${APP}/_next/static/chunks/gone-${status}.js`;
+    const { log, dispatch, allWaits } = fetchEvent(new Request(url));
+    dispatch(env.handlers.fetch);
+    assert.equal((await responded(log)).status, status);
+    await allWaits();
+    assert.deepEqual(log.errors, []);
+    assert.equal(await env.caches.match(url), undefined, `${status} stored`);
+  }
 });
 
 test("fetch static: stale-while-revalidate serves the cached file and refreshes it within the event", async () => {

@@ -113,3 +113,55 @@ test("offline.html is a self-contained fallback page", () => {
   assert.doesNotMatch(html, /<script/i, "no scripts");
   assert.doesNotMatch(html, /<link[^>]+stylesheet|src="\/_next/, "no external assets: it must render from one cached file");
 });
+
+// RED audit S1: the page side of the update path has no unit test of its own, so guard its source
+const manager = readFileSync(new URL("src/components/ServiceWorkerManager.tsx", WEB), "utf8");
+const banner = readFileSync(new URL("src/components/OfflineBanner.tsx", WEB), "utf8");
+
+test("S1 ServiceWorkerManager registers with the API origin and bypasses the HTTP cache", () => {
+  assert.match(manager, /register\("\/sw\.js\?api=" \+ encodeURIComponent\(/);
+  assert.match(manager, /\{ scope: "\/", updateViaCache: "none" \}/);
+  assert.match(manager, /process\.env\.NODE_ENV !== "production"/);
+  assert.match(manager, /flags\.serviceWorker/);
+  assert.match(manager, /import \{ API_URL \} from "@\/lib\/api"/);
+});
+
+test("S1 ServiceWorkerManager uses the shared SKIP_WAITING contract and reloads once", () => {
+  assert.match(manager, /import \{ MSG_SKIP_WAITING \} from "@\/lib\/offline"/);
+  assert.match(manager, /postMessage\(\{ type: MSG_SKIP_WAITING \}\)/);
+  assert.doesNotMatch(manager, /"SKIP_WAITING"/, "use the constant, not a literal");
+  assert.match(manager, /addEventListener\("controllerchange"/);
+  assert.match(manager, /reloadStarted\.current\) return;/, "a guard so the tab reloads once");
+  assert.match(manager, /addEventListener\("updatefound"/);
+  assert.match(manager, /visibilitychange/);
+});
+
+test("S1 the kill switch unregisters and deletes only tg- caches", () => {
+  assert.match(manager, /\.unregister\(\)/);
+  assert.match(manager, /startsWith\("tg-"\)/);
+  assert.doesNotMatch(manager, /beforeinstallprompt/, "Chrome's own install UI stays (ux.md section 3)");
+});
+
+test("S1 the update prompt matches ux.md", () => {
+  assert.match(manager, /A new version of Tara Gala is ready\./);
+  assert.match(manager, />\s*Later\s*</);
+  assert.match(manager, /"Reloading\.\.\." : "Reload"/);
+  assert.equal(manager.match(/min-h-11/g)?.length, 2, "both buttons at least 44px");
+  assert.equal(manager.match(/type="button"/g)?.length, 2);
+  assert.match(manager, /<div role="status">\s*\{show &&/, "an always-rendered status wrapper");
+  assert.match(manager, /shadow-lg/);
+});
+
+test("S1 OfflineBanner is an always-rendered status driven by the worker's messages", () => {
+  assert.match(banner, /return \(\s*<div role="status" className="sticky top-0 z-10 w-full">\s*\{text &&/);
+  assert.match(banner, /parseSwMessage\(/);
+  assert.match(banner, /useReducer\(bannerReducer/);
+  assert.match(banner, /bg-accent text-\[#1d2a24\]/);
+  assert.doesNotMatch(banner, /<button/, "a stale warning can't be dismissed");
+});
+
+test("S1 layout mounts the banner first and the manager last; api.ts only exports API_URL", () => {
+  assert.match(layout, /<body[^>]*>\s*<OfflineBanner \/>\s*\{children\}\s*<ServiceWorkerManager \/>\s*<\/body>/);
+  const api = readFileSync(new URL("src/lib/api.ts", WEB), "utf8");
+  assert.match(api, /^export const API_URL = process\.env\.NEXT_PUBLIC_API_URL \?\? "http:\/\/localhost:8000";$/m);
+});

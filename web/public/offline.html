@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#167856">
+<title>Tara Gala · offline</title>
+<!-- Served by the service worker when a page wasn't saved (TG-27). Self-contained: no scripts, no other files. -->
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #fbf7ee;
+    color: #1d2a24;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  main { box-sizing: border-box; max-width: 28rem; margin: 0 auto; padding: 2rem 1rem; }
+  h1 { color: #167856; font-size: 1.5rem; margin: 0 0 0.75rem; }
+  p { margin: 0 0 1.5rem; }
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1rem;
+    border-radius: 0.75rem;
+    background: #167856;
+    color: #ffffff;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  a:focus-visible { outline: 2px solid #167856; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>You're offline</h1>
+  <p>This page wasn't saved on this phone yet. Open it once while you have signal and it'll work offline next time.</p>
+  <a href="/">Back to bus search</a>
+</main>
+</body>
+</html>
