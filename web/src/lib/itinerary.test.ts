@@ -444,7 +444,8 @@ test("T43-B2 ItineraryList: summary, notice, sections and stops use the primitiv
   assert.match(src, /<PixelBox className="p-4 flex flex-col gap-1">/, "the stop box");
   assert.match(src, /<h3 className=\{`\$\{PX\.dataHeading\} min-w-0 break-words`\}>/, "the stop name is body font");
   assert.match(src, /<p className=\{PX\.meta\}>Entrance \{fee\}<\/p>/);
-  assert.match(src, /<p className=\{PX\.meta\}>Tap a stop or a ride for details\.<\/p>/, "plan §3.2: TG-22's intro line is PX.meta");
+  // ux-review-b S1: TG-22 ux §2.5 keeps the map's instruction text-sm (only the confirm note under it is meta)
+  assert.match(src, /<p className="text-sm">Tap a stop or a ride for details\.<\/p>/, "the map intro line stays text-sm");
   // RED audit nit: the trust lines keep their muted meta style (ux §2.4)
   assert.match(src, /<p className=\{PX\.meta\}>\{leg\.trip\.confirm_note\}<\/p>/, "bus confirm note");
   assert.match(src, /\{legNote && <p className=\{PX\.meta\}>\{legNote\}<\/p>\}/, "last-mile note");
