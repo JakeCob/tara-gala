@@ -11,6 +11,7 @@ import { formatFare, formatMinutes, modeLabel } from "@/lib/lastMile";
 import { SPRITES, modeSprite, placeSprite, spriteSrc, type SpriteName } from "@/lib/sprites";
 import {
   CHANGED,
+  MIN_WORLD,
   mapsTarget,
   rowData,
   signBoxes,
@@ -183,7 +184,7 @@ export default function OverworldMap({ itinerary }: { itinerary: Itinerary }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const g: Geometry = { ...trackGeometry(W), W };
+  const g: Geometry = { ...trackGeometry(W), W: Math.max(W, MIN_WORLD) }; // narrower worlds draw as a 320px phone's
 
   // The party spawns once when the map first renders; any tap, key or scroll skips it (TG-15's controller)
   const { active, step, start, skip } = useSpawn();

@@ -181,25 +181,24 @@ export function worldSections(rows: readonly WorldRow[]): { banner: Extract<Worl
   return out;
 }
 
+/** The narrowest world the layout draws: a 320px phone's (ux review). Narrower worlds are laid out as this one. */
+export const MIN_WORLD = 256;
+
 /**
  * Where the two 32px tracks sit in a world W px wide (ux.md 2.1). The turn row between them is a whole number of
  * straight tiles, so the path always joins: 316px gives 6 tiles and x = 30 / 254.
  */
 export function trackGeometry(W: number): { tile: 32; leftX: number; rightX: number; straights: number } {
-  const straights = Math.max(1, Math.floor((W - 124) / 32));
+  const straights = Math.max(1, Math.floor((Math.max(W, MIN_WORLD) - 124) / 32));
   return { tile: 32, leftX: 30, rightX: 62 + straights * 32, straights };
 }
 
-/** The smallest world the layout supports (a 220px phone). Narrower measurements are a collapsed box, not a phone. */
-export const MIN_WORLD = 156;
-
 /**
- * The world width to lay out for. A ResizeObserver can report a collapsed width for a moment (0 while Chrome resizes
- * the viewport for a full-page capture, or a hidden tab), and laying out for it squeezes every sign: keep the last
- * good width instead.
+ * The world width to lay out for. A ResizeObserver can report 0 for a moment (while Chrome resizes the viewport for
+ * a full-page capture, a parent that's briefly hidden, a tab coming back): keep the last good width instead.
  */
 export function usableWidth(measured: number, previous: number): number {
-  return measured >= MIN_WORLD ? measured : previous;
+  return measured > 0 ? measured : previous;
 }
 
 /**
@@ -208,7 +207,7 @@ export function usableWidth(measured: number, previous: number): number {
  */
 export function signBoxes(W: number): { left: { x: number; width: number }; right: { x: number; width: number } } {
   const g = trackGeometry(W);
-  const width = Math.max(0, Math.min(W - 8 - (g.leftX + 48), g.rightX - 16 - 8));
+  const width = Math.min(Math.max(W, MIN_WORLD) - 8 - (g.leftX + 48), g.rightX - 16 - 8);
   return { left: { x: g.leftX + 48, width }, right: { x: 8, width } };
 }
 
