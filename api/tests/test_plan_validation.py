@@ -593,14 +593,15 @@ def messy_plan() -> dict:
 
 def test_every_error_comes_back_in_plan_order():
     # Manager decision (ticket.md): plan position first (outbound, the days, then return)
-    errors = check(messy_plan())
+    raw = messy_plan()
+    errors = check(raw)
     assert found(errors) == [
         ("trip_not_running", "outbound.trip_id"),
         ("unknown_leg", at(0, 1, LEG_PATH)),
         ("overlap", at(1, 1, "arrive")),
         ("trip_not_running", "return.trip_id"),
     ]
-    assert check(messy_plan()) == check(messy_plan())
+    assert check(copy.deepcopy(raw)) == errors  # deterministic (messages may name the bad ids)
 
 
 def test_errors_sort_by_plan_position_then_check_order():

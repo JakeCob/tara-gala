@@ -279,6 +279,28 @@ def test_destination_disambiguates_a_trip(dsn, tmp_path):
     assert run(dsn, write_premade(tmp_path, [entry])) == 0
 
 
+VIA_TRIPS = TRIPS + (
+    "victory-liner,vl-cubao,vl-baguio,TPLEX,regular_aircon,750,330,2x2,yes,07:00,daily,,,https://example.test/schedule,2026-10-24,made up for tests only\n"
+    "victory-liner,vl-cubao,vl-baguio,Gerona,regular_aircon,700,390,2x2,yes,07:00,daily,,,https://example.test/schedule,2026-10-24,made up for tests only\n"
+)
+
+
+def test_via_disambiguates_a_trip(dsn, tmp_path, capsys):
+    """Audit N1: same operator, origin, time and class; only the route variant differs."""
+    load_rows(dsn, tmp_path / "csv", trips=VIA_TRIPS)
+    assert run(dsn, write_premade(tmp_path, [chill_entry()])) == 1
+    out = capsys.readouterr().out
+    assert "3 trips match" in out and "TPLEX" in out and "Gerona" in out
+    entry = chill_entry()
+    entry["outbound"]["via"] = "TPLEX"
+    assert run(dsn, write_premade(tmp_path, [entry])) == 0
+    with psycopg.connect(dsn) as conn:
+        tplex = conn.execute(
+            "select t.id from trips t join routes r on r.id = t.route_id where r.via = 'TPLEX'"
+        ).fetchone()[0]
+    assert premade_rows(dsn)[0]["plan"]["outbound"]["trip_id"] == str(tplex)
+
+
 def test_slug_that_is_both_a_terminal_and_a_spot_is_ambiguous(dsn, tmp_path, capsys):
     spots = SPOTS + "vl-baguio,Clashing Spot (made up),other,,,made up for tests only,,\n"
     load_rows(dsn, tmp_path / "csv", spots=spots)
@@ -311,11 +333,15 @@ def test_stale_rows_are_reported_and_only_pruned_on_request(rows, tmp_path, caps
     assert user_snapshot(rows) == users
 
 
-def test_user_row_with_a_clashing_slug_is_never_overwritten(rows, tmp_path):
+def test_user_row_with_a_clashing_slug_is_never_overwritten(rows, tmp_path, capsys):
+    """Review nit 7 (audit S2): the guarded upsert skipping a row is an error, not a silent no-op."""
     insert_user_row(rows, share_slug="premade-test-chill")
     users = user_snapshot(rows)
-    run(rows, write_premade(tmp_path, [chill_entry()]))
+    assert run(rows, write_premade(tmp_path, [chill_entry(), night_entry()])) == 1
+    out = capsys.readouterr().out
+    assert PROBLEMS in out and "  - test-chill: " in out
     assert user_snapshot(rows) == users
+    assert [r["model"] for r in premade_rows(rows)] == ["claude-haiku-5-5"]  # night rolled back too
 
 
 # --- CLI and module boundaries ---------------------------------------------------------------------

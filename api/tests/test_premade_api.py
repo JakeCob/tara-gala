@@ -119,6 +119,16 @@ def test_plan_that_no_longer_validates_is_dropped_with_a_warning(client, loaded,
     assert infos == ["premade list results=1 dropped=1"]
 
 
+def test_stored_dates_are_part_of_the_recheck(client, loaded, caplog):
+    """Audit survivor: the re-check passes the row's trip_date and return_date, so a hand-edited row drops."""
+    caplog.set_level(logging.WARNING, logger="tara_gala.api")
+    with psycopg.connect(loaded, autocommit=True) as conn:
+        conn.execute("update itineraries set trip_date = '2026-11-07' where share_slug = 'premade-test-chill'")
+    assert [i["share_slug"] for i in listing(client)] == ["premade-test-night"]
+    warnings = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and "premade itinerary dropped" in r.getMessage()]
+    assert len(warnings) == 1 and "wrong_date" in warnings[0]
+
+
 # --- logging ---------------------------------------------------------------------------------------
 
 def test_logs_one_info_line_and_no_party_data(client, loaded, caplog):
