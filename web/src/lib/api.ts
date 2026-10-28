@@ -120,14 +120,57 @@ export type PremadeSummary = {
 
 export type PremadeResult = { kind: "ok"; list: PremadeSummary[] } | { kind: "unavailable" } | { kind: "failed" };
 
-// RED stubs (TG-21): bodies until GREEN
+/**
+ * POST /plan (TG-20). Never throws: every outcome is a result. Our own 120 s timer is longer than the API's
+ * 100 s deadline, so the API's `deadline` answer normally arrives first. The caller's signal aborts on unmount.
+ */
 export async function postPlan(
-  _body: PlanRequestBody,
-  _opts: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+  body: PlanRequestBody,
+  opts: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<PostPlanResult> {
-  throw new Error("TG-21: not implemented");
+  const { signal, timeoutMs = 120_000 } = opts;
+  const doFetch = opts.fetchImpl ?? globalThis.fetch; // read per call, so tests can block the real fetch
+  if (signal?.aborted) return { kind: "aborted" };
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, timeoutMs);
+  const onAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", onAbort);
+  try {
+    const res = await doFetch(`${API_URL}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    const data: unknown = await res.json().catch(() => null); // Railway's proxy answers HTML on a crash
+    const slug = (data as { share_slug?: unknown } | null)?.share_slug;
+    if (res.status === 201 && typeof slug === "string") return { kind: "ok", slug };
+    return { kind: "response", status: res.status, body: data };
+  } catch {
+    if (timedOut) return { kind: "timeout" };
+    if (signal?.aborted) return { kind: "aborted" };
+    return { kind: "network" };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 
-export async function fetchPremade(_opts: { fetchImpl?: typeof fetch } = {}): Promise<PremadeResult> {
-  throw new Error("TG-21: not implemented");
+/** GET /premade-itineraries (TG-24). A plain GET, so TG-27's service worker can cache it for offline use. */
+export async function fetchPremade(opts: { fetchImpl?: typeof fetch } = {}): Promise<PremadeResult> {
+  const doFetch = opts.fetchImpl ?? globalThis.fetch;
+  try {
+    const res = await doFetch(`${API_URL}/premade-itineraries`);
+    if (res.status === 404) return { kind: "unavailable" }; // the API's PREMADE_ITINERARIES flag is off
+    if (!res.ok) return { kind: "failed" };
+    const data: unknown = await res.json();
+    return Array.isArray(data) ? { kind: "ok", list: data as PremadeSummary[] } : { kind: "failed" };
+  } catch {
+    return { kind: "failed" };
+  }
 }
