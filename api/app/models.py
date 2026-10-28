@@ -29,6 +29,7 @@ class Trip(BaseModel):
     travel_minutes: int | None = None
     departure_time: str          # "HH:MM", Manila time
     arrives_around: str | None   # departure + typical travel time, a rough guide only
+    arrives_day_offset: int | None = None  # days after the travel date; 0 same day, 1 next day
     booking_url: str | None = None
     source: str
     source_url: str | None = None

@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import {
   formatClass,
+  formatDayOffset,
   formatTime,
   formatVerified,
   manilaToday,
@@ -110,7 +111,9 @@ function TripCard({ trip: t }: { trip: Trip }) {
       </div>
       <div className="text-sm text-muted">
         {t.origin_name} → {t.destination_name}
-        {t.arrives_around ? ` · arrives around ${formatTime(t.arrives_around)}` : ""}
+        {t.arrives_around
+          ? ` · arrives around ${formatTime(t.arrives_around)}${formatDayOffset(t.arrives_day_offset)}`
+          : ""}
       </div>
       <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted">
         <span>

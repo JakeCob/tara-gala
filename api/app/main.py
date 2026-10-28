@@ -1,9 +1,10 @@
 """Tara Gala API."""
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import date as Date
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Query
@@ -11,6 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import db
 from .models import Terminal, Trip
+
+# Minimal root config so app INFO logs reach stdout; TG-13 replaces this.
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logger = logging.getLogger("tara_gala.api")
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
 
@@ -47,6 +52,14 @@ def _cities(city: str | None) -> list[str] | None:
     if city.strip().lower() in {"metro manila", "manila area", "ncr"}:
         return METRO_MANILA_CITIES
     return [city.strip()]
+
+
+def _arrival(travel_date: Date, departure: time, minutes: int | None) -> tuple[str | None, int | None]:
+    """Rough arrival as ("HH:MM", days after travel_date). Manila has no DST, so naive maths is fine."""
+    if not minutes:
+        return None, None
+    at = datetime.combine(travel_date, departure) + timedelta(minutes=minutes)
+    return at.strftime("%H:%M"), (at.date() - travel_date).days
 
 
 @app.get("/health")
@@ -109,9 +122,7 @@ def search_trips(
     trips = []
     for r in rows:
         dep = r["departure_time"]
-        arrives = None
-        if r["travel_minutes"]:
-            arrives = (datetime.combine(travel_date, dep) + timedelta(minutes=r["travel_minutes"])).strftime("%H:%M")
+        arrives, day_offset = _arrival(travel_date, dep, r["travel_minutes"])
         trips.append(
             Trip(
                 trip_id=r["trip_id"],
@@ -129,6 +140,7 @@ def search_trips(
                 travel_minutes=r["travel_minutes"],
                 departure_time=dep.strftime("%H:%M"),
                 arrives_around=arrives,
+                arrives_day_offset=day_offset,
                 booking_url=r["booking_url"],
                 source=r["source"],
                 source_url=r["source_url"],
@@ -136,4 +148,9 @@ def search_trips(
                 confirm_note=CONFIRM_NOTE,
             )
         )
+    logger.info(
+        "trips search date=%s origin_city=%r destination_city=%r origin=%r destination=%r results=%d next_day=%d",
+        travel_date, origin_city, destination_city, origin, destination, len(trips),
+        sum(1 for t in trips if t.arrives_day_offset),
+    )
     return trips
