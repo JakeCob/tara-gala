@@ -1142,10 +1142,20 @@ const readmeSection = (heading: RegExp) => {
   return end < 0 ? rest : rest.slice(0, end);
 };
 
-test("T43-R1 README says npm test force-exits and how to check timers", () => {
+// Manager addition (2026-10-28 21:40): --test-force-exit let node --test exit before every test registered
+test("T43-T1 npm test uses a per-test timeout, never --test-force-exit", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+  const script: string = pkg.scripts.test;
+  assert.doesNotMatch(script, /--test-force-exit/, "it dropped tests silently");
+  assert.match(script, /--test-timeout=60000\b/);
+});
+
+test("T43-R1 README says npm test has a 60 s per-test timeout, why not force-exit, and how to check timers", () => {
   const web = readmeSection(/\n## 6\. Web/);
-  assert.match(web, /--test-force-exit/);
+  assert.match(web, /--test-timeout=60000/);
+  assert.match(web, /--test-force-exit/, "say why it isn't used");
   assert.match(web, /mock\.timers/);
+  assert.doesNotMatch(web, /runs with `--test-force-exit`/, "the old note is gone");
 });
 
 test("T43-R2 README offline section: the list and /plan are saved, and the device-readiness steps", () => {
