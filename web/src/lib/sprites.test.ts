@@ -27,8 +27,8 @@ const SCHEMA = path("../../../supabase/schema.sql");
 
 const PALETTE_HEXES = ["#1d2a24", "#167856", "#5fb36b", "#cfe8c4", "#fbf7ee", "#ffd65c"];
 const INK = "#1d2a24";
-const TYPES = ["adult", "student", "senior", "pwd"];
-const FRAMES = ["idle-1", "idle-2", "wave"];
+const TYPES = ["adult", "student", "senior", "pwd"] as const;
+const FRAMES = ["idle-1", "idle-2", "wave"] as const;
 const PLACES = ["terminal", "lodging", "park", "food", "market", "museum", "viewpoint", "shopping", "church", "cafe", "other"];
 const VEHICLES = ["vehicle-bus", "mode-jeep", "mode-taxi", "mode-tricycle", "mode-van", "mode-grab"];
 const OPAQUE_TILES = ["tile-grass", "tile-path-straight", "tile-path-corner", "tile-road", "tile-water"];
