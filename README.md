@@ -77,7 +77,7 @@ Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila
 
 Tests run against a throwaway Postgres: `TEST_DATABASE_URL=postgresql://... pytest` (tests are skipped without it).
 
-Railway: set the service root to `api/`, add `DATABASE_URL` and `ALLOWED_ORIGINS` (optionally `LOG_LEVEL`); the start command is in `api/Procfile`.
+Deployed on Railway: see section 8. `api/Procfile` is the start command for local runs and other hosts; on Railway, `api/railway.json` overrides it.
 
 ### Logging
 - Everything goes to stdout as `<time> <LEVEL> <logger> <message>`. Timestamps are the server clock, which is UTC on Railway.
@@ -105,7 +105,7 @@ Installing, for testers:
 ## 7. Feature flags
 Each flag is an environment variable on both sides: the API reads it from `os.environ` (`api/app/flags.py`), the web app from a `NEXT_PUBLIC_` variable (`web/src/lib/flags.ts`).
 
-| Flag | API (Railway) | Web (Vercel) | Default | Turns on |
+| Flag | API (Railway `api` service) | Web (Railway `web` service) | Default | Turns on |
 |---|---|---|---|---|
 | Live AI planner | `PLANNER_LIVE` | `NEXT_PUBLIC_PLANNER_LIVE` | `false` | TG-25 live planner |
 | Pre-made itineraries | `PREMADE_ITINERARIES` | `NEXT_PUBLIC_PREMADE_ITINERARIES` | `true` | TG-24 pre-made itineraries |
@@ -114,8 +114,20 @@ Each flag is an environment variable on both sides: the API reads it from `os.en
 
 Values are trimmed and case-insensitive. `1`, `true`, `yes`, `on` mean on; `0`, `false`, `no`, `off` mean off. Unset or empty uses the default. Anything else also uses the default: the API logs a warning naming the variable, the web app falls back silently.
 
-- Set both sides together (e.g. `PLANNER_LIVE` on Railway and `NEXT_PUBLIC_PLANNER_LIVE` on Vercel). The API value decides server behaviour; the web value decides what the UI shows.
+- Set both sides together (e.g. `PLANNER_LIVE` on the Railway `api` service and `NEXT_PUBLIC_PLANNER_LIVE` on the Railway `web` service). The API value decides server behaviour; the web value decides what the UI shows.
 - The API reads flags once per process and logs them at startup, so changing a flag on Railway takes effect when the API restarts (Railway redeploys on a variable change).
-- Web flags are baked in at `next build`: change them in Vercel and redeploy.
+- Web flags are baked in at `next build`: change the `web` service variable on Railway, then rebuild web with `railway up` (section 8). A restart or `railway redeploy` reuses the old build and keeps the old value.
 
 Tests: the API flag tests run with the normal pytest command (section 5). The web tests run with `cd web && npm test`, which uses Node's built-in `node --test` and needs Node 22.18 or later for TypeScript type stripping. They use `node:test`, not Vitest, so TG-18 must port `web/src/lib/flags.test.ts` to Vitest or exclude it.
+
+## 8. Deploy (Railway)
+One Railway project with three services in its `production` environment: `Postgres` (Railway's Postgres), `api` (FastAPI) and `web` (`next start`). Both app services get a generated `*.up.railway.app` domain on port 8080.
+
+- Build config lives in the repo: `api/railway.json` and `web/railway.json` (Railpack builder, start command bound to `0.0.0.0:8080`, health checks on `/health` and `/`), plus `api/.python-version` (3.12) and `web/.node-version` (24). `/health` runs `select 1`, so a deploy that can't reach the database fails its health check and the previous deployment keeps serving.
+- Variables are set only on Railway, never in the repo:
+  - `api`: `DATABASE_URL` (the reference `${{Postgres.DATABASE_URL}}`, the private network), `PORT`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL`, `PLANNER_LIVE`, `PREMADE_ITINERARIES`, `REAL_MAP`, `RAILPACK_DEPLOY_APT_PACKAGES` (`tzdata`, for `Asia/Manila`).
+  - `web`: `PORT`, `NEXT_PUBLIC_API_URL` (the api origin), `NEXT_PUBLIC_PLANNER_LIVE`, `NEXT_PUBLIC_PREMADE_ITINERARIES`, `NEXT_PUBLIC_REAL_MAP`, `NEXT_PUBLIC_SERVICE_WORKER`, `NEXT_TELEMETRY_DISABLED`. `NEXT_PUBLIC_*` values are inlined at build time, so set them before the first web deploy and rebuild after a change.
+  - No LLM key and no Supabase variables.
+- `DATABASE_PUBLIC_URL` (Postgres' TCP proxy) is used only from the VPS, for the schema, the migrations and the scraper and loader runs (sections 1, 3 and 4). It is never set on `api`.
+- Redeploy after a merge to `main`: export a clean copy of `main` (`git archive`), apply `supabase/schema.sql` if new and every file in `supabase/migrations/` (safe to re-run), run the loaders if `data/` changed, then `railway up <export>/api --path-as-root` and `railway up <export>/web --path-as-root`, then the smoke test (`/health`, `/terminals`, `/trips` for both directions, CORS from the web origin, the pages at 380px).
+- Project and service IDs, hostnames, the exact commands and the rollback steps are in the ops notes, which live outside the repo.
