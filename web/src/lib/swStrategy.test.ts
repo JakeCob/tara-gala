@@ -4,6 +4,7 @@
 // handlers against in-memory fakes of caches, fetch and clients.
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
@@ -180,7 +181,7 @@ const CACHE_FIRST = { strategy: "cache-first", cache: "static" };
 const SWR = { strategy: "stale-while-revalidate", cache: "static" };
 
 const TRIPS = "/trips?origin_city=Metro%20Manila&destination_city=Baguio&date=2026-11-06";
-const API_GETS = [TRIPS, "/last-mile?terminal=vl-baguio", "/spots", "/terminals", "/itineraries/abc123"];
+const API_GETS = [TRIPS, "/last-mile?terminal=vl-baguio", "/spots", "/terminals", "/itineraries/abc123", "/premade-itineraries"];
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -1025,4 +1026,149 @@ test("message: SKIP_WAITING activates the waiting worker; anything else is ignor
   assert.equal(env.scope.skipWaitingCalls, 0);
   fakeEvent({ data: { type: "SKIP_WAITING" } }).dispatch(env.handlers.message);
   assert.equal(env.scope.skipWaitingCalls, 1);
+});
+
+// ---------------------------------------------------------------- TG-43 A1: the ready-made list offline
+
+const PREMADE = `${API}/premade-itineraries`;
+
+// T43-O1 is the API_GETS entry above (T27-5, and the no-origin test)
+
+test("T43-O2 look-alikes of /premade-itineraries are bypassed", () => {
+  const cases = [
+    req(`${API}/premade-itineraries/`),
+    req(`${API}/premade-itineraries/abc`),
+    req(`${API}/premade-itinerariesx`),
+    req(`${API}/xpremade-itineraries`),
+    req(`${APP}/premade-itineraries`), // the app origin is not the API
+    req(PREMADE, { method: "POST" }),
+    req(PREMADE, { method: "HEAD" }),
+    req(PREMADE, { headers: { authorization: "Bearer x" } }),
+  ];
+  for (const r of cases) assert.deepEqual(strategy(r), BYPASS, `${r.method} ${r.url} ${JSON.stringify(r.headers)}`);
+});
+
+test("T43-O3 offline, the saved ready-made list is served with TG-27's saved-at message", async () => {
+  const env = swEnv(async () => Promise.reject(new TypeError("Failed to fetch")));
+  await env.seed(env.names.data, PREMADE, json([{ share_slug: "premade-x" }], 200, OLD_ISO));
+  const { log, dispatch, allWaits } = fetchEvent(new Request(PREMADE));
+  dispatch(env.handlers.fetch);
+  assert.deepEqual(await (await responded(log)).json(), [{ share_slug: "premade-x" }]);
+  await allWaits();
+  assert.deepEqual(log.errors, []);
+  assert.ok(log.waits.every((w) => w.duringDispatch), "waitUntil only during dispatch");
+  assert.deepEqual(env.messages.map((m) => m.data), [{ type: "tg-sw:data", source: "cache", savedAt: OLD_ISO, url: PREMADE }]);
+});
+
+// Strict on purpose: it needs the worker to handle the request, so it fails at RED (the test plan expected a
+// vacuous pass there). After GREEN it pins "a 404 (the API flag off) never replaces the saved list".
+test("T43-O3b a 404 from the list is passed through and never replaces the saved copy", async () => {
+  const env = swEnv(async () => json({ detail: "Not Found" }, 404));
+  await env.seed(env.names.data, PREMADE, json([{ share_slug: "premade-x" }], 200, OLD_ISO));
+  const { log, dispatch, allWaits } = fetchEvent(new Request(PREMADE));
+  dispatch(env.handlers.fetch);
+  assert.equal((await responded(log)).status, 404);
+  await allWaits();
+  const stored = await (await env.caches.open(env.names.data)).match(PREMADE);
+  assert.equal(stored?.headers.get("X-TG-Saved-At"), OLD_ISO, "the saved list is untouched");
+  assert.equal((env.messages[0]?.data as { source: string } | undefined)?.source, "network");
+});
+
+test("T43-O3c online, the list is served and stored with its stamp", async () => {
+  const env = swEnv(async () => json([{ share_slug: "premade-y" }]));
+  const { log, dispatch, allWaits } = fetchEvent(new Request(PREMADE));
+  dispatch(env.handlers.fetch);
+  assert.deepEqual(await (await responded(log)).json(), [{ share_slug: "premade-y" }]);
+  await allWaits();
+  const stored = await (await env.caches.open(env.names.data)).match(PREMADE);
+  assert.ok(stored, "stored in the data cache, which survives SW versions");
+  assert.ok(env.sw.readSavedAt(stored), "stored copy carries X-TG-Saved-At");
+  assert.equal((env.messages[0]?.data as { source: string } | undefined)?.source, "network");
+});
+
+test("T43-O4 /plan is precached with / and /baguio", () => {
+  const sw = tg();
+  for (const p of ["/", "/baguio", "/plan"]) assert.ok(sw.PRECACHE_PAGES.includes(p), p);
+  assert.ok(!sw.PRECACHE_PAGES.some((p: string) => p.startsWith("/sw.js")));
+});
+
+// Strict like O3b: it fails at RED because /plan isn't precached yet; after GREEN it pins "a /plan miss can't break
+// an install" (only a miss on / does)
+test("T43-O4b install survives a /plan miss and logs it", async () => {
+  const env = swEnv(async (r) => {
+    const path = new URL(urlOf(r)).pathname;
+    if (path === "/plan") return new Response("down", { status: 503 });
+    return new Response(path === "/" ? '<script src="/_next/static/chunks/main.js"></script>' : "ok");
+  });
+  const { log, dispatch } = fakeEvent();
+  dispatch(env.handlers.install);
+  await waited(log); // resolves: the install isn't failed
+  const pages = await env.caches.open(env.names.pages);
+  for (const path of ["/", "/baguio"]) assert.ok(await pages.match(`${APP}${path}`), `${path} precached`);
+  const warns = env.logs.filter((l) => l.level === "warn").map((l) => l.args.join(" "));
+  assert.equal(warns.filter((w) => /precache miss url=\/plan\b/.test(w)).length, 1, warns.join("\n"));
+});
+
+test("T43-O5 SW_VERSION changes whenever sw.js does", (t) => {
+  let base: string;
+  try {
+    base = execFileSync("git", ["show", "origin/main:web/public/sw.js"], {
+      cwd: new URL(".", SW_PATH),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    t.skip("skipped: origin/main not fetched; run locally before merging");
+    return;
+  }
+  const now = readFileSync(SW_PATH, "utf8");
+  const version = (src: string) => src.match(/const SW_VERSION = "([^"]+)"/)?.[1];
+  assert.ok(version(base) && version(now), "SW_VERSION found in both");
+  if (now !== base) assert.notEqual(version(now), version(base), "sw.js changed: bump SW_VERSION (again after a rebase)");
+});
+
+test("T43-O6 SW_VERSION is a Manila date plus a counter", () => {
+  assert.match(tg().SW_VERSION, /^\d{4}-\d{2}-\d{2}\.\d+$/);
+});
+
+// ---------------------------------------------------------------- TG-43 A1: README section 6
+
+const README = readFileSync(new URL("../../../README.md", import.meta.url), "utf8");
+const readmeSection = (heading: RegExp) => {
+  const start = README.search(heading);
+  assert.ok(start >= 0, `README heading ${heading}`);
+  const rest = README.slice(start + 1);
+  const end = rest.search(/\n##? /);
+  return end < 0 ? rest : rest.slice(0, end);
+};
+
+// Manager addition (2026-10-28 21:40): --test-force-exit let node --test exit before every test registered
+test("T43-T1 npm test uses a per-test timeout, never --test-force-exit", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+  const script: string = pkg.scripts.test;
+  assert.doesNotMatch(script, /--test-force-exit/, "it dropped tests silently");
+  assert.match(script, /--test-timeout=60000\b/);
+});
+
+test("T43-R1 README says npm test has a 60 s per-test timeout, why not force-exit, and how to check timers", () => {
+  const web = readmeSection(/\n## 6\. Web/);
+  assert.match(web, /--test-timeout=60000/);
+  assert.match(web, /--test-force-exit/, "say why it isn't used");
+  assert.match(web, /mock\.timers/);
+  assert.doesNotMatch(web, /runs with `--test-force-exit`/, "the old note is gone");
+});
+
+test("T43-R2 README offline section: the list and /plan are saved, and the device-readiness steps", () => {
+  const offline = readmeSection(/\n### Offline and install/);
+  assert.match(offline, /ready-made trip list/i);
+  assert.match(offline, /`\/plan`/);
+  // Review S2: a trip's own page is saved only once it has been opened online
+  assert.match(offline, /saved only (after|once) (you've|you have) opened it/i);
+  // Review S1: numbered steps for each phone after the last deploy, and the kill switch warning
+  const steps = [...offline.matchAll(/^\d+\. (.+)$/gm)].map((m) => m[1]);
+  assert.ok(steps.length >= 4, `numbered readiness steps: ${steps.join(" | ")}`);
+  assert.ok(steps.some((s) => /Reload/.test(s)), "a step takes the update (Reload)");
+  assert.ok(steps.some((s) => /\/plan/.test(s) && /ready-made/i.test(s)), "a step loads the ready-made list on /plan");
+  assert.ok(steps.some((s) => /every ready-made trip/i.test(s)), "a step opens every ready-made trip");
+  assert.match(offline, /NEXT_PUBLIC_SERVICE_WORKER=false/);
 });

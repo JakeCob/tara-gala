@@ -47,7 +47,10 @@ import {
   validatePlanForm,
   type FormValues,
 } from "./planForm.ts";
-import { dateRange, formatPeso, premadeCard } from "./premadeView.ts";
+import { premadeCard } from "./premadeView.ts";
+import { dateRange, formatPeso } from "./itinerary.ts";
+// Namespace import: a missing export reads as undefined in a test instead of failing this whole file at load (T43-F1)
+import * as planFormModule from "./planForm.ts";
 import { formatTravelDate } from "./direction.ts";
 import { DEFAULT_PARTY, MAX_PARTY, PICKER_TYPES, add, type Party, type Passenger } from "./party.ts";
 import type { PremadeSummary } from "./api.ts";
@@ -652,7 +655,10 @@ test("T21-L6 card data: title, chip, dates, places, budget and link", () => {
   assert.doesNotMatch(JSON.stringify([card, plain]), /per person|fits|total|fare/i);
 });
 
-test("T21-L7 TG-23's dateRange and formatPeso (temporary copies until TG-23 merges)", () => {
+test("T21-L7 premadeView uses TG-23's dateRange and formatPeso", () => {
+  const view = read("src/lib/premadeView.ts");
+  assert.doesNotMatch(view, /function dateRange|function formatPeso|TODO\(TG-23/, "no local copies left");
+  assert.match(view, /^import \{[^}]*\bdateRange\b[^}]*\bformatPeso\b[^}]*\} from "\.\/itinerary\.ts";$/m);
   assert.equal(dateRange(TODAY, "2026-11-08"), "Fri, Nov 6 – Sun, Nov 8");
   assert.equal(dateRange(TODAY, null), "From Fri, Nov 6");
   assert.equal(dateRange(TODAY, TODAY), "Fri, Nov 6");
@@ -916,7 +922,7 @@ test("T21-G2 api.ts keeps only type imports, so node --test can load it; premade
   const view = readIf("src/lib/premadeView.ts");
   assert.ok(view);
   for (const line of view.match(/^\s*import\b.*$/gm) ?? []) {
-    assert.match(line, /from "\.\/(direction|planForm|api)\.ts";$/, line);
+    assert.match(line, /from "\.\/(direction|planForm|api|itinerary)\.ts";$/, line);
   }
   assert.doesNotMatch(view, /@\/|use client|<\/[A-Za-z]|\/>/);
 });
@@ -925,4 +931,50 @@ test("T21-P3 TG-15's picker and party module are left alone", () => {
   // The git diff is checked at Gate 3; here, the TG-15 seams TG-21 relies on still exist
   assert.match(read("src/components/PartyPicker.tsx"), /export default function PartyPicker\(\{ party, onChange, onAdd \}: Props\)/);
   assert.match(read("src/lib/party.ts"), /export const DEFAULT_PARTY: Party = \[\{ type: "adult" \}\];/);
+});
+
+// --- TG-43 A1: Enter from a field submits; focus moves to the submit button so the busy fieldset can't drop it ---
+
+const onSubmitSource = () => {
+  const start = form.indexOf("function onSubmit(");
+  assert.ok(start >= 0, "PlanForm has onSubmit");
+  const end = form.indexOf("\n  }\n", start);
+  return form.slice(start, end);
+};
+
+test("T43-F1 SUBMIT_ID is a DOM id distinct from every field id", () => {
+  const id: unknown = (planFormModule as Record<string, unknown>).SUBMIT_ID;
+  assert.equal(typeof id, "string", "planForm.ts exports SUBMIT_ID");
+  assert.match(id as string, /^[a-z][a-z0-9-]*$/);
+  assert.ok(!Object.values(FIELD_INPUT_ID).includes(id as string));
+});
+
+test("T43-F2 onSubmit focuses the submit button after validation and before either request", () => {
+  const body = onSubmitSource();
+  const FOCUS = "document.getElementById(SUBMIT_ID)?.focus()";
+  assert.equal(body.split(FOCUS).length - 1, 1, "focus the submit button exactly once");
+  const at = body.indexOf(FOCUS);
+  const guard = body.indexOf("if (found.length)");
+  assert.ok(guard >= 0 && body.indexOf("return;", guard) < at, "after the validation block returns, so errors still focus their field");
+  for (const call of ["plan(buildPlanRequest(", "loadPremade(v)"]) {
+    const i = body.indexOf(call);
+    assert.ok(i > at, `before ${call}`);
+  }
+  // Not inside one branch: the line before the branch is the focus call itself
+  assert.match(body, /\?\.focus\(\);\s*\n\s*if \(mode === "live"\) plan\(buildPlanRequest\(/);
+});
+
+test("T43-F2b the one submit button carries SUBMIT_ID and aria-disabled, never disabled", () => {
+  const submits = tags(ui, "(?:button|PixelButton)").filter((t) => /type="submit"/.test(t));
+  assert.equal(submits.length, 1);
+  assert.match(submits[0], /\bid=\{SUBMIT_ID\}/);
+  assert.match(submits[0], /aria-disabled=\{busy\}/);
+  assert.doesNotMatch(submits[0], /(?<![-\w])disabled(?=[\s=>{/])/);
+});
+
+test("T43-F3 the submit button sits outside the busy fieldset", () => {
+  const start = form.search(/<fieldset\b[^>]*\bdisabled=\{busy\}/);
+  assert.ok(start >= 0, "the busy fieldset");
+  const slice = form.slice(start, form.indexOf("</fieldset>", start));
+  assert.doesNotMatch(slice, /type="submit"/);
 });

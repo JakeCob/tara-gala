@@ -58,6 +58,8 @@ export const FIELD_INPUT_ID: Record<FieldId, string> = {
   vibe: "plan-chip-0", // the first chip takes focus for a vibe error
   note: "plan-note",
 };
+// The submit button: Enter from a field focuses it before the request, so the busy fieldset can't drop focus
+export const SUBMIT_ID = "plan-submit";
 
 // One entry per TG-20 MESSAGES code: may the user retry, and is the ready-made list offered (ux §5.2)
 export const PLAN_ERROR_CODES: Record<string, { retry: boolean; premade: boolean }> = {

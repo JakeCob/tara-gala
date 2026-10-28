@@ -10,6 +10,7 @@ import { DEFAULT_PARTY, type Party } from "@/lib/party";
 import {
   FIELD_INPUT_ID,
   PLAN_COPY,
+  SUBMIT_ID,
   buildPlanRequest,
   dateBounds,
   formMode,
@@ -99,6 +100,8 @@ export default function PlanForm() {
       document.getElementById(FIELD_INPUT_ID[found[0].field])?.focus();
       return;
     }
+    // Enter from a field submits; the fieldset then disables that field, and focus would drop to <body> (TG-21 review 2)
+    document.getElementById(SUBMIT_ID)?.focus();
     if (mode === "live") plan(buildPlanRequest(v, party));
     else loadPremade(v);
   }
@@ -144,7 +147,7 @@ export default function PlanForm() {
           </Link>
         </div>
       ) : (
-        <button type="submit" className={`${UI.submitBtn} w-full`} aria-disabled={busy}>
+        <button type="submit" id={SUBMIT_ID} className={`${UI.submitBtn} w-full`} aria-disabled={busy}>
           {label}
         </button>
       )}

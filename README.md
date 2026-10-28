@@ -189,14 +189,24 @@ npm run lint
 npm test                               # node:test, Node 22.18+
 npm run build
 ```
+`npm test` gives each test 60 s (`--test-timeout=60000`): a hung test fails by name instead of hanging forever. It doesn't use `--test-force-exit`, which could end the run before every test had registered, so tests went missing while the run still passed. A timer the code under test leaves running can still keep the run alive after its test fails (in CI, until the job's timeout), so when code starts a timer, assert it's cleared (`mock.timers`, as T21-N9 does).
 
 ### Offline and install (TG-27)
-The service worker (`web/public/sw.js`, hand-written) registers only in a production build (`npm run build && npm start`), never under `next dev`. It keeps the app shell, trip searches and last-mile routes on the phone, and shows a yellow banner with the saved time when it serves them from there. Bump `SW_VERSION` in `sw.js` on every change to it; open tabs then show "A new version of Tara Gala is ready." with a Reload button.
+The service worker (`web/public/sw.js`, hand-written) registers only in a production build (`npm run build && npm start`), never under `next dev`. It keeps the app shell, trip searches, last-mile routes, the ready-made trip list and the `/plan` page on the phone, and shows a yellow banner with the saved time when it serves them from there. Bump `SW_VERSION` in `sw.js` on every change to it; open tabs then show "A new version of Tara Gala is ready." with a Reload button.
 
 Installing, for testers:
 - Android: Chrome menu ⋮ → Install app (or Add to Home screen).
 - iPhone: Safari → Share → Add to Home Screen. On iPhone, install it and open your saved itinerary at least once before the trip. Safari may clear a site's saved data after about a week without use, and the installed app is the reliable way to keep it.
 - Open the app once online (search your dates, open the Baguio page) before going somewhere without signal.
+- Open each ready-made trip you might use once while online. The list is saved, but a trip's own page is saved only once you've opened it.
+
+Before the trip (Nov 6), after the last deploy, on each tester's phone:
+1. Open the app online.
+2. Tap **Reload** on the "A new version of Tara Gala is ready." prompt, or close and reopen the app. Until then the old worker doesn't save the list.
+3. Open `/plan` (Plan a Baguio trip) and load the ready-made trip list once.
+4. Open every ready-made trip you might use, once each.
+
+Don't set `NEXT_PUBLIC_SERVICE_WORKER=false` (the kill switch) during the trip: it unregisters the worker and deletes everything it saved.
 
 ## 7. Feature flags
 Each flag is an environment variable on both sides: the API reads it from `os.environ` (`api/app/flags.py`), the web app from a `NEXT_PUBLIC_` variable (`web/src/lib/flags.ts`).
