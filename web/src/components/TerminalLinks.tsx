@@ -12,8 +12,6 @@ import {
 } from "@/lib/mapLinks";
 import { getTerminals } from "@/lib/terminals";
 
-const FOCUS = "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card";
-
 /** Directions to the trip's origin terminal. Renders from the trip's fields first, then upgrades from /terminals. */
 export default function TerminalLinks({ slug, name, city }: { slug: string; name: string; city: string }) {
   const id = useId();
@@ -44,7 +42,7 @@ export default function TerminalLinks({ slug, name, city }: { slug: string; name
           target="_blank"
           rel="noopener noreferrer"
           aria-label={mapsLabel(name)}
-          className={`min-h-11 inline-flex items-center justify-center gap-1 rounded-xl border border-brand bg-card px-3 text-sm font-semibold text-brand ${FOCUS}${showSakay(city) ? "" : " col-span-2"}`}
+          className={`pixel-btn focus-pixel min-h-11 inline-flex items-center justify-center gap-1 bg-card px-3 text-sm font-bold text-brand${showSakay(city) ? "" : " col-span-2"}`}
         >
           Google Maps <span aria-hidden>↗</span>
         </a>
@@ -54,7 +52,7 @@ export default function TerminalLinks({ slug, name, city }: { slug: string; name
             target="_blank"
             rel="noopener noreferrer"
             aria-label={sakayLabel()}
-            className={`min-h-11 inline-flex items-center justify-center gap-1 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground ${FOCUS}`}
+            className="pixel-btn focus-pixel min-h-11 inline-flex items-center justify-center gap-1 bg-card px-3 text-sm font-semibold text-foreground"
           >
             Sakay.ph <span aria-hidden>↗</span>
           </a>

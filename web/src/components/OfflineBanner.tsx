@@ -45,9 +45,9 @@ export default function OfflineBanner() {
   return (
     <div role="status" className="sticky top-0 z-10 w-full">
       {text && (
-        <div className="bg-accent text-[#1d2a24]">
+        <div className="bg-accent text-accent-ink border-b-3 border-frame">
           <p className="mx-auto w-full max-w-md px-4 py-2 text-sm leading-snug">
-            <span className="font-semibold">{text.lead}</span>
+            <span className="font-bold">{text.lead}</span>
             {text.rest}
           </p>
         </div>

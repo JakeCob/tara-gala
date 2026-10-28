@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { PixelBox, PixelButton, PixelChoice } from "@/components/pixel";
 import { fetchLastMile, formatVerified } from "@/lib/api";
 import {
   BAGUIO_TERMINALS,
@@ -43,23 +44,18 @@ export default function LastMile() {
   return (
     <div className="flex flex-col gap-4">
       <fieldset className="m-0 min-w-0 border-0 p-0 flex flex-col gap-2">
-        <legend className="mb-2 text-sm text-muted">Which terminal does your bus arrive at?</legend>
+        <legend className="mb-2 text-sm font-semibold text-foreground">Which terminal does your bus arrive at?</legend>
         <div className="grid grid-cols-3 gap-2">
           {BAGUIO_TERMINALS.map((t) => (
-            <label
+            <PixelChoice
               key={t.slug}
-              className="min-h-11 flex cursor-pointer items-center justify-center rounded-xl border border-border bg-card px-2 py-2 text-center text-sm font-semibold leading-tight has-checked:border-brand has-checked:bg-brand has-checked:text-brand-ink has-focus-visible:ring-2 has-focus-visible:ring-brand has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-background"
+              name="terminal"
+              value={t.slug}
+              checked={terminal === t.slug}
+              onChange={() => load(t.slug)}
             >
-              <input
-                type="radio"
-                name="terminal"
-                value={t.slug}
-                checked={terminal === t.slug}
-                onChange={() => load(t.slug)}
-                className="sr-only"
-              />
               {t.label}
-            </label>
+            </PixelChoice>
           ))}
         </div>
       </fieldset>
@@ -68,30 +64,29 @@ export default function LastMile() {
         {status === "loading" && <p className="text-sm text-muted">Loading routes...</p>}
         {status === "done" && legs.length > 0 && <p className="text-sm text-muted">{legs[0].confirm_note}</p>}
         {status === "done" && legs.length === 0 && (
-          <p className="rounded-xl border border-border bg-card p-4 text-sm">No routes on file yet for this terminal.</p>
+          <PixelBox as="p" className="p-4 text-sm">No routes on file yet for this terminal.</PixelBox>
         )}
         {status === "error" && (
-          <div className="rounded-xl border border-border bg-card p-4 text-sm flex flex-col items-start gap-3">
+          <PixelBox className="p-4 text-sm flex flex-col items-start gap-3">
             <p>Could not reach the server. Check your connection and try again.</p>
-            <button
-              type="button"
+            <PixelButton
+              variant="secondary"
               onClick={() => {
                 if (!terminal) return;
                 // This box unmounts on retry; keep keyboard and screen-reader focus on the terminal being retried.
                 document.querySelector<HTMLInputElement>('input[name="terminal"]:checked')?.focus();
                 load(terminal);
               }}
-              className="min-h-11 inline-flex items-center rounded-xl border border-border bg-card px-4 text-sm font-semibold"
             >
               Try again
-            </button>
-          </div>
+            </PixelButton>
+          </PixelBox>
         )}
       </div>
 
       {groups.map((g) => (
         <section key={`${g.destination.kind}:${g.destination.slug}`} className="flex flex-col gap-2">
-          <h2 className="text-base font-semibold min-w-0 break-words">{g.destination.name}</h2>
+          <h2 className="text-base font-bold min-w-0 break-words">{g.destination.name}</h2>
           <ul className="flex flex-col gap-3">
             {g.legs.map((leg) => (
               <LegCard key={leg.last_mile_route_id} leg={leg} />
@@ -107,10 +102,10 @@ function LegCard({ leg }: { leg: LastMileLeg }) {
   const fare = formatFare(leg.fare_min_php, leg.fare_max_php);
   const minutes = formatMinutes(leg.minutes);
   return (
-    <li className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-1.5">
+    <PixelBox as="li" className="p-4 flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-semibold">{modeLabel(leg.mode)}</span>
-        {fare && <span className="font-semibold tabular-nums">{fare}</span>}
+        <span className="font-bold">{modeLabel(leg.mode)}</span>
+        {fare && <span className="font-bold tabular-nums">{fare}</span>}
       </div>
       {leg.signboard && (
         <p className={line}>
@@ -122,6 +117,6 @@ function LegCard({ leg }: { leg: LastMileLeg }) {
       {minutes && <p className={line}>{minutes}</p>}
       {leg.notes && <p className={`${line} text-muted`}>{leg.notes}</p>}
       <p className="pt-1 text-xs text-muted">{formatVerified(leg.last_verified_at)}</p>
-    </li>
+    </PixelBox>
   );
 }

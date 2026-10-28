@@ -714,7 +714,7 @@ test("T21 offline.html palette equals the tokens, in light and dark", () => {
   for (const hex of hexes) assert.ok(allowed.has(hex), `offline.html ${hex} isn't a token value`);
   assert.match(html, /@media \(prefers-color-scheme: dark\)/);
   for (const hex of ["#121815", "#1b2420", "#5fb36b", "#ffd65c"]) assert.ok(hexes.includes(hex), `dark ${hex}`);
-  assert.doesNotMatch(html, /border-radius:\s*(?!0[;\s}])/, "square corners only");
+  assert.doesNotMatch(html, /border-radius:(?!\s*0[;\s}])/, "square corners only");
 });
 
 // T23 (B9, ux.md 3.3): the one copy-level change, so an overnight arrival is hard to miss
