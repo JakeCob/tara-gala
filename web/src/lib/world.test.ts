@@ -471,7 +471,9 @@ test("T22-L10 trackGeometry: ux 2.1's numbers at 316px, and whole tiles at every
   assert.deepEqual(pick(316), { tile: 32, straights: 6, leftX: 30, rightX: 254 });
   assert.deepEqual(pick(256), { tile: 32, straights: 4, leftX: 30, rightX: 190 });
   assert.equal(pick(412).straights, 9);
-  for (let W = 160; W <= 448; W++) {
+  // Worlds narrower than a 320px phone's (256) are laid out as 256 (tg-ux's clamp, 2026-10-28), so the invariants
+  // start there; below it, see T22-L10e
+  for (let W = 256; W <= 448; W++) {
     const g = trackGeometry(W);
     assert.ok(g.straights >= 1, `${W}: straights`);
     assert.equal(g.rightX - (g.leftX + 32), g.straights * 32, `${W}: no gap or overlap`);
@@ -495,7 +497,7 @@ test("T22-L10c sign boxes come from trackGeometry: the same width on both sides,
   const narrow = signBoxes(256); // 320px phone
   assert.equal(narrow.left.width, narrow.right.width);
   assert.ok(narrow.left.width >= 160, `320px phone: ${narrow.left.width}px signs`);
-  for (let W = 156; W <= 448; W++) {
+  for (let W = 256; W <= 448; W++) {
     const g = trackGeometry(W);
     const { left, right } = signBoxes(W);
     assert.equal(left.width, right.width, `${W}: equal sign widths`);
@@ -503,21 +505,26 @@ test("T22-L10c sign boxes come from trackGeometry: the same width on both sides,
     assert.ok(left.x >= g.leftX + 32 + 16 && left.x + left.width <= W - 8, `${W}: the right-hand sign clears the left track and the edge`);
     assert.ok(right.x >= 8 && right.x + right.width <= g.rightX - 16, `${W}: the left-hand sign clears the edge and the right track`);
   }
-  for (const W of [0, 100, 155]) {
-    const { left, right } = signBoxes(W);
-    assert.ok(left.width >= 0 && right.width >= 0, `${W}: never negative`);
+  for (const W of [0, -5, 100, 255]) {
+    assert.deepEqual(signBoxes(W), signBoxes(256), `${W}: laid out as the 320px phone, never narrower`);
   }
 });
 
-test("T22-L10d a collapsed width measurement keeps the last good world width", async () => {
-  const { usableWidth, MIN_WORLD } = await load();
-  assert.equal(MIN_WORLD, 156);
+test("T22-L10d a non-positive width measurement keeps the last good world width", async () => {
+  const { usableWidth } = await load();
   assert.equal(usableWidth(0, 316), 316, "Chrome's capture resize reports 0");
-  assert.equal(usableWidth(3, 316), 316);
-  assert.equal(usableWidth(155, 316), 316);
-  assert.equal(usableWidth(156, 316), 156);
+  assert.equal(usableWidth(-1, 316), 316);
+  assert.equal(usableWidth(3, 316), 3, "a positive width is applied (trackGeometry clamps it)");
   assert.equal(usableWidth(256, 316), 256, "a real narrower phone is applied");
   assert.equal(usableWidth(448, 316), 448);
+});
+
+test("T22-L10e trackGeometry clamps the world to a 320px phone's: trackGeometry(0) is trackGeometry(256)", async () => {
+  const { trackGeometry, MIN_WORLD } = await load();
+  assert.equal(MIN_WORLD, 256);
+  assert.deepEqual(trackGeometry(0), trackGeometry(256));
+  for (const W of [-10, 1, 100, 155, 255]) assert.deepEqual(trackGeometry(W), trackGeometry(256), `${W}`);
+  assert.notDeepEqual(trackGeometry(257 + 32), trackGeometry(256), "wider worlds aren't clamped");
 });
 
 // ---- T22-L10b row ids ----
