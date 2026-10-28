@@ -864,6 +864,10 @@ test("T21-S5 the branch comes from formMode; home links /plan only when a mode i
   assert.match(ui, /PLAN_COPY\.actions\.seePremade/);
   assert.match(form, /type: "planResult"/);
   assert.match(form, /type: "premadeResult"/);
+  // postPlan's own result must be dispatched: the offline branch's planResult alone doesn't count
+  const posted = form.match(/const (\w+) = await postPlan\(/)?.[1];
+  assert.ok(posted, "postPlan's result is kept in a variable");
+  assert.match(form, new RegExp(`type: "planResult",[^}]*?(?:\\bresult: ${posted}\\b|\\b${posted}\\s*\\})`), "postPlan's result is dispatched");
 });
 
 test("T21-S6 the submit handler reads a fresh Manila today", () => {
