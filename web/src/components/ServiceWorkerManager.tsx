@@ -5,8 +5,6 @@ import { API_URL } from "@/lib/api";
 import { flags } from "@/lib/flags";
 import { MSG_SKIP_WAITING } from "@/lib/offline";
 
-const FOCUS = "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card";
-
 /** Kill switch (NEXT_PUBLIC_SERVICE_WORKER=false): unregister and drop our caches, saved trips included. */
 async function removeServiceWorker() {
   const registrations = await navigator.serviceWorker.getRegistrations();
@@ -132,24 +130,27 @@ export default function ServiceWorkerManager() {
   return (
     <div role="status">
       {show && (
-        <div className="fixed inset-x-4 bottom-4 z-20 mx-auto flex max-w-md flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-sm shadow-lg">
-          <p>A new version of Tara Gala is ready.</p>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setLater(true)}
-              className={`min-h-11 inline-flex items-center rounded-xl border border-border bg-card px-4 text-sm font-semibold ${FOCUS}`}
-            >
-              Later
-            </button>
-            <button
-              type="button"
-              onClick={reload}
-              disabled={reloading}
-              className={`min-h-11 rounded-xl bg-brand px-4 font-semibold text-brand-ink disabled:opacity-60 ${FOCUS}`}
-            >
-              {reloading ? "Reloading..." : "Reload"}
-            </button>
+        // pixel-box clips its own outer shadow, so the hard drop sits on the wrapper (ux-guide 3.2)
+        <div className="fixed inset-x-4 bottom-4 z-20 mx-auto max-w-md drop-shadow-[0_6px_0_var(--color-frame)]">
+          <div className="pixel-box bg-card p-4 flex flex-col gap-3 text-sm">
+            <p>A new version of Tara Gala is ready.</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLater(true)}
+                className="pixel-btn focus-pixel min-h-11 inline-flex items-center bg-card px-4 text-sm font-semibold text-foreground"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                onClick={reload}
+                disabled={reloading}
+                className="pixel-btn focus-pixel min-h-11 bg-brand px-4 font-bold text-brand-ink"
+              >
+                {reloading ? "Reloading..." : "Reload"}
+              </button>
+            </div>
           </div>
         </div>
       )}

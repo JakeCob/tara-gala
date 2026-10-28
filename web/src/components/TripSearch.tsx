@@ -19,6 +19,7 @@ import {
   swapLabel,
 } from "@/lib/direction";
 import TerminalLinks from "@/components/TerminalLinks";
+import { PX, PixelBox, PixelButton } from "@/components/pixel";
 
 const subscribeNothing = () => () => {};
 
@@ -57,24 +58,23 @@ export default function TripSearch() {
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={onSearch} className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-3">
+      <PixelBox as="form" onSubmit={onSearch} className="p-4 flex flex-col gap-3">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
           <div className="min-w-0 break-words">
             <div className="text-muted">From</div>
-            <div className="font-semibold">{originCity}</div>
+            <div className="font-bold">{originCity}</div>
           </div>
-          <button
-            type="button"
+          <PixelButton
+            variant="iconBrand"
             onClick={() => dispatch({ type: "swap" })}
             disabled={status === "loading"}
             aria-label={swapLabel(direction)}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-brand text-xl leading-none text-brand disabled:opacity-60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card"
           >
             <span aria-hidden>⇄</span>
-          </button>
+          </PixelButton>
           <div className="min-w-0 break-words text-right">
             <div className="text-muted">To</div>
-            <div className="font-semibold">{destinationCity}</div>
+            <div className="font-bold">{destinationCity}</div>
           </div>
         </div>
         {/* Rendered from the start, so only a change (a swap) is announced */}
@@ -92,37 +92,33 @@ export default function TripSearch() {
               setCleared(e.target.value === "");
               dispatch({ type: "pickDate", date: e.target.value });
             }}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-base"
+            className={PX.input}
             required
           />
         </label>
-        <button
-          type="submit"
-          disabled={status === "loading" || !date}
-          className="rounded-xl bg-brand px-4 py-3 font-semibold text-brand-ink disabled:opacity-60"
-        >
+        <PixelButton variant="primary" type="submit" disabled={status === "loading" || !date}>
           {status === "loading" ? "Searching..." : "Tara, show buses"}
-        </button>
-      </form>
+        </PixelButton>
+      </PixelBox>
 
       {/* Status lines are announced; the cards stay outside so a screen reader doesn't read every one.
           empty:-mt-4 cancels its gap before the first status without hiding it (display:none would drop the live region) */}
       <div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">
         {status === "error" && (
-          <p className="rounded-xl border border-border bg-card p-4 text-sm">
+          <PixelBox as="p" className="p-4 text-sm">
             Could not reach the schedule server. Check your connection and try again.
-          </p>
+          </PixelBox>
         )}
 
         {status === "done" && searched && trips.length === 0 && (
-          <p className="rounded-xl border border-border bg-card p-4 text-sm">
+          <PixelBox as="p" className="p-4 text-sm">
             {emptyMessage(searched.direction, searched.date)}
-          </p>
+          </PixelBox>
         )}
 
         {status === "done" && searched && trips.length > 0 && (
           <>
-            <h2 className="text-sm font-semibold">{resultsHeading(searched.direction, searched.date)}</h2>
+            <h2 className={PX.dataHeading}>{resultsHeading(searched.direction, searched.date)}</h2>
             <p className="text-sm text-muted">
               {trips.length} trip{trips.length === 1 ? "" : "s"} · {trips[0].confirm_note}
             </p>
@@ -143,10 +139,10 @@ export default function TripSearch() {
 
 function TripCard({ trip: t }: { trip: Trip }) {
   return (
-    <li className="rounded-2xl border border-border bg-card p-4 flex flex-col gap-2">
+    <PixelBox as="li">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-2xl font-bold tabular-nums">{formatTime(t.departure_time)}</span>
-        {t.fare_php != null && <span className="font-semibold">₱{t.fare_php.toLocaleString("en-PH")}</span>}
+        <span className="text-2xl font-extrabold tabular-nums">{formatTime(t.departure_time)}</span>
+        {t.fare_php != null && <span className="font-bold tabular-nums">₱{t.fare_php.toLocaleString("en-PH")}</span>}
       </div>
       <div className="text-sm">
         <span className="font-semibold">{t.operator_name}</span> · {formatClass(t.service_class)}
@@ -154,9 +150,15 @@ function TripCard({ trip: t }: { trip: Trip }) {
       </div>
       <div className="text-sm text-muted">
         {t.origin_name} → {t.destination_name}
-        {t.arrives_around
-          ? ` · arrives around ${formatTime(t.arrives_around)}${formatDayOffset(t.arrives_day_offset)}`
-          : ""}
+        {t.arrives_around ? (
+          <>
+            {` · arrives around ${formatTime(t.arrives_around)}`}
+            {/* An overnight arrival is the easiest fact to misread, so the offset gets full contrast (TG-42 ux.md 3.3) */}
+            <span className="font-semibold text-foreground">{formatDayOffset(t.arrives_day_offset)}</span>
+          </>
+        ) : (
+          ""
+        )}
       </div>
       <TerminalLinks slug={t.origin_slug} name={t.origin_name} city={t.origin_city} />
       <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted">
@@ -165,7 +167,7 @@ function TripCard({ trip: t }: { trip: Trip }) {
           {t.source_url && (
             <>
               {" · "}
-              <a href={t.source_url} target="_blank" rel="noreferrer" className="underline">
+              <a href={t.source_url} target="_blank" rel="noreferrer" className={PX.inlineLink}>
                 source
               </a>
             </>
@@ -176,7 +178,7 @@ function TripCard({ trip: t }: { trip: Trip }) {
             href={t.booking_url}
             target="_blank"
             rel="noreferrer"
-            className="min-h-11 inline-flex items-center rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-[#1d2a24]"
+            className="min-h-11 inline-flex items-center pixel-btn focus-pixel bg-accent px-3 text-sm font-bold text-accent-ink"
           >
             Book
           </a>
@@ -184,6 +186,6 @@ function TripCard({ trip: t }: { trip: Trip }) {
           <span>No booking link yet</span>
         )}
       </div>
-    </li>
+    </PixelBox>
   );
 }
