@@ -138,6 +138,7 @@ test("sakay link is always the home page", () => {
 
 test("sakay shows for Metro Manila origins only", () => {
   assert.equal(showSakay("Baguio"), false);
+  assert.equal(showSakay(" Baguio "), false);
   for (const city of ["Quezon City", "Pasay", "Manila", "Caloocan", "Paranaque"]) {
     assert.equal(showSakay(city), true, city);
   }
@@ -163,6 +164,9 @@ test("withTerminalData uses the API's address and coordinates", () => {
   assert.equal(merged.address, "EDSA cor. New York St");
   assert.equal(merged.lat, 14.6);
   assert.equal(merged.lng, 121.0);
+  const zeroLat = withTerminalData(CUBAO, { ...CUBAO, lat: 0, lng: 121.0 });
+  assert.equal(zeroLat.lat, 0);
+  assert.equal(zeroLat.lng, 121.0);
 });
 
 test("withTerminalData keeps the trip's fields when the API has nothing", () => {
@@ -230,4 +234,31 @@ test("mapLinks.ts is a plain module", () => {
   assert.doesNotMatch(source, /\bnamespace\s/);
   assert.doesNotMatch(source, /<\/[A-Za-z]|\/>/); // no JSX (closing or self-closing tags)
   assert.doesNotMatch(source, /\bconsole\./);
+});
+
+// RED audit S1: TerminalLinks.tsx has no component runner until TG-18, so guard its source.
+const component = readFileSync(new URL("../components/TerminalLinks.tsx", import.meta.url), "utf8");
+const anchors = [...component.matchAll(/<a\b[\s\S]*?<\/a>/g)];
+
+test("TerminalLinks: every link opens a new tab safely and is named by the label helpers", () => {
+  assert.equal(anchors.length, 2);
+  for (const [a] of anchors) {
+    assert.match(a, /target="_blank"/);
+    assert.match(a, /rel="noopener noreferrer"/);
+    assert.match(a, /aria-label=\{(mapsLabel|sakayLabel)\(/);
+  }
+  assert.equal(component.match(/<a\b/g)?.length, 2);
+  assert.doesNotMatch(component, /aria-live/);
+  assert.doesNotMatch(component, /\bconsole\./);
+});
+
+test("TerminalLinks: the Sakay link renders only under showSakay", () => {
+  const sakay = anchors.filter(([a]) => a.includes("sakayUrl("));
+  const maps = anchors.filter(([a]) => a.includes("googleMapsUrl("));
+  assert.equal(sakay.length, 1);
+  assert.equal(maps.length, 1);
+  assert.match(sakay[0][0], /aria-label=\{sakayLabel\(/);
+  assert.match(maps[0][0], /aria-label=\{mapsLabel\(/);
+  const before = component.slice(0, sakay[0].index);
+  assert.match(before, /\{showSakay\(city\) && \(\s*$/);
 });
