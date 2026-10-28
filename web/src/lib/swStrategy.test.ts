@@ -1172,3 +1172,60 @@ test("T43-R2 README offline section: the list and /plan are saved, and the devic
   assert.ok(steps.some((s) => /every ready-made trip/i.test(s)), "a step opens every ready-made trip");
   assert.match(offline, /NEXT_PUBLIC_SERVICE_WORKER=false/);
 });
+
+// ---- TG-22: sprites offline (T22-L18, plan-review finding 2) ----
+// Sprites go to the data cache, which has no SW_VERSION: in the static cache they'd be deleted on the next
+// update, and carryOverSavedPageAssets can't rescue them (React sets their URLs, so they're not in saved HTML).
+const SPRITE_SWR = { strategy: "stale-while-revalidate", cache: "data" };
+
+test("T22-L18 GET /sprites/* is stale-while-revalidate into the data cache", () => {
+  for (const origins of [LOCAL, PROD]) {
+    for (const path of ["/sprites/chibi-adult-idle-1.svg", "/sprites/x.png", "/sprites/tile-grass.svg?v=2"]) {
+      assert.deepEqual(strategy(req(`${origins.app}${path}`), origins), SPRITE_SWR, path);
+    }
+  }
+});
+
+test("T22-L18 sprite look-alikes, other methods and other origins are bypassed", () => {
+  const cases = [
+    req(`${APP}/sprites/x.svg`, { method: "POST" }),
+    req(`${APP}/spritesx/a.svg`),
+    req(`${APP}/sprites`),
+    req(`https://cdn.example.test/sprites/x.svg`),
+    req(`${API}/sprites/x.svg`),
+  ];
+  for (const r of cases) assert.deepEqual(strategy(r), BYPASS, `${r.method ?? "GET"} ${r.url}`);
+});
+
+test("T22-L18 a sprite is served and stored in the data cache, not the static cache", async () => {
+  const env = swEnv(async () => new Response("<svg>new</svg>"));
+  const url = `${APP}/sprites/place-park.svg`;
+  const { log, dispatch, allWaits } = fetchEvent(new Request(url));
+  dispatch(env.handlers.fetch);
+  assert.equal(await (await responded(log)).text(), "<svg>new</svg>");
+  await allWaits();
+  assert.deepEqual(log.errors, []);
+  assert.ok(await (await env.caches.open(env.names.data)).match(url), "stored in data");
+  assert.equal(await (await env.caches.open(env.names.static)).match(url), undefined, "not in static");
+  // the static files keep their own cache
+  const icon = fetchEvent(new Request(`${APP}/icon-192.png`));
+  icon.dispatch(env.handlers.fetch);
+  await responded(icon.log);
+  await icon.allWaits();
+  assert.ok(await (await env.caches.open(env.names.static)).match(`${APP}/icon-192.png`));
+});
+
+test("T22-L18 a stored sprite survives a service worker update", async () => {
+  const env = swEnv(async () => new Response("unused"));
+  const url = `${APP}/sprites/chibi-senior-idle-1.svg`;
+  await env.seed(env.names.data, url, new Response("<svg>saved</svg>"));
+  await env.seed("tg-static-older", `${APP}/sprites/old-static.svg`, new Response("<svg/>"));
+  const { dispatch, allWaits } = fakeEvent();
+  dispatch(env.handlers.activate);
+  await allWaits();
+  assert.equal(await (await env.caches.match(url))?.text(), "<svg>saved</svg>");
+});
+
+test("T22-L18 SW_VERSION is bumped for this change", () => {
+  assert.notEqual(tg().SW_VERSION, "2026-10-28.1");
+});

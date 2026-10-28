@@ -306,3 +306,17 @@ test("the empty results live region stays rendered but takes no gap", () => {
   assert.match(searchPage, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">/);
   assert.doesNotMatch(searchPage, /empty:hidden/);
 });
+
+// TG-22 (T22-L12): the overworld map's sheets pass a travel mode. The cases above call googleMapsUrl(t) unchanged.
+test("googleMapsUrl takes an optional travel mode; transit stays the default", () => {
+  assert.equal(new URL(googleMapsUrl(CUBAO)).searchParams.get("travelmode"), "transit");
+  assert.equal(googleMapsUrl(CUBAO, "transit"), googleMapsUrl(CUBAO));
+  const coords: TerminalPlace = { slug: "lodge", name: "Hilltop Lodging (made up)", city: "", lat: 16.40823, lng: 120.59035 };
+  for (const mode of ["walking", "driving"] as const) {
+    const url = new URL(googleMapsUrl(coords, mode));
+    assert.equal(url.searchParams.get("travelmode"), mode);
+    assert.equal(url.searchParams.get("destination"), "16.40823,120.59035");
+    assert.deepEqual([...url.searchParams.keys()].sort(), ["api", "destination", "travelmode"], "never an origin");
+    assert.ok(url.href.startsWith(MAPS_DIR_BASE));
+  }
+});
