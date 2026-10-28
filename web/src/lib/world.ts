@@ -190,6 +190,28 @@ export function trackGeometry(W: number): { tile: 32; leftX: number; rightX: num
   return { tile: 32, leftX: 30, rightX: 62 + straights * 32, straights };
 }
 
+/** The smallest world the layout supports (a 220px phone). Narrower measurements are a collapsed box, not a phone. */
+export const MIN_WORLD = 156;
+
+/**
+ * The world width to lay out for. A ResizeObserver can report a collapsed width for a moment (0 while Chrome resizes
+ * the viewport for a full-page capture, or a hidden tab), and laying out for it squeezes every sign: keep the last
+ * good width instead.
+ */
+export function usableWidth(measured: number, previous: number): number {
+  return measured >= MIN_WORLD ? measured : previous;
+}
+
+/**
+ * The sign boxes for each track side (ux.md 2.1), in world x. The sign sits on the side away from its track, and
+ * both sides get the same width so names wrap the same way in either column: 230px at 316 (a 380px phone).
+ */
+export function signBoxes(W: number): { left: { x: number; width: number }; right: { x: number; width: number } } {
+  const g = trackGeometry(W);
+  const width = Math.max(0, Math.min(W - 8 - (g.leftX + 48), g.rightX - 16 - 8));
+  return { left: { x: g.leftX + 48, width }, right: { x: 8, width } };
+}
+
 /** Rotations of tile-path-corner (drawn joining bottom and right) for a turn's two corners (ux.md 2.1). */
 export function turnRotations(from: Side, to: Side): { start: number; end: number } {
   if (from === to) throw new Error("a turn must change side");

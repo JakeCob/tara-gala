@@ -13,8 +13,10 @@ import {
   CHANGED,
   mapsTarget,
   rowData,
+  signBoxes,
   trackGeometry,
   turnRotations,
+  usableWidth,
   worldLayout,
   worldSections,
   type Formatters,
@@ -53,8 +55,11 @@ type Geometry = ReturnType<typeof trackGeometry> & { W: number };
 
 /** Where a row's box, track and sign sit for its side (ux.md 2.1): the sign is on the side away from the track. */
 function placement(side: Side, g: Geometry) {
-  if (side === "left") return { trackX: g.leftX, boxLeft: g.leftX, boxWidth: g.W - 8 - g.leftX, signLeft: 48, signWidth: g.W - 8 - g.leftX - 48 };
-  return { trackX: g.rightX, boxLeft: 8, boxWidth: g.rightX + TILE - 8, signLeft: 0, signWidth: g.rightX - 16 - 8 };
+  const signs = signBoxes(g.W);
+  if (side === "left") {
+    return { trackX: g.leftX, boxLeft: g.leftX, boxWidth: g.W - 8 - g.leftX, signLeft: signs.left.x - g.leftX, signWidth: signs.left.width };
+  }
+  return { trackX: g.rightX, boxLeft: 8, boxWidth: g.rightX + TILE - 8, signLeft: signs.right.x - 8, signWidth: signs.right.width };
 }
 
 function Track({ x, road }: { x: number; road?: boolean }) {
@@ -174,7 +179,7 @@ export default function OverworldMap({ itinerary }: { itinerary: Itinerary }) {
   useEffect(() => {
     const el = worldRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setW(Math.round(entry.contentRect.width)));
+    const ro = new ResizeObserver(([entry]) => setW((w) => usableWidth(Math.round(entry.contentRect.width), w)));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
