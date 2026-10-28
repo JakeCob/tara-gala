@@ -16,12 +16,13 @@ LAST_MILE_NOTE = "Fares and routes change. Confirm with the driver or a local be
 SPOTS = (
     "test-park,Test Park (made up),park,16.41,120.59,made up for tests only,60,\n"
     "test-market,Test Market (made up),market,16.42,120.60,made up for tests only,45,20\n"
-    "test-cafe,Test Cafe (made up),cafe,,,made up for tests only,30,\n"
+    "test-cafe,Upper Cafe (made up),cafe,,,made up for tests only,30,\n"  # name sorts differently from slug
 )
 # from_terminal,from_spot,to_terminal,to_spot,mode,signboard,boarding_point,alighting_point,fare_min,fare_max,minutes,verified_on,notes
 LAST_MILE = (
     "vl-baguio,,,test-park,jeep,Test Signboard (made up),Gov Pack Rd stop (made up),Park gate (made up),13,15,15,2026-10-24,made up for tests only\n"
     "vl-baguio,,,test-market,walk,,,,,,,2026-10-24,\n"
+    "vl-baguio,,,test-market,taxi,,,,60,80,5,2026-10-24,\n"
     "gen-baguio,,,test-park,taxi,,,,150,200,10,2026-10-24,\n"
     ",test-park,,test-cafe,walk,,,,,,8,2026-10-24,\n"
     ",test-cafe,vl-baguio,,jeep,Test Terminal (made up),,,13,13,20,2026-10-20,\n"
@@ -60,13 +61,17 @@ def pairs(legs):
     return [(leg["origin"]["slug"], leg["destination"]["slug"]) for leg in legs]
 
 
+def key(leg):
+    return leg["origin"]["slug"], leg["destination"]["slug"], leg["mode"]
+
+
 # --- /spots ------------------------------------------------------------------------------------
 
 def test_spots_lists_all_spots_with_schema_fields(client, data):
     r = client.get("/spots")
     assert r.status_code == 200, r.text
     spots = r.json()
-    assert [s["slug"] for s in spots] == ["test-cafe", "test-market", "test-park"]  # by name
+    assert [s["slug"] for s in spots] == ["test-market", "test-park", "test-cafe"]  # by name, not slug
     for s in spots:
         assert set(s) == SPOT_FIELDS
         assert s["city"] == "Baguio"
@@ -89,8 +94,10 @@ def test_spots_empty_when_no_data(client):
 # --- /last-mile filters ------------------------------------------------------------------------
 
 def test_last_mile_by_terminal(client, data):
-    # Sorted by destination name: Test Market (made up) before Test Park (made up)
-    assert pairs(last_mile(client, terminal="vl-baguio")) == [("vl-baguio", "test-market"), ("vl-baguio", "test-park")]
+    # Sorted by destination name, then minutes (nulls last): Test Market taxi 5 min, Test Market walk, Test Park
+    assert [key(leg) for leg in last_mile(client, terminal="vl-baguio")] == [
+        ("vl-baguio", "test-market", "taxi"), ("vl-baguio", "test-market", "walk"), ("vl-baguio", "test-park", "jeep"),
+    ]
     assert pairs(last_mile(client, terminal="gen-baguio")) == [("gen-baguio", "test-park")]
     assert last_mile(client, terminal="sn-baguio") == []
 
@@ -109,12 +116,12 @@ def test_last_mile_filters_combine(client, data):
 
 
 def test_last_mile_no_filter_returns_every_leg(client, data):
-    assert len(last_mile(client)) == 5
+    assert len(last_mile(client)) == 6
 
 
 def test_last_mile_empty_filter_value_means_no_filter(client, data):
-    assert len(last_mile(client, terminal="")) == 5
-    assert len(last_mile(client, spot="")) == 5
+    assert len(last_mile(client, terminal="")) == 6
+    assert len(last_mile(client, spot="")) == 6
     assert set(pairs(last_mile(client, terminal="", spot="test-cafe"))) == {("test-park", "test-cafe"), ("test-cafe", "vl-baguio")}
 
 
@@ -141,9 +148,9 @@ def test_leg_shape(client, data):
         assert leg["source"] == "manual"
         assert leg["confirm_note"] == LAST_MILE_NOTE
         assert leg["last_verified_at"] is not None
-    by_pair = {(leg["origin"]["slug"], leg["destination"]["slug"]): leg for leg in legs}
+    by_key = {key(leg): leg for leg in legs}
 
-    jeep = by_pair[("vl-baguio", "test-park")]
+    jeep = by_key[("vl-baguio", "test-park", "jeep")]
     assert jeep["origin"]["kind"] == "terminal"
     assert jeep["origin"]["name"] == "Victory Liner Baguio"
     assert jeep["destination"]["kind"] == "spot"
@@ -157,12 +164,12 @@ def test_leg_shape(client, data):
     assert jeep["notes"] == "made up for tests only"
     assert datetime.fromisoformat(jeep["last_verified_at"]) == datetime(2026, 10, 24, 4, tzinfo=timezone.utc)  # noon Manila
 
-    walk = by_pair[("vl-baguio", "test-market")]
+    walk = by_key[("vl-baguio", "test-market", "walk")]
     assert walk["mode"] == "walk"
     for key in ("signboard", "boarding_point", "alighting_point", "fare_min_php", "fare_max_php", "minutes", "notes"):
         assert walk[key] is None, key  # nulls stay null, never 0 or ""
 
-    back = by_pair[("test-cafe", "vl-baguio")]
+    back = by_key[("test-cafe", "vl-baguio", "jeep")]
     assert back["origin"]["kind"] == "spot"
     assert back["origin"]["lat"] is None  # test-cafe has no coordinates
     assert back["destination"]["kind"] == "terminal"
@@ -177,7 +184,7 @@ def test_last_mile_and_spots_log_one_line(client, data, caplog):
     client.get("/spots")
     lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api"]
     searches = [m for m in lines if m.startswith("last-mile search")]
-    assert searches == ["last-mile search terminal='vl-baguio' spot=None results=2"]
+    assert searches == ["last-mile search terminal='vl-baguio' spot=None results=3"]
     assert [m for m in lines if m.startswith("spots list")] == ["spots list results=3"]
 
 
