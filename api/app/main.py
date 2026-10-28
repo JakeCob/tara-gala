@@ -14,7 +14,11 @@ from . import db
 from .models import Terminal, Trip
 
 # Minimal root config so app INFO logs reach stdout; TG-13 replaces this.
-logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+_log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=_log_level if isinstance(logging.getLevelName(_log_level), int) else "INFO",  # bad value must not stop boot
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 logger = logging.getLogger("tara_gala.api")
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
@@ -149,8 +153,9 @@ def search_trips(
             )
         )
     logger.info(
-        "trips search date=%s origin_city=%r destination_city=%r origin=%r destination=%r results=%d next_day=%d",
+        "trips search date=%s origin_city=%r destination_city=%r origin=%r destination=%r results=%d next_day=%d no_travel_time=%d",
         travel_date, origin_city, destination_city, origin, destination, len(trips),
         sum(1 for t in trips if t.arrives_day_offset),
+        sum(1 for t in trips if t.arrives_around is None),
     )
     return trips
