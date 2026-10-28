@@ -61,7 +61,7 @@ export function DatesBox(props: {
           onChange={(e) => props.onDate(e.target.value)}
           aria-invalid={dateError ? true : undefined}
           aria-describedby={describedBy(dateError && errorId("date"))}
-          className={`${PX.input} w-full min-w-0 placeholder:text-muted`}
+          className={`${PX.input} w-full min-w-0`}
         />
         <FieldMessage field="date" message={dateError} />
         <label htmlFor={FIELD_INPUT_ID.returnDate} className="text-sm font-semibold">
@@ -76,7 +76,7 @@ export function DatesBox(props: {
           onChange={(e) => props.onReturn(e.target.value)}
           aria-invalid={returnError ? true : undefined}
           aria-describedby={describedBy(returnError && errorId("returnDate"))}
-          className={`${PX.input} w-full min-w-0 placeholder:text-muted`}
+          className={`${PX.input} w-full min-w-0`}
         />
         <FieldMessage field="returnDate" message={returnError} />
         {hint && <p className={PX.meta}>{hint}</p>}
@@ -93,6 +93,7 @@ export function BudgetBox(props: { value: string; errors: readonly FieldError[];
     <PixelBox className="p-4 flex flex-col gap-3">
       <SectionTitle as="label" htmlFor={FIELD_INPUT_ID.budget}>
         {L.budget}
+        <span className="font-sans text-base font-semibold">{L.optional}</span>
         <span className="sr-only">{H.budgetSr}</span>
       </SectionTitle>
       <div className="flex items-stretch">

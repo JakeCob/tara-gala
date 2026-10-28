@@ -53,4 +53,7 @@ body { background: var(--background); color: var(--foreground); font-family: var
 }
 @utility focus-pixel { &:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } }
 @utility focus-pixel-within { &:has(:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; } }
+/* A date input's calendar button takes focus inside Chrome's shadow DOM, where :focus-visible never matches the
+   input, so focus-pixel can't draw at that Tab stop; :focus-within does (TG-43 UX review S2) */
+input[type=date]:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
 @utility pixelated { image-rendering: pixelated; }
