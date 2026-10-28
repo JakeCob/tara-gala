@@ -433,6 +433,14 @@ test("T12 a className prop replaces the default layout, never merges with it", (
   }
 });
 
+// RED audit addition: B5 and T8 only see PX, so a primitive could still cap its own height in its cx() call.
+test("T8 primitives add no height or size classes of their own", () => {
+  for (const name of PRIMITIVES) {
+    const source = primitive(name);
+    assert.doesNotMatch(source, /["'`][^"'`\n]*(?<![\w-])(max-h|h|size)-(\d|\[|px\b)/, `${name} sets a height`);
+  }
+});
+
 // B4
 test("B4 the pixel barrel exports every primitive, PX and cx", () => {
   assert.ok(existsSync(new URL(`${PIXEL}index.ts`, WEB)), "components/pixel/index.ts exists");
@@ -555,6 +563,21 @@ test("T18 no font or stylesheet is fetched from anywhere else", () => {
     assert.doesNotMatch(source, /@import\s+url\(/, where);
     assert.doesNotMatch(source, /@font-face[^}]*url\(\s*["']?https?:/, where);
     assert.doesNotMatch(source, /<link\b[^>]*rel=["']stylesheet["']/, where);
+  }
+});
+
+// RED audit addition: a self-hosted @font-face with its own font-family would bypass next/font without fetching anything.
+test("T18 no @font-face and no literal font-family outside next/font", () => {
+  const files = [...walkFiles(new URL("src/", WEB)), ...walkFiles(new URL("public/", WEB))].filter(
+    (url) => /\.(tsx?|css|html|js)$/.test(url.pathname) && !url.pathname.endsWith(".test.ts"),
+  );
+  for (const url of files) {
+    const where = url.pathname.slice(new URL(WEB).pathname.length);
+    assert.doesNotMatch(readFileSync(url, "utf8"), /@font-face/, where);
+  }
+  const css = stripComments(read("src/app/globals.css"));
+  for (const m of css.matchAll(/font-family:\s*([^;}]+)/g)) {
+    assert.match(m[1].trim(), /^var\(--font-(sans|pixel)\)$/, m[1]);
   }
 });
 
