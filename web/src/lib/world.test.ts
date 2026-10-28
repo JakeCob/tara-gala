@@ -487,6 +487,39 @@ test("T22-L10 trackGeometry: ux 2.1's numbers at 316px, and whole tiles at every
   }
 });
 
+// 380px defect (manager, 2026-10-28): during a full-page capture Chrome briefly resizes the viewport and the
+// ResizeObserver reports a world width of 0; the map re-laid out for W = 0 and left-column signs shrank to 70px.
+test("T22-L10c sign boxes come from trackGeometry: the same width on both sides, never negative", async () => {
+  const { signBoxes, trackGeometry } = await load();
+  assert.deepEqual(signBoxes(316), { left: { x: 78, width: 230 }, right: { x: 8, width: 230 } }, "380px phone (world 316)");
+  const narrow = signBoxes(256); // 320px phone
+  assert.equal(narrow.left.width, narrow.right.width);
+  assert.ok(narrow.left.width >= 160, `320px phone: ${narrow.left.width}px signs`);
+  for (let W = 156; W <= 448; W++) {
+    const g = trackGeometry(W);
+    const { left, right } = signBoxes(W);
+    assert.equal(left.width, right.width, `${W}: equal sign widths`);
+    assert.ok(left.width > 0, `${W}: positive width`);
+    assert.ok(left.x >= g.leftX + 32 + 16 && left.x + left.width <= W - 8, `${W}: the right-hand sign clears the left track and the edge`);
+    assert.ok(right.x >= 8 && right.x + right.width <= g.rightX - 16, `${W}: the left-hand sign clears the edge and the right track`);
+  }
+  for (const W of [0, 100, 155]) {
+    const { left, right } = signBoxes(W);
+    assert.ok(left.width >= 0 && right.width >= 0, `${W}: never negative`);
+  }
+});
+
+test("T22-L10d a collapsed width measurement keeps the last good world width", async () => {
+  const { usableWidth, MIN_WORLD } = await load();
+  assert.equal(MIN_WORLD, 156);
+  assert.equal(usableWidth(0, 316), 316, "Chrome's capture resize reports 0");
+  assert.equal(usableWidth(3, 316), 316);
+  assert.equal(usableWidth(155, 316), 316);
+  assert.equal(usableWidth(156, 316), 156);
+  assert.equal(usableWidth(256, 316), 256, "a real narrower phone is applied");
+  assert.equal(usableWidth(448, 316), 448);
+});
+
 // ---- T22-L10b row ids ----
 
 test("T22-L10b row ids are unique, stable, and resolve back to the tapped row's data", async () => {
@@ -716,6 +749,9 @@ test("T22-S6 the world fits the phone: measured width, starting at 316", () => {
   const map = component(MAP);
   assert.match(map, /new ResizeObserver\(/);
   assert.match(map, /useState\(316\)/);
+  // The measured width only applies when it's usable, and signs are placed from the tested signBoxes
+  assert.match(map, /new ResizeObserver\(\(\[entry\]\) =>[^;]*usableWidth\(/);
+  assert.match(map, /signBoxes\(/);
   for (const m of map.matchAll(/\b(min-)?w-\[(\d+)px\]/g)) {
     assert.ok(Number(m[2]) <= (m[1] ? 316 : 380), m[0]);
   }
