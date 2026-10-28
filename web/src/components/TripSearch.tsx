@@ -21,6 +21,12 @@ import {
 
 const subscribeNothing = () => () => {};
 
+/** "YYYY-MM-DD" plus n days, computed in UTC so the device's time zone can't shift the day. */
+function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
 export default function TripSearch() {
   // Today in Manila, read on the client only so the prerendered shell does not bake in a date
   const today = useSyncExternalStore(subscribeNothing, manilaToday, () => "");
@@ -30,6 +36,9 @@ export default function TripSearch() {
   const [cleared, setCleared] = useState(false);
   const { direction, status, trips, searched } = state;
   const date = state.date || (cleared ? "" : today);
+  // Native validation blocks submitting dates outside today to a year from now (Manila), e.g. a mistyped year 0008
+  const minDate = today || undefined;
+  const maxDate = today ? addDays(today, 365) : undefined;
   const { originCity, destinationCity } = endpoints(direction);
 
   async function onSearch(e: React.FormEvent) {
@@ -76,6 +85,8 @@ export default function TripSearch() {
           <input
             type="date"
             value={date}
+            min={minDate}
+            max={maxDate}
             onChange={(e) => {
               setCleared(e.target.value === "");
               dispatch({ type: "pickDate", date: e.target.value });
