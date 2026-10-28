@@ -55,7 +55,7 @@ python scraper/victory_liner.py --direction to-baguio     # one direction only: 
 - Rows are saved with `source = 'scraped'`. Trips that stop appearing are set inactive (`is_active = false`), but only in the direction(s) the run fetched. A `--direction to-baguio` run never deactivates Baguio to Manila trips, and vice versa. Trips with `source = 'manual'` are never touched, and a scraped time that clashes with a manual trip on the same route is skipped.
 - Any failed request, unknown bus type or unexpected response shape writes nothing and exits non-zero.
 - A missing operator or terminal seed fails the run with nothing written. Run the `supabase/schema.sql` seeds.
-- `--database-url` still works but warns: it shows the password in `ps`. Prefer `DATABASE_URL` (env or repo `.env`).
+- `--database-url` still works but warns: it shows the password in `ps`. Prefer `DATABASE_URL` (env or repo `.env`). The daily run below refuses the flag and reads a root-only env file instead.
 - If a fetched direction comes back with no trips at all, the whole run aborts with nothing written (both directions) and exits non-zero. If the reverse direction keeps failing, run with `--direction to-baguio` until it's fixed. While runs abort, outbound `last_verified_at` stops advancing.
 - The Baguio to Pasay, Caloocan and Sampaloc API codes are assumed to match the outbound ones; only Baguio to Cubao was checked live. The first live `--dry-run` confirms them: a wrong code fails the run, or prints `WARNING: no trips at all for BAGUIO->...`.
 - One route per terminal pair + class. Express and Inner Cities share a class, so the route keeps the longest running time and lists each branding's own time in `routes.notes`.
@@ -64,13 +64,58 @@ python scraper/victory_liner.py --direction to-baguio     # one direction only: 
   - **Empty dates:** a date on which a route returned no trips at all is ignored, and printed as `WARNING: no trips at all for <leg> on <date>`.
 
   Any other date a departure was seen on is saved for that date only (`valid_from = valid_to`), so a holiday extra on Sat Oct 31 never shows up on Sat Nov 7. Each one prints a `one-off:` line, a weekly trip whose weekdays change prints a `weekly:` line, and every trip set inactive prints a `deactivated:` line (after the commit, so a failed run lists nothing). Dated rows not seen again are set inactive like any other scraped trip. Known gaps: an early extra (within 3 hours of the scrape) seen only on the same weekday next week is still saved as weekly; and after a manual run at another hour, the next 4am run is the one that counts. Keep the cron at 4am for that reason.
-- Daily at 4am Manila time (VPS clock in UTC, so 20:00 UTC the day before):
 
-```cron
-0 20 * * * cd /root/personal-projects/tara-gala && .venv/bin/python scraper/victory_liner.py >> /var/log/tara-gala-scraper.log 2>&1
-```
+### Daily run (cron)
+The VPS runs the scrape every day at **04:00 Manila**. The VPS clock is UTC and Manila is UTC+8 with no daylight saving, so that is **20:00 UTC** the day before. TG-9's same-day rule assumes a 04:00 run, so don't move it.
 
-  If the VPS clock is already Manila time, use `0 4 * * *` instead. Cron mails or logs the non-zero exit when a run fails.
+Cron runs `scraper/cron.sh`, installed as `/usr/local/sbin/tara-gala-scrape`. Each run it:
+- takes a lock, so two runs never overlap;
+- reads `DATABASE_URL` from `/root/.config/tara-gala-scraper.env`, which must be mode 600 and owned by root. The file is **parsed, not sourced** (the one intended difference from the ticket): a password with `$`, `'`, `&` or spaces arrives intact, and nothing in the file is executed. The value is never printed, and the wrapper refuses a database URL passed on the command line;
+- fetches `main` over https into a private mirror under `/var/lib/tara-gala-scraper` and runs an export of it, never a working checkout, so merged scraper changes (TG-9) are picked up with no edit. If GitHub is down it warns and reruns the previous export;
+- keeps its own venv there, reinstalled only when `api/requirements.txt` changes;
+- logs `START`, `END rc=…`, and any `FAILED`, `WARNING` or `SKIPPED` line, plus the scraper's own output, to `/var/log/tara-gala-scraper.log`. It warns when the last successful scrape is more than 36 hours old.
+
+**Owner steps** (as root on the VPS, once the Railway database exists; nothing here is installed automatically):
+
+1. Create the env file. Paste the Railway Postgres `DATABASE_PUBLIC_URL` in the editor, never on the command line, so it stays out of your shell history:
+   ```sh
+   mkdir -p /root/.config && chmod 700 /root/.config
+   install -m 600 /dev/null /root/.config/tara-gala-scraper.env
+   nano /root/.config/tara-gala-scraper.env      # exactly one line, unquoted: DATABASE_URL=postgresql://...
+   stat -c '%a %U %s bytes' /root/.config/tara-gala-scraper.env   # expect 600 root and a size above 0; don't print the file
+   ```
+2. Install the wrapper and the log rotation from `main` (not from whatever branch the checkout is on):
+   ```sh
+   cd /root/projects/personal/tara-gala && git fetch -q origin main
+   git show origin/main:scraper/cron.sh > /tmp/tara-gala-scrape
+   install -m 755 /tmp/tara-gala-scrape /usr/local/sbin/tara-gala-scrape && rm /tmp/tara-gala-scrape
+   git show origin/main:scraper/logrotate.conf > /etc/logrotate.d/tara-gala-scraper && chmod 644 /etc/logrotate.d/tara-gala-scraper
+   ```
+   The scraper code updates itself every run, but the wrapper doesn't: after a merged change to `scraper/cron.sh`, run this step again.
+3. Try it: a dry run fetches everything (about 5 minutes), builds the venv and writes nothing:
+   ```sh
+   tara-gala-scrape --dry-run >> /var/log/tara-gala-scraper.log 2>&1; echo rc=$?
+   ```
+4. Schedule it: run `crontab -e` as root and add these two lines:
+   ```cron
+   # Tara Gala: Victory Liner scrape at 04:00 Manila = 20:00 UTC (the VPS clock is UTC). TG-9 assumes 04:00; don't move it.
+   0 20 * * * /usr/local/sbin/tara-gala-scrape >> /var/log/tara-gala-scraper.log 2>&1
+   ```
+   Check with `crontab -l | grep tara-gala`. If the VPS time zone ever changes from UTC (`timedatectl`), recompute the hour.
+
+**Reading the log:** `grep -E 'START|END|FAILED|WARNING|SKIPPED' /var/log/tara-gala-scraper.log | tail`. Every run has a `START sha=…` line and an `END rc=…` line; a failed run ends with `FAILED`. Run one by hand any time with `tara-gala-scrape` (or `tara-gala-scrape --dry-run`), but not within 10 minutes of 20:00 UTC.
+
+| Exit | Meaning |
+|---|---|
+| `0` | ok |
+| `1` | the scraper failed (any non-zero exit from the scraper is passed through as-is) |
+| `2` | config or venv: env file missing, wrong mode or owner, no `DATABASE_URL`, a database URL passed on the command line, or `pip install` failed |
+| `3` | no code: the first fetch from GitHub failed |
+| `75` | skipped: another run holds the lock |
+
+- **New database password:** edit the env file again (step 1). A wrong password fails late, after the full 5-minute fetch, with `END rc=1 … FAILED`; that's slow, not hung.
+- **Pause:** comment out the line with `crontab -e`.
+- **Known limit:** everything runs as root, including the fetch and `pip install` of code from GitHub. That's acceptable on a personal VPS where only the owner pushes to `main`; a dedicated system user is post-trip hardening.
 
 ## 5. API
 ```bash
