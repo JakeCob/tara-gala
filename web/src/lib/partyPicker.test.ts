@@ -243,6 +243,30 @@ test("T43-P5 planUi's only importers are ItineraryView and ItineraryList", () =>
   assert.deepEqual(importers, ["ItineraryList.tsx", "ItineraryView.tsx"]);
 });
 
+// T43-P6 (A2 RED audit): G10's old frames-and-fills ban stays (plan G10) and covers every A2 file; the share page
+// header and the Share button are primitives too
+test("T43-P6 A2 files hand-write no frame, fill or press shadow; the share header and Share button are primitives", () => {
+  const files: Record<string, string> = {
+    ...PLAN_FILES,
+    "i/[slug]/page.tsx": read("src/app/i/[slug]/page.tsx"),
+    "ShareButton.tsx": read("src/components/ShareButton.tsx"),
+  };
+  for (const [file, src] of Object.entries(files)) {
+    assert.doesNotMatch(src, /\bborder-[1-9]|\bbg-card\b|\bbg-stone-|\bshadow-\[|\boutline-solid\b/, `${file}: frames and fills come from PX or a primitive`);
+  }
+  const share = files["i/[slug]/page.tsx"];
+  assert.match(share, /<PageTitle>Your trip<\/PageTitle>/);
+  assert.doesNotMatch(share, /<h1\b/, "PageTitle is the h1");
+  assert.ok(
+    tags(share, "PixelLink").some((t) => /href="\/"/.test(t) && /variant="secondary"/.test(t)),
+    '<PixelLink variant="secondary" href="/">',
+  );
+  const button = files["ShareButton.tsx"];
+  assert.doesNotMatch(button, /<button\b/);
+  assert.ok(tags(button, "PixelButton").some((t) => /variant="primary"/.test(t)), '<PixelButton variant="primary">');
+  assert.match(button, /\bPX\.input\b/, "the manual copy field is PX.input");
+});
+
 // T15-X2 (N3): no animation library
 test("T15-X2 no animation or motion package", () => {
   const pkg = JSON.parse(read("package.json"));
