@@ -1,3 +1,5 @@
+import type { LastMileLeg } from "@/lib/lastMile";
+
 export type Trip = {
   trip_id: string;
   operator_slug: string;
@@ -66,4 +68,14 @@ export function formatVerified(iso: string | null): string {
   if (!iso) return "Not yet verified";
   const d = new Date(iso);
   return `Checked ${d.toLocaleDateString("en-PH", { month: "short", day: "numeric", timeZone: "Asia/Manila" })}`;
+}
+
+/** Last-mile legs in Baguio. Empty filters mean no filter; unknown slugs give []. */
+export async function fetchLastMile(params: { terminal?: string; spot?: string }): Promise<LastMileLeg[]> {
+  const q = new URLSearchParams();
+  if (params.terminal) q.set("terminal", params.terminal);
+  if (params.spot) q.set("spot", params.spot);
+  const res = await fetch(`${API_URL}/last-mile?${q}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
 }

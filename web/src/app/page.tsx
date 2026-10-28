@@ -1,3 +1,4 @@
+import Link from "next/link";
 import TripSearch from "@/components/TripSearch";
 
 export default function Home() {
@@ -8,6 +9,14 @@ export default function Home() {
         <p className="text-sm text-muted">Every Manila to Baguio bus, straight from the operators.</p>
       </header>
       <TripSearch />
+      <Link
+        href="/baguio"
+        className="min-h-11 flex items-center rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold"
+      >
+        <span>
+          In Baguio? Jeeps, taxis and walks from the terminal <span aria-hidden>→</span>
+        </span>
+      </Link>
       <footer className="mt-auto pt-6 text-xs text-muted">
         Getting to the terminal?{" "}
         <a href="https://sakay.ph" target="_blank" rel="noreferrer" className="underline">
