@@ -384,8 +384,19 @@ test("ShareButton hands the tap to runShare with shareDeps(navigator) (RED re-au
   assert.doesNotMatch(src, /\.writeText\(/);
 });
 
-test("no new web dependency (T23-G1)", () => {
-  const base = execFileSync("git", ["show", "origin/main:web/package.json"], { cwd: new URL(".", WEB), encoding: "utf8" });
+// CI's shallow checkout has no origin/main; there T27-17 (pwa.test.ts) still pins the exact dependency set
+test("no new web dependency (T23-G1)", (t) => {
+  let base: string;
+  try {
+    base = execFileSync("git", ["show", "origin/main:web/package.json"], {
+      cwd: new URL(".", WEB),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    t.skip("origin/main not fetched; T27-17 covers the dependency set");
+    return;
+  }
   const now = readFileSync(new URL("package.json", WEB), "utf8");
   const deps = (s: string) => {
     const j = JSON.parse(s);
