@@ -208,6 +208,15 @@ Before the trip (Nov 6), after the last deploy, on each tester's phone:
 
 Don't set `NEXT_PUBLIC_SERVICE_WORKER=false` (the kill switch) during the trip: it unregisters the worker and deletes everything it saved.
 
+Offline end-to-end check (TG-27 Part B): `web/scripts/offline-e2e.mjs` runs the four steps above in a fresh headless Chrome profile, takes the page and the service worker offline, then reloads a saved trip and `/plan`. It checks the overworld map, its sprites, the bus sheet (Checked and the confirm note), the "Offline · saved" banner, no sideways scroll at 380px, and installability (manifest and worker). It has no dependencies: it drives Chrome over the DevTools protocol with Node's built-in WebSocket, using `$CHROME_BIN` or Playwright's cached `chrome-headless-shell`. It only loads pages, so it's safe against the live site.
+```bash
+cd web
+npm run build && npx next start -p 3040     # a production build (the worker never registers under next dev), with the API running
+node scripts/offline-e2e.mjs --origin http://localhost:3040 [--slug premade-chill] [--port 9040] [--out <screenshot dir>]
+node scripts/offline-e2e.mjs --origin https://<web domain>   # or the deployed site
+```
+It exits 1 on any `FAIL` line. Chrome's offline emulation leaves `navigator.onLine` true in a page loaded after going offline (a phone in airplane mode reports false), so that first banner reads "Can't reach the server · saved …"; the script then fires the browser's offline event and expects "Offline · saved".
+
 ## 7. Feature flags
 Each flag is an environment variable on both sides: the API reads it from `os.environ` (`api/app/flags.py`), the web app from a `NEXT_PUBLIC_` variable (`web/src/lib/flags.ts`).
 

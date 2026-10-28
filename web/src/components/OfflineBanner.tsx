@@ -24,7 +24,7 @@ export default function OfflineBanner() {
     const offline = () => dispatch({ type: "offline" });
     const onMessage = (event: MessageEvent) => {
       const msg = parseSwMessage(event.data);
-      if (msg) dispatch({ type: "data", source: msg.source, savedAt: msg.savedAt });
+      if (msg) dispatch({ type: "data", source: msg.source, savedAt: msg.savedAt, url: msg.url });
     };
     window.addEventListener("online", online);
     window.addEventListener("offline", offline);

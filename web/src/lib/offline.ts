@@ -10,7 +10,7 @@ export const MSG_SKIP_WAITING = "SKIP_WAITING";
 
 export type BannerState = { kind: "none" | "cached" | "miss"; savedAt: string | null; online: boolean; backOnline: boolean };
 export type BannerEvent =
-  | { type: "data"; source: DataSource; savedAt: string | null }
+  | { type: "data"; source: DataSource; savedAt: string | null; url?: string }
   | { type: "online" }
   | { type: "offline" }
   | { type: "reset"; online: boolean };
@@ -23,10 +23,24 @@ export function initialBanner(online: boolean): BannerState {
   return { kind: "none", savedAt: null, online, backOnline: false };
 }
 
+// Answers that only add to a screen, never its own data: /terminals upgrades directions links and falls back to the
+// trip's own fields, so a miss there (on a saved itinerary, offline) mustn't read as "nothing saved" (TG-27 Part B)
+const SUPPLEMENTARY = /\/terminals$/;
+
+function supplementary(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    return SUPPLEMENTARY.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 /** The banner follows the data (was the last API answer served from the cache?), not just navigator.onLine. */
 export function bannerReducer(s: BannerState, e: BannerEvent): BannerState {
   switch (e.type) {
     case "data":
+      if (supplementary(e.url)) return s;
       if (e.source === "network") return { ...s, kind: "none", savedAt: null, backOnline: false };
       if (e.source === "cache") {
         // Several cached answers on one screen: show the oldest
