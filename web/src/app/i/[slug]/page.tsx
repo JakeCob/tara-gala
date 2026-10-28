@@ -1,8 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import ItineraryView from "@/components/ItineraryView";
-import { UI } from "@/components/planUi";
+import { PageTitle, PixelLink } from "@/components/pixel";
 
 // A capability link: never indexed, and no referrer when it links out to operators, Maps or Sakay
 export const metadata: Metadata = {
@@ -25,10 +24,10 @@ async function SlugView({ params }: { params: Promise<{ slug: string }> }) {
 export default function TripPlanPage({ params }: PageProps<"/i/[slug]">) {
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 py-6 flex flex-col gap-5">
-      <Link href="/" className={UI.backLink}>
+      <PixelLink variant="secondary" href="/" className="inline-flex items-center self-start px-4 text-sm">
         <span aria-hidden="true">←&nbsp;</span>Back to bus search
-      </Link>
-      <h1 className={UI.h1}>Your trip</h1>
+      </PixelLink>
+      <PageTitle>Your trip</PageTitle>
       <Suspense fallback={<p className="text-sm text-muted">Loading your trip...</p>}>
         <SlugView params={params} />
       </Suspense>

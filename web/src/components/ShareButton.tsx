@@ -4,7 +4,7 @@
 // The tap logic lives in runShare (lib/itinerary.ts, unit-tested); this only renders its outcome.
 import { useEffect, useRef, useState } from "react";
 import { runShare, shareDeps, shareText, shareUrl, type ShareOutcome } from "@/lib/itinerary";
-import { UI } from "@/components/planUi";
+import { PX, PixelButton } from "@/components/pixel";
 
 const STATUS: Record<ShareOutcome, string> = {
   done: "", // the OS share sheet was the feedback
@@ -46,16 +46,16 @@ export default function ShareButton({ slug, tripDate, returnDate }: { slug: stri
 
   return (
     <div className="flex flex-col gap-2">
-      <button type="button" onClick={onShare} className={UI.primaryBtn}>
+      <PixelButton variant="primary" className="w-full px-4 py-3" onClick={onShare}>
         {canShare ? "Share this trip" : "Copy link"}
-      </button>
+      </PixelButton>
       <p role="status" className="text-sm">
         {outcome ? STATUS[outcome] : ""}
       </p>
       {outcome === "manual" && (
         <label className="flex flex-col gap-1">
-          <span className={UI.meta}>Trip link</span>
-          <input ref={field} readOnly value={url} className={UI.input} onFocus={(e) => e.currentTarget.select()} />
+          <span className={PX.meta}>Trip link</span>
+          <input ref={field} readOnly value={url} className={`${PX.input} w-full`} onFocus={(e) => e.currentTarget.select()} />
         </label>
       )}
     </div>

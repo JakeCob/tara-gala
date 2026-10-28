@@ -17,7 +17,7 @@ import {
   type Party,
 } from "@/lib/party";
 import { chibi, spriteSrc, type PassengerType } from "@/lib/sprites";
-import { UI } from "./planUi";
+import { PX, PixelBox, PixelButton, SectionTitle } from "@/components/pixel";
 
 type Props = {
   party: Party;
@@ -50,43 +50,41 @@ export default function PartyPicker({ party, onChange, onAdd }: Props) {
   }
 
   return (
-    <section className={UI.box}>
-      <h2 id={`${id}-h`} className={UI.h2}>
-        {"Who's travelling?"}
-      </h2>
+    <PixelBox as="section" className="p-4 flex flex-col gap-3">
+      <SectionTitle id={`${id}-h`}>Who&apos;s travelling?</SectionTitle>
       <ul role="group" aria-labelledby={`${id}-h`} className="flex flex-col gap-2">
         {PICKER_TYPES.map((t) => (
           <li key={t} role="group" aria-labelledby={`${id}-${t}-label ${id}-${t}-count`} className="flex items-center gap-3 min-h-14">
-            <span className={`${UI.plate} shrink-0`}>
+            <span className={PX.plate}>
               {/* eslint-disable-next-line @next/next/no-img-element -- pixel art: next/image would resample PNG art and needs dangerouslyAllowSVG */}
-              <img src={spriteSrc(chibi(t, "idle-1"))} width={32} height={32} alt="" className={`${UI.pixelated} block`} draggable={false} decoding="async" />
+              <img src={spriteSrc(chibi(t, "idle-1"))} width={32} height={32} alt="" className="pixelated block" draggable={false} decoding="async" />
             </span>
             <span className="min-w-0 flex-1 flex flex-col">
               <span id={`${id}-${t}-label`} className="text-sm font-bold">
                 {TYPE_LABEL[t]}
               </span>
-              <span className={UI.meta}>{TYPE_HINT[t]}</span>
+              <span className={PX.meta}>{TYPE_HINT[t]}</span>
             </span>
-            <button type="button" className={UI.iconBtn} aria-label={removeLabel(t)} aria-disabled={!canRemove(party, t)} onClick={() => minus(t)}>
+            <PixelButton variant="icon" aria-label={removeLabel(t)} aria-disabled={!canRemove(party, t)} onClick={() => minus(t)}>
               <span aria-hidden="true" className="text-xl font-bold">
                 −
               </span>
-            </button>
+            </PixelButton>
             <span id={`${id}-${t}-count`} className="w-8 text-center text-xl font-bold tabular-nums">
               {n[t]}
             </span>
-            <button type="button" className={UI.iconBtn} aria-label={addLabel(t)} aria-disabled={!canAdd(party)} onClick={() => plus(t)}>
+            <PixelButton variant="icon" aria-label={addLabel(t)} aria-disabled={!canAdd(party)} onClick={() => plus(t)}>
               <span aria-hidden="true" className="text-xl font-bold">
                 +
               </span>
-            </button>
+            </PixelButton>
           </li>
         ))}
       </ul>
       <p aria-live="polite" className="text-sm font-semibold">
         {partySummary(party)}
       </p>
-      <p className={UI.meta}>{DISCOUNT_NOTE}</p>
-    </section>
+      <p className={PX.meta}>{DISCOUNT_NOTE}</p>
+    </PixelBox>
   );
 }

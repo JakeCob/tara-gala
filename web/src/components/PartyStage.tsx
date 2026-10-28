@@ -1,7 +1,7 @@
 import { isPickerType, tagLabel } from "@/lib/party";
 import type { SpawnStep } from "@/lib/spawn";
 import { chibi, spriteSrc } from "@/lib/sprites";
-import { UI } from "./planUi";
+import { PX } from "@/components/pixel";
 
 type Props = {
   party: readonly { type: string }[];
@@ -18,7 +18,7 @@ export default function PartyStage({ party, spawning, step, fixedRows = false }:
   return (
     <div
       aria-hidden="true"
-      className={`${UI.stage} ${UI.pixelated} grid grid-cols-5 px-1 py-3 gap-y-2 ${fixedRows ? "grid-rows-[repeat(2,5.5rem)]" : ""}`}
+      className={`pixel-frame bg-screen pixelated grid grid-cols-5 px-1 py-3 gap-y-2 ${fixedRows ? "grid-rows-[repeat(2,5.5rem)]" : ""}`}
       style={{ backgroundImage: `url(${spriteSrc("tile-grass")})`, backgroundSize: "32px" }}
     >
       {party.map((p, i) => {
@@ -28,17 +28,17 @@ export default function PartyStage({ party, spawning, step, fixedRows = false }:
           <div key={i} className="relative flex flex-col items-center justify-end">
             {src && (
               // eslint-disable-next-line @next/next/no-img-element -- pixel art: next/image would resample PNG art and needs dangerouslyAllowSVG
-              <img src={src} width={64} height={64} alt="" className={UI.pixelated} draggable={false} decoding="async" />
+              <img src={src} width={64} height={64} alt="" className="pixelated" draggable={false} decoding="async" />
             )}
             {src && live?.stars && (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element -- pixel art, as above */}
-                <img src={spriteSrc("ui-star")} width={24} height={24} alt="" className={`${UI.pixelated} absolute left-0 top-0`} draggable={false} />
+                <img src={spriteSrc("ui-star")} width={24} height={24} alt="" className="pixelated absolute left-0 top-0" draggable={false} />
                 {/* eslint-disable-next-line @next/next/no-img-element -- pixel art, as above */}
-                <img src={spriteSrc("ui-star")} width={24} height={24} alt="" className={`${UI.pixelated} absolute right-0 top-0`} draggable={false} />
+                <img src={spriteSrc("ui-star")} width={24} height={24} alt="" className="pixelated absolute right-0 top-0" draggable={false} />
               </>
             )}
-            <span className={`${UI.screenChip} px-1 text-xs font-semibold`}>{tagLabel(p.type)}</span>
+            <span className={PX.screenTag}>{tagLabel(p.type)}</span>
           </div>
         );
       })}

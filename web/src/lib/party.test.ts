@@ -307,3 +307,11 @@ test("T15-X1 party.ts is a plain module", () => {
   assert.doesNotMatch(source, /\benum\s/);
   assert.doesNotMatch(source, /\bnamespace\s/);
 });
+
+// TG-15 Gate 3 S3 (carried into TG-43 A2): the stage tag for every type, including saved data's child and unknowns
+test("T15-L6 tagLabel names picker types, child, and anything else as Other", async () => {
+  const { tagLabel } = await import("./party.ts");
+  assert.deepEqual(PICKER_TYPES.map(tagLabel), ["Adult", "Student", "Senior", "PWD"]);
+  assert.equal(tagLabel("child"), "Child");
+  for (const t of ["", "<b>x</b>", "constructor", "Adult"]) assert.equal(tagLabel(t), "Other", JSON.stringify(t));
+});

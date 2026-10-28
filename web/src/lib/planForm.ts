@@ -91,7 +91,8 @@ export const PLAN_COPY = {
     dates: "When are you going?",
     date: "Travel date",
     returnDate: "Return date",
-    budget: "Budget (optional)",
+    budget: "Budget", // pixel font; Pixelify draws ( ) as braces, so " (optional)" is a separate body-font span
+    optional: " (optional)",
     vibe: "What's the vibe?",
     note: "Anything else? (optional)",
   },

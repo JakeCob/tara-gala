@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import PlanForm from "@/components/PlanForm";
-import { UI } from "@/components/planUi";
+import { PageTitle, PixelLink } from "@/components/pixel";
 
 export const metadata: Metadata = {
   title: "Plan your trip · Tara Gala",
@@ -11,10 +10,10 @@ export const metadata: Metadata = {
 export default function PlanPage() {
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 py-6 flex flex-col gap-5">
-      <Link href="/" className={UI.backLink}>
+      <PixelLink variant="secondary" href="/" className="inline-flex items-center self-start px-4 text-sm">
         <span aria-hidden="true">←&nbsp;</span>Back to bus search
-      </Link>
-      <h1 className={UI.h1}>Plan your trip</h1>
+      </PixelLink>
+      <PageTitle>Plan your trip</PageTitle>
       <PlanForm />
     </main>
   );
