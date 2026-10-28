@@ -186,12 +186,25 @@ def test_first_database_url_line_wins(h):
     assert h.dsn() == DSN
 
 
-@pytest.mark.parametrize("args", [["--database-url", DSN], [f"--database-url={DSN}"], ["--dry-run", "--database-url", DSN]])
+@pytest.mark.parametrize("args", [
+    ["--database-url", DSN], [f"--database-url={DSN}"], ["--dry-run", "--database-url", DSN],
+    # argparse's allow_abbrev: any unambiguous prefix means --database-url to the scraper (code review blocker 1)
+    ["--da", DSN], [f"--data={DSN}"], ["--database", DSN], ["--dry-run", f"--databa={DSN}"],
+])
 def test_database_url_argument_is_refused(h, args):
     cp = h.run(*args)
     assert cp.returncode == 2
     assert any("FAILED config: --database-url is not allowed; use the env file" in l for l in lines(cp))
     assert not h.ran()
+
+
+def test_no_other_scraper_option_starts_with_da():
+    # The wrapper refuses every --da* argument, because argparse expands any prefix of --database-url. That's only
+    # safe while no other scraper option shares the prefix; a new one would need the wrapper's guard revisited.
+    src = (ROOT / "scraper" / "victory_liner.py").read_text()
+    options = re.findall(r"add_argument\(\s*\"(--[a-z-]+)\"", src)
+    assert "--database-url" in options and "--dry-run" in options
+    assert [o for o in options if o.startswith("--da")] == ["--database-url"]
 
 
 def test_every_wrapper_line_has_the_log_format(h):
@@ -423,8 +436,9 @@ def test_no_committed_file_holds_a_dsn():
     assert not [f for f in files if f == ".env" or f.endswith(".env")]
     hits = subprocess.run(["git", "-C", str(ROOT), "grep", "-nE", r"postgres(ql)?://[^ ]*:[^ ]*@", "--", ".", ":!api/tests"],
                           capture_output=True, text=True).stdout
-    # allowed: obvious placeholders like <password> in docs and .env.example
-    real = [l for l in hits.splitlines() if not re.search(r"<[a-z-]+>|\.\.\.", l)]
+    # allowed: obvious placeholders like <password> in docs and .env.example, and throwaway local test databases
+    # (TG-18's CI service container at localhost)
+    real = [l for l in hits.splitlines() if not re.search(r"<[a-z-]+>|\.\.\.|@(localhost|127\.0\.0\.1)[:/]", l)]
     assert real == [], real
 
 
@@ -461,6 +475,9 @@ def test_readme_cron_section_has_the_line_and_the_utc_reasoning():
 def test_readme_owner_steps():
     s = cron_section()
     assert "/root/.config/tara-gala-scraper.env" in s
+    assert "/tmp/" not in s  # no predictable temp path for root to write through (code review 2)
+    assert "DATABASE_PUBLIC_URL" in s and "jacob-rafal's Projects" in s  # which Railway project (code review 3)
+    assert "trailing space" in s
     assert "chmod 600" in s or "install -m 600" in s
     assert not re.search(r"\bcat\b[^\n]*tara-gala-scraper\.env", s)
     assert "install -m 755" in s and "/usr/local/sbin/tara-gala-scrape" in s
