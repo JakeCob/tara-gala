@@ -262,3 +262,31 @@ test("TerminalLinks: the Sakay link renders only under showSakay", () => {
   const before = component.slice(0, sakay[0].index);
   assert.match(before, /\{showSakay\(city\) && \(\s*$/);
 });
+
+// Step 2 wiring guards (manual M1/M2 check the rendered result).
+const tripSearch = readFileSync(new URL("../components/TripSearch.tsx", import.meta.url), "utf8");
+const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+test("TripCard links to the trip's origin terminal, between the route line and the Book row", () => {
+  assert.match(tripSearch, /^import TerminalLinks from "@\/components\/TerminalLinks";$/m);
+  const card = tripSearch.slice(tripSearch.indexOf("function TripCard"));
+  const uses = card.match(/<TerminalLinks\b[^>]*\/>/g) ?? [];
+  assert.deepEqual(uses, ["<TerminalLinks slug={t.origin_slug} name={t.origin_name} city={t.origin_city} />"]);
+  const at = card.indexOf("<TerminalLinks");
+  assert.ok(card.indexOf("{t.origin_name} → {t.destination_name}") < at, "after the route line");
+  assert.ok(at < card.indexOf("formatVerified("), "before the Checked/Book row");
+});
+
+test("Book is a 44px target (manager decision)", () => {
+  const book = tripSearch.match(/<a\b[^>]*href=\{t\.booking_url\}[^>]*>/)?.[0] ?? "";
+  assert.match(book, /className="[^"]*\bmin-h-11 inline-flex items-center\b[^"]*"/);
+});
+
+test("footer points to the cards, with no homepage links; the /baguio link stays", () => {
+  const footer = page.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/);
+  assert.ok(footer, "footer present");
+  assert.match(footer[0], /^<footer className="mt-auto pt-6 text-xs text-muted">/);
+  assert.equal(footer[1].trim(), "Directions to your terminal are on each trip.");
+  assert.doesNotMatch(page, /maps\.google\.com|sakay\.ph/);
+  assert.match(page, /href="\/baguio"/);
+});
