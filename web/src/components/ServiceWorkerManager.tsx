@@ -13,7 +13,10 @@ async function removeServiceWorker() {
   await Promise.all(registrations.map((r) => r.unregister()));
   const names = "caches" in window ? (await caches.keys()).filter((name) => name.startsWith("tg-")) : [];
   await Promise.all(names.map((name) => caches.delete(name)));
-  console.info("[tg-pwa] kill switch", { registrations: registrations.length, caches: names.length });
+  // Runs on every load while the flag is off; only worth a line when it removed something
+  if (registrations.length || names.length) {
+    console.info("[tg-pwa] kill switch", { registrations: registrations.length, caches: names.length });
+  }
 }
 
 /** The API origin the service worker may cache, passed in its URL because public/sw.js can't read env vars. */
