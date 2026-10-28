@@ -167,6 +167,11 @@ test("Part B: /terminals only upgrades directions links, so its answers never ch
   // The screen's own data still drives it: a trip search miss is variant C, as before
   const tripsMiss: BannerEvent = { type: "data", source: "none", savedAt: null, url: `${api}/trips?origin_city=Baguio` };
   assert.equal(bannerVariant(bannerReducer(a, tripsMiss)), "C");
+  for (const path of ["/itineraries/premade-chill", "/itineraries/3f9a1c0b7e2d", "/premade-itineraries", "/last-mile?terminal=vl-baguio", "/terminals/vl-baguio"]) {
+    assert.equal(bannerVariant(bannerReducer(a, { type: "data", source: "none", savedAt: null, url: `${api}${path}` })), "C", path);
+  }
+  assert.deepEqual(bannerReducer(a, { ...terminals("none"), url: `${api}/terminals?fresh=1` }), a);
+  assert.equal(bannerVariant(bannerReducer(a, { type: "data", source: "none", savedAt: null, url: "not a url" })), "C");
   assert.equal(bannerVariant(reduce(initialBanner(false), terminals("none"))), null);
 });
 
