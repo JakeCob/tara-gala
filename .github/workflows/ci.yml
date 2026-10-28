@@ -25,6 +25,8 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v7
+      # The checkout is shallow with no origin/main, so the base-diff guards (T43-O5, T23-G1) would always skip
+      - run: git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main
       - uses: actions/setup-node@v7
         with:
           node-version: 24
