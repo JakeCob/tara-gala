@@ -131,6 +131,9 @@ const pixels = (name: string): Pixels => {
 const mask = (p: Pixels) => p.map((row) => row.map((c) => (c === null ? "." : "#")).join("")).join("\n");
 const lowestRow = (p: Pixels) => p.findLastIndex((row) => row.some((c) => c !== null));
 const column = (p: Pixels, x: number) => p.map((row) => row[x]);
+// The grid-based art rules hold the placeholders to ux.md section 3. Once a sprite is swapped for PNG art (PNG_ART),
+// its grid is gone and the art is checked by its IHDR size instead, so these rules skip it.
+const placeholders = (...names: string[]) => names.every((n) => !PNG_ART.has(n as SpriteName));
 
 // --- T33-1 the art list and the manifest ------------------------------------------------------------
 
@@ -268,6 +271,7 @@ test("every committed SVG is exactly gridToSvg(its grid), at the manifest size",
 test("chibis stand on row 30 (idle-2 one lower), centred on x 15.5", async (t) => {
   for (const type of TYPES) {
     await t.test(type, () => {
+      if (!placeholders(...FRAMES.map((f) => `chibi-${type}-${f}`))) return;
       const idle1 = pixels(`chibi-${type}-idle-1`);
       assert.equal(lowestRow(idle1), 30, "idle-1 lowest row");
       assert.equal(lowestRow(pixels(`chibi-${type}-wave`)), 30, "wave lowest row");
@@ -282,6 +286,7 @@ test("chibis stand on row 30 (idle-2 one lower), centred on x 15.5", async (t) =
 test("idle-2 is idle-1 one pixel lower; for PWD only the body above the seat moves", async (t) => {
   for (const type of TYPES) {
     await t.test(type, () => {
+      if (!placeholders(`chibi-${type}-idle-1`, `chibi-${type}-idle-2`)) return;
       const one = grid(`chibi-${type}-idle-1`).rows;
       const two = grid(`chibi-${type}-idle-2`);
       const blank = ".".repeat(one[0].length);
@@ -300,45 +305,56 @@ test("idle-2 is idle-1 one pixel lower; for PWD only the body above the seat mov
 
 test("places sit on row 23", async (t) => {
   for (const place of PLACES) {
-    await t.test(place, () => assert.equal(lowestRow(pixels(`place-${place}`)), 23));
+    await t.test(place, () => {
+      if (placeholders(`place-${place}`)) assert.equal(lowestRow(pixels(`place-${place}`)), 23);
+    });
   }
 });
 
 test("vehicles touch the bottom row (mode-walk footprints are exempt but not empty)", async (t) => {
   for (const name of VEHICLES) {
     await t.test(name, () => {
+      if (!placeholders(name)) return;
       const p = pixels(name);
       assert.equal(lowestRow(p), p.length - 1);
     });
   }
-  assert.ok(lowestRow(pixels("mode-walk")) >= 0);
+  if (placeholders("mode-walk")) assert.ok(lowestRow(pixels("mode-walk")) >= 0);
 });
 
 // --- T33-12 seamless tiles and the 9-slice frame -----------------------------------------------------
 
 test("ground tiles are opaque; pine and mountain are drawn over grass", async (t) => {
   for (const name of OPAQUE_TILES) {
-    await t.test(name, () => assert.ok(pixels(name).every((row) => row.every((c) => c !== null)), "a transparent pixel"));
+    await t.test(name, () => {
+      if (placeholders(name)) assert.ok(pixels(name).every((row) => row.every((c) => c !== null)), "a transparent pixel");
+    });
   }
   for (const name of ["tile-pine", "tile-mountain"]) {
-    await t.test(name, () => assert.ok(pixels(name).some((row) => row.some((c) => c === null))));
+    await t.test(name, () => {
+      if (placeholders(name)) assert.ok(pixels(name).some((row) => row.some((c) => c === null)));
+    });
   }
 });
 
 test("tiles repeat without seams", () => {
-  for (const name of ["tile-path-straight", "tile-road", "tile-water"]) {
+  for (const name of ["tile-path-straight", "tile-road", "tile-water"].filter((n) => placeholders(n))) {
     const p = pixels(name);
     assert.deepEqual(p[0], p[15], `${name}: row 0 = row 15`);
   }
-  const water = pixels("tile-water");
-  assert.deepEqual(column(water, 0), column(water, 15), "tile-water: column 0 = column 15");
-  const grass = pixels("tile-grass");
-  const leaf = "#5fb36b";
-  const edges = [...grass[0], ...grass[15], ...column(grass, 0), ...column(grass, 15)];
-  assert.ok(!edges.includes(leaf), "tile-grass: no Leaf on an edge");
+  if (placeholders("tile-water")) {
+    const water = pixels("tile-water");
+    assert.deepEqual(column(water, 0), column(water, 15), "tile-water: column 0 = column 15");
+  }
+  if (placeholders("tile-grass")) {
+    const grass = pixels("tile-grass");
+    const edges = [...grass[0], ...grass[15], ...column(grass, 0), ...column(grass, 15)];
+    assert.ok(!edges.includes("#5fb36b"), "tile-grass: no Leaf on an edge");
+  }
 });
 
 test("a rotated path corner joins a straight path", () => {
+  if (!placeholders("tile-path-straight", "tile-path-corner")) return;
   const straight = pixels("tile-path-straight");
   const corner = pixels("tile-path-corner");
   assert.deepEqual(corner[15], straight[15], "corner bottom row = straight bottom row");
@@ -346,6 +362,7 @@ test("a rotated path corner joins a straight path", () => {
 });
 
 test("ui-dialog-frame stretches cleanly as a 9-slice with 8px corners", () => {
+  if (!placeholders("ui-dialog-frame")) return;
   const p = pixels("ui-dialog-frame");
   const uniform = (cells: (string | null)[], what: string) => assert.equal(new Set(cells).size, 1, what);
   for (let y = 0; y < 24; y++) {
@@ -360,10 +377,16 @@ test("ui-dialog-frame stretches cleanly as a 9-slice with 8px corners", () => {
 // --- T33-18 silhouettes differ by shape --------------------------------------------------------------
 
 test("the four chibi types differ by silhouette, and each wave differs from its idle", () => {
-  const masks = TYPES.map((t) => mask(pixels(`chibi-${t}-idle-1`)));
-  assert.equal(new Set(masks).size, 4, "two chibi types share a silhouette");
-  for (const t of TYPES) assert.notEqual(mask(pixels(`chibi-${t}-wave`)), mask(pixels(`chibi-${t}-idle-1`)), `${t} wave`);
-  assert.notEqual(mask(pixels("mode-taxi")), mask(pixels("mode-grab")), "taxi and grab share a silhouette");
+  const idles = TYPES.map((t) => `chibi-${t}-idle-1`).filter((n) => placeholders(n));
+  const masks = idles.map((n) => mask(pixels(n)));
+  assert.equal(new Set(masks).size, idles.length, "two chibi types share a silhouette");
+  for (const t of TYPES) {
+    const [wave, idle] = [`chibi-${t}-wave`, `chibi-${t}-idle-1`];
+    if (placeholders(wave, idle)) assert.notEqual(mask(pixels(wave)), mask(pixels(idle)), `${t} wave`);
+  }
+  if (placeholders("mode-taxi", "mode-grab")) {
+    assert.notEqual(mask(pixels("mode-taxi")), mask(pixels("mode-grab")), "taxi and grab share a silhouette");
+  }
 });
 
 // --- T33-13 lookups ---------------------------------------------------------------------------------
@@ -393,16 +416,21 @@ test("modeSprite() maps the six modes; anything else is null", () => {
 });
 
 test("spriteSrc() gives /sprites/<name>.svg, or .png once the name is in PNG_ART", () => {
-  assert.equal(PNG_ART.size, 0, "no art yet");
-  for (const name of manifestNames()) assert.equal(spriteSrc(name), `/sprites/${name}.svg`);
-  const art = PNG_ART as Set<SpriteName>;
-  art.add("ui-star" as SpriteName);
-  try {
-    assert.equal(spriteSrc("ui-star" as SpriteName), "/sprites/ui-star.png");
-  } finally {
-    art.delete("ui-star" as SpriteName);
+  for (const name of manifestNames()) {
+    assert.equal(spriteSrc(name), `/sprites/${name}.${PNG_ART.has(name) ? "png" : "svg"}`);
   }
-  assert.equal(PNG_ART.size, 0);
+  const art = PNG_ART as Set<SpriteName>;
+  const before = new Set(art);
+  const probe = manifestNames().find((n) => !art.has(n));
+  if (probe) {
+    art.add(probe);
+    try {
+      assert.equal(spriteSrc(probe), `/sprites/${probe}.png`);
+    } finally {
+      art.delete(probe);
+    }
+  }
+  assert.deepEqual(new Set(art), before, "PNG_ART restored");
 });
 
 // --- T33-14 enums match the schema ------------------------------------------------------------------
