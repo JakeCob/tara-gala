@@ -20,6 +20,7 @@ import {
   planFormReducer,
   planRunReducer,
   sortPremade,
+  statusShown,
   statusText,
   validatePlanForm,
   type FormValues,
@@ -147,7 +148,7 @@ export default function PlanForm() {
           {label}
         </button>
       )}
-      <p role="status" className={UI.meta}>
+      <p role="status" className={statusShown(run) ? UI.meta : "sr-only"}>
         {statusText(run, mode, values)}
       </p>
       {run.error && (

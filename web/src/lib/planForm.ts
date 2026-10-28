@@ -362,6 +362,12 @@ export function planRunReducer(s: RunState, a: RunAction): RunState {
   }
 }
 
+// Whether the status line is shown. In the error and list phases the error box or the list already shows the same
+// text, so the region goes sr-only: still in the DOM and still announcing, but each line appears once (TG-21 ux-review 2)
+export function statusShown(run: RunState): boolean {
+  return run.phase !== "error" && run.phase !== "premade";
+}
+
 // The one live status region (ux §7)
 export function statusText(run: RunState, mode: FormMode, dates: { date: string; returnDate: string }): string {
   switch (run.phase) {

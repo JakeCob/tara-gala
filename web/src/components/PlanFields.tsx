@@ -81,7 +81,7 @@ export function DatesBox(props: {
   );
 }
 
-/** "Budget (optional)" with a ₱ prefix (ux §2.2). Reformatted to 6,000 on blur, never while typing. */
+/** "Budget (optional)" with a ₱ prefix (ux §2.2). Reformatted to 6,000 when the field loses focus, never while typing. */
 export function BudgetBox(props: { value: string; errors: readonly FieldError[]; onChange(value: string): void; onBlur(): void }) {
   const error = errorOf(props.errors, "budget");
   const hintId = `${FIELD_INPUT_ID.budget}-hint`;

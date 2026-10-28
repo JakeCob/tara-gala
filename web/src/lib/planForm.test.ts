@@ -41,6 +41,7 @@ import {
   shiftReturn,
   showPremadeAction,
   sortPremade,
+  statusShown,
   statusText,
   toggleChip,
   validatePlanForm,
@@ -755,6 +756,19 @@ test("T21-RUN5 the status region text per phase", () => {
   }
 });
 
+test("T21-RUN7 the status line goes sr-only while the error box or the list shows the same text", () => {
+  const planning = planRunReducer(initialRun, { type: "start", kind: "plan", id: 1 });
+  const failed = planRunReducer(planning, { type: "planResult", id: 1, result: { kind: "network" } });
+  const loading = planRunReducer(failed, { type: "start", kind: "premade", id: 2 });
+  const listed = planRunReducer(loading, { type: "premadeResult", id: 2, result: { kind: "failed" } });
+  const opening = planRunReducer(planning, { type: "planResult", id: 1, result: { kind: "ok", slug: "s" } });
+  assert.deepEqual(
+    [initialRun, planning, failed, loading, listed, opening].map(statusShown),
+    [true, true, false, true, false, true],
+    "shown before submit and while working; hidden (sr-only) in the error and list phases",
+  );
+});
+
 test("T21-RUN6 errors show only after the first submit, then follow each change", () => {
   const s0 = planFormReducer(initialForm, { type: "toggleChip", chip: "Chill" });
   assert.equal(s0.attempted, false);
@@ -844,6 +858,8 @@ test("T21-S3 one noValidate form; aria-disabled submit; only a fieldset is ever 
   }
   assert.match(ui, /<fieldset\b[^>]*\bdisabled=\{/);
   assert.equal((ui.match(/role="status"/g) ?? []).length, 1);
+  // Always rendered, never removed: only its class switches to sr-only (RUN7)
+  assert.match(form, /<p role="status" className=\{statusShown\(run\) \? UI\.meta : "sr-only"\}>/);
   assert.doesNotMatch(ui, /animate-|setInterval|<progress\b|spinner/i);
 });
 
