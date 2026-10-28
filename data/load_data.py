@@ -4,7 +4,8 @@ Usage:
     python data/load_data.py --dry-run     # validate everything, write nothing
     python data/load_data.py               # load (safe to re-run: rows are matched and updated)
 
-Reads DATABASE_URL from the environment or from the repo-root .env file.
+Reads DATABASE_URL from the environment or from the repo-root .env file. --database-url still works but warns:
+it shows the password in the process list (ps). Database errors are printed with the password and DSN masked.
 Load order: spots.csv, routes_trips.csv, last_mile_routes.csv.
 """
 
@@ -14,6 +15,7 @@ import argparse
 import csv
 import os
 import sys
+from collections.abc import Iterable
 from datetime import date, datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -22,6 +24,17 @@ import psycopg
 
 MANILA = ZoneInfo("Asia/Manila")
 HERE = Path(__file__).resolve().parent
+API_DIR = HERE.parent / "api"
+if str(API_DIR) not in sys.path:
+    sys.path.insert(0, str(API_DIR))  # app.redact: stdlib only, no FastAPI (TG-40)
+from app.redact import redact_error  # noqa: E402
+
+SEEDS_HINT = "run supabase/schema.sql seeds"
+DATABASE_URL_FLAG_WARNING = (
+    "WARNING: --database-url shows the password in the process list (ps) while this runs. "
+    "Set DATABASE_URL in the environment or the repo .env instead."
+)
+DATABASE_URL_FLAG_HELP = "deprecated: visible in ps while it runs; set DATABASE_URL (env or repo .env) instead"
 
 CLASSES = {
     "regular_aircon", "deluxe", "super_deluxe", "executive", "premiere",
@@ -153,8 +166,17 @@ def _lookup(mapping: dict[str, str], slug: str | None, what: str) -> str | None:
     if slug is None:
         return None
     if slug not in mapping:
-        raise RowError(f"unknown {what} {slug!r}; known: {', '.join(sorted(mapping))}")
+        known = ', '.join(sorted(mapping)) or '(none)'
+        # Operators and terminals are seeds: a typo and a deleted seed look the same here, so hint at both
+        hint = f" (if it should exist, {SEEDS_HINT})" if what in ("operator", "terminal") else ""
+        raise RowError(f"unknown {what} {slug!r}; known: {known}{hint}")
     return mapping[slug]
+
+
+def missing_seed_message(what: str, slugs: Iterable[str]) -> str:
+    """E.g. "missing terminal slug 'vl-cubao' (run supabase/schema.sql seeds)"; plural 'slugs' for several, sorted."""
+    names = sorted(slugs)
+    return f"missing {what} slug{'s' if len(names) > 1 else ''} {', '.join(map(repr, names))} ({SEEDS_HINT})"
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +400,20 @@ def _dotenv_database_url() -> str | None:
     return None
 
 
+def database_url(cli_value: str | None) -> str | None:
+    """--database-url (warns once on stderr, never with the value), else DATABASE_URL, else the repo .env."""
+    if cli_value:
+        print(DATABASE_URL_FLAG_WARNING, file=sys.stderr)
+        return cli_value
+    return os.environ.get("DATABASE_URL") or _dotenv_database_url()
+
+
+def db_failure(exc: psycopg.Error, dsn: str | None) -> str:
+    """The FAILED line both scripts print, redacted; adds the schema hint for UndefinedTable."""
+    line = f"FAILED, nothing was written (database error): {redact_error(exc, dsn)}"
+    return line + " (run supabase/schema.sql first)" if isinstance(exc, psycopg.errors.UndefinedTable) else line
+
+
 def run(dsn: str, data_dir: Path, dry_run: bool) -> int:
     spots_rows = read_csv(data_dir / "spots.csv")
     trip_rows = read_csv(data_dir / "routes_trips.csv")
@@ -392,9 +428,9 @@ def run(dsn: str, data_dir: Path, dry_run: bool) -> int:
 
         if errors:
             conn.rollback()
-            print(f"{len(errors)} problem(s) found, nothing was saved:\n")
+            print(f"FAILED, nothing was written: {len(errors)} problem(s) found:\n", file=sys.stderr)
             for e in errors:
-                print(f"  - {e}")
+                print(f"  - {e}", file=sys.stderr)
             return 1
 
         summary = f"spots: {n_spots}, trips: {n_trips} ({new_routes} new routes), last-mile routes: {n_lm}"
@@ -411,14 +447,18 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dry-run", action="store_true", help="validate and roll back")
     p.add_argument("--data-dir", type=Path, default=HERE, help="folder with the CSVs (default: data/)")
-    p.add_argument("--database-url", default=None, help="defaults to DATABASE_URL or the repo .env")
+    p.add_argument("--database-url", default=None, help=DATABASE_URL_FLAG_HELP)
     args = p.parse_args()
 
-    dsn = args.database_url or os.environ.get("DATABASE_URL") or _dotenv_database_url()
+    dsn = database_url(args.database_url)
     if not dsn:
         print("DATABASE_URL is not set (env var or repo-root .env).", file=sys.stderr)
         return 2
-    return run(dsn, args.data_dir, args.dry_run)
+    try:
+        return run(dsn, args.data_dir, args.dry_run)
+    except psycopg.Error as e:
+        print(db_failure(e, dsn), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
