@@ -1,3 +1,29 @@
 slug,name,category,lat,lng,description,visit_minutes,entrance_fee_php
 # finteo-skylands-premium: agent-researched (tg-data) - owner to verify. Name/address/GPS from https://www.gites.fr/gites_finteo-skylands-premium_baguio_h5844590_en.htm (checked 2026-10-29); address also on https://www.laterooms.com/en-us/hotel/baguio/finteo-skylands-premium. See data/SOURCES.md.
 finteo-skylands-premium,Finteo Skylands Premium,other,16.40823,120.59035,"Lodging. 96 Doctor Carino Street, Baguio 2600.",,
+# burnham-park: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/way/330642136 (Nominatim; checked 2026-10-29)
+burnham-park,Burnham Park,park,16.408010,120.595985,City park with a lake in the central business district.,,
+# session-road: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/node/2131877654 (Nominatim; checked 2026-10-29)
+session-road,Session Road,shopping,16.409260,120.598831,Downtown street in the central business district.,,
+# baguio-city-market: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/way/224613128 (Nominatim; checked 2026-10-29)
+baguio-city-market,Baguio City Market,market,16.415073,120.595043,"The city public market, Kayang Street area.",,
+# mines-view-park: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/way/109351462 (Nominatim; checked 2026-10-29)
+mines-view-park,Mines View Park,viewpoint,16.419701,120.627499,Viewpoint on Outlook Drive.,,
+# wright-park: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/relation/12714120 (Nominatim; checked 2026-10-29)
+wright-park,Wright Park,park,16.415139,120.618590,,,
+# the-mansion: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/relation/7918303 (Nominatim; checked 2026-10-29)
+the-mansion,The Mansion,other,16.412148,120.621409,The Mansion compound on V. L. Romulo Drive.,,
+# baguio-botanical-garden: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/relation/14181288 (Nominatim; checked 2026-10-29)
+baguio-botanical-garden,Baguio Botanical Garden,park,16.414116,120.613781,On Leonard Wood Road.,,
+# camp-john-hay: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/node/8595268914 (Nominatim; checked 2026-10-29)
+camp-john-hay,Camp John Hay,park,16.399407,120.615699,,,
+# bencab-museum: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/way/112289880 (Nominatim; checked 2026-10-29); hours and fee https://bencabmuseum.org/location-info/ (checked 2026-10-29)
+bencab-museum,BenCab Museum,museum,16.410572,120.550296,"91 Asin Road, Tuba, Benguet (outside Baguio). Open Tuesday to Sunday 9:00 AM to 6:00 PM, last entry 5:30 PM; closed Mondays.",,200
+# baguio-cathedral: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/way/42936372 (Nominatim; checked 2026-10-29)
+baguio-cathedral,Baguio Cathedral,church,16.412727,120.598531,"Our Lady of the Atonement Cathedral, on Father Carlu Street.",,
+# good-shepherd-convent: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/node/384142750 (Nominatim; checked 2026-10-29)
+good-shepherd-convent,Good Shepherd Sisters Convent,shopping,16.422326,120.626126,"Convent shop on Dominica Lane, Mines View.",,
+# la-trinidad-strawberry-farm: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/relation/7917267 (Nominatim; checked 2026-10-29)
+la-trinidad-strawberry-farm,La Trinidad Strawberry Farm,other,16.453122,120.581917,"In La Trinidad, Benguet (outside Baguio).",,
+# tam-awan-village: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/way/209022152 (Nominatim; checked 2026-10-29)
+tam-awan-village,Tam-awan Village,other,16.429956,120.576908,"Arts village at 366-C Longlong Road, Pinsao Proper.",,
