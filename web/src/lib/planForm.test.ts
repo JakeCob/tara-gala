@@ -282,6 +282,8 @@ test("T21-B-5 blurBudget reformats a valid budget and leaves a bad one as typed"
 const PY_PATTERN = existsSync(PLANNER_PY)
   ? new RegExp(readFileSync(PLANNER_PY, "utf8").match(/vibe: str = Field\([^)]*pattern=r"([^"]+)"/)?.[1] ?? "(?!)", "u")
   : /^[\w ,.'&!?-]+$/u;
+// Python's \w is Unicode; JS \w (even with the u flag) is ASCII, so translate it before matching non-ASCII text
+const PY_PATTERN_JS = new RegExp(PY_PATTERN.source.replace(/\\w/g, "\\p{L}\\p{N}_"), "u");
 
 test("T21-V1 the six chips, in order, and each fits TG-20's vibe pattern", () => {
   assert.deepEqual(VIBE_CHIPS, ["Food trip", "Chill", "Nature", "Sightseeing", "Shopping", "Cafe hopping"]);
@@ -444,7 +446,7 @@ test("T21-R5 valid boundary forms build payloads that pass a mirror of PlanReque
     assert.ok(b.date >= TODAY && daysBetween(TODAY, b.date) <= 365);
     if (b.budget_php !== undefined) assert.ok(Number.isInteger(b.budget_php) && b.budget_php >= 500 && b.budget_php <= 200_000);
     assert.ok(b.vibe.length >= 1 && b.vibe.length <= 60);
-    assert.match(b.vibe, PY_PATTERN);
+    assert.match(b.vibe, PY_PATTERN_JS);
   }
 });
 
@@ -527,7 +529,7 @@ test("T21-E14 no status codes, codes or raw detail ever reach the message", () =
   for (const r of inputs) {
     const { message } = planErrorView(r);
     assert.equal(typeof message, "string");
-    assert.doesNotMatch(message, /\b[45]\d\d\b|detail|\bcode\b|[{[]|request.?id/i, message);
+    assert.doesNotMatch(message, /\b[45]\d\d\b|\bdetail\b|\bcode\b|[{[]|request.?id/i, message);
     for (const code of Object.keys(PLAN_ERROR_CODES)) assert.ok(!message.includes(code), `${code} in ${message}`);
   }
   assert.deepEqual(planErrorView(err(504, "deadline", 42)), { message: GENERIC, retry: true, premade: true }, "non-string message");
@@ -820,11 +822,15 @@ test("T21-S1 date inputs use dateBounds, never a hard-coded date", () => {
   assert.match(ui, /dateBounds\(/);
   assert.doesNotMatch(ui, /["'`]\d{4}-\d{2}-\d{2}["'`]/);
   for (const f of ["date", "returnDate", "budget", "note"]) assert.match(fields, new RegExp(`id=\\{FIELD_INPUT_ID\\.${f}\\}`), f);
+  // RED audit survivor V4: the note input stops at 30 characters, not only the reducer
+  const note = tags(fields, "input").filter((t) => /id=\{FIELD_INPUT_ID\.note\}/.test(t));
+  assert.equal(note.length, 1, "one note input");
+  assert.match(note[0], /maxLength=\{NOTE_MAX\}/);
 });
 
 test("T21-S2 the payload is built from TG-15's party at submit", () => {
   assert.match(form, /useState(<[^>]+>)?\(DEFAULT_PARTY\)/, "TG-15's party state stays");
-  assert.match(form, /buildPlanRequest\([^)]*\bparty\b/);
+  assert.match(form, /buildPlanRequest\((?:[^()]|\([^()]*\))*\bparty\b/);
 });
 
 test("T21-S3 one noValidate form; aria-disabled submit; only a fieldset is ever disabled; one status; no loops", () => {
@@ -853,6 +859,11 @@ test("T21-S5 the branch comes from formMode; home links /plan only when a mode i
   assert.doesNotMatch(ui, /flags\.plannerLive/, "branch on formMode, not ad-hoc flag checks");
   assert.match(home, /formMode\(flags\) !== "none"/);
   assert.match(home, /href="\/plan"/);
+  // RED audit survivors E6 and L6: the fallback button and both result dispatches exist
+  assert.match(ui, /showPremadeAction\(/);
+  assert.match(ui, /PLAN_COPY\.actions\.seePremade/);
+  assert.match(form, /type: "planResult"/);
+  assert.match(form, /type: "premadeResult"/);
 });
 
 test("T21-S6 the submit handler reads a fresh Manila today", () => {

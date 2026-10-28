@@ -121,13 +121,13 @@ test("T21-N6 a rejected fetch is a network error", async () => {
   assert.deepEqual(await postPlan(BODY, { fetchImpl: f.impl }), { kind: "network" });
 });
 
-test("T21-N7 our own timeout is a timeout; the default is 120 s, longer than TG-20's deadline", async () => {
+test("T21-N7 our own timeout is a timeout; the default is 120 s, longer than TG-20's deadline", { timeout: 5_000 }, async () => {
   const f = fakeFetch(hang);
   assert.deepEqual(await postPlan(BODY, { fetchImpl: f.impl, timeoutMs: 20 }), { kind: "timeout" });
   assert.match(readFileSync(new URL("./api.ts", import.meta.url), "utf8"), /timeoutMs = 120_000/);
 });
 
-test("T21-N8 the caller's abort is aborted, not timeout", async () => {
+test("T21-N8 the caller's abort is aborted, not timeout", { timeout: 5_000 }, async () => {
   const f = fakeFetch(hang);
   const ctrl = new AbortController();
   const p = postPlan(BODY, { fetchImpl: f.impl, signal: ctrl.signal, timeoutMs: 5_000 });
@@ -138,7 +138,7 @@ test("T21-N8 the caller's abort is aborted, not timeout", async () => {
   assert.deepEqual(await postPlan(BODY, { fetchImpl: fakeFetch(hang).impl, signal: pre.signal }), { kind: "aborted" });
 });
 
-test("T21-N9 no timer is left behind, and postPlan never throws", async () => {
+test("T21-N9 no timer is left behind, and postPlan never throws", { timeout: 5_000 }, async () => {
   const t = trackTimers();
   try {
     const cases: [string, (c: Call) => Response | Promise<Response>, number?][] = [
@@ -181,7 +181,7 @@ test("T21-N10 fetchPremade: GET with no body; ok, unavailable or failed", async 
   }
 });
 
-test("T21-N11 the default fetch is read at call time, so the test guard can catch it", async () => {
+test("T21-N11 the default fetch is read at call time, so the test guard can catch it", { timeout: 5_000 }, async () => {
   // No fetchImpl: this must hit the blocked global, which records the URL and rejects
   assert.deepEqual(await postPlan(BODY, { timeoutMs: 1_000 }), { kind: "network" });
   assert.deepEqual(await fetchPremade(), { kind: "failed" });
