@@ -17,17 +17,7 @@ export default function Home() {
           In Baguio? Jeeps, taxis and walks from the terminal <span aria-hidden>→</span>
         </span>
       </Link>
-      <footer className="mt-auto pt-6 text-xs text-muted">
-        Getting to the terminal?{" "}
-        <a href="https://sakay.ph" target="_blank" rel="noreferrer" className="underline">
-          Sakay.ph
-        </a>{" "}
-        or{" "}
-        <a href="https://maps.google.com" target="_blank" rel="noreferrer" className="underline">
-          Google Maps
-        </a>
-        .
-      </footer>
+      <footer className="mt-auto pt-6 text-xs text-muted">Directions to your terminal are on each trip.</footer>
     </main>
   );
 }

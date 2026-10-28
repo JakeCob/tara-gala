@@ -18,6 +18,7 @@ import {
   searchReducer,
   swapLabel,
 } from "@/lib/direction";
+import TerminalLinks from "@/components/TerminalLinks";
 
 const subscribeNothing = () => () => {};
 
@@ -104,8 +105,9 @@ export default function TripSearch() {
         </button>
       </form>
 
-      {/* Status lines are announced; the cards stay outside so a screen reader doesn't read every one */}
-      <div aria-live="polite" className="flex flex-col gap-1">
+      {/* Status lines are announced; the cards stay outside so a screen reader doesn't read every one.
+          empty:-mt-4 cancels its gap before the first status without hiding it (display:none would drop the live region) */}
+      <div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">
         {status === "error" && (
           <p className="rounded-xl border border-border bg-card p-4 text-sm">
             Could not reach the schedule server. Check your connection and try again.
@@ -156,6 +158,7 @@ function TripCard({ trip: t }: { trip: Trip }) {
           ? ` · arrives around ${formatTime(t.arrives_around)}${formatDayOffset(t.arrives_day_offset)}`
           : ""}
       </div>
+      <TerminalLinks slug={t.origin_slug} name={t.origin_name} city={t.origin_city} />
       <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted">
         <span>
           {formatVerified(t.last_verified_at)}
@@ -173,7 +176,7 @@ function TripCard({ trip: t }: { trip: Trip }) {
             href={t.booking_url}
             target="_blank"
             rel="noreferrer"
-            className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-[#1d2a24]"
+            className="min-h-11 inline-flex items-center rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-[#1d2a24]"
           >
             Book
           </a>
