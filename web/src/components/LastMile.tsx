@@ -75,7 +75,12 @@ export default function LastMile() {
             <p>Could not reach the server. Check your connection and try again.</p>
             <button
               type="button"
-              onClick={() => terminal && load(terminal)}
+              onClick={() => {
+                if (!terminal) return;
+                // This box unmounts on retry; keep keyboard and screen-reader focus on the terminal being retried.
+                document.querySelector<HTMLInputElement>('input[name="terminal"]:checked')?.focus();
+                load(terminal);
+              }}
               className="min-h-11 inline-flex items-center rounded-xl border border-border bg-card px-4 text-sm font-semibold"
             >
               Try again
