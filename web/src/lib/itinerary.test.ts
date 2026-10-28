@@ -445,6 +445,9 @@ test("T43-B2 ItineraryList: summary, notice, sections and stops use the primitiv
   assert.match(src, /<h3 className=\{`\$\{PX\.dataHeading\} min-w-0 break-words`\}>/, "the stop name is body font");
   assert.match(src, /<p className=\{PX\.meta\}>Entrance \{fee\}<\/p>/);
   assert.match(src, /<p className=\{PX\.meta\}>Tap a stop or a ride for details\.<\/p>/, "plan §3.2: TG-22's intro line is PX.meta");
+  // RED audit nit: the trust lines keep their muted meta style (ux §2.4)
+  assert.match(src, /<p className=\{PX\.meta\}>\{leg\.trip\.confirm_note\}<\/p>/, "bus confirm note");
+  assert.match(src, /\{legNote && <p className=\{PX\.meta\}>\{legNote\}<\/p>\}/, "last-mile note");
   assert.doesNotMatch(src, /<Link\b|<h2\b/, "no raw link or h2 left");
 });
 
