@@ -21,7 +21,7 @@ FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 SECRET_NAME = re.compile(r"KEY|SECRET|TOKEN|PASSWORD", re.I)
 MIN_SECRET_LEN = 8
 URL_PASSWORD = re.compile(r"(\b[a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s@]+@", re.I)
-KV_PASSWORD = re.compile(r"\b(password=)\S+", re.I)
+KV_PASSWORD = re.compile(r"\b(password=)('(?:[^'\\]|\\.)*'|\S+)", re.I)  # libpq quotes values with spaces
 
 request_log = logging.getLogger("tara_gala.request")
 
@@ -110,8 +110,9 @@ class RequestLogMiddleware:
 
         try:
             await self.app(scope, receive, send_and_track)
-        except Exception:
-            request_log.exception("unhandled error method=%s path=%r", scope["method"], scope["path"])
+        except Exception as exc:
+            # class name only on this line (greppable); the message is in the redacted traceback below it
+            request_log.exception("unhandled error method=%s path=%r error=%s", scope["method"], scope["path"], type(exc).__name__)
             # Once the response has started nothing more can be sent; the connection just closes
             if status is None:
                 status = 500

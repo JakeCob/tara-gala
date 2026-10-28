@@ -214,14 +214,16 @@ def test_redacting_formatter_masks_secrets():
         "bare raw password": "auth failed for p%40ss%2Fword9",
         "bare decoded password": "auth failed for p@ss/word9",
         "key=value password": "conninfo host=h password=hunter2xyz dbname=db",
+        "quoted key=value password": "conninfo host=h password='hunter2 xyz' dbname=db",
         "other URL password": "retrying postgresql://u:s3cretpw@h/db",
     }
     for label, msg in cases.items():
         text = render(msg)
-        for secret in ("p%40ss%2Fword9", "p@ss/word9", LLM_KEY, SERVICE_KEY, "hunter2xyz", "s3cretpw"):
+        for secret in ("p%40ss%2Fword9", "p@ss/word9", LLM_KEY, SERVICE_KEY, "hunter2xyz", "hunter2 xyz", "xyz'", "s3cretpw"):
             assert secret not in text, f"{label}: {secret!r} not masked in {text!r}"
         assert "***" in text, label
     assert "password=***" in render(cases["key=value password"])
+    assert "password=*** dbname=db" in render(cases["quoted key=value password"])
     assert "/usr/local/bin" in render("PATH is /usr/local/bin")  # non-secret env values are left alone
 
     try:
@@ -306,6 +308,7 @@ def test_unhandled_error_logs_stack_trace_and_returns_generic_500(dsn, client, c
     trace = "".join(traceback.format_exception(*err.exc_info))
     assert "Traceback (most recent call last)" in trace and "UndefinedTable" in trace
     assert "GET" in err.getMessage() and "'/trips'" in err.getMessage()  # T13-E2
+    assert "error=UndefinedTable" in err.getMessage()
 
     lines = request_records(caplog)
     assert len(lines) == 1
