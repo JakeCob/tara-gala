@@ -1,8 +1,9 @@
 """Provider-neutral LLM seam for the planner (TG-20). See docs/decisions/TG-19-llm-provider.md.
 
 The planner, prompt and retry code only use what's in this module. Each provider adapter maps its own
-stop reasons and errors onto these types, so adding a provider (e.g. a local OpenAI-compatible server)
-is one adapter file, one branch in make_llm_client and its model ids in limits.PRICES_PER_MTOK.
+stop reasons and errors onto these types (llm_anthropic.py, llm_openrouter.py), so adding a provider
+(e.g. a local OpenAI-compatible server) is one adapter file, one branch in make_llm_client and its model
+ids in limits.PRICES_PER_MTOK.
 """
 
 import logging
@@ -17,6 +18,11 @@ logger = logging.getLogger("tara_gala.api")
 Stop = Literal["complete", "refused", "truncated", "other"]
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 MAX_TOKENS_CEILING = 16000  # non-streaming calls stay well under SDK timeouts at this size
+# (model, fallback) per provider; OpenRouter slugs checked against its models endpoint 2026-10-28
+DEFAULT_MODELS = {
+    "anthropic": ("claude-haiku-5-5", "claude-sonnet-5-5"),
+    "openrouter": ("anthropic/claude-haiku-5.5", "anthropic/claude-sonnet-5.5"),
+}
 
 
 @dataclass(frozen=True)
@@ -91,10 +97,12 @@ class LLMConfig:
         if max_tokens > MAX_TOKENS_CEILING:
             logger.warning("LLM_MAX_TOKENS is above %d; using %d", MAX_TOKENS_CEILING, MAX_TOKENS_CEILING)
             max_tokens = MAX_TOKENS_CEILING
+        provider = env.get("LLM_PROVIDER", "anthropic").strip()  # set but empty is an error, not the default
+        model, fallback = DEFAULT_MODELS.get(provider, DEFAULT_MODELS["anthropic"])
         return cls(
-            provider=env.get("LLM_PROVIDER", "anthropic").strip(),  # set but empty is an error, not the default
-            model=(env.get("LLM_MODEL") or "").strip() or "claude-haiku-5-5",
-            fallback_model=env.get("LLM_FALLBACK_MODEL", "claude-sonnet-5-5").strip() or None,
+            provider=provider,
+            model=(env.get("LLM_MODEL") or "").strip() or model,
+            fallback_model=env.get("LLM_FALLBACK_MODEL", fallback).strip() or None,
             api_key=(env.get("LLM_API_KEY") or "").strip(),
             effort=effort,
             max_tokens=max_tokens,
@@ -113,4 +121,10 @@ def make_llm_client(cfg: LLMConfig) -> LLMClient:
         from .llm_anthropic import AnthropicClient  # lazy: only the adapter imports anthropic
 
         return AnthropicClient(api_key=cfg.api_key, effort=cfg.effort)
-    raise LLMConfigError(f"LLM_PROVIDER={cfg.provider!r} is not implemented (only 'anthropic')")
+    if cfg.provider == "openrouter":
+        if not cfg.api_key:
+            raise LLMConfigError("LLM_API_KEY is not set")
+        from .llm_openrouter import OpenRouterClient
+
+        return OpenRouterClient(api_key=cfg.api_key, effort=cfg.effort)
+    raise LLMConfigError(f"LLM_PROVIDER={cfg.provider!r} is not implemented (anthropic or openrouter)")

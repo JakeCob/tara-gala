@@ -24,6 +24,8 @@ MANILA_TZ = ZoneInfo("Asia/Manila")
 PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-sonnet-5-5": (2.00, 10.00),
+    "anthropic/claude-haiku-5.5": (0.10, 0.50),  # OpenRouter, same price (its models endpoint, 2026-10-28)
+    "anthropic/claude-sonnet-5.5": (2.00, 10.00),
 }
 _HIGHEST_PRICE = (max(p[0] for p in PRICES_PER_MTOK.values()), max(p[1] for p in PRICES_PER_MTOK.values()))
 

@@ -34,7 +34,7 @@ MANILA_TZ = ZoneInfo("Asia/Manila")
 MAX_DAYS_AHEAD = 365
 MAX_TRIP_DAYS = 6  # return_date at most this many days after date
 MIN_CALL_SECONDS = 5  # don't start a model call with less time than this left
-CONFIG_STATUSES = {400, 401, 403, 404}  # a broken deploy (key, model id, request shape), not an outage
+CONFIG_STATUSES = {400, 401, 402, 403, 404}  # a broken deploy (key, credits, model id, request shape), not an outage
 
 MESSAGES = {
     "no_valid_plan": "We couldn't build a plan from the trips and spots on file. Try again, or pick a pre-made itinerary.",
