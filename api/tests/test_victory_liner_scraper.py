@@ -368,7 +368,7 @@ def test_reverse_request_failure_fails_whole_fetch(monkeypatch):
     total = sum(len(legs) for legs in vl.DIRECTIONS.values())
     with pytest.raises(vl.ScrapeError, match=f"request {fail_at}/{total} ") as err:
         vl.fetch_all(client, [SUNDAY], log=lambda *_: None)
-    assert "BAGUIO" in str(err.value)
+    assert "BAGUIO->" in str(err.value)
     assert len(calls) == fail_at  # stops at the first failure
 
 
@@ -495,7 +495,7 @@ def test_empty_forward_direction_refuses_and_writes_nothing(dsn):
 def test_observation_outside_fetched_directions_is_rejected(dsn):
     load_both(dsn)
     before = tables(dsn)
-    with pytest.raises(vl.ScrapeError):
+    with pytest.raises(vl.ScrapeError, match="from-baguio: got trips for a direction that was not fetched"):
         vl.run(dsn, observations() + reverse_obs(), dry_run=False, directions=TO, verified_at=LATER)
     assert tables(dsn) == before
 
