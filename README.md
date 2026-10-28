@@ -216,6 +216,7 @@ Each flag is an environment variable on both sides: the API reads it from `os.en
 | Live AI planner | `PLANNER_LIVE` | `NEXT_PUBLIC_PLANNER_LIVE` | `false` | TG-25 live planner |
 | Pre-made itineraries | `PREMADE_ITINERARIES` | `NEXT_PUBLIC_PREMADE_ITINERARIES` | `true` | TG-24 pre-made itineraries |
 | Real-map toggle | `REAL_MAP` | `NEXT_PUBLIC_REAL_MAP` | `false` | TG-26 real map (cut) |
+| Overworld map | - | `NEXT_PUBLIC_OVERWORLD_MAP` | `true` | TG-22 map on the share page `/i/[slug]`. Web only. Setting `false` shows TG-23's list view instead (the same facts), the escape hatch if the map misbehaves on a phone |
 | Offline service worker | - | `NEXT_PUBLIC_SERVICE_WORKER` | `true` | TG-27 offline caching. Web only. Setting `false` is the kill switch: on the next online load each phone unregisters the worker and deletes its `tg-*` caches, **saved trips and itineraries included** |
 
 Values are trimmed and case-insensitive. `1`, `true`, `yes`, `on` mean on; `0`, `false`, `no`, `off` mean off. Unset or empty uses the default. Anything else also uses the default: the API logs a warning naming the variable, the web app falls back silently.
@@ -232,7 +233,7 @@ One Railway project with three services in its `production` environment: `Postgr
 - Build config lives in the repo: `api/railway.json` and `web/railway.json` (Railpack builder, start command bound to `0.0.0.0:8080`, health checks on `/health` and `/`), plus `api/.python-version` (3.12) and `web/.node-version` (24). `/health` runs `select 1`, so a deploy that can't reach the database fails its health check and the previous deployment keeps serving.
 - Variables are set only on Railway, never in the repo:
   - `api`: `DATABASE_URL` (the reference `${{Postgres.DATABASE_URL}}`, the private network), `PORT`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL`, `PLANNER_LIVE`, `PREMADE_ITINERARIES`, `REAL_MAP`, `RAILPACK_DEPLOY_APT_PACKAGES` (`tzdata`, for `Asia/Manila`).
-  - `web`: `PORT`, `NEXT_PUBLIC_API_URL` (the api origin), `NEXT_PUBLIC_PLANNER_LIVE`, `NEXT_PUBLIC_PREMADE_ITINERARIES`, `NEXT_PUBLIC_REAL_MAP`, `NEXT_PUBLIC_SERVICE_WORKER`, `NEXT_TELEMETRY_DISABLED`. `NEXT_PUBLIC_*` values are inlined at build time, so set them before the first web deploy and rebuild after a change.
+  - `web`: `PORT`, `NEXT_PUBLIC_API_URL` (the api origin), `NEXT_PUBLIC_PLANNER_LIVE`, `NEXT_PUBLIC_PREMADE_ITINERARIES`, `NEXT_PUBLIC_REAL_MAP`, `NEXT_PUBLIC_SERVICE_WORKER`, `NEXT_PUBLIC_OVERWORLD_MAP`, `NEXT_TELEMETRY_DISABLED`. `NEXT_PUBLIC_*` values are inlined at build time, so set them before the first web deploy and rebuild after a change.
   - No LLM key and no Supabase variables.
 - `DATABASE_PUBLIC_URL` (Postgres' TCP proxy) is used only from the VPS, for the schema, the migrations and the scraper and loader runs (sections 1, 3 and 4). It is never set on `api`.
 - Redeploy after a merge to `main`: export a clean copy of `main` (`git archive`), apply `supabase/schema.sql` if new and every file in `supabase/migrations/` (safe to re-run), run the loaders if `data/` changed, then `railway up <export>/api --path-as-root` and `railway up <export>/web --path-as-root`, then the smoke test (`/health`, `/terminals`, `/trips` for both directions, CORS from the web origin, the pages at 380px).

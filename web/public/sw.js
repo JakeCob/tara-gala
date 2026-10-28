@@ -69,6 +69,8 @@ function strategyFor(req, origins) {
     const rsc = headerOf(req.headers, "rsc") !== null || headerOf(req.headers, "next-router-prefetch") !== null;
     if (rsc || url.searchParams.has("_rsc")) return bypass();
     if (url.pathname.startsWith("/_next/static/")) return { strategy: "cache-first", cache: "static" };
+    // Sprites (TG-22 map) live with the saved data: the data cache survives SW updates, the static one doesn't
+    if (url.pathname.startsWith("/sprites/")) return { strategy: "stale-while-revalidate", cache: "data" };
     if (req.mode === "navigate") {
       return { strategy: "network-first", cache: SAVED_PAGE.test(url.pathname) ? "data" : "pages", kind: "page" };
     }
@@ -369,6 +371,6 @@ self.addEventListener("fetch", (event) => {
   if (plan.strategy === "bypass") return;
   const names = cacheNames(SW_VERSION);
   if (plan.strategy === "cache-first") return handleCacheFirst(event, names.static);
-  if (plan.strategy === "stale-while-revalidate") return handleStaleWhileRevalidate(event, names.static);
+  if (plan.strategy === "stale-while-revalidate") return handleStaleWhileRevalidate(event, names[plan.cache]);
   handleNetworkFirst(event, names[plan.cache], plan.kind);
 });

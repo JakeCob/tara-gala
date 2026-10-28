@@ -7,6 +7,7 @@ import Link from "next/link";
 import { fetchItinerary } from "@/lib/api";
 import { isValidSlug, type Itinerary } from "@/lib/itinerary";
 import ItineraryList from "@/components/ItineraryList";
+import { flags } from "@/lib/flags";
 import { UI } from "@/components/planUi";
 
 type State =
@@ -67,7 +68,7 @@ export default function ItineraryView({ slug }: { slug: string }) {
         {announce}
       </p>
       {state.kind === "loading" && <p className="text-sm text-muted">{LOADING}</p>}
-      {state.kind === "found" && <ItineraryList itinerary={state.itinerary} />}
+      {state.kind === "found" && <ItineraryList itinerary={state.itinerary} map={flags.overworldMap} />}
       {state.kind === "notfound" && (
         <div className={UI.box}>
           <p className="text-sm font-bold">{NOT_FOUND}</p>
