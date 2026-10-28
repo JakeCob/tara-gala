@@ -36,6 +36,7 @@ export default function ShareButton({ slug, tripDate, returnDate }: { slug: stri
         text: shareText(tripDate, returnDate),
         url,
       });
+      // method is the first one tried; outcome shows the path (method=share outcome=copied is the fallback). No URL.
       console.info("[tg-itinerary] share method=%s outcome=%s", canShare ? "share" : "copy", result);
       setOutcome(result);
     } finally {

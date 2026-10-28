@@ -12,6 +12,7 @@ import {
   joinNames,
   partySummary,
   type BusLegOut,
+  type DayOut,
   type Itinerary,
   type PlanIssue,
   type StopOut,
@@ -54,26 +55,9 @@ export default function ItineraryList({ itinerary: it }: { itinerary: Itinerary 
 
       <BusSection title="Bus to Baguio" leg={it.outbound} issues={issuesFor("outbound", it.issues)} />
 
-      {it.days.map((day, d) => {
-        const legNote = day.stops.find((s) => s.leg)?.leg?.confirm_note; // the API's last-mile note, once per day
-        return (
-        <section key={day.day} className="flex flex-col gap-3">
-          <h2 className={UI.h2}>{dayHeading(day)}</h2>
-          {day.stops.length === 0 ? (
-            <p className={`${UI.textBox} text-sm`}>Free time. No stops planned for this day.</p>
-          ) : (
-            <>
-              {legNote && <p className={UI.meta}>{legNote}</p>}
-              <ol className="flex flex-col gap-4">
-                {day.stops.map((stop, s) => (
-                  <StopItem key={`${s}-${stop.spot_id}`} n={s + 1} stop={stop} issues={issuesFor(`days[${d}].stops[${s}]`, it.issues)} />
-                ))}
-              </ol>
-            </>
-          )}
-        </section>
-        );
-      })}
+      {it.days.map((day, d) => (
+        <DaySection key={day.day} day={day} index={d} issues={it.issues} />
+      ))}
 
       <BusSection title="Bus to Metro Manila" leg={it.return} issues={issuesFor("return", it.issues)} />
     </>
@@ -100,6 +84,27 @@ function BusSection({ title, leg, issues }: { title: string; leg: BusLegOut; iss
             Search buses
           </Link>
         </div>
+      )}
+    </section>
+  );
+}
+
+function DaySection({ day, index, issues }: { day: DayOut; index: number; issues: PlanIssue[] }) {
+  const legNote = day.stops.find((s) => s.leg)?.leg?.confirm_note; // the API's last-mile note, once per day
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className={UI.h2}>{dayHeading(day)}</h2>
+      {day.stops.length === 0 ? (
+        <p className={`${UI.textBox} text-sm`}>Free time. No stops planned for this day.</p>
+      ) : (
+        <>
+          {legNote && <p className={UI.meta}>{legNote}</p>}
+          <ol className="flex flex-col gap-4">
+            {day.stops.map((stop, s) => (
+              <StopItem key={`${s}-${stop.spot_id}`} n={s + 1} stop={stop} issues={issuesFor(`days[${index}].stops[${s}]`, issues)} />
+            ))}
+          </ol>
+        </>
       )}
     </section>
   );

@@ -25,7 +25,10 @@ async function loadState(slug: string): Promise<State> {
     const itinerary = await fetchItinerary(slug);
     return itinerary ? { kind: "found", itinerary } : { kind: "notfound" };
   } catch (e) {
-    console.warn("[tg-itinerary] load failed", e instanceof Error ? e.message : "error"); // "API error 503", never the URL
+    // Only our own "API error 503" text, else the error's name: a JSON SyntaxError message can quote the body,
+    // which holds party names and the budget
+    const detail = e instanceof Error ? (/^API error \d{3}$/.test(e.message) ? e.message : e.name) : "error";
+    console.warn("[tg-itinerary] load failed", detail);
     return { kind: "error", retrying: false };
   }
 }

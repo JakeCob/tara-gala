@@ -19,7 +19,7 @@ export const instant = false
 // Reading the slug suspends; the header above renders first
 async function SlugView({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  return <ItineraryView slug={slug} />;
+  return <ItineraryView key={slug} slug={slug} />; // a new slug starts from "loading", never the old plan
 }
 
 export default function TripPlanPage({ params }: PageProps<"/i/[slug]">) {

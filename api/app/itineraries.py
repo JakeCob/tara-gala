@@ -117,7 +117,8 @@ def get_itinerary(
     share_slug: str = Path(description="The share slug from the link, matched exactly"),
 ) -> ItineraryOut:
     if not SLUG.fullmatch(share_slug):
-        logger.info("itinerary not found share_slug=<invalid>")  # never echo a malformed slug
+        # Not echoed here; the request line (TG-13) logs the path with %r, which escapes newlines
+        logger.info("itinerary not found share_slug=<invalid>")
         raise HTTPException(404, NOT_FOUND, headers=NOINDEX)
 
     with db.get_conn() as conn:
