@@ -135,6 +135,9 @@ test("T45-H3 HomeDecor is a hidden, inert server component of sized, pixelated b
     // display comes from the flex row (or absolute) and SHOW_CLASS only: a base "block" would fight SHOW_CLASS's "hidden"
     const base = span.match(/cx\("([^"]*)"/)?.[1] ?? "";
     assert.doesNotMatch(base, /(^|\s)(block|inline|inline-block|flex|grid|hidden)(\s|$)/, `display token in ${base}`);
+    // Nothing else sets display or the size: exactly these class arguments, and no display or backgroundSize in style
+    assert.match(span, /className=\{cx\("pixelated bg-no-repeat bg-\[length:100%_100%\]",\s*SHOW_CLASS\[(\w+)\.show\](,\s*\1\.at)?\)\}/, `class arguments in ${span}`);
+    assert.doesNotMatch(span, /\bdisplay\s*:|backgroundSize/, `a style override in ${span}`);
   }
   for (const banned of [/use client/, /\buse[A-Z]\w*\(/, /animate-/, /transition/, /@keyframes/, /tabIndex/, /<a\b/, /<button\b/,
     /\bLink\b/, /loading="lazy"/, /\brole=/, /["'`]\/sprites\//, /onClick|onError|onLoad/]) {
