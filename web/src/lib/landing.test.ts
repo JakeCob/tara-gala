@@ -388,6 +388,31 @@ test("T46-L7 the cast: every landing chibi slot maps to a manifest sprite (the s
   assert.doesNotMatch(src, /use client|from "@\/|\bfetch\(|<\/?[A-Za-z][\w.]*[\s>/]/, "a plain module");
 });
 
+test("T48-C1 the landing cast draws TG-48 looks, by lookFor, and repeats no look already on the page", async () => {
+  const cast = await load<{ CAST: Record<string, unknown>; castSprite: (s: { type: string; index: number; frame: string }) => string }>("src/lib/landingCast.ts");
+  const { lookFor } = await load<{ lookFor: (type: string, index: number) => string | null }>("src/lib/party.ts");
+  const { HOME_ROW } = await load<{ HOME_ROW: readonly { name: string }[] }>("src/lib/homeDecor.ts");
+  const c = cast.CAST as Record<string, { type: string; index: number; frame: string } | { type: string; index: number; frame: string }[]>;
+  // The trio proposed in the TG-48 build log (tg-ux2 OK pending): casual man (light), lola and schoolboy (Kayumanggi)
+  assert.deepEqual((c.heroTrio as { type: string; index: number; frame: string }[]).map(cast.castSprite), [
+    "chibi-adult-casual-m-idle-1",
+    "chibi-senior-lola-idle-1",
+    "chibi-student-boy-idle-1",
+  ]);
+  assert.equal(cast.castSprite(c.planTile as { type: string; index: number; frame: string }), "chibi-adult-casual-f-wave");
+  assert.equal(cast.castSprite(c.planStep as { type: string; index: number; frame: string }), "chibi-senior-lolo-idle-1");
+  const slots = Object.values(c).flat();
+  for (const slot of slots) {
+    assert.equal(cast.castSprite(slot), `chibi-${lookFor(slot.type, slot.index)}-${slot.frame}`, `${JSON.stringify(slot)} by lookFor`);
+    assert.doesNotMatch(cast.castSprite(slot), /^chibi-(adult|student|senior|pwd)-(idle-1|idle-2|wave)$/, "not a classic TG-33 chibi");
+  }
+  // One cast on `/`: the hero and tiles never repeat a look, nor the home strip's barong or Filipiniana
+  const looks = slots.map((s) => lookFor(s.type, s.index));
+  const strip = HOME_ROW.map((d) => d.name.match(/^chibi-(.+)-idle-1$/)?.[1]).filter((x): x is string => !!x);
+  assert.deepEqual(strip, ["adult-barong", "adult-filipiniana"]);
+  assert.equal(new Set([...looks, ...strip]).size, looks.length + strip.length, [...looks, ...strip].join(", "));
+});
+
 // ================================================================ T46-V: the ready-made view (pure)
 
 type LandingCard = { title: string; dates: string; places: string; budget: string | null; href: string };
