@@ -262,8 +262,8 @@ export default function OverworldMap({ itinerary }: { itinerary: Itinerary }) {
           </div>
           {sections.map(({ banner, rows: list }) => (
             <section key={banner.id} aria-labelledby={banner.id} className="flex flex-col">
-              <div className="mx-2 my-2 pixel-frame bg-screen-paper px-3 py-1 text-center">
-                <SectionTitle onScreen id={banner.id}>{banner.text}</SectionTitle>
+              <div className="mx-2 my-2 pixel-frame bg-flag-blue px-3 py-1 text-center">
+                <SectionTitle onScreen="banner" id={banner.id}>{banner.text}</SectionTitle>
               </div>
               <ol className="flex flex-col">
                 {list.map((r) => {
