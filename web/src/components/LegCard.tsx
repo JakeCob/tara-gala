@@ -11,7 +11,7 @@ export default function LegCard({ leg, notice }: { leg: LastMileLeg; notice?: st
   const minutes = formatMinutes(leg.minutes);
   return (
     <PixelBox as="li" className="p-4 flex flex-col gap-1.5">
-      {notice && <p className="text-sm font-semibold">{notice}</p>}
+      {notice && <p className="text-sm font-semibold text-danger-text">{notice}</p>}
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-bold">{modeLabel(leg.mode)}</span>
         {fare && <span className="font-bold tabular-nums">{fare}</span>}

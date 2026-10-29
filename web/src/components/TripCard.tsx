@@ -7,7 +7,7 @@ import { PX, PixelBox } from "@/components/pixel";
 export default function TripCard({ trip: t, notice }: { trip: Trip; notice?: string }) {
   return (
     <PixelBox as="li">
-      {notice && <p className="text-sm font-semibold">{notice}</p>}
+      {notice && <p className="text-sm font-semibold text-danger-text">{notice}</p>}
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-2xl font-extrabold tabular-nums">{formatTime(t.departure_time)}</span>
         {t.fare_php != null && <span className="font-bold tabular-nums">₱{t.fare_php.toLocaleString("en-PH")}</span>}
