@@ -211,6 +211,50 @@ export function signBoxes(W: number): { left: { x: number; width: number }; righ
   return { left: { x: g.leftX + 48, width }, right: { x: 8, width } };
 }
 
+/**
+ * TG-45 scenery (ux.md 2.2): 1× Philippine decor for the outer gutters of turn rows, the only grass that no sign,
+ * track or button touches. The sizes match SPRITES (a test pins them); world.ts can't import it at runtime.
+ */
+export const SCENERY_POOL = [
+  { name: "deco-rice-terraces", w: 24, h: 24 },
+  { name: "deco-bahay-kubo", w: 24, h: 24 },
+  { name: "deco-sampaguita", w: 16, h: 16 },
+  { name: "deco-parol", w: 16, h: 16 },
+] as const satisfies readonly { name: SpriteName; w: number; h: number }[];
+export type SceneryItem = { rowId: string; side: Side; sprite: SpriteName; x: number; y: number };
+
+/** 32-bit FNV-1a over the string's UTF-16 code units: a stable seed, so a trip always gets the same scenery. */
+export function fnv1a(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/**
+ * Decor for every other turn row (ux.md 2.3): sides alternate from the left, the sprite steps through the pool from
+ * the slug's seed, and each sits centred in its gutter. Only x depends on the width. Reads rows; never changes them.
+ */
+export function scenery(rows: readonly WorldRow[], slug: string, W: number): SceneryItem[] {
+  const Wc = Math.max(W, MIN_WORLD);
+  const g = trackGeometry(Wc);
+  const seed = fnv1a(slug);
+  const out: SceneryItem[] = [];
+  let turn = 0;
+  for (const r of rows) {
+    if (r.kind !== "turn") continue;
+    if (turn++ % 2 !== 0) continue;
+    const k = out.length;
+    const { name, w, h } = SCENERY_POOL[(seed + k) % SCENERY_POOL.length];
+    const side: Side = k % 2 === 0 ? "left" : "right";
+    const gutter = side === "left" ? { from: 0, to: g.leftX } : { from: g.rightX + 32, to: Wc };
+    out.push({ rowId: r.id, side, sprite: name, x: gutter.from + Math.floor((gutter.to - gutter.from - w) / 2), y: (32 - h) / 2 });
+  }
+  return out;
+}
+
 /** Rotations of tile-path-corner (drawn joining bottom and right) for a turn's two corners (ux.md 2.1). */
 export function turnRotations(from: Side, to: Side): { start: number; end: number } {
   if (from === to) throw new Error("a turn must change side");
