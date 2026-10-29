@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
@@ -46,6 +47,22 @@ const ART_DROP = [
 const KEPT_SVG = [
   "ui-dialog-frame", "ui-cursor", "tile-grass", "tile-path-straight", "tile-path-corner", "tile-road", "tile-water", "mode-van",
 ];
+// TG-45 Philippine decor (_team/tickets/TG-45/ticket.md, the owner's ~/tara-art/ph/SHIP.txt): 10 decorative PNGs from the
+// same pipeline, in the ticket's table order. The two chibis are decor, not passenger types. sha256 is pinned so a
+// silent re-export (or two same-size files swapped) shows up; the values are in TG-45/build-log.md.
+const PH_DROP = new Map([
+  ["deco-sun-stars", { w: 24, h: 24, sha256: "26b989060be4bf1baa355be5d3ed3bc13a3b2ddd8cff981d939ab773f361531e" }],
+  ["deco-carabao", { w: 32, h: 24, sha256: "07eb059e0a3e41fbd5da400276cc9991fb8e8ae301985805c787c6707477a744" }],
+  ["deco-bahay-kubo", { w: 24, h: 24, sha256: "f0cfddbcc92ae874e11ccc31724721e6fd861185d6855ab0de91d06c10180117" }],
+  ["chibi-barong", { w: 32, h: 32, sha256: "c5038d76a32ac640c6673be1898934a540fc8865e26136b6e8fc6a2f4f5c285d" }],
+  ["chibi-filipiniana", { w: 32, h: 32, sha256: "e5355982c80bc543250ee38a8556624e5ffde6be172681d7338a616ac5cdfe9c" }],
+  ["deco-taho-vendor", { w: 32, h: 32, sha256: "6820afdbe38cffbead35b38f17f7ed96d5d730c9e59dabbcece9a5becb126c98" }],
+  ["deco-parol", { w: 16, h: 16, sha256: "eedad4b29ecd30af0e44621a7eef66d467c75b26c85103bcb2d6879ef909c137" }],
+  ["deco-sampaguita", { w: 16, h: 16, sha256: "5b4cf375a9fde3fd128797749a177876b4f8981940277be7cd8e7c8ad0b4b115" }],
+  ["deco-rice-terraces", { w: 24, h: 24, sha256: "5ba90f536e9ca07cb2c1b91c545c6bc697d364e86d3c8ef3538b40728238e1c0" }],
+  ["deco-panagbenga-float", { w: 32, h: 24, sha256: "75ff7f59244fcbaaa5011a5b84b95aee85242e095d0f6309c191c838203513b1" }],
+]);
+const PH_NAMES = [...PH_DROP.keys()];
 const PNG_CHUNKS = ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"]; // nothing else: no text, time or colour-profile metadata
 
 // ux.md section 1: art-list entries that are not shipped as sprites, each with its reason.
@@ -129,7 +146,7 @@ function checkDir(dir: string, manifest: Record<string, Size>, pngArt: ReadonlyS
 
 function manifestNames(): SpriteName[] {
   const names = Object.keys(SPRITES) as SpriteName[];
-  assert.equal(names.length, 43, "the manifest must list all 43 sprites");
+  assert.equal(names.length, 53, "the manifest must list all 53 sprites");
   return names;
 }
 
@@ -152,9 +169,10 @@ const placeholders = (...names: string[]) => names.every((n) => !PNG_ART.has(n a
 
 // --- T33-1 the art list and the manifest ------------------------------------------------------------
 
-test("the art-list parser finds all 46 entries (43 sprites + 3 exclusions)", () => {
+test("the art-list parser finds all 56 entries (53 sprites + 3 exclusions)", () => {
   const art = parseArtList(readFileSync(ART_LIST, "utf8"));
-  assert.equal(art.size, 46, [...art.keys()].join(", "));
+  assert.equal(art.size, 56, [...art.keys()].join(", "));
+  for (const [name, { w, h }] of PH_DROP) assert.deepEqual(art.get(name), { w, h }, `${name} in section 7 (TG-45)`);
   assert.deepEqual(art.get("ref-style-sheet"), { w: 512, h: 512 });
   assert.deepEqual(art.get("chibi-{type}-walk-1..4"), { w: 32, h: 32 });
   assert.deepEqual(art.get("icon-app"), { w: 512, h: 512 });
@@ -176,7 +194,7 @@ test("the manifest covers every art-list name and size, minus the documented exc
     assert.deepEqual(SPRITES[name as SpriteName], size, `${name} size`);
   }
   for (const name of Object.keys(SPRITES)) assert.ok(art.has(name), `${name} is not in the art list`);
-  assert.equal(Object.keys(SPRITES).length, 43);
+  assert.equal(Object.keys(SPRITES).length, 53);
 });
 
 test("the irregular sizes are right", () => {
@@ -208,16 +226,18 @@ test("the app icons are the art-drop icon: 512, 192 and 180 PNGs in the 6-colour
 
 // --- T33-19 the art drop ------------------------------------------------------------------------------
 
-test("PNG_ART is exactly the 35 art-drop names; the 8 kept placeholders stay SVG", () => {
+test("PNG_ART is exactly the 35 art-drop names plus the 10 TG-45 decor names; the 8 kept placeholders stay SVG", () => {
   const names = manifestNames();
   assert.equal(ART_DROP.length, 35);
-  assert.deepEqual([...ART_DROP, ...KEPT_SVG].sort(), [...names].sort(), "art drop + kept SVG = the manifest");
-  assert.deepEqual([...PNG_ART].sort(), [...ART_DROP].sort());
+  assert.equal(PH_DROP.size, 10);
+  assert.deepEqual([...ART_DROP, ...PH_NAMES, ...KEPT_SVG].sort(), [...names].sort(), "art drop + decor + kept SVG = the manifest");
+  assert.deepEqual([...PNG_ART].sort(), [...ART_DROP, ...PH_NAMES].sort());
+  for (const [name, { w, h }] of PH_DROP) assert.deepEqual(SPRITES[name as SpriteName], { w, h }, `${name}: the ticket's size`);
   for (const name of KEPT_SVG) assert.equal(spriteSrc(name as SpriteName), `/sprites/${name}.svg`);
 });
 
 test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 255, not empty, at most 4 KB", async (t) => {
-  for (const name of ART_DROP) {
+  for (const name of [...ART_DROP, ...PH_NAMES]) {
     await t.test(name, () => {
       const file = join(SPRITE_DIR, `${name}.png`);
       assert.ok(existsSync(file), `${name}.png is missing`);
@@ -230,6 +250,24 @@ test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 
       assert.ok(png.pixels.some(([, , , a]) => a === 255), "draws something");
     });
   }
+});
+
+test("T45-S3 the 10 decor PNGs are byte-for-byte the shipped art (sha256 pinned)", async (t) => {
+  for (const [name, { sha256 }] of PH_DROP) {
+    await t.test(name, () => {
+      const file = join(SPRITE_DIR, `${name}.png`);
+      assert.ok(existsSync(file), `${name}.png is missing`);
+      assert.equal(createHash("sha256").update(readFileSync(file)).digest("hex"), sha256);
+    });
+  }
+});
+
+test("T45-S1 the decor chibis are not passenger types: chibi() never names them", () => {
+  assert.deepEqual([...PASSENGER_TYPES], ["adult", "student", "senior", "pwd"]);
+  assert.deepEqual([...CHIBI_FRAMES], ["idle-1", "idle-2", "wave"]);
+  const named = new Set(PASSENGER_TYPES.flatMap((t) => CHIBI_FRAMES.map((f) => chibi(t, f))));
+  for (const name of PH_NAMES) assert.ok(!named.has(name as SpriteName), `${name} is a chibi() result`);
+  assert.equal(named.size, 12);
 });
 
 test("each art-drop idle-2 is its idle-1 one pixel lower", async (t) => {
