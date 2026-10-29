@@ -127,7 +127,7 @@ Endpoints: `GET /health`, `GET /terminals`, `GET /trips?origin_city=Metro Manila
 
 Tests run against a throwaway Postgres: `cd api && TEST_DATABASE_URL=postgresql://... python -m pytest` (use `python -m`: a bare `pytest` can't import `app`). Without `TEST_DATABASE_URL` the run is skipped and exits non-zero.
 
-Deployed on Railway: see section 8. `api/Procfile` is the start command for local runs and other hosts; on Railway, `api/railway.json` overrides it.
+The API is deployed on Railway: see section 8. `api/Procfile` is the start command for local runs and other hosts; on Railway, `api/railway.json` overrides it.
 
 ### Live planner (`POST /plan`)
 - The body is `{"date", "return_date", "party": [{"type", "name"?}], "budget_php"?, "vibe"}`.
@@ -230,23 +230,31 @@ Each flag is an environment variable on both sides: the API reads it from `os.en
 
 Values are trimmed and case-insensitive. `1`, `true`, `yes`, `on` mean on; `0`, `false`, `no`, `off` mean off. Unset or empty uses the default. Anything else also uses the default: the API logs a warning naming the variable, the web app falls back silently.
 
-- Set both sides together (e.g. `PLANNER_LIVE` on the Railway `api` service and `NEXT_PUBLIC_PLANNER_LIVE` on the Railway `web` service). The API value decides server behaviour; the web value decides what the UI shows.
+- Set both sides together (e.g. `PLANNER_LIVE` on the Railway `api` service and `NEXT_PUBLIC_PLANNER_LIVE` on the Vercel `tara-gala-ph` project). The API value decides server behaviour; the web value decides what the UI shows.
 - The API reads flags once per process and logs them at startup, so changing a flag on Railway takes effect when the API restarts (Railway redeploys on a variable change).
-- Web flags are baked in at `next build`: change the `web` service variable on Railway, then rebuild web with `railway up` (section 8). A restart or `railway redeploy` reuses the old build and keeps the old value.
+- Web flags are baked in at `next build`: change the variable on the Vercel project, then deploy web again (section 8). Redeploying an existing build reuses the old value.
 
 Tests: the API flag tests run with the normal pytest command (section 5). The web tests run with `cd web && npm test`, which uses Node's built-in `node --test` and needs Node 22.18 or later for TypeScript type stripping. CI runs them as they are (section 9).
 
-## 8. Deploy (Railway)
-One Railway project with three services in its `production` environment: `Postgres` (Railway's Postgres), `api` (FastAPI) and `web` (`next start`). Both app services get a generated `*.up.railway.app` domain on port 8080.
+## 8. Deploy (Railway API, Vercel web)
+- **Railway** (one project, `production` environment): `Postgres` (Railway's Postgres) and `api` (FastAPI), on its Railway-provided domain, port 8080.
+- **Vercel:** `web` (Next.js), the owner's personal account, project `tara-gala-ph`, on its `vercel.app` domain. It moved from Railway on 2026-10-29.
 
-- Build config lives in the repo: `api/railway.json` and `web/railway.json` (Railpack builder, start command bound to `0.0.0.0:8080`, health checks on `/health` and `/`), plus `api/.python-version` (3.12) and `web/.node-version` (24). `/health` runs `select 1`, so a deploy that can't reach the database fails its health check and the previous deployment keeps serving.
-- Variables are set only on Railway, never in the repo:
-  - `api`: `DATABASE_URL` (the reference `${{Postgres.DATABASE_URL}}`, the private network), `PORT`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL`, `PLANNER_LIVE`, `PREMADE_ITINERARIES`, `REAL_MAP`, `RAILPACK_DEPLOY_APT_PACKAGES` (`tzdata`, for `Asia/Manila`).
-  - `web`: `PORT`, `NEXT_PUBLIC_API_URL` (the api origin), `NEXT_PUBLIC_PLANNER_LIVE`, `NEXT_PUBLIC_PREMADE_ITINERARIES`, `NEXT_PUBLIC_REAL_MAP`, `NEXT_PUBLIC_SERVICE_WORKER`, `NEXT_PUBLIC_OVERWORLD_MAP`, `NEXT_TELEMETRY_DISABLED`. `NEXT_PUBLIC_*` values are inlined at build time, so set them before the first web deploy and rebuild after a change.
+- **Build config in the repo:**
+  - `api/railway.json` (Railpack builder, start command bound to `0.0.0.0:8080`, health check on `/health`) and `api/.python-version` (3.12). `/health` runs `select 1`, so a deploy that can't reach the database fails its health check, and the previous deployment keeps serving.
+  - Vercel builds `web/` as a standard Next.js project (`web/.node-version` 24). `web/railway.json` is kept only as a fallback, in case web ever goes back to Railway.
+- **Variables live only on the hosts, never in the repo:**
+  - `api` (Railway): `DATABASE_URL` (the reference `${{Postgres.DATABASE_URL}}`, private network), `PORT`, `ALLOWED_ORIGINS` (the web origin; it's comma-separated, so another origin can be added), `LOG_LEVEL`, `PLANNER_LIVE`, `PREMADE_ITINERARIES`, `REAL_MAP`, and `RAILPACK_DEPLOY_APT_PACKAGES` (`tzdata`, for `Asia/Manila`).
+  - `web` (Vercel, production): `NEXT_PUBLIC_API_URL` (the api origin), `NEXT_PUBLIC_PLANNER_LIVE`, `NEXT_PUBLIC_PREMADE_ITINERARIES`, `NEXT_PUBLIC_REAL_MAP`, `NEXT_PUBLIC_SERVICE_WORKER`, `NEXT_PUBLIC_OVERWORLD_MAP` and `NEXT_TELEMETRY_DISABLED`. `NEXT_PUBLIC_*` values are inlined at build time, so deploy again after any change.
   - No LLM key and no Supabase variables.
-- `DATABASE_PUBLIC_URL` (Postgres' TCP proxy) is used only from the VPS, for the schema, the migrations and the scraper and loader runs (sections 1, 3 and 4). It is never set on `api`.
-- Redeploy after a merge to `main`: export a clean copy of `main` (`git archive`), apply `supabase/schema.sql` if new and every file in `supabase/migrations/` (safe to re-run), run the loaders if `data/` changed, then `railway up <export>/api --path-as-root` and `railway up <export>/web --path-as-root`, then the smoke test (`/health`, `/terminals`, `/trips` for both directions, CORS from the web origin, the pages at 380px).
-- Project and service IDs, hostnames, the exact commands and the rollback steps are in the ops notes, which live outside the repo.
+- `DATABASE_PUBLIC_URL` (Postgres' TCP proxy) is used only from the VPS, for the schema, the migrations, and the scraper and loader runs (sections 1, 3 and 4). It is never set on `api`.
+- **Redeploy after a merge to `main`:**
+  1. Export a clean copy of `main` (`git archive`).
+  2. Apply `supabase/schema.sql` if it's new, and every file in `supabase/migrations/` (safe to rerun). Run the loaders if `data/` changed.
+  3. `railway up <export>/api --path-as-root`.
+  4. Deploy `web/` from the same export to Vercel production (`vercel deploy --prod`, with the personal account's config; the ops notes have a script).
+  5. Smoke test: `/health`, `/terminals`, `/trips` for both directions, CORS from the web origin, the pages at 380px, and `web/scripts/offline-e2e.mjs --origin https://<web domain>`.
+- The project and service IDs, the hostnames, the exact commands and the rollback steps are in the ops notes, outside the repo. Changing the web host changes the origin: update `ALLOWED_ORIGINS`, and note that phones lose their saved offline data.
 
 ## 9. CI
 GitHub Actions (`.github/workflows/ci.yml`, workflow `CI`) runs on every pull request and every push to `main`. It has two jobs:
@@ -255,7 +263,7 @@ GitHub Actions (`.github/workflows/ci.yml`, workflow `CI`) runs on every pull re
 
 npm and pip are cached. A new push to a pull request cancels that PR's older run. Runs on `main` are never cancelled.
 
-CI uses no secrets: the token is read-only, and no `LLM_API_KEY` or `DATABASE_URL` is set. The Postgres password in `ci.yml` belongs to the throwaway service container. CI doesn't deploy either: deploys are manual (`railway up`, section 8).
+CI uses no secrets: the token is read-only, and no `LLM_API_KEY` or `DATABASE_URL` is set. The Postgres password in `ci.yml` belongs to the throwaway service container. CI doesn't deploy either: deploys are manual (`railway up` for the api, `vercel deploy --prod` for web; section 8).
 
 Reading a failure: the red step's name says which check failed (tsc, lint, `npm test`, build or pytest), and the same command runs locally (sections 5 and 6). For `api` failures, the Postgres service log is in the job's "Stop containers" step. `-rs` prints the reason for any skipped test.
 
