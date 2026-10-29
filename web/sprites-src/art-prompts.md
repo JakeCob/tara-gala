@@ -26,6 +26,15 @@
 **Shared style line** (append to every prompt):
 > pixel art, crisp hard pixels, no anti-aliasing, no gradients, no blur, limited 6-colour palette (#1d2a24, #167856, #5fb36b, #cfe8c4, #fbf7ee, #ffd65c), 1px dark outline, transparent background, centred, 1990s handheld monster-RPG overworld sprite style, whimsical rounded cartoon proportions, original character, no text, no watermark
 
+**New art only (TG-47):** art drawn after TG-47 (TG-48's looks first) may also use these 5, for 11 colours in all. The sprites in sections 1 to 7 keep the 6 above. No literal flag (RA 8491).
+| Name | Hex | Use |
+|---|---|---|
+| Flag Blue | `#0038a8` | Philippine flag blue |
+| Flag Red | `#ce1126` | Philippine flag red |
+| Flag Yellow | `#fcd116` | Philippine flag yellow |
+| Kayumanggi | `#8d5524` | skin tone: art only, never UI |
+| Light skin | `#c68642` | skin tone: art only, never UI |
+
 ---
 
 ## S0. Style reference sheet (generate FIRST)
