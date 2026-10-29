@@ -340,7 +340,7 @@ test("T46-S2 every sprite the landing names is in TG-33's manifest", async () =>
   const names = new Set<string>();
   for (const path of [...landingFiles(), "src/lib/landingCast.ts"].filter(has)) {
     const src = read(path);
-    for (const m of src.matchAll(/spriteSrc\("([^"]+)"\)/g)) names.add(m[1]);
+    for (const m of src.matchAll(/(?:spriteSrc\(|SPRITES\[)"([^"]+)"/g)) names.add(m[1]);
     for (const m of src.matchAll(/"((?:vehicle|mode|tile|ui|deco|place|chibi|hero)-[a-z0-9-]+)"/g)) names.add(m[1]);
   }
   assert.ok(names.has("hero-scene") && names.has("vehicle-bus") && names.has("mode-jeep") && names.has("ui-badge-verified") && names.has("tile-mountain"));
