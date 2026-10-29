@@ -39,6 +39,8 @@ export const SPRITES = {
   "deco-sun-stars": DECO_SQUARE, "deco-carabao": DECO_WIDE, "deco-bahay-kubo": DECO_SQUARE,
   "chibi-barong": CHIBI, "chibi-filipiniana": CHIBI, "deco-taho-vendor": CHIBI,
   "deco-parol": TILE, "deco-sampaguita": TILE, "deco-rice-terraces": DECO_SQUARE, "deco-panagbenga-float": DECO_WIDE,
+  // TG-46 the landing hero, drawn at 2x
+  "hero-scene": { w: 320, h: 123 },
 } as const satisfies Record<string, { w: number; h: number }>;
 export type SpriteName = keyof typeof SPRITES;
 
@@ -55,7 +57,7 @@ export const PNG_ART: ReadonlySet<SpriteName> = new Set<SpriteName>([
   "ui-badge-verified", "ui-heart", "ui-star", "vehicle-bus",
   "deco-sun-stars", "deco-carabao", "deco-bahay-kubo", "chibi-barong",
   "chibi-filipiniana", "deco-taho-vendor", "deco-parol", "deco-sampaguita",
-  "deco-rice-terraces", "deco-panagbenga-float",
+  "deco-rice-terraces", "deco-panagbenga-float", "hero-scene",
 ]);
 
 export function spriteSrc(name: SpriteName): string {

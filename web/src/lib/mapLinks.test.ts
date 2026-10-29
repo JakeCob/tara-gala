@@ -296,9 +296,10 @@ test("footer points to the cards, with no homepage links; the /baguio link stays
   const footer = page.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/);
   assert.ok(footer, "footer present");
   assert.match(footer[0], /^<footer className="mt-auto pt-6 text-xs text-muted">/);
-  assert.equal(footer[1].trim(), "Directions to your terminal are on each trip.");
+  assert.ok(footer[1].includes("Directions to your terminal are on each trip."));
   assert.doesNotMatch(page, /maps\.google\.com|sakay\.ph/);
-  assert.match(page, /href="\/baguio"/);
+  // TG-46: the /baguio link is a quick action now
+  assert.match(readFileSync(new URL("../components/landing/QuickActions.tsx", import.meta.url), "utf8"), /href="\/baguio"/);
 });
 
 test("the empty results live region stays rendered but takes no gap", () => {

@@ -70,6 +70,8 @@ const PH_DROP = new Map([
   ["deco-panagbenga-float", { w: 32, h: 24, sha256: "75ff7f59244fcbaaa5011a5b84b95aee85242e095d0f6309c191c838203513b1" }],
 ]);
 const PH_NAMES = [...PH_DROP.keys()];
+// TG-46 the landing hero: one 320×123 scene in the original 6 colours, so existing art (T47-A3b), with an 8 KB budget
+const HERO = ["hero-scene"];
 const PNG_CHUNKS = ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"]; // nothing else: no text, time or colour-profile metadata
 
 // ux.md section 1: art-list entries that are not shipped as sprites, each with its reason.
@@ -153,7 +155,7 @@ function checkDir(dir: string, manifest: Record<string, Size>, pngArt: ReadonlyS
 
 function manifestNames(): SpriteName[] {
   const names = Object.keys(SPRITES) as SpriteName[];
-  assert.equal(names.length, 53, "the manifest must list all 53 sprites");
+  assert.equal(names.length, 54, "the manifest must list all 54 sprites");
   return names;
 }
 
@@ -176,9 +178,9 @@ const placeholders = (...names: string[]) => names.every((n) => !PNG_ART.has(n a
 
 // --- T33-1 the art list and the manifest ------------------------------------------------------------
 
-test("the art-list parser finds all 56 entries (53 sprites + 3 exclusions)", () => {
+test("the art-list parser finds all 57 entries (54 sprites + 3 exclusions)", () => {
   const art = parseArtList(readFileSync(ART_LIST, "utf8"));
-  assert.equal(art.size, 56, [...art.keys()].join(", "));
+  assert.equal(art.size, 57, [...art.keys()].join(", "));
   for (const [name, { w, h }] of PH_DROP) assert.deepEqual(art.get(name), { w, h }, `${name} in section 7 (TG-45)`);
   assert.deepEqual(art.get("ref-style-sheet"), { w: 512, h: 512 });
   assert.deepEqual(art.get("chibi-{type}-walk-1..4"), { w: 32, h: 32 });
@@ -201,7 +203,7 @@ test("the manifest covers every art-list name and size, minus the documented exc
     assert.deepEqual(SPRITES[name as SpriteName], size, `${name} size`);
   }
   for (const name of Object.keys(SPRITES)) assert.ok(art.has(name), `${name} is not in the art list`);
-  assert.equal(Object.keys(SPRITES).length, 53);
+  assert.equal(Object.keys(SPRITES).length, 54);
 });
 
 test("the irregular sizes are right", () => {
@@ -237,19 +239,19 @@ test("PNG_ART is exactly the 35 art-drop names plus the 10 TG-45 decor names; th
   const names = manifestNames();
   assert.equal(ART_DROP.length, 35);
   assert.equal(PH_DROP.size, 10);
-  assert.deepEqual([...ART_DROP, ...PH_NAMES, ...KEPT_SVG].sort(), [...names].sort(), "art drop + decor + kept SVG = the manifest");
-  assert.deepEqual([...PNG_ART].sort(), [...ART_DROP, ...PH_NAMES].sort());
+  assert.deepEqual([...ART_DROP, ...PH_NAMES, ...HERO, ...KEPT_SVG].sort(), [...names].sort(), "art drop + decor + hero + kept SVG = the manifest");
+  assert.deepEqual([...PNG_ART].sort(), [...ART_DROP, ...PH_NAMES, ...HERO].sort());
   for (const [name, { w, h }] of PH_DROP) assert.deepEqual(SPRITES[name as SpriteName], { w, h }, `${name}: the ticket's size`);
   for (const name of KEPT_SVG) assert.equal(spriteSrc(name as SpriteName), `/sprites/${name}.svg`);
 });
 
-test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 255, not empty, at most 4 KB", async (t) => {
+test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 255, not empty, at most 4 KB (the hero 8 KB)", async (t) => {
   for (const name of [...PNG_ART]) {
     await t.test(name, () => {
       const file = join(SPRITE_DIR, `${name}.png`);
       assert.ok(existsSync(file), `${name}.png is missing`);
       const buf = readFileSync(file);
-      assert.ok(buf.length <= 4096, `${buf.length} bytes`);
+      assert.ok(buf.length <= (HERO.includes(name) ? 8192 : 4096), `${buf.length} bytes`);
       const png = decodePng(buf);
       assert.deepEqual({ w: png.w, h: png.h }, SPRITES[name as SpriteName]);
       assert.deepEqual(paletteProblems(png, paletteFor(name)), []);
@@ -709,8 +711,8 @@ test("T47-A1 the art palette is pixelSvg's 11 colours, in order, and its first 6
 // Manager decision on review-plan finding 1: existing art stays held to the original 6
 test("T47-A3b existing art is held to the 6; the 11-colour group holds only new art", () => {
   // Existing art: the TG-33 art drop, TG-45's Philippine decor and the kept SVG placeholders
-  const existing = new Set([...ART_DROP, ...PH_NAMES, ...KEPT_SVG]);
-  assert.equal(existing.size, ART_DROP.length + PH_NAMES.length + KEPT_SVG.length, "the groups don't overlap");
+  const existing = new Set([...ART_DROP, ...PH_NAMES, ...HERO, ...KEPT_SVG]);
+  assert.equal(existing.size, ART_DROP.length + PH_NAMES.length + HERO.length + KEPT_SVG.length, "the groups don't overlap");
   for (const name of PH_NAMES) assert.deepEqual(paletteFor(name), ART_PALETTE_V1, `${name}: TG-45 decor keeps the 6`);
   for (const name of NEW_ART_11) {
     assert.ok(!existing.has(name), `${name} is existing art: it keeps the 6-colour palette`);

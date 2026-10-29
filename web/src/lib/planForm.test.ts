@@ -830,7 +830,8 @@ test("T21-C1 every pinned string from ux §8", () => {
 const form = readIf("src/components/PlanForm.tsx");
 const fields = readIf("src/components/PlanFields.tsx");
 const results = readIf("src/components/PlanResults.tsx");
-const home = read("src/app/page.tsx");
+// TG-46: the home /plan link is a quick action now
+const home = read("src/components/landing/QuickActions.tsx");
 const ui = form + fields + results;
 
 test("T21-S1 date inputs use dateBounds, never a hard-coded date", () => {

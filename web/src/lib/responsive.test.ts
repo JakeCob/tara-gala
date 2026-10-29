@@ -143,12 +143,10 @@ test("TG44-H1 home: form left, results right from md; the links stay after TripS
   assert.match(search, /<ul className="flex flex-col gap-3 md:grid md:grid-cols-\[repeat\(auto-fill,minmax\(20rem,1fr\)\)\] md:gap-4">/);
   assert.match(search, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">/, "the live wrapper is unchanged");
   const page = read("src/app/page.tsx");
-  assert.match(page, /<p className="text-sm text-muted md:max-w-prose">Every Manila to Baguio bus/);
-  const links = [...page.matchAll(/<PixelLink variant="secondary" href="\/(baguio|plan)" className="([^"]*)">/g)];
-  assert.equal(links.length, 2);
-  for (const [, href, cls] of links) assert.equal(cls, "flex items-center px-4 py-3 text-sm md:self-start", href);
+  // TG-46: the tagline moved to the hero, on its fixed light screen; the two links became the quick actions
+  assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses/);
   const at = page.indexOf("<TripSearch />");
-  assert.ok(at > 0 && links.every((l) => l.index! > at), "both links come after TripSearch in the DOM (tab order = visual order)");
+  assert.ok(at > 0 && page.indexOf("<QuickActions />") > at, "the quick actions come after TripSearch in the DOM (tab order = visual order)");
   assert.match(page, /<footer className="mt-auto pt-6 text-xs text-muted">/, "the footer is unchanged");
 });
 

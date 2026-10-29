@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useState, useSyncExternalStore } from "react";
+import { useEffect, useReducer, useState, useSyncExternalStore } from "react";
 import { manilaToday, searchTrips, type Trip } from "@/lib/api";
 import {
   emptyMessage,
@@ -10,10 +10,11 @@ import {
   searchReducer,
   swapLabel,
 } from "@/lib/direction";
-import { PX, PixelBox, PixelButton } from "@/components/pixel";
+import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
 import TripCard from "@/components/TripCard";
 
 const subscribeNothing = () => () => {};
+const DATE_ID = "travel-date";
 
 /** "YYYY-MM-DD" plus n days, computed in UTC so the device's time zone can't shift the day. */
 function addDays(iso: string, n: number): string {
@@ -34,6 +35,19 @@ export default function TripSearch() {
   const minDate = today || undefined;
   const maxDate = today ? addDays(today, 365) : undefined;
   const { originCity, destinationCity } = endpoints(direction);
+
+  // A link to the date input (TG-46's "Find buses" quick action) moves focus there too: next/link's in-page jump only
+  // scrolls, so a keyboard user would Tab on from the link. Enter on a link fires click as well. The input's scroll-mt-44
+  // keeps the whole form, from the From / To row down, clear of the sticky offline banner after the jump.
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!(e.target instanceof Element) || !e.target.closest(`a[href="#${DATE_ID}"]`)) return;
+      document.getElementById(DATE_ID)?.focus();
+      console.info("[tg-search] focus date input from an in-page link");
+    }
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
 
   async function onSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -76,6 +90,7 @@ export default function TripSearch() {
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Travel date</span>
           <input
+            id="travel-date"
             type="date"
             value={date}
             min={minDate}
@@ -84,7 +99,7 @@ export default function TripSearch() {
               setCleared(e.target.value === "");
               dispatch({ type: "pickDate", date: e.target.value });
             }}
-            className={PX.input}
+            className={cx(PX.input, "scroll-mt-44")}
             required
           />
         </label>

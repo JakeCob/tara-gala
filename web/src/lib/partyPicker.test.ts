@@ -14,7 +14,8 @@ const stage = read("src/components/PartyStage.tsx");
 const useSpawn = read("src/components/useSpawn.ts");
 const form = read("src/components/PlanForm.tsx");
 const page = read("src/app/plan/page.tsx");
-const home = read("src/app/page.tsx");
+// TG-46: the home /plan link is a quick action now
+const home = read("src/components/landing/QuickActions.tsx");
 const NEW_UI = {
   "PartyPicker.tsx": picker,
   "PartyStage.tsx": stage,

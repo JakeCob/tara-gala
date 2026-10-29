@@ -155,7 +155,8 @@ test("T45-H3 HomeDecor is a hidden, inert server component of sized, pixelated b
 test("T45-H4 the home page renders the strip once, between </header> and the search", () => {
   const src = source("src/app/page.tsx");
   assert.equal(src.match(/<HomeDecor\b/g)?.length ?? 0, 1, "one <HomeDecor />");
-  assert.match(src, /<\/header>\s*<HomeDecor \/>\s*<TripSearch \/>/, "a sibling of <header>, before the search (review finding 2)");
+  // TG-46: the hero replaced the header, so the strip sits last, before the footer
+  assert.match(src, /<HomeDecor \/>\s*<footer/, "a sibling of the sections, just before the footer");
   assert.match(src, /^import HomeDecor from "@\/components\/HomeDecor";$/m);
 });
 

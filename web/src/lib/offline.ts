@@ -8,7 +8,16 @@ export type SwDataMessage = { type: "tg-sw:data"; source: DataSource; savedAt: s
 export const MSG_DATA = "tg-sw:data";
 export const MSG_SKIP_WAITING = "SKIP_WAITING";
 
-export type BannerState = { kind: "none" | "cached" | "miss"; savedAt: string | null; online: boolean; backOnline: boolean };
+/** One API path answered from the cache on this screen (TG-46: the landing makes two GETs). */
+export type CachedPath = { path: string; savedAt: string | null };
+export type BannerState = {
+  kind: "none" | "cached" | "miss";
+  savedAt: string | null;
+  online: boolean;
+  backOnline: boolean;
+  /** Present only when non-empty, so the URL-less states read as before */
+  cached?: CachedPath[];
+};
 export type BannerEvent =
   | { type: "data"; source: DataSource; savedAt: string | null; url?: string }
   | { type: "online" }
@@ -36,18 +45,49 @@ function supplementary(url: string | undefined): boolean {
   }
 }
 
+function pathOf(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return null;
+  }
+}
+
+function oldest(list: CachedPath[]): string | null {
+  return list.slice(1).reduce((at, c) => olderOf(at, c.savedAt), list[0].savedAt);
+}
+
+/** The state with exactly these cached paths: the key is left off when there are none. */
+function withCached(s: BannerState, list: CachedPath[]): BannerState {
+  const base = { kind: s.kind, savedAt: s.savedAt, online: s.online, backOnline: s.backOnline };
+  return list.length ? { ...base, cached: list } : base;
+}
+
+// One screen can show several API answers (TG-46: the landing's trips search and ready-made list). Each answer speaks
+// for its own path, so a fresh or missing one doesn't hide another path still on screen from the cache. An answer
+// without a URL speaks for the whole screen, as before.
+function onData(s: BannerState, e: Extract<BannerEvent, { type: "data" }>): BannerState {
+  const path = pathOf(e.url);
+  const others = path === null ? [] : (s.cached ?? []).filter((c) => c.path !== path);
+  if (e.source === "cache") {
+    // Several cached answers on one screen: show the oldest. A cached state with no paths came from URL-less answers.
+    const earlier = s.kind === "cached" && (path === null || !s.cached) ? s.savedAt : undefined;
+    const list = path === null ? [] : [...others, { path, savedAt: e.savedAt }];
+    const own = list.length ? oldest(list) : e.savedAt;
+    const savedAt = earlier === undefined ? own : olderOf(earlier, own);
+    return withCached({ ...s, kind: "cached", savedAt, backOnline: false }, list);
+  }
+  if (others.length) return withCached({ ...s, kind: "cached", savedAt: oldest(others) }, others);
+  if (e.source === "network") return withCached({ ...s, kind: "none", savedAt: null, backOnline: false }, []);
+  return withCached({ ...s, kind: "miss" }, []);
+}
+
 /** The banner follows the data (was the last API answer served from the cache?), not just navigator.onLine. */
 export function bannerReducer(s: BannerState, e: BannerEvent): BannerState {
   switch (e.type) {
     case "data":
-      if (supplementary(e.url)) return s;
-      if (e.source === "network") return { ...s, kind: "none", savedAt: null, backOnline: false };
-      if (e.source === "cache") {
-        // Several cached answers on one screen: show the oldest
-        const savedAt = s.kind === "cached" ? olderOf(s.savedAt, e.savedAt) : e.savedAt;
-        return { ...s, kind: "cached", savedAt, backOnline: false };
-      }
-      return { ...s, kind: "miss" };
+      return supplementary(e.url) ? s : onData(s, e);
     case "online":
       return { ...s, online: true, backOnline: s.kind === "cached" && !s.online };
     case "offline":

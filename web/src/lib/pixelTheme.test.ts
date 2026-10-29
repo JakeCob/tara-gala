@@ -19,6 +19,7 @@ type PXShape = {
   screenChip: string;
   input: string;
   h1: string;
+  h1Screen: string;
   h2: string;
   dataHeading: string;
   meta: string;
@@ -325,6 +326,7 @@ const EXPECTED_PX: PXShape = {
   screenChip: "pixel-frame bg-screen-paper text-screen-ink px-2 py-1 text-sm",
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
   h1: "font-pixel text-[2rem] leading-tight font-bold text-brand md:text-[2.5rem]",
+  h1Screen: "font-pixel text-[2rem] leading-tight font-bold text-screen-ink md:text-[2.5rem]",
   h2: "font-pixel text-xl font-semibold",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",

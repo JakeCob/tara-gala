@@ -92,3 +92,4 @@ Sprites carry no `<title>`. The component that shows one sets its alt text (`alt
 | `deco-sampaguita` | 16×16 | PNG | AI art: sampaguita (jasmine) flowers |
 | `deco-rice-terraces` | 24×24 | PNG | AI art: stepped mountain rice terraces |
 | `deco-panagbenga-float` | 32×24 | PNG | AI art: a Panagbenga flower-festival float |
+| `hero-scene` | 320×123 | PNG | AI art: the landing hero scene (TG-46), drawn at 2x |

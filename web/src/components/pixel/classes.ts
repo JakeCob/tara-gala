@@ -29,6 +29,8 @@ export const PX = {
   // rounded-none is the one deliberate rounding class: it resets the rounded iOS date input
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
   h1: "font-pixel text-[2rem] leading-tight font-bold text-brand md:text-[2.5rem]",
+  // TG-46: the same title on the hero, a fixed light screen
+  h1Screen: "font-pixel text-[2rem] leading-tight font-bold text-screen-ink md:text-[2.5rem]",
   h2: "font-pixel text-xl font-semibold",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
