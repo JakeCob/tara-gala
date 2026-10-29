@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gridToSvg, parseGrid } from "./pixelSvg.ts";
+import { PALETTE, gridToSvg, parseGrid } from "./pixelSvg.ts";
 import type { Grid } from "./pixelSvg.ts";
 import { gridPixels, rasterize } from "./pixelSvg.testutil.ts";
 import type { Pixels } from "./pixelSvg.testutil.ts";
@@ -28,7 +28,14 @@ const PUBLIC_DIR = path("../../public/");
 const ART_LIST = path("../../sprites-src/art-prompts.md");
 const SCHEMA = path("../../../supabase/schema.sql");
 
-const PALETTE_HEXES = ["#1d2a24", "#167856", "#5fb36b", "#cfe8c4", "#fbf7ee", "#ffd65c"];
+// The art palette has one source, pixelSvg.ts PALETTE (TG-47: the 6 greens, then 3 flag colours and 2 skin tones).
+// Art made before TG-47 stays held to the original 6 (manager decision on review-plan finding 1); only art listed in
+// NEW_ART_11 may use all 11.
+const ART_PALETTE_V1 = ["#1d2a24", "#167856", "#5fb36b", "#cfe8c4", "#fbf7ee", "#ffd65c"];
+const PALETTE_11: string[] = Object.values(PALETTE);
+// Art drawn after TG-47 (TG-48's looks first). Empty until that art lands; an existing sprite never moves here (T47-A3b).
+const NEW_ART_11: string[] = [];
+const paletteFor = (name: string) => (NEW_ART_11.includes(name) ? PALETTE_11 : ART_PALETTE_V1);
 const INK = "#1d2a24";
 const TYPES = ["adult", "student", "senior", "pwd"] as const;
 const FRAMES = ["idle-1", "idle-2", "wave"] as const;
@@ -218,7 +225,7 @@ test("the app icons are the art-drop icon: 512, 192 and 180 PNGs in the 6-colour
     await t.test(file, () => {
       const png = decodePng(readFileSync(join(PUBLIC_DIR, file)));
       assert.deepEqual({ w: png.w, h: png.h }, { w: side, h: side });
-      assert.deepEqual(paletteProblems(png, PALETTE_HEXES), []);
+      assert.deepEqual(paletteProblems(png, ART_PALETTE_V1), []);
       assert.deepEqual(png.chunks.filter((c) => !PNG_CHUNKS.includes(c)), [], "metadata chunks");
     });
   }
@@ -245,7 +252,7 @@ test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 
       assert.ok(buf.length <= 4096, `${buf.length} bytes`);
       const png = decodePng(buf);
       assert.deepEqual({ w: png.w, h: png.h }, SPRITES[name as SpriteName]);
-      assert.deepEqual(paletteProblems(png, PALETTE_HEXES), []);
+      assert.deepEqual(paletteProblems(png, paletteFor(name)), []);
       assert.deepEqual(png.chunks.filter((c) => !PNG_CHUNKS.includes(c)), [], "metadata chunks");
       assert.ok(png.pixels.some(([, , , a]) => a === 255), "draws something");
     });
@@ -316,9 +323,17 @@ test("decodePng and paletteProblems catch what the art test relies on", () => {
   };
   const ok = decodePng(png(2, 1, 6, [[0x1d, 0x2a, 0x24, 255, 9, 9, 9, 0]]));
   assert.deepEqual([ok.w, ok.h, ok.pixels.length], [2, 1, 2]);
-  assert.deepEqual(paletteProblems(ok, PALETTE_HEXES), [], "palette colour + fully transparent off-palette pixel");
-  assert.deepEqual(paletteProblems(decodePng(png(1, 1, 6, [[0x1d, 0x2a, 0x24, 128]])), PALETTE_HEXES), ["alpha 128 at (0,0)"]);
-  assert.deepEqual(paletteProblems(decodePng(png(1, 1, 2, [[0x28, 0x3c, 0x50]])), PALETTE_HEXES), ["#283c50 off-palette"]);
+  assert.deepEqual(paletteProblems(ok, ART_PALETTE_V1), [], "palette colour + fully transparent off-palette pixel");
+  assert.deepEqual(paletteProblems(decodePng(png(1, 1, 6, [[0x1d, 0x2a, 0x24, 128]])), ART_PALETTE_V1), ["alpha 128 at (0,0)"]);
+  assert.deepEqual(paletteProblems(decodePng(png(1, 1, 2, [[0x28, 0x3c, 0x50]])), ART_PALETTE_V1), ["#283c50 off-palette"]);
+  // T47-A2: Flag Blue and Kayumanggi are on the 11-colour palette and off the original 6; near misses are off both
+  const flag = decodePng(png(2, 1, 2, [[0x00, 0x38, 0xa8, 0x8d, 0x55, 0x24]]));
+  assert.deepEqual(paletteProblems(flag, PALETTE_11), [], "#0038a8 and #8d5524 are on the 11");
+  assert.deepEqual(paletteProblems(flag, ART_PALETTE_V1), ["#0038a8 off-palette", "#8d5524 off-palette"], "existing art keeps the 6");
+  for (const near of [[0x00, 0x38, 0xa9], [0x28, 0x3c, 0x50]]) {
+    const hex = `#${near.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+    assert.deepEqual(paletteProblems(decodePng(png(1, 1, 2, [near])), PALETTE_11), [`${hex} off-palette`], hex);
+  }
   const text = Buffer.from([0, 0, 0, 1, 0x74, 0x45, 0x58, 0x74, 0x41, 0, 0, 0, 0]); // a 1-byte tEXt chunk
   assert.ok(decodePng(png(1, 1, 2, [[0x1d, 0x2a, 0x24]], [text])).chunks.includes("tEXt"));
   const deep = png(1, 1, 2, [[0, 0, 0]]);
@@ -383,7 +398,7 @@ test("every SVG uses only palette colours, one path per colour, and draws each p
       const elements = [...svg.matchAll(/<(path|rect)\b[^>]*\/>/g)].map((m) => m[0]);
       assert.ok(elements.length > 0, "draws something");
       const fills = elements.map((el) => el.match(/\bfill="([^"]*)"/)?.[1]);
-      for (const f of fills) assert.ok(f !== undefined && PALETTE_HEXES.includes(f), `fill ${f}`);
+      for (const f of fills) assert.ok(f !== undefined && ART_PALETTE_V1.includes(f), `fill ${f}`);
       const pathFills = [...svg.matchAll(/<path fill="([^"]*)"/g)].map((m) => m[1]);
       assert.equal(new Set(pathFills).size, pathFills.length, "a colour appears in more than one path");
       const r = rasterize(svg, name);
@@ -661,6 +676,7 @@ test("the sprites README has the agreed text and a row per sprite", () => {
   for (const line of [
     "Art: AI-generated with fal nano-banana, owner-approved, 2026-10-29.",
     "Names and sizes follow `web/sprites-src/art-prompts.md`. To swap in art: export PNGs at exactly the listed size (nearest-neighbour, 6-colour palette, transparent), copy them here with the same base name, add each name to `PNG_ART` in `web/src/lib/sprites.ts`, delete the matching `.svg`, and run the web tests.",
+    "New art drawn after TG-47 (TG-48's looks first) may use the 11-colour palette in `web/src/lib/pixelSvg.ts` (the 6 greens plus Flag Blue, Red and Yellow and two skin tones): list its names in `NEW_ART_11` in `web/src/lib/sprites.test.ts`. The skin tones are for art only, never UI. The sprites listed here keep the 6-colour palette.",
     "App icon: export `icon-app.png` over `web/public/icon-512.png`, `icon-192.png` and `apple-touch-icon.png` (180×180).",
     "Processing script: `process.py` in the owner's `~/tara-art/` (Pillow, so it stays outside the repo).",
     `Still SVG: ${KEPT_SVG.map((n) => `\`${n}\``).join(", ")}.`,
@@ -674,5 +690,34 @@ test("the sprites README has the agreed text and a row per sprite", () => {
     assert.ok(row, `no table row for ${name}`);
     assert.ok(row.includes(`${w}×${h}`), `${name}: size ${w}×${h} in its row`);
     assert.ok(row.includes(PNG_ART.has(name) ? "| PNG |" : "| SVG |"), `${name}: format in its row`);
+  }
+});
+
+// --- TG-47 Phase A: the 11-colour art palette ------------------------------------------------------------
+
+test("T47-A1 the art palette is pixelSvg's 11 colours, in order, and its first 6 are the original greens", () => {
+  assert.deepEqual(PALETTE, {
+    I: "#1d2a24", F: "#167856", L: "#5fb36b", M: "#cfe8c4", C: "#fbf7ee", S: "#ffd65c",
+    B: "#0038a8", R: "#ce1126", Y: "#fcd116", K: "#8d5524", T: "#c68642",
+  });
+  assert.equal(PALETTE_11.length, 11);
+  assert.deepEqual(PALETTE_11.slice(0, 6), ART_PALETTE_V1, "the original 6 come first, unchanged");
+  for (const hex of PALETTE_11) assert.match(hex, /^#[0-9a-f]{6}$/, `${hex} is lower case, like the committed SVGs`);
+});
+
+// Manager decision on review-plan finding 1: existing art stays held to the original 6
+test("T47-A3b existing art is held to the 6; the 11-colour group holds only new art", () => {
+  // Existing art: the TG-33 art drop, TG-45's Philippine decor and the kept SVG placeholders
+  const existing = new Set([...ART_DROP, ...PH_NAMES, ...KEPT_SVG]);
+  assert.equal(existing.size, ART_DROP.length + PH_NAMES.length + KEPT_SVG.length, "the groups don't overlap");
+  for (const name of PH_NAMES) assert.deepEqual(paletteFor(name), ART_PALETTE_V1, `${name}: TG-45 decor keeps the 6`);
+  for (const name of NEW_ART_11) {
+    assert.ok(!existing.has(name), `${name} is existing art: it keeps the 6-colour palette`);
+    assert.ok(PNG_ART.has(name as SpriteName), `${name}: new art ships as PNG`);
+  }
+  for (const name of existing) assert.deepEqual(paletteFor(name), ART_PALETTE_V1, name);
+  for (const name of svgNames()) {
+    const fills = [...readSvg(name).matchAll(/\bfill="([^"]*)"/g)].map((m) => m[1]);
+    for (const f of fills) assert.ok(ART_PALETTE_V1.includes(f), `${name}: ${f}`);
   }
 });
