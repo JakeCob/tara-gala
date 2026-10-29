@@ -39,6 +39,9 @@ export default function PartyStage({ party, spawning, step, fixedRows = false }:
                 className="pixelated"
                 draggable={false}
                 decoding="async"
+                onLoad={(e) => {
+                  e.currentTarget.style.visibility = "";
+                }}
                 onError={(e) => {
                   // A sprite never fetched before going offline: hide it (no broken-image icon); the tag still names the type
                   e.currentTarget.style.visibility = "hidden";
