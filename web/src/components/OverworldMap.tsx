@@ -81,7 +81,7 @@ function SignBody({ sign, bus }: { sign: SignLines; bus?: boolean }) {
       {bus && !sign.missing && <Sprite name="vehicle-bus" className="block" />}
       <span className="block text-sm font-bold">{sign.title}</span>
       {sign.lines.map((line) => (
-        <span key={line} className={`block text-xs tabular-nums ${line === CHANGED ? "font-semibold text-screen-ink" : "text-screen-muted"}`}>
+        <span key={line} className={`block text-xs tabular-nums ${line === CHANGED ? "font-semibold text-flag-red" : "text-screen-muted"}`}>
           {line}
         </span>
       ))}

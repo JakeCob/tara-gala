@@ -355,3 +355,12 @@ test("W6 no Blue control or Blue fill inside a red-lined box", () => {
   assert.equal(boxes(probe).length, 1);
   assert.match(boxes(probe)[0].body, /\bvariant=(?:"primary"|\{\s*["'`]primary["'`]\s*\})/);
 });
+
+// ux review S1: the map signs' "changed" line is red on the fixed game screen, so it uses the fixed flag-red (5.26 on
+// screen-paper in both themes), never danger-text, which follows the theme. The one place flag-red is text.
+test("W7 the map's changed sign line is Flag Red, and text-flag-red appears nowhere else", () => {
+  assert.match(read("src/components/OverworldMap.tsx"), /line === CHANGED \? "font-semibold text-flag-red" : "text-screen-muted"/);
+  for (const file of tsxFiles().filter((f) => f !== "src/components/OverworldMap.tsx")) {
+    assert.doesNotMatch(read(file), /(?<![\w-])text-flag-red(?![\w-])/, `${file}: text-flag-red is only for the map's sign line`);
+  }
+});
