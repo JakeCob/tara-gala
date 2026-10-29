@@ -126,6 +126,21 @@ test("T46-L3 quick actions: a named nav of three neutral card links; Find buses 
   assert.match(source("src/components/TripSearch.tsx"), /<input\b[^>]*\bid="travel-date"/, "the Find buses target");
 });
 
+test("T46-L8 activating Find buses moves focus to the date input, not just the scroll (manager GREEN follow-up)", () => {
+  // next/link's in-page jump scrolls but leaves focus on the link, so a keyboard user would Tab on from it. A link's
+  // Enter fires click too, so one click listener covers both.
+  const src = source("src/components/TripSearch.tsx");
+  assert.match(src, /const DATE_ID = "travel-date";/);
+  assert.match(src, /<input\b[^>]*\bid="travel-date"/, "the id stays literal (T46-L3)");
+  const effect = src.match(/useEffect\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/)?.[1] ?? "";
+  assert.ok(effect, "a mount-only effect");
+  assert.match(effect, /document\.addEventListener\("click", (\w+)\);[\s\S]*return \(\) => document\.removeEventListener\("click", \1\);/, "added once, removed on unmount");
+  assert.match(effect, /\.closest\(`a\[href="#\$\{DATE_ID\}"\]`\)/, "any in-page link to the input, the quick action's included");
+  assert.match(effect, /document\.getElementById\(DATE_ID\)\?\.focus\(\)/);
+  assert.doesNotMatch(effect, /preventDefault/, "the link still scrolls and sets the hash");
+  assert.match(source(sectionPath("QuickActions")), /<PixelCardLink href="#travel-date"/);
+});
+
 test("T46-L4 the hero: a fixed light screen with decorative art; its text is screen-ink", () => {
   const src = source(sectionPath("Hero"));
   assert.doesNotMatch(src, /use client|\buse(State|Effect|Ref|Memo|Callback|Reducer|SyncExternalStore)\b/, "a server component");
@@ -523,6 +538,8 @@ test("T46-X2 only plan §2.1's files and the approved test edits change (PR-scop
     "web/src/lib/partyPicker.test.ts",
     "web/src/lib/planForm.test.ts",
     "web/public/sprites/README.md",
+    // Manager GREEN follow-up (build log): Find buses moves focus to the date input. The fix is in TripSearch.tsx, which
+    // is already listed above, so no file is added here
   ]);
   for (const f of changedFiles()) assert.ok(allowed.has(f), `${f} is outside PR A's plan`);
   // The edited existing tests are retargeted or recounted, never loosened (audit M76/M79): no assert goes, no count becomes >=
