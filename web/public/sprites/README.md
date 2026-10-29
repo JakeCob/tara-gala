@@ -1,8 +1,8 @@
 # Sprites (TG-33)
 
-Art: AI-generated with fal nano-banana, owner-approved, 2026-10-29. 36 sprites and the app icon ship as PNG; the other 7 are hand-made SVG placeholders.
+Art: AI-generated with fal nano-banana, owner-approved, 2026-10-29. 35 sprites and the app icon ship as PNG; the other 8 are hand-made SVG placeholders.
 
-Still SVG: `ui-dialog-frame`, `ui-cursor`, `tile-grass`, `tile-path-straight`, `tile-path-corner`, `tile-road`, `tile-water`. The AI versions were too noisy (`ui-dialog-frame`, `ui-cursor`), or the map relies on these tiles being seamless and the map tests check them.
+Still SVG: `ui-dialog-frame`, `ui-cursor`, `tile-grass`, `tile-path-straight`, `tile-path-corner`, `tile-road`, `tile-water`, `mode-van`. The AI versions were too noisy (`ui-dialog-frame`, `ui-cursor`) or had garbled pseudo-lettering in its windows (`mode-van`, UX review S2), or the map relies on these tiles being seamless and the map tests check them.
 
 Names and sizes follow `web/sprites-src/art-prompts.md`. To swap in art: export PNGs at exactly the listed size (nearest-neighbour, 6-colour palette, transparent), copy them here with the same base name, add each name to `PNG_ART` in `web/src/lib/sprites.ts`, delete the matching `.svg`, and run the web tests.
 
@@ -11,7 +11,7 @@ Also delete that sprite's grid, `web/sprites-src/<name>.txt`: the tests expect a
 App icon: export `icon-app.png` over `web/public/icon-512.png`, `icon-192.png` and `apple-touch-icon.png` (180×180).
 
 ## How the art was made
-Generated with fal (nano-banana), using the adult chibi as the style reference so the set stays consistent: 45 calls, about $1.80, on the owner's fal key. The prompts follow `web/sprites-src/art-prompts.md`. Only original characters are used, with no franchise names and no real operator logos.
+Generated with fal (nano-banana), using the adult chibi as the style reference so the set stays consistent: 46 calls (one redo for the app icon), about $1.85, on the owner's fal key. The prompts follow `web/sprites-src/art-prompts.md`. Only original characters are used, with no franchise names and no real operator logos.
 
 Processing script: `process.py` in the owner's `~/tara-art/` (Pillow, so it stays outside the repo). For each raw image it:
 - removes the white background by flood fill from the edges, then crops;
@@ -19,6 +19,8 @@ Processing script: `process.py` in the owner's `~/tara-art/` (Pillow, so it stay
 - downscales to the exact size by majority vote per target pixel;
 - makes `idle-2` as `idle-1` moved 1px down;
 - draws the app icon on a 64px grid, then upscales it nearest-neighbour to 512, 192 and 180.
+
+After the UX review, a few pixels were fixed by hand: Leaf speckles in the senior's hair became Mint (with `idle-2` re-derived), and the Sun "beak" on the adult, student and senior wave mouths became Ink. The app icon was redone: a big chibi in front of the bus on a flat Leaf background, no inner frame, readable at 48px.
 
 The tests check every PNG: its size, palette colours only, alpha 0 or 255, no metadata chunks, and at most 4 KB.
 
@@ -64,7 +66,7 @@ Sprites carry no `<title>`. The component that shows one sets its alt text (`alt
 | `mode-jeep` | 24×16 | PNG | AI art: a jeepney, side view, no text |
 | `mode-taxi` | 24×16 | PNG | AI art: a small taxi, side view |
 | `mode-tricycle` | 24×16 | PNG | AI art: a motorcycle-sidecar tricycle |
-| `mode-van` | 24×16 | PNG | AI art: a white passenger van |
+| `mode-van` | 24×16 | SVG | placeholder: a long, boxy Cream van facing right with Ink windows |
 | `mode-grab` | 24×16 | PNG | AI art: a generic ride-hailing car with a map pin (no brand colours) |
 | `mode-walk` | 16×16 | PNG | AI art: footprints |
 | `ui-dialog-frame` | 24×24 | SVG | placeholder: 9-slice frame, 8px corners: Ink double line with notched corners, Cream fill |

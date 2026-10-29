@@ -42,7 +42,7 @@ export const PNG_ART: ReadonlySet<SpriteName> = new Set<SpriteName>([
   "chibi-pwd-idle-2", "chibi-pwd-wave", "chibi-senior-idle-1", "chibi-senior-idle-2",
   "chibi-senior-wave", "chibi-student-idle-1", "chibi-student-idle-2", "chibi-student-wave",
   "logo-wordmark", "mode-grab", "mode-jeep", "mode-taxi",
-  "mode-tricycle", "mode-van", "mode-walk", "place-cafe",
+  "mode-tricycle", "mode-walk", "place-cafe",
   "place-church", "place-food", "place-lodging", "place-market",
   "place-museum", "place-other", "place-park", "place-shopping",
   "place-terminal", "place-viewpoint", "tile-mountain", "tile-pine",
