@@ -17,6 +17,8 @@ export default function HomeDecor() {
           alt=""
           draggable={false}
           decoding="async"
+          // decoration: low priority, and no React preload hint (which a prefetch of / would push into every page)
+          fetchPriority="low"
           className={cx("pixelated", SHOW_CLASS[d.show], d.at)}
         />
       ))}
@@ -30,6 +32,8 @@ export default function HomeDecor() {
           alt=""
           draggable={false}
           decoding="async"
+          // decoration: low priority, and no React preload hint (which a prefetch of / would push into every page)
+          fetchPriority="low"
           className={cx("pixelated", SHOW_CLASS[d.show])}
         />
       ))}
