@@ -165,6 +165,10 @@ test("T15-G5 stage is decorative and gets sprites only from the manifest", () =>
   assert.match(chibiImg, /onError=\{/, "the chibi img has an onError");
   assert.match(chibiImg, /style\.visibility\s*=\s*"hidden"/, "a failed look hides itself (no broken-image icon)");
   assert.match(chibiImg, /console\.warn\("\[tg-party\] sprite failed/, "and logs it");
+  // M5 cold-cache check: the img element is reused across spawn frames, so a frame that loads after a failed one (an
+  // uncached wave, then the cached idle-1) must show it again, or the passenger stays invisible
+  assert.match(chibiImg, /onLoad=\{/, "the chibi img has an onLoad");
+  assert.match(chibiImg, /onLoad=\{\(e\) => \{\s*e\.currentTarget\.style\.visibility = "";?\s*\}\}/, "a frame that loads shows the img again");
   assert.match(stage, /tagLabel\(p\.type\)/, "the tag stays the type");
   assert.match(stage, /\bPX\.screenTag\b/);
   assert.match(root, /pixel-frame bg-screen\b/, "the stage is the fixed game screen (guide 1.3)");
