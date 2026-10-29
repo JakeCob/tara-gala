@@ -118,18 +118,23 @@ test("T45-H5 no layout shift: a fixed 80px strip that no sprite can grow; the sk
 
 // ---- T45-H3 HomeDecor.tsx (static) -------------------------------------------------------------------
 
-test("T45-H3 HomeDecor is a hidden, inert server component of sized, pixelated sprites with no text", () => {
+test("T45-H3 HomeDecor is a hidden, inert server component of sized, pixelated background sprites with no text", () => {
   const src = source("src/components/HomeDecor.tsx");
   assert.match(src, /<div aria-hidden="true" className=\{HOME_STRIP_CLASS\}/);
   assert.match(src, /backgroundImage: `url\(\$\{spriteSrc\("tile-grass"\)\}\)`/);
   assert.match(src, /backgroundSize: "32px"/);
-  const imgs = [...src.matchAll(/<img\b[^>]*?\/>/g)].map((m) => m[0]);
-  assert.ok(imgs.length >= 2, "renders the sky and the row as <img> elements");
-  for (const img of imgs) {
-    for (const want of [/src=\{spriteSrc\(/, /alt=""/, /draggable=\{false\}/, /width=\{SPRITES\[[^\]]+\]\.w \* 2\}/,
-      /height=\{SPRITES\[[^\]]+\]\.h \* 2\}/, /pixelated/, /SHOW_CLASS\[/]) {
-      assert.match(img, want, `${want} in ${img}`);
+  // ux-review S1: CSS backgrounds, not <img>, so a sprite that fails to load just leaves grass (no broken-image icon)
+  assert.doesNotMatch(src, /<img\b/, "no <img> in the strip");
+  const spans = [...src.matchAll(/<span\b[^>]*?\/>/g)].map((m) => m[0]);
+  assert.ok(spans.length >= 2, "renders the sky and the row as <span> elements");
+  for (const span of spans) {
+    for (const want of [/aria-hidden="true"/, /backgroundImage: `url\(\$\{spriteSrc\(/, /width: SPRITES\[[^\]]+\]\.w \* 2/,
+      /height: SPRITES\[[^\]]+\]\.h \* 2/, /"pixelated bg-no-repeat bg-\[length:100%_100%\]"/, /SHOW_CLASS\[/]) {
+      assert.match(span, want, `${want} in ${span}`);
     }
+    // display comes from the flex row (or absolute) and SHOW_CLASS only: a base "block" would fight SHOW_CLASS's "hidden"
+    const base = span.match(/cx\("([^"]*)"/)?.[1] ?? "";
+    assert.doesNotMatch(base, /(^|\s)(block|inline|inline-block|flex|grid|hidden)(\s|$)/, `display token in ${base}`);
   }
   for (const banned of [/use client/, /\buse[A-Z]\w*\(/, /animate-/, /transition/, /@keyframes/, /tabIndex/, /<a\b/, /<button\b/,
     /\bLink\b/, /loading="lazy"/, /\brole=/, /["'`]\/sprites\//, /onClick|onError|onLoad/]) {

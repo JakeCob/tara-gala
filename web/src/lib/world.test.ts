@@ -1062,3 +1062,16 @@ test("T45-M1 the map renders scenery first in each turn row, under the signs' fo
   assert.doesNotMatch(src, /Math\.random|animate-|@keyframes|transition|setInterval/);
 });
 
+// ux-review S1 (TG-45): a map sprite that fails to load hides itself, so the world shows grass, not a broken-image icon.
+// It's TG-22's shared Sprite, so this covers scenery and every existing map sprite; the failure is still logged.
+test("T45-S4 a map sprite that fails to load hides itself and still logs its name", () => {
+  const sheet = component(SHEET);
+  const sprite = sheet.slice(sheet.indexOf("export function Sprite"), sheet.indexOf("export function", sheet.indexOf("export function Sprite") + 1));
+  const handler = sprite.match(/onError=\{\((\w+)\)\s*=>\s*\{([\s\S]*?)\}\}/);
+  assert.ok(handler, "Sprite has an onError handler that takes the event");
+  const [, e, body] = handler;
+  assert.match(body, new RegExp(`\\b${e}\\.currentTarget\\.style\\.visibility = "hidden";`), "hides the failed image");
+  assert.match(body, /console\.warn\("\[tg-map\] sprite failed %s", name\);/, "still logs the sprite name (T22-S7)");
+  assert.doesNotMatch(body, /display\s*=|\.remove\(\)|\.src\s*=/, "keeps its box: no display change, removal or src swap");
+});
+
