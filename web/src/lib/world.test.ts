@@ -1045,6 +1045,11 @@ test("T45-M1 the map renders scenery first in each turn row, under the signs' fo
   assert.ok(decor, "a 1x <Sprite> in TurnRow");
   assert.match(decor, /className="absolute z-0 pointer-events-none"/);
   assert.ok(turn.indexOf(decor) < turn.indexOf('name="tile-path-corner"'), "the decor renders before the corner tiles");
+  // The width is a dependency, so a resize moves the scenery with the tracks
+  assert.match(src, /useMemo\(\s*\(\)\s*=>\s*scenery\(rows,\s*itinerary\.share_slug,\s*g\.W\),\s*\[[^\]]*\bg\.W\b[^\]]*\]\)/, "g.W in the deps");
+  // Each turn row gets its own item, drawn where scenery() put it
+  assert.match(decor, /\bname=\{(\w+)\.sprite\}[\s\S]*\bstyle=\{\{\s*left:\s*\1\.x,\s*top:\s*\1\.y\s*\}\}/, "the item's sprite at its x and y");
+  assert.match(src, /<TurnRow\b[^>]*\bdecor=\{[^}]*\br\.id\b[^}]*\}/, "a turn row's decor is looked up by its id");
   const sign = src.slice(src.indexOf("function SignRow"), src.indexOf("function TurnRow"));
   assert.match(sign, /<li className="relative z-\[1\]">/, "sign rows paint over scenery");
   // Manager ruling (test-plan F1): the "head to the terminal" row's Maps link sits right above a turn, so its row

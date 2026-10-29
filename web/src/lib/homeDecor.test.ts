@@ -135,6 +135,9 @@ test("T45-H3 HomeDecor is a hidden, inert server component of sized, pixelated s
     /\bLink\b/, /loading="lazy"/, /\brole=/, /["'`]\/sprites\//, /onClick|onError|onLoad/]) {
     assert.doesNotMatch(src, banned, String(banned));
   }
+  // Both lists render in full, and each sky sprite takes its `at` position (ux §1.3)
+  assert.match(src, /\{HOME_SKY\.map\(\((\w+)\)\s*=>[\s\S]*?SHOW_CLASS\[\1\.show\],\s*\1\.at\)/, "every sky sprite, at its position");
+  assert.match(src, /\{HOME_ROW\.map\(/, "every grounded sprite");
   // No JSX text: after a tag closes (not an arrow =>), the next thing is never a word
   assert.doesNotMatch(src.replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, ""), /(?<![=-])>\s*[A-Za-z0-9&][^<{}]*</, "JSX text in the strip");
 });
