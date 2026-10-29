@@ -67,6 +67,7 @@ Notes:
 2. **Update.** Open the app online. If "A new version of Tara Gala is ready." shows, tap **Reload**, or close and reopen the app.
 3. **Buses and Baguio.** Search Nov 6 Manila → Baguio and Nov 8 Baguio → Manila once each, then open the Baguio page.
 4. **Trips.** Open `/plan` (Plan a Baguio trip) and load the ready-made list. Open every trip you might use once, and your own trip link (`/i/<slug>`) once. A trip's page is saved only after you've opened it.
+   - After the last deploy, open the home page and each saved trip's map online once, so the decor pictures (TG-45) are saved too.
 5. **Offline test.** Turn on airplane mode and open the app from the icon. The yellow saved banner shows, along with both searches, the Baguio page and the trip pages. Turn airplane mode off.
 6. **Backup.** Take screenshots of the bus cards for both dates and of your trip page.
 - **iPhone:** open the app at least once in the days before the trip. Safari can clear a site's saved data after about a week without use.

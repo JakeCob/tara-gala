@@ -14,6 +14,7 @@ import {
   MIN_WORLD,
   mapsTarget,
   rowData,
+  scenery,
   signBoxes,
   trackGeometry,
   turnRotations,
@@ -21,6 +22,7 @@ import {
   worldLayout,
   worldSections,
   type Formatters,
+  type SceneryItem,
   type Side,
   type SignLines,
   type WorldRow,
@@ -114,7 +116,7 @@ function SignRow({ row, g, onOpen }: RowProps) {
     </>
   );
   return (
-    <li className="relative">
+    <li className="relative z-[1]">
       <Track x={p.trackX} road={isLeg && row.track === "road"} />
       {row.sign.missing ? (
         // A row that didn't join has no sheet (plan B6), so it's not a button
@@ -140,12 +142,15 @@ function SignRow({ row, g, onOpen }: RowProps) {
   );
 }
 
-function TurnRow({ from, to, g }: { from: Side; to: Side; g: Geometry }) {
+// Scenery (TG-45) paints first and under z-0; sign and to-terminal rows are z-[1], so their focus outlines and
+// the hover cursor always paint over it
+function TurnRow({ from, to, g, decor }: { from: Side; to: Side; g: Geometry; decor?: SceneryItem }) {
   const { start, end } = turnRotations(from, to);
   const startX = from === "left" ? g.leftX : g.rightX;
   const endX = to === "left" ? g.leftX : g.rightX;
   return (
     <li aria-hidden="true" role="presentation" className="relative h-8">
+      {decor && <Sprite name={decor.sprite} scale={1} className="absolute z-0 pointer-events-none" style={{ left: decor.x, top: decor.y }} />}
       <Sprite name="tile-path-corner" className="absolute top-0" style={{ left: startX, transform: `rotate(${start}deg)` }} />
       {Array.from({ length: g.straights }, (_, k) => (
         <Sprite key={k} name="tile-path-straight" className="absolute top-0" style={{ left: g.leftX + TILE + k * TILE, transform: "rotate(90deg)" }} />
@@ -158,7 +163,7 @@ function TurnRow({ from, to, g }: { from: Side; to: Side; g: Geometry }) {
 function PlainRow({ side, g, children }: { side: Side; g: Geometry; children: ReactNode }) {
   const p = placement(side, g);
   return (
-    <li className="relative">
+    <li className="relative z-[1]">
       <Track x={p.trackX} />
       <div className="relative min-h-14 py-2" style={{ marginLeft: p.boxLeft, width: p.boxWidth }}>
         <span className={SIGN} style={{ marginLeft: p.signLeft, width: p.signWidth }}>
@@ -185,6 +190,12 @@ export default function OverworldMap({ itinerary }: { itinerary: Itinerary }) {
     return () => ro.disconnect();
   }, []);
   const g: Geometry = { ...trackGeometry(W), W: Math.max(W, MIN_WORLD) }; // narrower worlds draw as a 320px phone's
+  // Philippine decor in the outer gutters of every other turn row, seeded by the share slug (TG-45, ux.md 2.3)
+  const decor = useMemo(() => scenery(rows, itinerary.share_slug, g.W), [rows, itinerary.share_slug, g.W]);
+  const decorByRow = useMemo(() => new Map(decor.map((d) => [d.rowId, d])), [decor]);
+  useEffect(() => {
+    console.info("[tg-map] scenery n=%d w=%d", decor.length, g.W);
+  }, [decor.length, g.W]);
 
   // The party spawns once when the map first renders; any tap, key or scroll skips it (TG-15's controller)
   const { active, step, start, skip } = useSpawn();
@@ -257,7 +268,7 @@ export default function OverworldMap({ itinerary }: { itinerary: Itinerary }) {
               <ol className="flex flex-col">
                 {list.map((r) => {
                   if (r.kind === "node" || r.kind === "leg") return <SignRow key={r.id} row={r} g={g} onOpen={open} />;
-                  if (r.kind === "turn") return <TurnRow key={r.id} from={r.from} to={r.to} g={g} />;
+                  if (r.kind === "turn") return <TurnRow key={r.id} from={r.from} to={r.to} g={g} decor={decorByRow.get(r.id)} />;
                   if (r.kind === "free") {
                     return (
                       <PlainRow key={r.id} side={r.side} g={g}>

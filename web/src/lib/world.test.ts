@@ -9,7 +9,7 @@ import { formatTravelDate } from "./direction.ts";
 import { formatPeso, issuesFor, partySummary, type Itinerary, type StopOut } from "./itinerary.ts";
 import { formatFare, formatMinutes, modeLabel, type LastMileLeg, type Spot } from "./lastMile.ts";
 import { googleMapsUrl } from "./mapLinks.ts";
-import { SPRITES, modeSprite, placeSprite } from "./sprites.ts";
+import { PNG_ART, SPRITES, modeSprite, placeSprite, type SpriteName } from "./sprites.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
@@ -823,3 +823,255 @@ test("the bus sheet shows the trip's confirm note under TripCard", () => {
   const bus = sheet.slice(sheet.indexOf('data?.kind === "bus"'), sheet.indexOf('data?.kind === "terminal"'));
   assert.match(bus, /<TripCard\b[^>]*\/>\s*<\/ul>\s*<p className="text-xs text-muted">\{t\.confirm_note\}<\/p>/);
 });
+
+// ---- TG-45 part B: map scenery in turn-row gutters (ux.md section 2) ----------------------------------
+
+const POOL_NAMES = ["deco-rice-terraces", "deco-bahay-kubo", "deco-sampaguita", "deco-parol"];
+const WIDTHS = [256, 316, 416];
+// FIXTURE plus 20 generated itineraries; the generated ones share FIXTURE's slug, so give each its own
+const sceneryCases = (): [string, Itinerary][] => [
+  ["made-up-slug", FIXTURE],
+  ...generated(20).map((it, i): [string, Itinerary] => {
+    it.share_slug = `gen-${i}`;
+    return [`gen-${i}`, it];
+  }),
+];
+type Scenery = ReturnType<World["scenery"]>[number];
+const turnsOf = (rows: Row[]) => ofKind(rows, "turn");
+const spriteSize = (name: string) => {
+  const s = SPRITES[name as SpriteName];
+  assert.ok(s, `${name} is in SPRITES`);
+  return s;
+};
+
+// The oracle: gutters from trackGeometry alone, never from scenery's own arithmetic
+function gutters(W: number, trackGeometry: World["trackGeometry"]) {
+  const Wc = Math.max(W, 256);
+  const g = trackGeometry(Wc);
+  return { Wc, g, left: [0, g.leftX] as const, right: [g.rightX + 32, Wc] as const, path: [g.leftX, g.rightX + 32] as const };
+}
+const disjoint = (a: readonly [number, number], b: readonly [number, number]) => a[1] <= b[0] || b[1] <= a[0];
+
+function checkPlacement(item: Scenery, rows: Row[], W: number, trackGeometry: World["trackGeometry"], where: string) {
+  const row = rows.find((r) => "id" in r && r.id === item.rowId);
+  assert.ok(row, `${where}: row ${item.rowId} exists`);
+  assert.equal(row.kind, "turn", `${where}: ${item.rowId} is a turn row`);
+  const { w, h } = spriteSize(item.sprite);
+  const o = gutters(W, trackGeometry);
+  const span = [item.x, item.x + w] as const;
+  if (item.side === "left") {
+    assert.ok(item.x >= 3 && item.x + w <= o.left[1] - 3, `${where}: left ${item.x}+${w} inside [3, ${o.left[1] - 3}]`);
+  } else {
+    assert.equal(item.side, "right", where);
+    assert.ok(item.x >= o.right[0] + 3 && item.x + w <= o.right[1] - 3, `${where}: right ${item.x}+${w} inside [${o.right[0] + 3}, ${o.right[1] - 3}]`);
+  }
+  assert.ok(item.y >= 0 && item.y + h <= 32, `${where}: y ${item.y}+${h} inside the 32px turn row`);
+  assert.ok(disjoint(span, o.path), `${where}: clear of the turn's path [${o.path}]`);
+  assert.ok(disjoint(span, [o.g.leftX, o.g.leftX + 32]), `${where}: clear of the left track`);
+  assert.ok(disjoint(span, [o.g.rightX, o.g.rightX + 32]), `${where}: clear of the right track`);
+}
+
+test("T45-W1 SCENERY_POOL is ux §2.2's four small sprites, sized from SPRITES, never the emblem or a figure", async () => {
+  const { SCENERY_POOL } = await load();
+  assert.deepEqual(SCENERY_POOL.map((p) => p.name), POOL_NAMES);
+  for (const p of SCENERY_POOL) {
+    assert.deepEqual({ w: p.w, h: p.h }, spriteSize(p.name), `${p.name} size`);
+    assert.ok(PNG_ART.has(p.name), `${p.name} in PNG_ART`);
+    assert.doesNotMatch(p.name, /^(deco-sun-stars|chibi-|deco-taho-vendor|deco-carabao|deco-panagbenga-float)/);
+  }
+});
+
+test("T45-W2 fnv1a: the standard 32-bit vectors, always an unsigned 32-bit integer", async () => {
+  const { fnv1a } = await load();
+  assert.equal(fnv1a(""), 0x811c9dc5);
+  assert.equal(fnv1a("a"), 0xe40c292c);
+  assert.equal(fnv1a("foobar"), 0xbf9cf968);
+  const r = rng(45);
+  for (let i = 0; i < 1000; i++) {
+    const str = Array.from({ length: Math.floor(r() * 24) }, () => String.fromCharCode(32 + Math.floor(r() * 0x2fff))).join("");
+    const h = fnv1a(str);
+    assert.ok(Number.isInteger(h) && h >= 0 && h < 2 ** 32, `${JSON.stringify(str)} -> ${h}`);
+  }
+});
+
+test("T45-W3 scenery is deterministic: no clock, randomness or crypto", async (t) => {
+  const { scenery, worldLayout } = await load();
+  const rows = worldLayout(FIXTURE, F);
+  const first = scenery(rows, FIXTURE.share_slug, 316);
+  const thrower = (what: string) => () => {
+    throw new Error(`${what} called`);
+  };
+  t.mock.method(Math, "random", thrower("Math.random"));
+  t.mock.method(Date, "now", thrower("Date.now"));
+  t.mock.method(performance, "now", thrower("performance.now"));
+  assert.deepEqual(scenery(rows, FIXTURE.share_slug, 316), first);
+  const source = read("src/lib/world.ts");
+  assert.doesNotMatch(source, /Math\.random|\bnew Date\b|\bDate\.now\b|\bcrypto\b|\bperformance\b/);
+});
+
+test("T45-W4 no overlap: every item sits in a turn-row gutter, clear of the path and both tracks (256, 316, 416)", async () => {
+  const { scenery, worldLayout, trackGeometry } = await load();
+  // the oracle itself, against ux §2.1 and review-plan.md
+  assert.deepEqual([gutters(256, trackGeometry).left, gutters(256, trackGeometry).right], [[0, 30], [222, 256]]);
+  assert.deepEqual([gutters(316, trackGeometry).left, gutters(316, trackGeometry).right], [[0, 30], [286, 316]]);
+  assert.deepEqual([gutters(416, trackGeometry).left, gutters(416, trackGeometry).right], [[0, 30], [382, 416]]);
+  let n = 0;
+  for (const [slug, it] of sceneryCases()) {
+    const rows = worldLayout(it, F);
+    for (const W of WIDTHS) {
+      const items = scenery(rows, it.share_slug, W);
+      assert.ok(items.length > 0, `${slug} @${W}: some scenery`);
+      for (const item of items) checkPlacement(item, rows, W, trackGeometry, `${slug} @${W} ${item.rowId}`);
+      n += items.length;
+    }
+  }
+  assert.ok(n > 100, `${n} items checked`);
+});
+
+test("T45-W4b the same rules hold at every world width from 256 to 1280", async () => {
+  const { scenery, worldLayout, trackGeometry } = await load();
+  const cases = sceneryCases().map(([slug, it]) => [slug, it.share_slug, worldLayout(it, F)] as const);
+  for (let W = 256; W <= 1280; W++) {
+    for (const [slug, seed, rows] of cases) {
+      for (const item of scenery(rows, seed, W)) {
+        const where = `${slug} @${W} ${item.rowId}`;
+        checkPlacement(item, rows, W, trackGeometry, where);
+        // centred, rounding down: the right gutter is 30 to 61px wide across these widths, so odd widths are exercised
+        const [from, to] = gutters(W, trackGeometry)[item.side];
+        assert.equal(item.x, from + Math.floor((to - from - spriteSize(item.sprite).w) / 2), `${where}: centred in its gutter`);
+      }
+    }
+  }
+});
+
+test("T45-W5 rules: every other turn, sides alternating from the left, seeded sprite, centred in the row", async () => {
+  const { scenery, worldLayout, fnv1a } = await load();
+  for (const [slug, it] of sceneryCases()) {
+    const rows = worldLayout(it, F);
+    const turns = turnsOf(rows);
+    const seed = fnv1a(it.share_slug);
+    for (const W of WIDTHS) {
+      const items = scenery(rows, it.share_slug, W);
+      assert.deepEqual(items.map((d) => d.rowId), turns.filter((_, t) => t % 2 === 0).map((r) => r.id), `${slug} @${W}: even turns`);
+      items.forEach((d, k) => {
+        const where = `${slug} @${W} #${k}`;
+        assert.equal(d.side, k % 2 === 0 ? "left" : "right", where);
+        assert.equal(d.sprite, POOL_NAMES[(seed + k) % 4], where);
+        if (k > 0) assert.notEqual(d.sprite, items[k - 1].sprite, `${where}: same sprite twice in a row`);
+        assert.equal(d.y, (32 - spriteSize(d.sprite).h) / 2, where);
+        assert.ok(Number.isInteger(d.x) && Number.isInteger(d.y), where);
+      });
+    }
+  }
+  const rows = worldLayout(FIXTURE, F);
+  assert.deepEqual(scenery(rows.filter((r) => r.kind !== "turn"), "made-up-slug", 316), [], "no turn rows, no scenery");
+  assert.deepEqual(scenery([], "made-up-slug", 316), []);
+});
+
+test("T45-W5b golden positions: ux §2.3's numbers", async () => {
+  const { scenery, worldLayout } = await load();
+  // [W][side][sprite size] -> x
+  const X: Record<number, Record<string, Record<number, number>>> = {
+    256: { left: { 24: 3, 16: 7 }, right: { 24: 227, 16: 231 } },
+    316: { left: { 24: 3, 16: 7 }, right: { 24: 289, 16: 293 } },
+    416: { left: { 24: 3, 16: 7 }, right: { 24: 387, 16: 391 } },
+  };
+  const seen = new Set<string>();
+  for (const [slug, it] of sceneryCases()) {
+    const rows = worldLayout(it, F);
+    for (const W of WIDTHS) {
+      for (const d of scenery(rows, it.share_slug, W)) {
+        const { w } = spriteSize(d.sprite);
+        assert.equal(d.x, X[W][d.side][w], `${slug} @${W} ${d.side} ${w}px`);
+        assert.equal(d.y, w === 24 ? 4 : 8, `${slug} ${d.sprite} y`);
+        seen.add(`${W}-${d.side}-${w}`);
+      }
+    }
+  }
+  assert.equal(seen.size, 12, `every golden cell exercised: ${[...seen].sort().join(" ")}`);
+});
+
+test("T45-W6 width changes only x: same rows, sides and sprites; narrower worlds draw as 256", async () => {
+  const { scenery, worldLayout } = await load();
+  for (const [slug, it] of sceneryCases()) {
+    const rows = worldLayout(it, F);
+    const strip = (W: number) => scenery(rows, it.share_slug, W).map(({ rowId, side, sprite, y }) => ({ rowId, side, sprite, y }));
+    assert.deepEqual(strip(316), strip(256), slug);
+    assert.deepEqual(strip(416), strip(256), slug);
+    assert.deepEqual(scenery(rows, it.share_slug, 0), scenery(rows, it.share_slug, 256), `${slug} @0`);
+    assert.deepEqual(scenery(rows, it.share_slug, 200), scenery(rows, it.share_slug, 256), `${slug} @200`);
+  }
+});
+
+test("T45-W7 seeded by the share slug: different trips start on different sprites", async () => {
+  const { scenery, worldLayout } = await load();
+  const firsts = new Set(sceneryCases().slice(1).map(([, it]) => scenery(worldLayout(it, F), it.share_slug, 316)[0]?.sprite));
+  assert.ok(firsts.size >= 3, `distinct first sprites: ${[...firsts].join(", ")}`);
+  const rows = worldLayout(FIXTURE, F);
+  assert.equal(scenery(rows, "made-up-slug", 316)[0].sprite, "deco-sampaguita");
+  assert.equal(scenery(rows, "premade-chill", 316)[0].sprite, "deco-rice-terraces");
+});
+
+test("T45-W8 scenery reads the rows and never changes them, or the geometry", async () => {
+  const { scenery, worldLayout, trackGeometry, signBoxes } = await load();
+  const before = WIDTHS.map((W) => [trackGeometry(W), signBoxes(W)]);
+  const rows = deepFreeze(worldLayout(FIXTURE, F));
+  for (const W of WIDTHS) scenery(rows, FIXTURE.share_slug, W);
+  assert.deepEqual(rows, worldLayout(FIXTURE, F));
+  assert.deepEqual(WIDTHS.map((W) => [trackGeometry(W), signBoxes(W)]), before);
+});
+
+// The z-order rule (ux §2.3) assumes which rows can paint a focus outline into a turn row: the ride or the
+// "head to the terminal" row above, and the node below. Pin it, so a worldLayout change re-opens the question.
+test("T45-W9 a turn row always sits between a ride (or the to-terminal row) and the next node", async () => {
+  const { worldLayout } = await load();
+  for (const [slug, it] of sceneryCases()) {
+    const rows = worldLayout(it, F);
+    rows.forEach((r, i) => {
+      if (r.kind !== "turn") return;
+      assert.ok(["leg", "toTerminal"].includes(rows[i - 1]?.kind), `${slug} ${r.id}: above is ${rows[i - 1]?.kind}`);
+      assert.equal(rows[i + 1]?.kind, "node", `${slug} ${r.id}: below`);
+    });
+  }
+});
+
+test("T45-M1 the map renders scenery first in each turn row, under the signs' focus outlines, with its own log", () => {
+  const src = component(MAP);
+  assert.match(src, /useMemo\(\s*\(\)\s*=>\s*scenery\(rows,\s*itinerary\.share_slug,\s*g\.W\)/);
+  const turn = src.slice(src.indexOf("function TurnRow"), src.indexOf("function PlainRow"));
+  assert.ok(turn.length > 0, "TurnRow found");
+  assert.match(turn, /<li aria-hidden="true" role="presentation" className="relative h-8">/, "TurnRow's <li> unchanged");
+  const decor = turn.match(/<Sprite\b[^>]*\bscale=\{1\}[^>]*\/>/)?.[0];
+  assert.ok(decor, "a 1x <Sprite> in TurnRow");
+  assert.match(decor, /className="absolute z-0 pointer-events-none"/);
+  assert.ok(turn.indexOf(decor) < turn.indexOf('name="tile-path-corner"'), "the decor renders before the corner tiles");
+  // The width is a dependency, so a resize moves the scenery with the tracks
+  assert.match(src, /useMemo\(\s*\(\)\s*=>\s*scenery\(rows,\s*itinerary\.share_slug,\s*g\.W\),\s*\[[^\]]*\bg\.W\b[^\]]*\]\)/, "g.W in the deps");
+  // Each turn row gets its own item, drawn where scenery() put it
+  assert.match(decor, /\bname=\{(\w+)\.sprite\}[\s\S]*\bstyle=\{\{\s*left:\s*\1\.x,\s*top:\s*\1\.y\s*\}\}/, "the item's sprite at its x and y");
+  assert.match(src, /<TurnRow\b[^>]*\bdecor=\{[^}]*\br\.id\b[^}]*\}/, "a turn row's decor is looked up by its id");
+  const sign = src.slice(src.indexOf("function SignRow"), src.indexOf("function TurnRow"));
+  assert.match(sign, /<li className="relative z-\[1\]">/, "sign rows paint over scenery");
+  // Manager ruling (test-plan F1): the "head to the terminal" row's Maps link sits right above a turn, so its row
+  // is raised the same way (PlainRow also draws the free-day rows)
+  const plain = src.slice(src.indexOf("function PlainRow"), src.indexOf("export default function OverworldMap"));
+  assert.ok(plain.length > 0, "PlainRow found");
+  assert.match(plain, /<li className="relative z-\[1\]">/, "the to-terminal row paints over scenery");
+  assert.match(src, /console\.info\("\[tg-map\] scenery n=%d w=%d", decor\.length, g\.W\)/);
+  assert.match(src, /console\.info\("\[tg-map\] render rows=%d days=%d missing=%d", rows\.length, itinerary\.days\.length, missing\)/, "T22-S7's line unchanged");
+  assert.doesNotMatch(src, /Math\.random|animate-|@keyframes|transition|setInterval/);
+});
+
+// ux-review S1 (TG-45): a map sprite that fails to load hides itself, so the world shows grass, not a broken-image icon.
+// It's TG-22's shared Sprite, so this covers scenery and every existing map sprite; the failure is still logged.
+test("T45-S4 a map sprite that fails to load hides itself and still logs its name", () => {
+  const sheet = component(SHEET);
+  const sprite = sheet.slice(sheet.indexOf("export function Sprite"), sheet.indexOf("export function", sheet.indexOf("export function Sprite") + 1));
+  const handler = sprite.match(/onError=\{\((\w+)\)\s*=>\s*\{([\s\S]*?)\}\}/);
+  assert.ok(handler, "Sprite has an onError handler that takes the event");
+  const [, e, body] = handler;
+  assert.match(body, new RegExp(`\\b${e}\\.currentTarget\\.style\\.visibility = "hidden";`), "hides the failed image");
+  assert.match(body, /console\.warn\("\[tg-map\] sprite failed %s", name\);/, "still logs the sprite name (T22-S7)");
+  assert.doesNotMatch(body, /display\s*=|\.remove\(\)|\.src\s*=/, "keeps its box: no display change, removal or src swap");
+});
+

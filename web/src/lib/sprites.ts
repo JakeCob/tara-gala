@@ -15,6 +15,8 @@ const TILE = { w: 16, h: 16 };
 const PLACE = { w: 24, h: 24 };
 const MODE = { w: 24, h: 16 };
 const UI = { w: 8, h: 8 };
+const DECO_SQUARE = { w: 24, h: 24 };
+const DECO_WIDE = { w: 32, h: 24 };
 
 export const SPRITES = {
   "chibi-adult-idle-1": CHIBI, "chibi-adult-idle-2": CHIBI, "chibi-adult-wave": CHIBI,
@@ -33,6 +35,10 @@ export const SPRITES = {
   "ui-cursor": UI, "ui-star": UI, "ui-heart": UI,
   "ui-badge-verified": TILE,
   "logo-wordmark": { w: 192, h: 48 },
+  // TG-45 Philippine decor, home strip and map scenery only. chibi-barong and chibi-filipiniana are decor, not passenger types (TG-45)
+  "deco-sun-stars": DECO_SQUARE, "deco-carabao": DECO_WIDE, "deco-bahay-kubo": DECO_SQUARE,
+  "chibi-barong": CHIBI, "chibi-filipiniana": CHIBI, "deco-taho-vendor": CHIBI,
+  "deco-parol": TILE, "deco-sampaguita": TILE, "deco-rice-terraces": DECO_SQUARE, "deco-panagbenga-float": DECO_WIDE,
 } as const satisfies Record<string, { w: number; h: number }>;
 export type SpriteName = keyof typeof SPRITES;
 
@@ -47,6 +53,9 @@ export const PNG_ART: ReadonlySet<SpriteName> = new Set<SpriteName>([
   "place-museum", "place-other", "place-park", "place-shopping",
   "place-terminal", "place-viewpoint", "tile-mountain", "tile-pine",
   "ui-badge-verified", "ui-heart", "ui-star", "vehicle-bus",
+  "deco-sun-stars", "deco-carabao", "deco-bahay-kubo", "chibi-barong",
+  "chibi-filipiniana", "deco-taho-vendor", "deco-parol", "deco-sampaguita",
+  "deco-rice-terraces", "deco-panagbenga-float",
 ]);
 
 export function spriteSrc(name: SpriteName): string {

@@ -25,7 +25,9 @@ export function Sprite({ name, scale = 2, className = "", style }: { name: Sprit
       style={style}
       draggable={false}
       decoding="async"
-      onError={() => {
+      onError={(e) => {
+        // Hide it, so a missing sprite leaves grass rather than a broken-image icon (TG-45 ux-review S1); the box stays
+        e.currentTarget.style.visibility = "hidden";
         console.warn("[tg-map] sprite failed %s", name);
       }}
     />
