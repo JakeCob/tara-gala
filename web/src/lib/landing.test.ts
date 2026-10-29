@@ -188,6 +188,20 @@ test("T46-L5 ready-made trips: a client section, fed by the cached list, with se
   assert.ok(source("src/app/page.tsx").indexOf("<PremadeTrips />") > source("src/app/page.tsx").indexOf("<TripSearch />"), "mounted after the form");
 });
 
+test("T46-L10 Try again keeps keyboard focus in the section (tg-review S2)", () => {
+  // retry() unmounts the failed block with the focused button in it: focus the state area first, or focus falls to body
+  const src = source(sectionPath("PremadeTrips"));
+  const ref = src.match(/const (\w+) = useRef<HTMLDivElement>\(null\);/)?.[1];
+  assert.ok(ref, "a ref for the state area");
+  assert.match(src, new RegExp(`<div ref=\\{${ref}\\} tabIndex=\\{-1\\}`), "the state area can take focus, but isn't a Tab stop");
+  const body = src.match(/function retry\(\) \{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+  const focus = body.indexOf(`${ref}.current?.focus()`), reset = body.indexOf("setResult(null)");
+  assert.ok(focus >= 0 && reset >= 0, "retry() focuses the state area and resets the result");
+  assert.ok(focus < reset, "focus moves before the failed block (and its button) unmounts");
+  const area = src.slice(src.indexOf(`<div ref={${ref}}`));
+  for (const state of ['"loading"', '"failed"', '"list"']) assert.ok(area.includes(`view.state === ${state}`), `${state} renders inside the state area`);
+});
+
 test("T46-L6 how it works and trust: server sections named by their h2; the steps are an ordered list", () => {
   for (const name of ["HowItWorks", "Trust"]) {
     const src = source(sectionPath(name));

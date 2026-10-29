@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { PX, PixelBox, PixelButton, PixelLink, SectionTitle } from "@/components/pixel";
 import { fetchPremade, type PremadeResult } from "@/lib/api";
 import { flags } from "@/lib/flags";
@@ -31,6 +31,7 @@ function TripCard({ card }: { card: LandingCard }) {
 export default function PremadeTrips() {
   const [result, setResult] = useState<PremadeResult | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const stateArea = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!flags.premadeItineraries) return;
@@ -47,6 +48,8 @@ export default function PremadeTrips() {
   }, [attempt]);
 
   function retry() {
+    // The failed block, with the focused Try again in it, unmounts below: move focus first, or it falls to the body
+    stateArea.current?.focus();
     setResult(null);
     setAttempt((n) => n + 1);
   }
@@ -63,26 +66,28 @@ export default function PremadeTrips() {
         <SectionStripe />
       </div>
       <p className="text-sm text-muted">No time to plan? Tara, pick one. Each is built only from buses and spots on file.</p>
-      {view.state === "loading" && <p className="text-sm text-muted">Loading trip ideas...</p>}
-      {view.state === "empty" && <p className="text-sm text-muted">No ready-made trips on file yet.</p>}
-      {view.state === "offline" && (
-        <p className="text-sm text-muted">
-          Ready-made trips need a connection the first time. Open this page once with signal and they&apos;ll be saved.
-        </p>
-      )}
-      {view.state === "failed" && (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-sm">Could not load trip ideas. Check your connection and try again.</p>
-          <PixelButton variant="secondary" onClick={retry}>
-            Try again
-          </PixelButton>
-        </div>
-      )}
-      {view.state === "list" && (
-        <ul className="flex flex-col gap-3 md:grid md:grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] md:gap-4">
-          {view.cards?.map((card) => <TripCard key={card.href} card={card} />)}
-        </ul>
-      )}
+      <div ref={stateArea} tabIndex={-1} className="flex flex-col gap-3 focus-pixel">
+        {view.state === "loading" && <p className="text-sm text-muted">Loading trip ideas...</p>}
+        {view.state === "empty" && <p className="text-sm text-muted">No ready-made trips on file yet.</p>}
+        {view.state === "offline" && (
+          <p className="text-sm text-muted">
+            Ready-made trips need a connection the first time. Open this page once with signal and they&apos;ll be saved.
+          </p>
+        )}
+        {view.state === "failed" && (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm">Could not load trip ideas. Check your connection and try again.</p>
+            <PixelButton variant="secondary" onClick={retry}>
+              Try again
+            </PixelButton>
+          </div>
+        )}
+        {view.state === "list" && (
+          <ul className="flex flex-col gap-3 md:grid md:grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] md:gap-4">
+            {view.cards?.map((card) => <TripCard key={card.href} card={card} />)}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }
