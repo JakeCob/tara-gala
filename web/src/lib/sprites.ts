@@ -1,5 +1,5 @@
 // Sprite manifest (TG-33). Names and sizes follow web/sprites-src/art-prompts.md; files live in web/public/sprites/.
-// Placeholders are SVG. When AI art lands as PNG, copy the files in and list their names in PNG_ART; nothing else changes.
+// The 2026-10-29 AI art drop ships as PNG (PNG_ART); the rest are hand-made SVG placeholders from web/sprites-src/ grids.
 
 export const PASSENGER_TYPES = ["adult", "student", "senior", "pwd"] as const; // schema passenger_type minus child
 export const SPOT_CATEGORIES = ["park", "food", "market", "museum", "viewpoint", "shopping", "church", "cafe", "other"] as const;
@@ -37,7 +37,17 @@ export const SPRITES = {
 export type SpriteName = keyof typeof SPRITES;
 
 // Art drop: list each sprite that now ships as PNG. The sprite tests check this matches the files on disk.
-export const PNG_ART: ReadonlySet<SpriteName> = new Set<SpriteName>([]);
+export const PNG_ART: ReadonlySet<SpriteName> = new Set<SpriteName>([
+  "chibi-adult-idle-1", "chibi-adult-idle-2", "chibi-adult-wave", "chibi-pwd-idle-1",
+  "chibi-pwd-idle-2", "chibi-pwd-wave", "chibi-senior-idle-1", "chibi-senior-idle-2",
+  "chibi-senior-wave", "chibi-student-idle-1", "chibi-student-idle-2", "chibi-student-wave",
+  "logo-wordmark", "mode-grab", "mode-jeep", "mode-taxi",
+  "mode-tricycle", "mode-van", "mode-walk", "place-cafe",
+  "place-church", "place-food", "place-lodging", "place-market",
+  "place-museum", "place-other", "place-park", "place-shopping",
+  "place-terminal", "place-viewpoint", "tile-mountain", "tile-pine",
+  "ui-badge-verified", "ui-heart", "ui-star", "vehicle-bus",
+]);
 
 export function spriteSrc(name: SpriteName): string {
   return `/sprites/${name}.${PNG_ART.has(name) ? "png" : "svg"}`;
