@@ -1,31 +1,26 @@
-import { PageShell, PageTitle, PixelLink } from "@/components/pixel";
+import { PageShell } from "@/components/pixel";
 import HomeDecor from "@/components/HomeDecor";
 import TripSearch from "@/components/TripSearch";
-import { flags } from "@/lib/flags";
-import { formMode } from "@/lib/planForm";
+import Hero from "@/components/landing/Hero";
+import HowItWorks from "@/components/landing/HowItWorks";
+import PremadeTrips from "@/components/landing/PremadeTrips";
+import QuickActions from "@/components/landing/QuickActions";
+import Trust from "@/components/landing/Trust";
 
 export default function Home() {
   return (
     <PageShell>
-      <header className="flex flex-col gap-1">
-        <PageTitle>Tara Gala</PageTitle>
-        <p className="text-sm text-muted md:max-w-prose">Every Manila to Baguio bus, straight from the operators.</p>
-      </header>
-      <HomeDecor />
+      <Hero />
       <TripSearch />
-      <PixelLink variant="secondary" href="/baguio" className="flex items-center px-4 py-3 text-sm md:self-start">
-        <span>
-          In Baguio? Jeeps, taxis and walks from the terminal <span aria-hidden>→</span>
-        </span>
-      </PixelLink>
-      {formMode(flags) !== "none" && (
-        <PixelLink variant="secondary" href="/plan" className="flex items-center px-4 py-3 text-sm md:self-start">
-          <span>
-            Plan a Baguio trip <span aria-hidden>→</span>
-          </span>
-        </PixelLink>
-      )}
-      <footer className="mt-auto pt-6 text-xs text-muted">Directions to your terminal are on each trip.</footer>
+      <QuickActions />
+      <PremadeTrips />
+      <HowItWorks />
+      <Trust />
+      <HomeDecor />
+      <footer className="mt-auto pt-6 text-xs text-muted">
+        <p>Directions to your terminal are on each trip.</p>
+        <p>Tara Gala isn&apos;t affiliated with any bus operator. Ingat sa biyahe!</p>
+      </footer>
     </PageShell>
   );
 }

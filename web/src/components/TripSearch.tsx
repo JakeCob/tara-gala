@@ -76,6 +76,7 @@ export default function TripSearch() {
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted">Travel date</span>
           <input
+            id="travel-date"
             type="date"
             value={date}
             min={minDate}
