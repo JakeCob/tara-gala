@@ -42,7 +42,7 @@ export default function TerminalLinks({ slug, name, city }: { slug: string; name
           target="_blank"
           rel="noopener noreferrer"
           aria-label={mapsLabel(name)}
-          className={`pixel-btn focus-pixel min-h-11 inline-flex items-center justify-center gap-1 bg-card px-3 text-sm font-bold text-brand${showSakay(city) ? "" : " col-span-2"}`}
+          className={`pixel-btn focus-pixel min-h-11 inline-flex items-center justify-center gap-1 bg-card px-3 text-sm font-bold text-link${showSakay(city) ? "" : " col-span-2"}`}
         >
           Google Maps <span aria-hidden>↗</span>
         </a>

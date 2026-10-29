@@ -62,7 +62,7 @@ function TripCard({ trip, date, returnDate }: { trip: PremadeSummary; date: stri
       <h3 id={titleId} className={`${PX.dataHeading} min-w-0 break-words`}>
         {card.title}
       </h3>
-      {card.matches && <span className={PX.chip}>{LIST.match}</span>}
+      {card.matches && <span className={PX.chipHighlight}>{LIST.match}</span>}
       <p className="text-sm tabular-nums">{card.dates}</p>
       {card.places && <p className="text-sm min-w-0 break-words">{card.places}</p>}
       {card.budget && <p className={`${PX.meta} tabular-nums`}>{card.budget}</p>}
