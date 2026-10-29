@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
-import { PX, PixelBox, SectionTitle } from "@/components/pixel";
+import { PX, PixelBox, SectionTitle, cx } from "@/components/pixel";
 import { CAST, castSprite } from "@/lib/landingCast";
 import { SPRITES, spriteSrc, type SpriteName } from "@/lib/sprites";
 import SectionStripe from "./SectionStripe";
 
-/** One step in its box. The numeral is decorative: the ordered list already numbers the steps. */
+/** One step in its box, with the quick actions' plate size. The numeral is decorative: the ordered list numbers the steps. */
 function Step({ numeral, sprite, title, line }: { numeral: ReactNode; sprite: SpriteName; title: string; line: string }) {
   return (
     <PixelBox as="li" className="flex items-start gap-3 p-4">
-      <span className={PX.plate}>
+      <span className={cx(PX.plate, "h-[74px] w-[106px] items-center justify-center")}>
         {/* eslint-disable-next-line @next/next/no-img-element -- pixel art: next/image would resample it */}
         <img src={spriteSrc(sprite)} alt="" width={SPRITES[sprite].w * 2} height={SPRITES[sprite].h * 2} draggable={false} className="pixelated" />
       </span>
