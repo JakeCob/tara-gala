@@ -4,12 +4,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { deflateSync } from "node:zlib";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gridToSvg, parseGrid } from "./pixelSvg.ts";
 import type { Grid } from "./pixelSvg.ts";
 import { gridPixels, rasterize } from "./pixelSvg.testutil.ts";
 import type { Pixels } from "./pixelSvg.testutil.ts";
+import { decodePng, paletteProblems } from "./png.testutil.ts";
 import {
   CHIBI_FRAMES, LAST_MILE_MODES, PASSENGER_TYPES, PNG_ART, SPOT_CATEGORIES, SPRITES,
   chibi, modeSprite, placeSprite, spriteSrc,
@@ -32,6 +34,17 @@ const FRAMES = ["idle-1", "idle-2", "wave"] as const;
 const PLACES = ["terminal", "lodging", "park", "food", "market", "museum", "viewpoint", "shopping", "church", "cafe", "other"];
 const VEHICLES = ["vehicle-bus", "mode-jeep", "mode-taxi", "mode-tricycle", "mode-van", "mode-grab"];
 const OPAQUE_TILES = ["tile-grass", "tile-path-straight", "tile-path-corner", "tile-road", "tile-water"];
+
+// The 2026-10-29 art drop (_team/tickets/TG-33/art-drop.md): these 36 ship as PNG (the owner's SHIP-AS-PNG.txt),
+// and these 7 stay hand-made SVG (AI output too noisy, or seamless map tiles the map tests rely on).
+const ART_DROP = [
+  ...TYPES.flatMap((t) => FRAMES.map((f) => `chibi-${t}-${f}`)),
+  "logo-wordmark", "mode-grab", "mode-jeep", "mode-taxi", "mode-tricycle", "mode-van", "mode-walk",
+  ...PLACES.map((p) => `place-${p}`),
+  "tile-mountain", "tile-pine", "ui-badge-verified", "ui-heart", "ui-star", "vehicle-bus",
+];
+const KEPT_SVG = ["ui-dialog-frame", "ui-cursor", "tile-grass", "tile-path-straight", "tile-path-corner", "tile-road", "tile-water"];
+const PNG_CHUNKS = ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"]; // nothing else: no text, time or colour-profile metadata
 
 // ux.md section 1: art-list entries that are not shipped as sprites, each with its reason.
 const EXCLUDED = new Map([
@@ -178,6 +191,74 @@ test("icon-app maps to the existing app icons", () => {
   for (const [file, side] of [["icon-192.png", 192], ["icon-512.png", 512], ["apple-touch-icon.png", 180]] as const) {
     assert.deepEqual(pngSize(readFileSync(join(PUBLIC_DIR, file))), { w: side, h: side }, file);
   }
+});
+
+test("the app icons are the art-drop icon: 512, 192 and 180 PNGs in the 6-colour palette", async (t) => {
+  for (const [file, side] of [["icon-512.png", 512], ["icon-192.png", 192], ["apple-touch-icon.png", 180]] as const) {
+    await t.test(file, () => {
+      const png = decodePng(readFileSync(join(PUBLIC_DIR, file)));
+      assert.deepEqual({ w: png.w, h: png.h }, { w: side, h: side });
+      assert.deepEqual(paletteProblems(png, PALETTE_HEXES), []);
+      assert.deepEqual(png.chunks.filter((c) => !PNG_CHUNKS.includes(c)), [], "metadata chunks");
+    });
+  }
+});
+
+// --- T33-19 the art drop ------------------------------------------------------------------------------
+
+test("PNG_ART is exactly the 36 art-drop names; the 7 kept placeholders stay SVG", () => {
+  const names = manifestNames();
+  assert.equal(ART_DROP.length, 36);
+  assert.deepEqual([...ART_DROP, ...KEPT_SVG].sort(), [...names].sort(), "art drop + kept SVG = the manifest");
+  assert.deepEqual([...PNG_ART].sort(), [...ART_DROP].sort());
+  for (const name of KEPT_SVG) assert.equal(spriteSrc(name as SpriteName), `/sprites/${name}.svg`);
+});
+
+test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 255, not empty, at most 4 KB", async (t) => {
+  for (const name of ART_DROP) {
+    await t.test(name, () => {
+      const file = join(SPRITE_DIR, `${name}.png`);
+      assert.ok(existsSync(file), `${name}.png is missing`);
+      const buf = readFileSync(file);
+      assert.ok(buf.length <= 4096, `${buf.length} bytes`);
+      const png = decodePng(buf);
+      assert.deepEqual({ w: png.w, h: png.h }, SPRITES[name as SpriteName]);
+      assert.deepEqual(paletteProblems(png, PALETTE_HEXES), []);
+      assert.deepEqual(png.chunks.filter((c) => !PNG_CHUNKS.includes(c)), [], "metadata chunks");
+      assert.ok(png.pixels.some(([, , , a]) => a === 255), "draws something");
+    });
+  }
+});
+
+test("decodePng and paletteProblems catch what the art test relies on", () => {
+  const png = (w: number, h: number, colourType: number, rows: number[][], extra: Buffer[] = []) => {
+    const chunk = (type: string, body: Buffer) => {
+      const b = Buffer.alloc(12 + body.length);
+      b.writeUInt32BE(body.length, 0);
+      b.write(type, 4, "ascii");
+      body.copy(b, 8);
+      return b; // CRC left 0: the decoder doesn't check it
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(w, 0);
+    ihdr.writeUInt32BE(h, 4);
+    ihdr[8] = 8;
+    ihdr[9] = colourType;
+    const raw = Buffer.concat(rows.map((r) => Buffer.from([0, ...r])));
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), ...extra,
+      chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+  };
+  const ok = decodePng(png(2, 1, 6, [[0x1d, 0x2a, 0x24, 255, 9, 9, 9, 0]]));
+  assert.deepEqual([ok.w, ok.h, ok.pixels.length], [2, 1, 2]);
+  assert.deepEqual(paletteProblems(ok, PALETTE_HEXES), [], "palette colour + fully transparent off-palette pixel");
+  assert.deepEqual(paletteProblems(decodePng(png(1, 1, 6, [[0x1d, 0x2a, 0x24, 128]])), PALETTE_HEXES), ["alpha 128 at (0,0)"]);
+  assert.deepEqual(paletteProblems(decodePng(png(1, 1, 2, [[0x28, 0x3c, 0x50]])), PALETTE_HEXES), ["#283c50 off-palette"]);
+  const text = Buffer.from([0, 0, 0, 1, 0x74, 0x45, 0x58, 0x74, 0x41, 0, 0, 0, 0]); // a 1-byte tEXt chunk
+  assert.ok(decodePng(png(1, 1, 2, [[0x1d, 0x2a, 0x24]], [text])).chunks.includes("tEXt"));
+  const deep = png(1, 1, 2, [[0, 0, 0]]);
+  deep[24] = 16; // IHDR bit depth
+  assert.throws(() => decodePng(deep), /unsupported PNG: depth 16/);
+  assert.throws(() => decodePng(Buffer.from("GIF89a")), /not a PNG/);
 });
 
 // --- T33-3 the sprite dir matches the manifest ------------------------------------------------------
@@ -512,17 +593,20 @@ test("the sprites README has the agreed text and a row per sprite", () => {
   assert.ok(existsSync(file), "web/public/sprites/README.md");
   const readme = readFileSync(file, "utf8");
   for (const line of [
-    "Placeholders: hand-made pixel-art SVG, swap for AI art (TG-33 follow-up).",
+    "Art: AI-generated with fal nano-banana, owner-approved, 2026-10-29.",
     "Names and sizes follow `web/sprites-src/art-prompts.md`. To swap in art: export PNGs at exactly the listed size (nearest-neighbour, 6-colour palette, transparent), copy them here with the same base name, add each name to `PNG_ART` in `web/src/lib/sprites.ts`, delete the matching `.svg`, and run the web tests.",
     "App icon: export `icon-app.png` over `web/public/icon-512.png`, `icon-192.png` and `apple-touch-icon.png` (180×180).",
-    "Tool and terms: placeholders made by hand by the team, no third-party art. Record the AI tool and its terms here when the art lands.",
+    "Processing script: `process.py` in the owner's `~/tara-art/` (Pillow, so it stays outside the repo).",
+    `Still SVG: ${KEPT_SVG.map((n) => `\`${n}\``).join(", ")}.`,
   ]) {
     assert.ok(readme.includes(line), `missing: ${line}`);
   }
+  assert.ok(!readme.includes("Placeholders: hand-made pixel-art SVG"), "the placeholder-only intro is gone");
   for (const name of manifestNames()) {
     const { w, h } = SPRITES[name];
     const row = readme.split("\n").find((l) => l.startsWith("|") && l.includes(`\`${name}\``));
     assert.ok(row, `no table row for ${name}`);
     assert.ok(row.includes(`${w}×${h}`), `${name}: size ${w}×${h} in its row`);
+    assert.ok(row.includes(PNG_ART.has(name) ? "| PNG |" : "| SVG |"), `${name}: format in its row`);
   }
 });
