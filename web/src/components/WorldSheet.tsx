@@ -133,7 +133,7 @@ export default function WorldSheet({ itinerary: it, rowId, f, dialogRef, onClose
       onClose={onClose}
       // A tap on the backdrop lands on the dialog itself; taps inside land on the box
       onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}
-      className="m-0 mt-auto mx-auto mb-4 w-[calc(100%-2rem)] max-w-md max-h-[70dvh] overflow-y-auto bg-transparent p-0 text-foreground backdrop:bg-screen-ink/60"
+      className="m-0 mt-auto md:my-auto mx-auto mb-4 w-[calc(100%-2rem)] max-w-md max-h-[70dvh] overflow-y-auto bg-transparent p-0 text-foreground backdrop:bg-screen-ink/60"
     >
       <DialogBox>
         <div className="flex flex-row-reverse items-start justify-between gap-3">
