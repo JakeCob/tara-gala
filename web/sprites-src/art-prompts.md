@@ -142,6 +142,13 @@ Owner request 2026-10-29, made with the same pipeline as the TG-33 art. **Decora
 | `deco-rice-terraces.png` | 24×24 | stepped mountain rice terraces |
 | `deco-panagbenga-float.png` | 32×24 | a Panagbenga flower-festival float |
 
+## 8. Landing hero (TG-46)
+Owner art 2026-10-29, the same palette. One wide scene behind the landing title, drawn at 2x. **Decorative only:** no text, no flag.
+
+| File | Size | Subject |
+|---|---|---|
+| `hero-scene.png` | 320×123 | a provincial bus on a pine-lined mountain road up to Baguio, morning sky |
+
 ---
 
 ## Checklist for the owner
