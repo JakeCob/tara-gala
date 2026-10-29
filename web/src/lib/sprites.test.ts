@@ -244,7 +244,7 @@ test("PNG_ART is exactly the 35 art-drop names plus the 10 TG-45 decor names; th
 });
 
 test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 255, not empty, at most 4 KB", async (t) => {
-  for (const name of [...ART_DROP, ...PH_NAMES]) {
+  for (const name of [...PNG_ART]) {
     await t.test(name, () => {
       const file = join(SPRITE_DIR, `${name}.png`);
       assert.ok(existsSync(file), `${name}.png is missing`);
@@ -701,6 +701,7 @@ test("T47-A1 the art palette is pixelSvg's 11 colours, in order, and its first 6
     B: "#0038a8", R: "#ce1126", Y: "#fcd116", K: "#8d5524", T: "#c68642",
   });
   assert.equal(PALETTE_11.length, 11);
+  assert.deepEqual(Object.keys(PALETTE), [..."IFLMCSBRYKT"], "letter order = SVG path order");
   assert.deepEqual(PALETTE_11.slice(0, 6), ART_PALETTE_V1, "the original 6 come first, unchanged");
   for (const hex of PALETTE_11) assert.match(hex, /^#[0-9a-f]{6}$/, `${hex} is lower case, like the committed SVGs`);
 });
@@ -716,6 +717,13 @@ test("T47-A3b existing art is held to the 6; the 11-colour group holds only new 
     assert.ok(PNG_ART.has(name as SpriteName), `${name}: new art ships as PNG`);
   }
   for (const name of existing) assert.deepEqual(paletteFor(name), ART_PALETTE_V1, name);
+  for (const name of PNG_ART) assert.ok(existing.has(name) || NEW_ART_11.includes(name), `${name}: PNG art must be existing art or listed in NEW_ART_11`);
+  // The groups are enforced where the files are checked, not only in paletteFor (tg-test3 RED audit, survivors 1 to 3)
+  const self = readFileSync(fileURLToPath(import.meta.url), "utf8");
+  assert.match(self, /for \(const name of \[\.\.\.PNG_ART\]\) \{\n\s+await t\.test\(name, \(\) => \{\n\s+const file = join\(SPRITE_DIR, `\$\{name\}\.png`\);/, "the art loop covers every PNG");
+  assert.equal(self.match(/paletteProblems\(png, paletteFor\(name\)\)/g)?.length, 1, "the art loop checks each PNG against its group");
+  assert.equal(self.match(/paletteProblems\(png, ART_PALETTE_V1\)/g)?.length, 1, "the app icons keep the 6");
+  assert.doesNotMatch(self, /paletteProblems\(png, PALETTE_11\)/);
   for (const name of svgNames()) {
     const fills = [...readSvg(name).matchAll(/\bfill="([^"]*)"/g)].map((m) => m[1]);
     for (const f of fills) assert.ok(ART_PALETTE_V1.includes(f), `${name}: ${f}`);

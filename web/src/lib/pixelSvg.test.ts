@@ -1,6 +1,7 @@
 // TG-33: the grid -> SVG converter (T33-8) and grid parsing errors (T33-9). Fixtures are in-test only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { PALETTE, gridToSvg, parseGrid } from "./pixelSvg.ts";
 import { LETTERS, gridPixels, gridText, rasterize } from "./pixelSvg.testutil.ts";
 
@@ -129,4 +130,7 @@ test("T47-A4 grids accept the 5 new letters; the original colours keep their pat
 
 test("T47-A5 the test rasterizer's colours are PALETTE itself, not a copy", () => {
   assert.deepEqual(LETTERS, { ...PALETTE });
+  const util = readFileSync(new URL("./pixelSvg.testutil.ts", import.meta.url), "utf8");
+  assert.match(util, /export const LETTERS: Record<string, string> = \{ \.\.\.PALETTE \};/);
+  assert.doesNotMatch(util, /#[0-9a-f]{6}/i, "no hex copy in the testutil");
 });
