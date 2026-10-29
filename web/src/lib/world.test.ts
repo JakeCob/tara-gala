@@ -1047,6 +1047,11 @@ test("T45-M1 the map renders scenery first in each turn row, under the signs' fo
   assert.ok(turn.indexOf(decor) < turn.indexOf('name="tile-path-corner"'), "the decor renders before the corner tiles");
   const sign = src.slice(src.indexOf("function SignRow"), src.indexOf("function TurnRow"));
   assert.match(sign, /<li className="relative z-\[1\]">/, "sign rows paint over scenery");
+  // Manager ruling (test-plan F1): the "head to the terminal" row's Maps link sits right above a turn, so its row
+  // is raised the same way (PlainRow also draws the free-day rows)
+  const plain = src.slice(src.indexOf("function PlainRow"), src.indexOf("export default function OverworldMap"));
+  assert.ok(plain.length > 0, "PlainRow found");
+  assert.match(plain, /<li className="relative z-\[1\]">/, "the to-terminal row paints over scenery");
   assert.match(src, /console\.info\("\[tg-map\] scenery n=%d w=%d", decor\.length, g\.W\)/);
   assert.match(src, /console\.info\("\[tg-map\] render rows=%d days=%d missing=%d", rows\.length, itinerary\.days\.length, missing\)/, "T22-S7's line unchanged");
   assert.doesNotMatch(src, /Math\.random|animate-|@keyframes|transition|setInterval/);
