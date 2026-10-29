@@ -3,7 +3,7 @@ import { SPRITES, spriteSrc } from "@/lib/sprites";
 import SectionStripe from "./SectionStripe";
 
 const POINTS = [
-  "Times come from the operators' own pages and posts.",
+  "Times come from the operators' own booking sites.",
   "Every trip shows a Checked date, so you know how fresh it is.",
   "Works offline once you've opened it.",
 ];

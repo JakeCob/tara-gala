@@ -22,7 +22,7 @@ export default function Hero() {
       />
       <div className="relative flex flex-col gap-1 p-4">
         <PageTitle onScreen id="landing-title" tabIndex={-1}>Tara Gala</PageTitle>
-        <p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio bus, straight from the operators.</p>
+        <p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses, straight from the operators.</p>
       </div>
       <div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1 md:hidden">
         {CAST.heroTrio.map((slot) => (

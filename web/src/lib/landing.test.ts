@@ -159,7 +159,7 @@ test("T46-L4 the hero: a fixed light screen with decorative art; its text is scr
   for (const attr of [/alt=""/, /aria-hidden="true"/, /draggable=\{false\}/, /width=\{640\}/, /height=\{246\}/, /\bpixelated\b/, /fetchPriority="high"/]) {
     assert.match(img, attr, `hero img ${attr}`);
   }
-  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio bus, straight from the operators\.<\/p>/);
+  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses, straight from the operators\.<\/p>/);
   assert.doesNotMatch(src, /text-brand|text-foreground|text-muted|text-link/, "the hero is a fixed light screen (ux §0)");
   // The phone-only trio: decorative, static, and hidden by width only because it carries nothing
   assert.match(src, /<div aria-hidden="true" className="[^"]*\bmd:hidden\b[^"]*">/);
@@ -223,7 +223,7 @@ test("T46-L6 how it works and trust: server sections named by their h2; the step
 test("T46-C2 the hero and the quick actions say exactly ux §5.1 and §5.3", () => {
   const text = copyIn([sectionPath("Hero"), sectionPath("QuickActions")]);
   for (const s of [
-    "Every Manila to Baguio bus, straight from the operators.",
+    "Manila to Baguio buses, straight from the operators.", // the owner's S1 call: honest, no "every"
     "Find buses", "Every trip on file, with fares and where to book.",
     "Plan a Baguio trip", "Tell us who's coming and your vibe. Tara!",
     "In Baguio?", "Jeeps, taxis and walks from the terminal.",
@@ -251,7 +251,7 @@ test("T46-C4 how it works and trust say exactly ux §5.5, and claim nothing we c
     "Plan", "Tell us who's coming and what you're into, or pick a ready-made trip.",
     "Go offline", "Open your trip once with signal. It stays on your phone for the mountain roads.",
     "Why you can trust it",
-    "Times come from the operators' own pages and posts.",
+    "Times come from the operators' own booking sites.", // S1
     "Every trip shows a Checked date, so you know how fresh it is.",
     "Works offline once you've opened it.",
     "Bus times can change. Always confirm with the operator before you travel.",
