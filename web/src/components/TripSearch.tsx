@@ -49,8 +49,8 @@ export default function TripSearch() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <PixelBox as="form" onSubmit={onSearch} className="p-4 flex flex-col gap-3">
+    <div className="flex flex-col gap-4 md:grid md:grid-cols-[20rem_minmax(0,1fr)] md:grid-rows-[auto_1fr] md:gap-6 md:items-start lg:grid-cols-[22rem_minmax(0,1fr)] lg:gap-8">
+      <PixelBox as="form" onSubmit={onSearch} className="p-4 flex flex-col gap-3 md:row-span-2">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
           <div className="min-w-0 break-words">
             <div className="text-muted">From</div>
@@ -119,7 +119,7 @@ export default function TripSearch() {
       </div>
 
       {status === "done" && trips.length > 0 && (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-3 md:grid md:grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] md:gap-4">
           {trips.map((t) => (
             <TripCard key={t.trip_id} trip={t} />
           ))}

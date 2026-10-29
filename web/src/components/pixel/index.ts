@@ -3,6 +3,7 @@ export { PX, cx } from "./classes";
 export type { ButtonVariant } from "./classes";
 export { DialogBox } from "./DialogBox";
 export { MenuCursor } from "./MenuCursor";
+export { PageShell } from "./PageShell";
 export { PageTitle } from "./PageTitle";
 export { PixelBox } from "./PixelBox";
 export { PixelButton } from "./PixelButton";

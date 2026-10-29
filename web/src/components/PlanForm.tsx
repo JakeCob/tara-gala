@@ -111,74 +111,78 @@ export default function PlanForm() {
 
   // Capture phase: a tap or key during a spawn finishes it before the button's click starts the next one
   return (
-    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4" onPointerDownCapture={spawn.skip} onKeyDownCapture={spawn.skip}>
-      <PartyStage party={party} spawning={spawn.active} step={spawn.step} fixedRows />
-      <PartyPicker party={party} onChange={setParty} onAdd={(i) => spawn.start([i])} />
-      {/* Locked while a request runs; the picker and the submit button stay out, so focus never drops */}
-      <fieldset disabled={busy} role="none" className="contents">
-        <DatesBox
-          values={values}
-          bounds={dateBounds(today, values.date)}
-          hint={lengthHint(values.date, values.returnDate)}
-          errors={errors}
-          onDate={(value) => dispatch({ type: "setDate", value, today })}
-          onReturn={(value) => dispatch({ type: "setReturn", value })}
-        />
-        <BudgetBox
-          value={form.budget}
-          errors={errors}
-          onChange={(value) => dispatch({ type: "setBudget", value })}
-          onBlur={() => dispatch({ type: "blurBudget" })}
-        />
-        <VibeBox
-          chips={form.chips}
-          note={form.note}
-          errors={errors}
-          onToggle={(chip) => dispatch({ type: "toggleChip", chip })}
-          onNote={(value) => dispatch({ type: "setNote", value })}
-        />
-      </fieldset>
-      {mode === "none" ? (
-        <PixelBox className="p-4 flex flex-col items-start gap-3">
-          <p className="text-sm">{PLAN_COPY.none}</p>
-          <PixelLink variant="secondary" href="/">
-            {PLAN_COPY.actions.searchBuses}
-          </PixelLink>
-        </PixelBox>
-      ) : (
-        <PixelButton variant="primary" type="submit" id={SUBMIT_ID} className="w-full px-4 py-3" aria-disabled={busy}>
-          {label}
-        </PixelButton>
-      )}
-      <p role="status" className={statusShown(run) ? PX.meta : "sr-only"}>
-        {statusText(run, mode, values)}
-      </p>
-      {run.error && (
-        <PlanErrorBox
-          view={run.error}
-          flags={flags}
-          busy={busy}
-          onRetry={() => {
-            // Try again restarts the run, which unmounts this box and the focused button (TG-21 review nit 3)
-            document.getElementById(SUBMIT_ID)?.focus();
-            if (sent.current) plan(sent.current);
-          }}
-          onPremade={() => loadPremade(values)}
-        />
-      )}
-      {run.premade && (
-        <PremadeResults
-          key={run.id}
-          premade={run.premade}
-          date={values.date}
-          returnDate={values.returnDate}
-          busy={busy}
-          onRetry={() => {
-            document.getElementById(SUBMIT_ID)?.focus(); // the failed box unmounts when the list reloads
-            loadPremade(values);
-          }}
-        />
-      )}
+    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4 md:grid md:grid-cols-2 md:gap-6 md:items-start lg:gap-8" onPointerDownCapture={spawn.skip} onKeyDownCapture={spawn.skip}>
+      <div className="contents md:flex md:flex-col md:gap-4">
+        <PartyStage party={party} spawning={spawn.active} step={spawn.step} fixedRows />
+        <PartyPicker party={party} onChange={setParty} onAdd={(i) => spawn.start([i])} />
+      </div>
+      <div className="contents md:flex md:flex-col md:gap-4">
+        {/* Locked while a request runs; the picker and the submit button stay out, so focus never drops */}
+        <fieldset disabled={busy} role="none" className="contents">
+          <DatesBox
+            values={values}
+            bounds={dateBounds(today, values.date)}
+            hint={lengthHint(values.date, values.returnDate)}
+            errors={errors}
+            onDate={(value) => dispatch({ type: "setDate", value, today })}
+            onReturn={(value) => dispatch({ type: "setReturn", value })}
+          />
+          <BudgetBox
+            value={form.budget}
+            errors={errors}
+            onChange={(value) => dispatch({ type: "setBudget", value })}
+            onBlur={() => dispatch({ type: "blurBudget" })}
+          />
+          <VibeBox
+            chips={form.chips}
+            note={form.note}
+            errors={errors}
+            onToggle={(chip) => dispatch({ type: "toggleChip", chip })}
+            onNote={(value) => dispatch({ type: "setNote", value })}
+          />
+        </fieldset>
+        {mode === "none" ? (
+          <PixelBox className="p-4 flex flex-col items-start gap-3">
+            <p className="text-sm">{PLAN_COPY.none}</p>
+            <PixelLink variant="secondary" href="/">
+              {PLAN_COPY.actions.searchBuses}
+            </PixelLink>
+          </PixelBox>
+        ) : (
+          <PixelButton variant="primary" type="submit" id={SUBMIT_ID} className="w-full px-4 py-3" aria-disabled={busy}>
+            {label}
+          </PixelButton>
+        )}
+        <p role="status" className={statusShown(run) ? PX.meta : "sr-only"}>
+          {statusText(run, mode, values)}
+        </p>
+        {run.error && (
+          <PlanErrorBox
+            view={run.error}
+            flags={flags}
+            busy={busy}
+            onRetry={() => {
+              // Try again restarts the run, which unmounts this box and the focused button (TG-21 review nit 3)
+              document.getElementById(SUBMIT_ID)?.focus();
+              if (sent.current) plan(sent.current);
+            }}
+            onPremade={() => loadPremade(values)}
+          />
+        )}
+        {run.premade && (
+          <PremadeResults
+            key={run.id}
+            premade={run.premade}
+            date={values.date}
+            returnDate={values.returnDate}
+            busy={busy}
+            onRetry={() => {
+              document.getElementById(SUBMIT_ID)?.focus(); // the failed box unmounts when the list reloads
+              loadPremade(values);
+            }}
+          />
+        )}
+      </div>
     </form>
   );
 }

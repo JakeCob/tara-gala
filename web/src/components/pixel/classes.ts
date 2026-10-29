@@ -28,7 +28,7 @@ export const PX = {
   screenChip: "pixel-frame bg-screen-paper text-screen-ink px-2 py-1 text-sm",
   // rounded-none is the one deliberate rounding class: it resets the rounded iOS date input
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
-  h1: "font-pixel text-[2rem] leading-tight font-bold text-brand",
+  h1: "font-pixel text-[2rem] leading-tight font-bold text-brand md:text-[2.5rem]",
   h2: "font-pixel text-xl font-semibold",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
@@ -37,6 +37,8 @@ export const PX = {
   // the share page's decorative step numeral (plan §3.2), so font-pixel stays inside components/pixel
   plate: "pixel-frame bg-screen-paper p-0.5 inline-flex shrink-0",
   numeral: "font-pixel text-xl font-semibold",
+  // TG-44 ux §2: every page's main element. Its phone tokens are the old string, in order; md/lg/xl widen it
+  shell: "mx-auto w-full max-w-md flex-1 px-4 py-6 flex flex-col gap-5 md:max-w-3xl md:px-6 md:py-8 lg:max-w-5xl lg:px-8 xl:max-w-6xl",
   screenTag: "pixel-frame bg-screen-paper text-screen-ink px-1 text-xs font-semibold",
   inputPrefix: "inline-flex items-center border-3 border-r-0 border-frame bg-card px-3 text-base font-bold text-foreground",
 } as const;
