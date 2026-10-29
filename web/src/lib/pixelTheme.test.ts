@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { PALETTE as ART_PALETTE } from "./pixelSvg.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
@@ -12,10 +13,11 @@ const PIXEL = "src/components/pixel/";
 // their own assertions) while the module doesn't exist yet.
 type Skinned = { skin: string; layout: string };
 type PXShape = {
-  box: Skinned;
+  box: Skinned & { alert: string; alertText: string }; // TG-47 ux §7: the alert lining, as PixelBox tones
   btn: Record<"primary" | "secondary" | "accent" | "icon" | "iconBrand", Skinned>;
   choice: Skinned;
   chip: string;
+  chipHighlight: string; // TG-47 ux §2
   screenChip: string;
   input: string;
   h1: string;
@@ -117,18 +119,25 @@ function contrast(a: string | undefined, b: string | undefined): number {
 
 // ---- guide 1.1 and 1.2 ----
 
-const PALETTE = { ink: "#1d2a24", forest: "#167856", leaf: "#5fb36b", mint: "#cfe8c4", cream: "#fbf7ee", sun: "#ffd65c" };
+// The art palette has one source, pixelSvg.ts (TG-47: the 6 greens, Flag Blue, Red and Yellow, two skin tones)
+const PALETTE: Record<string, string> = { ...ART_PALETTE };
+const SKIN = ["#8d5524", "#c68642"]; // art only, never a UI token (ux §0.6)
 const MUTED_LIGHT = "#4f5f57";
 
 const LIGHT = {
   background: "#cfe8c4", foreground: "#1d2a24", muted: "#4f5f57", card: "#fbf7ee",
   frame: "#1d2a24", border: "#5fb36b", brand: "#167856", "brand-ink": "#fbf7ee",
-  accent: "#ffd65c", "accent-ink": "#1d2a24", focus: "#1d2a24",
+  accent: "#fcd116", "accent-ink": "#1d2a24", focus: "#1d2a24", // TG-47: accent is Flag Yellow (was Sun)
+  // TG-47 ux §1.1: Blue to act, Red for what changed or failed
+  primary: "#0038a8", "primary-ink": "#fbf7ee", link: "#0038a8", danger: "#ce1126", "danger-text": "#ce1126",
 };
 const DARK_OVERRIDES = {
   background: "#121815", foreground: "#fbf7ee", muted: "#a3b1aa", card: "#1b2420",
   frame: "#cfe8c4", border: "#2c3833", brand: "#5fb36b", "brand-ink": "#1d2a24", focus: "#ffd65c",
+  link: "#8fb0ff", "danger-text": "#ff8a8a", // TG-47: UI-only tints (Flag Blue and Red can't be text on the dark card)
 };
+// TG-47: the flag colours for the game screen (map banners), fixed in both themes like screen-*
+const FIXED_FLAG = { "--color-flag-blue": "#0038a8", "--color-flag-red": "#ce1126", "--color-flag-yellow": "#fcd116" };
 const SCREEN = {
   "--color-screen": "#cfe8c4", "--color-screen-paper": "#fbf7ee",
   "--color-screen-ink": "#1d2a24", "--color-screen-muted": "#4f5f57",
@@ -139,8 +148,8 @@ const TOKEN_NAMES = Object.keys(LIGHT);
 test("T2 tokens match guide 1.2 in light and dark", () => {
   const { lightVars, darkVars, dark } = tokenModes();
   const pick = (o: Record<string, string>) => Object.fromEntries(TOKEN_NAMES.filter((k) => k in o).map((k) => [k, o[k]]));
-  assert.deepEqual(pick(lightVars), LIGHT, "the 11 light :root variables");
-  assert.deepEqual(pick(darkVars), DARK_OVERRIDES, "dark overrides 9 tokens; accent and accent-ink are inherited");
+  assert.deepEqual(pick(lightVars), LIGHT, "the 16 light :root variables");
+  assert.deepEqual(pick(darkVars), DARK_OVERRIDES, "dark overrides 11 tokens; accent, accent-ink, primary, primary-ink and danger are inherited");
   assert.deepEqual(pick(dark), { ...LIGHT, ...DARK_OVERRIDES });
 });
 
@@ -148,12 +157,13 @@ test("T2 the screen tokens are fixed and every token is a Tailwind colour", () =
   const { all } = tokenModes();
   const theme = all.filter((b) => b.path.length === 1 && b.path[0] === "@theme").map((b) => decls(b.body));
   const fixed = Object.assign({}, ...theme) as Record<string, string>;
-  for (const [name, hex] of Object.entries(SCREEN)) {
+  for (const [name, hex] of Object.entries({ ...SCREEN, ...FIXED_FLAG })) {
     assert.equal(fixed[name]?.toLowerCase(), hex, `${name} in a plain @theme block`);
   }
   for (const b of all) {
     if (DARK.test(b.path[0] ?? "")) {
       assert.doesNotMatch(b.body, /--color-screen/, "screen tokens must not change in dark mode");
+      assert.doesNotMatch(b.body, /--color-flag/, "the flag colours are the game screen's: fixed in dark mode too");
     }
   }
   const inline = Object.assign(
@@ -198,10 +208,12 @@ test("T2 globals.css has guide 3.2's utilities", () => {
 });
 
 // T3 (B1)
-test("T3 art palette is exactly 6 colours and the light tokens use only them", () => {
+test("T3 art palette is exactly 11 colours and the light tokens use only them", () => {
   const { lightVars, darkVars } = tokenModes();
   const palette = new Set(Object.values(PALETTE));
-  assert.equal(palette.size, 6);
+  assert.deepEqual([...palette], [
+    "#1d2a24", "#167856", "#5fb36b", "#cfe8c4", "#fbf7ee", "#ffd65c", "#0038a8", "#ce1126", "#fcd116", "#8d5524", "#c68642",
+  ], "pixelSvg.ts PALETTE, in order (the one deliberate copy)");
   for (const name of TOKEN_NAMES) {
     assert.ok(lightVars[name], `light --${name} is set`);
     assert.ok(palette.has(lightVars[name]) || lightVars[name] === MUTED_LIGHT, `light --${name} ${lightVars[name]} is off-palette`);
@@ -210,7 +222,11 @@ test("T3 art palette is exactly 6 colours and the light tokens use only them", (
     assert.ok(palette.has(hex) || hex === MUTED_LIGHT, `screen token ${hex}`);
   }
   const offPalette = new Set(Object.values(darkVars).filter((hex) => !palette.has(hex)));
-  assert.deepEqual([...offPalette].sort(), ["#121815", "#1b2420", "#2c3833", "#a3b1aa"], "the only non-palette dark values");
+  assert.deepEqual([...offPalette].sort(), ["#121815", "#1b2420", "#2c3833", "#8fb0ff", "#a3b1aa", "#ff8a8a"], "the only non-palette dark values");
+  // Skin tones are art only (ux §0.6): no token in either mode uses one
+  for (const [mode, vars] of [["light", lightVars], ["dark", { ...lightVars, ...darkVars }]] as const) {
+    for (const [name, hex] of Object.entries(vars)) assert.ok(!SKIN.includes(hex), `${mode} --${name} is a skin tone`);
+  }
 });
 
 // T4 (B15)
@@ -222,11 +238,17 @@ const TEXT_PAIRS: [fg: string, bg: string][] = [
   ["brand-ink", "brand"],
   ["brand", "card"],
   ["accent-ink", "accent"],
+  // TG-47 ux §3
+  ["primary-ink", "primary"],
+  ["link", "card"],
+  ["link", "background"],
+  ["danger-text", "card"],
 ];
 const SCREEN_PAIRS: [fg: string, bg: string][] = [
   ["--color-screen-ink", "--color-screen"],
   ["--color-screen-ink", "--color-screen-paper"],
   ["--color-screen-muted", "--color-screen-paper"],
+  ["--color-screen-paper", "--color-flag-blue"], // TG-47: the map's Blue title bars
 ];
 
 test("T4 every text pair used is AA (4.5:1) in both modes", () => {
@@ -287,12 +309,24 @@ test("T7 known-failing pairs stay banned", () => {
   assert.ok(contrast(dark.focus, dark.accent) < 3.0, `dark focus on accent: ${msg}`);
   assert.ok(contrast(lightVars.focus, lightVars.brand) < 3.0, `light focus on brand: ${msg}`);
   assert.ok(contrast(dark.focus, dark.brand) < 3.0, `dark focus on brand: ${msg}`);
-  // Leaf (light border) and Sun (accent) never carry text on Cream (card) or Mint (background)
+  // Leaf (light border) and Flag Yellow (accent) never carry text on Cream (card) or Mint (background)
   for (const fg of ["border", "accent"]) {
     for (const bg of ["card", "background"]) {
       assert.ok(contrast(lightVars[fg], lightVars[bg]) < 4.5, `light ${fg} on ${bg}: ${msg}`);
     }
   }
+  for (const name of ["primary", "danger", "danger-text"]) assert.ok(lightVars[name], `light --${name} is set`);
+  // TG-47 ux §3: no control on a Blue or Red surface (Ink focus on Blue is 1.51), Sun focus on Yellow is 1.05
+  assert.ok(contrast(lightVars.focus, lightVars.primary) < 3.0, `light focus on primary: ${msg}`);
+  assert.ok(contrast(lightVars.focus, lightVars.danger) < 3.0, `light focus on danger: ${msg}`);
+  // Red text only on card: on the Mint page it's 4.28
+  assert.ok(contrast(lightVars["danger-text"], lightVars.background) < 4.5, `light danger-text on background: ${msg}`);
+  // Ink text never on Blue or Red: Cream only
+  assert.ok(contrast(lightVars.foreground, lightVars.primary) < 4.5, `Ink on primary: ${msg}`);
+  assert.ok(contrast(lightVars.foreground, lightVars.danger) < 4.5, `Ink on danger: ${msg}`);
+  // Raw Flag Blue and Red can't be text on the dark card, hence the dark link and danger-text tints
+  assert.ok(contrast(lightVars.primary, dark.card) < 4.5, `Flag Blue on the dark card: ${msg}`);
+  assert.ok(contrast(lightVars.danger, dark.card) < 4.5, `Flag Red on the dark card: ${msg}`);
 });
 
 // ---- PX (components/pixel/classes.ts) ----
@@ -310,19 +344,26 @@ function flatPX(px: PXShape): [path: string, value: string][] {
 
 // plan.md "PX values", with review-plan finding 1 (a named group, so nested groups don't light every cursor).
 const EXPECTED_PX: PXShape = {
-  box: { skin: "pixel-box bg-card", layout: "p-4 flex flex-col gap-2" },
+  box: {
+    skin: "pixel-box bg-card",
+    layout: "p-4 flex flex-col gap-2",
+    // TG-47 ux §7 Option B: the double frame's 3px gap turns Red on all four sides; no element, no layout change
+    alert: "shadow-[inset_0_0_0_6px_var(--danger)]",
+    alertText: "shadow-[inset_0_0_0_6px_var(--danger)] text-danger-text", // a one-sentence box is its own lead
+  },
   btn: {
-    primary: { skin: "pixel-btn focus-pixel min-h-11 bg-brand font-bold text-brand-ink", layout: "px-4 py-3" },
+    primary: { skin: "pixel-btn focus-pixel min-h-11 bg-primary font-bold text-primary-ink", layout: "px-4 py-3" },
     secondary: { skin: "pixel-btn focus-pixel min-h-11 bg-card font-semibold text-foreground", layout: "inline-flex items-center px-4 text-sm" },
     accent: { skin: "pixel-btn focus-pixel min-h-11 bg-accent font-bold text-accent-ink", layout: "inline-flex items-center px-3 text-sm" },
     icon: { skin: "pixel-btn focus-pixel min-h-11 min-w-11 bg-card", layout: "inline-flex items-center justify-center" },
-    iconBrand: { skin: "pixel-btn focus-pixel min-h-11 min-w-11 bg-card text-brand", layout: "inline-flex items-center justify-center text-xl leading-none" },
+    iconBrand: { skin: "pixel-btn focus-pixel min-h-11 min-w-11 bg-card text-link", layout: "inline-flex items-center justify-center text-xl leading-none" },
   },
   choice: {
-    skin: "group/choice pixel-btn focus-pixel-within min-h-11 cursor-pointer bg-card font-semibold has-checked:bg-brand has-checked:text-brand-ink has-checked:translate-y-[3px] has-checked:shadow-none has-[[aria-disabled=true]]:opacity-60 has-[[aria-disabled=true]]:shadow-none",
+    skin: "group/choice pixel-btn focus-pixel-within min-h-11 cursor-pointer bg-card font-semibold has-checked:bg-primary has-checked:text-primary-ink has-checked:translate-y-[3px] has-checked:shadow-none has-[[aria-disabled=true]]:opacity-60 has-[[aria-disabled=true]]:shadow-none",
     layout: "flex items-center justify-center gap-1 px-2 py-2 text-center text-sm leading-tight",
   },
   chip: "pixel-frame bg-card px-2 py-1 text-sm",
+  chipHighlight: "pixel-frame bg-accent text-accent-ink px-2 py-1 text-sm", // TG-47 ux §2, colour only (plan §6.2)
   screenChip: "pixel-frame bg-screen-paper text-screen-ink px-2 py-1 text-sm",
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
   h1: "font-pixel text-[2rem] leading-tight font-bold text-brand md:text-[2.5rem]",
@@ -330,7 +371,7 @@ const EXPECTED_PX: PXShape = {
   h2: "font-pixel text-xl font-semibold",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
-  inlineLink: "underline underline-offset-2 focus-pixel",
+  inlineLink: "underline underline-offset-2 focus-pixel text-link",
   // TG-43 ux §4: the sprite plate (stepper rows, stop sprites), the stage tag, the budget's ₱ prefix;
   // plan §3.2: the share page's decorative step numeral
   plate: "pixel-frame bg-screen-paper p-0.5 inline-flex shrink-0",
@@ -501,7 +542,8 @@ test("B4 PageTitle and SectionTitle use PX headings; SectionTitle supports the s
   assert.match(primitive("PageTitle"), /PX\.h1/);
   const section = primitive("SectionTitle");
   assert.match(section, /PX\.h2/);
-  assert.match(section, /onScreen\s*\?\s*"text-screen-ink"\s*:\s*"text-foreground"/);
+  assert.match(section, /onScreen === "banner"\s*\?\s*"text-screen-paper"\s*:\s*onScreen\s*\?\s*"text-screen-ink"\s*:\s*"text-foreground"/);
+  assert.match(section, /onScreen\?: boolean \| "banner"/, "TG-47: the Blue map banner");
   for (const tag of ["h2", "h3", "legend", "label"]) {
     assert.match(section, new RegExp(`"${tag}"`), `SectionTitle as="${tag}"`);
   }
@@ -635,7 +677,7 @@ function elementsWithFill(source: string): { tag: string; inner: string }[] {
   const open = /<([A-Za-z][\w.]*)\b((?:[^>"{]|"[^"]*"|\{[^}]*\})*?)(\/?)>/g;
   for (const m of source.matchAll(open)) {
     const [whole, tag, attrs, selfClosing] = m;
-    if (selfClosing || !/(?<![\w:-])bg-(accent|brand)(?![\w-])/.test(attrs)) continue;
+    if (selfClosing || !/(?<![\w:-])bg-(accent|brand|primary|danger|flag-blue|flag-red|flag-yellow)(?![\w-])/.test(attrs)) continue;
     // Find the matching close tag, counting nested elements with the same name
     const re = new RegExp(`<${tag}\\b|</${tag}>`, "g");
     re.lastIndex = m.index! + whole.length;
@@ -659,7 +701,7 @@ test("T13 no focusable element sits on an accent or brand surface", () => {
       assert.doesNotMatch(
         inner,
         /<(a|button|input|select|textarea|Link|PixelButton|PixelLink|PixelCardLink|PixelChoice)\b/,
-        `${relative(url)}: a control inside a bg-accent/bg-brand <${tag}>`,
+        `${relative(url)}: a control inside a bg-accent/brand/primary/danger/flag-* <${tag}>`,
       );
     }
   }
@@ -671,6 +713,10 @@ test("T13 the scan finds the filled elements it should", () => {
   assert.match(found[0].inner, /<a href/);
   assert.equal(found[1].inner, "z");
   assert.deepEqual(elementsWithFill('<label className="has-checked:bg-brand">x</label>'), [], "a variant fill isn't a surface");
+  // TG-47: the Blue, Red and Yellow fills are surfaces too
+  const flags = elementsWithFill('<div className="bg-primary"><a>y</a></div><span className="bg-flag-blue px-1">t</span>');
+  assert.deepEqual(flags.map((f) => f.tag), ["div", "span"]);
+  assert.deepEqual(elementsWithFill('<label className="has-checked:bg-primary">x</label>'), [], "a checked pill's fill isn't a surface");
 });
 
 // T14 (B12)
@@ -793,4 +839,199 @@ test("T43-U2 globals.css outlines a date input whenever focus is inside it", () 
   const d = decls(rule.body);
   assert.equal(d.outline, "3px solid var(--focus)");
   assert.equal(d["outline-offset"], "2px");
+});
+
+// ---------------------------------------------------------------- TG-47 B/C: flag-colour tokens, contrast, no flag
+
+// T47-T1: ux §1.1's 7 new or changed tokens, per mode. "same" in dark means inherited, never redeclared.
+test("T47-T1 the new and changed tokens have ux's exact values in light and dark", () => {
+  const { lightVars, darkVars, dark } = tokenModes();
+  const ux: [name: string, light: string, dark: string][] = [
+    ["primary", "#0038a8", "#0038a8"],
+    ["primary-ink", "#fbf7ee", "#fbf7ee"],
+    ["link", "#0038a8", "#8fb0ff"],
+    ["danger", "#ce1126", "#ce1126"],
+    ["danger-text", "#ce1126", "#ff8a8a"],
+    ["accent", "#fcd116", "#fcd116"],
+    ["accent-ink", "#1d2a24", "#1d2a24"],
+  ];
+  for (const [name, l, d] of ux) {
+    assert.equal(lightVars[name], l, `light --${name}`);
+    assert.equal(dark[name], d, `dark --${name}`);
+    if (l === d) assert.ok(!(name in darkVars), `--${name} is the same in dark: inherited, not redeclared`);
+  }
+});
+
+// T47-T2: the @theme inline mappings and the fixed flag colours
+test("T47-T2 the new tokens are Tailwind colours; the flag colours are fixed hexes", () => {
+  const { all } = tokenModes();
+  const inline = Object.assign({}, ...all.filter((b) => b.path.length === 1 && b.path[0] === "@theme inline").map((b) => decls(b.body)));
+  for (const name of ["primary", "primary-ink", "link", "danger", "danger-text"]) {
+    assert.equal(inline[`--color-${name}`], `var(--${name})`, `@theme inline --color-${name}`);
+  }
+  const fixed = Object.assign({}, ...all.filter((b) => b.path.length === 1 && b.path[0] === "@theme").map((b) => decls(b.body)));
+  for (const [name, hex] of Object.entries(FIXED_FLAG)) {
+    assert.equal(fixed[name]?.toLowerCase(), hex, `${name} is a fixed hex`);
+    assert.ok(!(name in inline), `${name} is not a var: the game screen doesn't follow the theme`);
+  }
+});
+
+// T47-C1: ux §3's table as the test. Each ratio must meet its minimum AND equal ux's documented number (to ux's
+// own precision), so a token edit that still passes AA but changes the table shows up as a ux change.
+type Row = { fg: string; bg: string; mode: "light" | "dark" | "fixed"; min: number | null; ux: number; dp: 1 | 2; where: string };
+const UX_TABLE: Row[] = [
+  { fg: "primary-ink", bg: "primary", mode: "light", min: 4.5, ux: 9.22, dp: 2, where: "primary buttons, checked pills, cursor" },
+  { fg: "primary-ink", bg: "primary", mode: "dark", min: 4.5, ux: 9.22, dp: 2, where: "primary buttons, checked pills, cursor" },
+  { fg: "--color-screen-paper", bg: "--color-flag-blue", mode: "fixed", min: 4.5, ux: 9.22, dp: 2, where: "map banners" },
+  { fg: "link", bg: "card", mode: "light", min: 4.5, ux: 9.22, dp: 2, where: "links, Maps, the swap glyph" },
+  { fg: "link", bg: "card", mode: "dark", min: 4.5, ux: 7.44, dp: 2, where: "links, Maps, the swap glyph" },
+  { fg: "link", bg: "background", mode: "light", min: 4.5, ux: 7.5, dp: 2, where: "a link on the page" },
+  { fg: "link", bg: "background", mode: "dark", min: 4.5, ux: 8.42, dp: 2, where: "a link on the page" },
+  { fg: "accent-ink", bg: "accent", mode: "light", min: 4.5, ux: 10.13, dp: 2, where: "Book, stale banner, highlight chip" },
+  { fg: "accent-ink", bg: "accent", mode: "dark", min: 4.5, ux: 10.13, dp: 2, where: "Book, stale banner, highlight chip" },
+  { fg: "danger-text", bg: "card", mode: "light", min: 4.5, ux: 5.26, dp: 2, where: "alert leads, card warnings" },
+  { fg: "danger-text", bg: "card", mode: "dark", min: 4.5, ux: 7.01, dp: 2, where: "alert leads, card warnings" },
+  { fg: "danger-text", bg: "background", mode: "dark", min: 4.5, ux: 7.93, dp: 2, where: "dark only (light is banned, T7)" },
+  { fg: "danger", bg: "frame", mode: "light", min: null, ux: 2.65, dp: 2, where: "the alert lining, decorative (never text, C2)" },
+  { fg: "danger", bg: "frame", mode: "dark", min: null, ux: 4.28, dp: 2, where: "the alert lining, decorative (never text, C2)" },
+  { fg: "frame", bg: "background", mode: "light", min: 3, ux: 11.4, dp: 1, where: "the frame defines every control" },
+  { fg: "frame", bg: "card", mode: "light", min: 3, ux: 13.9, dp: 1, where: "the frame defines every control" },
+  { fg: "frame", bg: "card", mode: "dark", min: 3, ux: 12.1, dp: 1, where: "the frame defines every control" },
+  { fg: "focus", bg: "card", mode: "light", min: 3, ux: 13.9, dp: 1, where: "focus around a Blue or Yellow control" },
+  { fg: "focus", bg: "background", mode: "light", min: 3, ux: 11.4, dp: 1, where: "focus around a Blue or Yellow control" },
+  { fg: "focus", bg: "card", mode: "dark", min: 3, ux: 11.4, dp: 1, where: "focus around a Blue or Yellow control" },
+  { fg: "focus", bg: "background", mode: "dark", min: 3, ux: 12.9, dp: 1, where: "focus around a Blue or Yellow control" },
+];
+
+test("T47-C1 ux §3's contrast table holds, number for number, in both themes", () => {
+  const { lightVars, dark, all } = tokenModes();
+  const fixed = Object.assign({}, ...all.filter((b) => b.path.length === 1 && b.path[0] === "@theme").map((b) => decls(b.body)));
+  for (const row of UX_TABLE) {
+    const vars: Record<string, string> = row.mode === "light" ? lightVars : row.mode === "dark" ? dark : fixed;
+    const [fg, bg] = [vars[row.fg]?.toLowerCase(), vars[row.bg]?.toLowerCase()];
+    assert.ok(fg && bg, `${row.mode}: ${row.fg} and ${row.bg} are set (${row.where})`);
+    const ratio = contrast(fg, bg);
+    const label = `${row.mode} ${row.fg} on ${row.bg} = ${ratio.toFixed(3)} (${row.where})`;
+    if (row.min !== null) assert.ok(ratio >= row.min, `${label}: below ${row.min}`);
+    assert.ok(Math.abs(ratio - row.ux) < (row.dp === 2 ? 0.01 : 0.05), `${label}: ux §3 says ${row.ux}`);
+  }
+});
+
+// T47-C2/C3: every colour pair written in the code is one ux §3 or T4 approved. Class literals are scanned, tokens
+// grouped by variant prefix (has-checked:, md:, …), and each bg-X with a text-Y in the same group is a pair.
+const COLOUR_NAMES = [
+  "background", "foreground", "muted", "card", "frame", "border", "brand", "brand-ink", "accent", "accent-ink", "focus",
+  "primary", "primary-ink", "link", "danger", "danger-text", "screen", "screen-paper", "screen-ink", "screen-muted",
+  "flag-blue", "flag-red", "flag-yellow",
+];
+const colourOf = (token: string, prop: "bg" | "text" | "border") => {
+  const m = token.match(new RegExp(`^${prop}-(.+)$`));
+  return m && COLOUR_NAMES.includes(m[1]) ? m[1] : null;
+};
+/** The colour pairs in one class literal: [fg, bg] for every bg-X and text-Y sharing a variant prefix. */
+function colourPairs(literal: string): [fg: string, bg: string][] {
+  const groups = new Map<string, { bg: string[]; text: string[] }>();
+  for (const token of tokensOf(literal.replace(/^["'`]|["'`]$/g, ""))) {
+    const cut = token.lastIndexOf(":");
+    const [prefix, bareToken] = cut < 0 ? ["", token] : [token.slice(0, cut), token.slice(cut + 1)];
+    const g = groups.get(prefix) ?? { bg: [], text: [] };
+    const bg = colourOf(bareToken, "bg");
+    const text = colourOf(bareToken, "text");
+    if (bg) g.bg.push(bg);
+    if (text) g.text.push(text);
+    groups.set(prefix, g);
+  }
+  return [...groups.values()].flatMap((g) => g.text.flatMap((fg) => g.bg.map((bg) => [fg, bg] as [string, string])));
+}
+const APPROVED_PAIRS = new Set([
+  ...TEXT_PAIRS.map(([fg, bg]) => `${fg}/${bg}`),
+  ...SCREEN_PAIRS.map(([fg, bg]) => `${fg.replace("--color-", "")}/${bg.replace("--color-", "")}`),
+]);
+// ux §3 rules, per file: red text only where ux puts it (alert leads and the card warning lines)
+const DANGER_TEXT_FILES = ["src/components/pixel/classes.ts", "src/components/TripCard.tsx", "src/components/LegCard.tsx",
+  "src/components/PlanResults.tsx", "src/components/ItineraryView.tsx", "src/components/ItineraryList.tsx", "src/components/LastMile.tsx"];
+
+test("T47-C2 every colour pair in the code is approved; red text and Blue links only where ux puts them", async () => {
+  const { PX } = await loadPixel();
+  const sources: [string, string[]][] = [
+    ...tsxFiles().filter((u) => !inPixel(u)).map((u) => [relative(u), stringLiterals(readFileSync(u, "utf8"))] as [string, string[]]),
+    ["src/components/pixel/classes.ts", flatPX(PX).map(([, v]) => v)],
+  ];
+  for (const [file, literals] of sources) {
+    for (const literal of literals) {
+      for (const [fg, bg] of colourPairs(literal)) {
+        assert.ok(APPROVED_PAIRS.has(`${fg}/${bg}`), `${file}: text-${fg} on bg-${bg} isn't a ux §3 / T4 pair: ${literal}`);
+      }
+      const t = tokensOf(literal.replace(/^["'`]|["'`]$/g, "")).map(bare);
+      if (t.includes("text-danger-text")) assert.ok(DANGER_TEXT_FILES.includes(file), `${file}: red text outside ux's places: ${literal}`);
+      if (t.includes("text-link")) {
+        assert.ok(!t.some((x) => ["bg-primary", "bg-danger", "bg-accent"].includes(x)), `${file}: a link on a flag fill: ${literal}`);
+      }
+      if (t.includes("bg-danger")) {
+        assert.ok(!t.some((x) => colourOf(x, "text")), `${file}: bg-danger is never a text surface: ${literal}`);
+      }
+    }
+  }
+});
+
+test("T47-C3 the pair scanner finds pairs per variant group and ignores sizes", () => {
+  assert.deepEqual(colourPairs('"bg-primary text-primary-ink"'), [["primary-ink", "primary"]]);
+  assert.deepEqual(colourPairs('"has-checked:bg-primary has-checked:text-primary-ink bg-card"'), [["primary-ink", "primary"]]);
+  assert.deepEqual(colourPairs('"bg-card text-sm text-center font-bold"'), []);
+  assert.deepEqual(colourPairs('"bg-primary text-link"'), [["link", "primary"]]);
+  assert.ok(!APPROVED_PAIRS.has("link/primary"), "a link on Blue is not approved");
+  assert.ok(!APPROVED_PAIRS.has("danger-text/background"), "red text on the Mint page is not approved");
+  assert.ok(APPROVED_PAIRS.has("screen-paper/flag-blue"), "the map banner pair is approved");
+});
+
+// T47-F1: no literal flag (RA 8491, ux §0.5)
+const BLUE = ["primary", "flag-blue", "link"];
+const RED = ["danger", "danger-text", "flag-red"];
+const YELLOW = ["accent", "flag-yellow"];
+function flagProblems(literal: string): string[] {
+  const t = tokensOf(literal.replace(/^["'`]|["'`]$/g, "")).map(bare);
+  const families = new Set<string>();
+  for (const x of t) {
+    const c = colourOf(x, "bg") ?? colourOf(x, "border") ?? (x.startsWith("shadow-[") && /var\(--danger\)/.test(x) ? "danger" : null);
+    if (!c) continue;
+    if (BLUE.includes(c)) families.add("blue");
+    if (RED.includes(c)) families.add("red");
+    if (YELLOW.includes(c) && (x.includes("flag-") || families.size)) families.add("yellow");
+  }
+  const out: string[] = [];
+  if (families.has("blue") && families.has("red")) out.push("Blue and Red fills or borders in one element");
+  const flagFills = t.filter((x) => /^(bg|border)-flag-/.test(x));
+  if (new Set(flagFills.map((x) => x.replace(/^(bg|border)-/, ""))).size > 1) out.push("two flag colours in one element");
+  return out;
+}
+
+test("T47-F1 no element combines flag colours; no flag gradient, triangle or sun on Blue or Red", async () => {
+  const { PX } = await loadPixel();
+  for (const url of tsxFiles()) {
+    const source = readFileSync(url, "utf8");
+    for (const literal of stringLiterals(source)) assert.deepEqual(flagProblems(literal), [], `${relative(url)}: ${literal}`);
+    assert.doesNotMatch(source, /linear-gradient/i, `${relative(url)}: no gradients`);
+    for (const m of source.matchAll(/<([A-Za-z][\w.]*)\b[^>]*\bbg-(primary|flag-blue|danger|flag-red)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
+      assert.doesNotMatch(m[3], /deco-sun-stars/, `${relative(url)}: the sun and stars on a Blue or Red field`);
+    }
+  }
+  for (const [path, value] of flatPX(PX)) assert.deepEqual(flagProblems(value), [], `PX.${path}`);
+  const css = read("src/app/globals.css");
+  assert.doesNotMatch(css, /linear-gradient[^;]*(#0038a8|#ce1126|#fcd116|flag-)/i, "no flag gradient");
+  for (const m of css.matchAll(/polygon\(([^)]*)\)/g)) {
+    assert.ok(m[1].split(",").length !== 3, `no triangle clip-path: polygon(${m[1]})`);
+  }
+  // the checker itself
+  assert.deepEqual(flagProblems('"bg-primary border-flag-red"'), ["Blue and Red fills or borders in one element"]);
+  assert.deepEqual(flagProblems('"bg-flag-blue border-flag-yellow"'), ["two flag colours in one element"]);
+  assert.deepEqual(flagProblems('"pixel-box bg-card shadow-[inset_0_0_0_6px_var(--danger)]"'), [], "the Red lining alone is fine");
+  assert.deepEqual(flagProblems('"bg-primary shadow-[inset_0_0_0_6px_var(--danger)]"'), ["Blue and Red fills or borders in one element"]);
+});
+
+// The colour PRs keep classes.ts's rule in its header, now with Blue (ux §5)
+test("T47-B1 classes.ts says never to put a control on a Blue surface; PixelBox takes the alert tones", () => {
+  assert.match(read(`${PIXEL}classes.ts`), /Never put a control on a bg-accent, bg-brand or bg-primary surface/);
+  const box = primitive("PixelBox");
+  assert.match(box, /tone\?: "alert" \| "alertText"/);
+  assert.match(box, /cx\(PX\.box\.skin, tone && PX\.box\[tone\], className \?\? PX\.box\.layout\)/, "a tone joins the skin, never the layout");
 });

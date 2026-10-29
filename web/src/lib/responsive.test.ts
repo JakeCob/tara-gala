@@ -177,7 +177,7 @@ test("TG44-L1 /baguio: the picker is capped, the destination groups are a grid f
   assert.match(src, /<p className="text-sm text-muted md:max-w-prose">Loading routes\.\.\.<\/p>/);
   assert.match(src, /<p className="text-sm text-muted md:max-w-prose">\{legs\[0\]\.confirm_note\}<\/p>/);
   assert.match(src, /<PixelBox as="p" className="p-4 text-sm md:max-w-prose">No routes on file yet/);
-  assert.match(src, /<p className="md:max-w-prose">Could not reach the server/);
+  assert.match(src, /<p className="md:max-w-prose text-danger-text">Could not reach the server/); // TG-47: the red lead
   assert.match(read("src/app/baguio/page.tsx"), /<p className="text-sm text-muted md:max-w-prose">Jeeps, taxis and walks/);
 });
 

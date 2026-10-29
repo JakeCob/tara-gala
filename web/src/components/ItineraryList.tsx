@@ -49,8 +49,8 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
       </PixelBox>
 
       {it.issues.length > 0 && (
-        <PixelBox as="section" aria-label="Plan changes" className="p-4 flex flex-col gap-1">
-          <p className="text-sm font-bold">Some of this plan has changed since it was saved.</p>
+        <PixelBox as="section" aria-label="Plan changes" tone="alert" className="p-4 flex flex-col gap-1">
+          <p className="text-sm font-bold text-danger-text">Some of this plan has changed since it was saved.</p>
           <p className="text-sm">Check the marked buses and stops before you go.</p>
         </PixelBox>
       )}
@@ -90,8 +90,8 @@ function BusSection({ title, leg, issues }: { title: string; leg: BusLegOut; iss
           <p className={PX.meta}>{leg.trip.confirm_note}</p>
         </>
       ) : (
-        <PixelBox className="p-4 flex flex-col items-start gap-3">
-          <p className="text-sm">{issueNotice("unknown_trip")}</p>
+        <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
+          <p className="text-sm text-danger-text">{issueNotice("unknown_trip")}</p>
           <PixelLink variant="secondary" href="/">
             Search buses
           </PixelLink>

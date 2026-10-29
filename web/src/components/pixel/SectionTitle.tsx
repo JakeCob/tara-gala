@@ -4,7 +4,7 @@ import { PX, cx } from "./classes";
 type Props = {
   as?: "h2" | "h3" | "legend" | "label";
   /** On the fixed game screen, which stays light in dark mode (guide 1.3) */
-  onScreen?: boolean;
+  onScreen?: boolean | "banner";
   htmlFor?: string;
   id?: string;
   className?: string;
@@ -17,7 +17,7 @@ export function SectionTitle({ as: Tag = "h2", onScreen, htmlFor, id, className,
     <Tag
       id={id}
       htmlFor={Tag === "label" ? htmlFor : undefined}
-      className={cx(PX.h2, onScreen ? "text-screen-ink" : "text-foreground", className)}
+      className={cx(PX.h2, onScreen === "banner" ? "text-screen-paper" : onScreen ? "text-screen-ink" : "text-foreground", className)}
     >
       {children}
     </Tag>

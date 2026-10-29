@@ -23,8 +23,8 @@ export function PlanErrorBox(props: {
   const { view, busy } = props;
   const premade = showPremadeAction(view, props.flags);
   return (
-    <PixelBox className="p-4 flex flex-col items-start gap-3">
-      <p className="text-sm">{view.message}</p>
+    <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
+      <p className="text-sm text-danger-text">{view.message}</p>
       {(view.retry || premade) && (
         <div className="flex flex-wrap gap-2">
           {view.retry && (
@@ -62,7 +62,7 @@ function TripCard({ trip, date, returnDate }: { trip: PremadeSummary; date: stri
       <h3 id={titleId} className={`${PX.dataHeading} min-w-0 break-words`}>
         {card.title}
       </h3>
-      {card.matches && <span className={PX.chip}>{LIST.match}</span>}
+      {card.matches && <span className={PX.chipHighlight}>{LIST.match}</span>}
       <p className="text-sm tabular-nums">{card.dates}</p>
       {card.places && <p className="text-sm min-w-0 break-words">{card.places}</p>}
       {card.budget && <p className={`${PX.meta} tabular-nums`}>{card.budget}</p>}
@@ -91,8 +91,8 @@ export function PremadeResults(props: { premade: PremadeView; date: string; retu
   if (premade.kind === "failed") {
     return (
       <div ref={top}>
-        <PixelBox className="p-4 flex flex-col items-start gap-3">
-          <p className="text-sm">{LIST.failed}</p>
+        <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
+          <p className="text-sm text-danger-text">{LIST.failed}</p>
           <PixelButton variant="secondary" aria-disabled={props.busy} onClick={() => !props.busy && props.onRetry()}>
             {PLAN_COPY.actions.tryAgain}
           </PixelButton>
