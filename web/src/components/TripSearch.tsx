@@ -112,7 +112,7 @@ export default function TripSearch() {
           empty:-mt-4 cancels its gap before the first status without hiding it (display:none would drop the live region) */}
       <div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">
         {status === "error" && (
-          <PixelBox as="p" className="p-4 text-sm">
+          <PixelBox as="p" tone="alertText" className="p-4 text-sm">
             Could not reach the schedule server. Check your connection and try again.
           </PixelBox>
         )}

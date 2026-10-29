@@ -69,8 +69,8 @@ export default function ItineraryView({ slug }: { slug: string }) {
       {state.kind === "loading" && <p className="text-sm text-muted">{LOADING}</p>}
       {state.kind === "found" && <ItineraryList itinerary={state.itinerary} map={flags.overworldMap} />}
       {state.kind === "notfound" && (
-        <PixelBox className="p-4 flex flex-col items-start gap-3">
-          <p className="text-sm font-bold">{NOT_FOUND}</p>
+        <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
+          <p className="text-sm font-bold text-danger-text">{NOT_FOUND}</p>
           <p className="text-sm">{NOT_FOUND_BODY}</p>
           <PixelLink variant="secondary" href="/">
             Search buses
@@ -78,8 +78,8 @@ export default function ItineraryView({ slug }: { slug: string }) {
         </PixelBox>
       )}
       {state.kind === "error" && (
-        <PixelBox className="p-4 flex flex-col items-start gap-3">
-          <p className="text-sm">{ERROR}</p>
+        <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
+          <p className="text-sm text-danger-text">{ERROR}</p>
           <PixelButton variant="secondary" aria-disabled={state.retrying || undefined} onClick={retry}>
             {state.retrying ? "Loading..." : "Try again"}
           </PixelButton>

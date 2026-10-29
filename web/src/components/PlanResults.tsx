@@ -23,8 +23,8 @@ export function PlanErrorBox(props: {
   const { view, busy } = props;
   const premade = showPremadeAction(view, props.flags);
   return (
-    <PixelBox className="p-4 flex flex-col items-start gap-3">
-      <p className="text-sm">{view.message}</p>
+    <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
+      <p className="text-sm text-danger-text">{view.message}</p>
       {(view.retry || premade) && (
         <div className="flex flex-wrap gap-2">
           {view.retry && (
@@ -91,8 +91,8 @@ export function PremadeResults(props: { premade: PremadeView; date: string; retu
   if (premade.kind === "failed") {
     return (
       <div ref={top}>
-        <PixelBox className="p-4 flex flex-col items-start gap-3">
-          <p className="text-sm">{LIST.failed}</p>
+        <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
+          <p className="text-sm text-danger-text">{LIST.failed}</p>
           <PixelButton variant="secondary" aria-disabled={props.busy} onClick={() => !props.busy && props.onRetry()}>
             {PLAN_COPY.actions.tryAgain}
           </PixelButton>

@@ -59,8 +59,8 @@ export default function LastMile() {
           <PixelBox as="p" className="p-4 text-sm md:max-w-prose">No routes on file yet for this terminal.</PixelBox>
         )}
         {status === "error" && (
-          <PixelBox className="p-4 text-sm flex flex-col items-start gap-3">
-            <p className="md:max-w-prose">Could not reach the server. Check your connection and try again.</p>
+          <PixelBox tone="alert" className="p-4 text-sm flex flex-col items-start gap-3">
+            <p className="md:max-w-prose text-danger-text">Could not reach the server. Check your connection and try again.</p>
             <PixelButton
               variant="secondary"
               onClick={() => {
