@@ -10,7 +10,7 @@ import {
   searchReducer,
   swapLabel,
 } from "@/lib/direction";
-import { PX, PixelBox, PixelButton } from "@/components/pixel";
+import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
 import TripCard from "@/components/TripCard";
 
 const subscribeNothing = () => () => {};
@@ -37,7 +37,8 @@ export default function TripSearch() {
   const { originCity, destinationCity } = endpoints(direction);
 
   // A link to the date input (TG-46's "Find buses" quick action) moves focus there too: next/link's in-page jump only
-  // scrolls, so a keyboard user would Tab on from the link. Enter on a link fires click as well.
+  // scrolls, so a keyboard user would Tab on from the link. Enter on a link fires click as well. The input's scroll-mt-24
+  // keeps its label, and the sticky offline banner, clear of it after the jump.
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (!(e.target instanceof Element) || !e.target.closest(`a[href="#${DATE_ID}"]`)) return;
@@ -98,7 +99,7 @@ export default function TripSearch() {
               setCleared(e.target.value === "");
               dispatch({ type: "pickDate", date: e.target.value });
             }}
-            className={PX.input}
+            className={cx(PX.input, "scroll-mt-24")}
             required
           />
         </label>

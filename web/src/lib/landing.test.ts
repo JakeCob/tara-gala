@@ -141,6 +141,14 @@ test("T46-L8 activating Find buses moves focus to the date input, not just the s
   assert.match(source(sectionPath("QuickActions")), /<PixelCardLink href="#travel-date"/);
 });
 
+test("T46-L9 the jump leaves room above the date input for its label and the sticky offline banner (manager follow-up)", () => {
+  // scroll-mt-24 is 96px: the banner is 58px at 380 (two lines) and the "Travel date" row about 24px
+  const src = source("src/components/TripSearch.tsx");
+  const input = src.match(/<input\b[^>]*\bid="travel-date"[\s\S]*?\/>/)?.[0] ?? "";
+  assert.ok(input, "the date input");
+  assert.match(input, /className=\{cx\(PX\.input, "scroll-mt-24"\)\}/);
+});
+
 test("T46-L4 the hero: a fixed light screen with decorative art; its text is screen-ink", () => {
   const src = source(sectionPath("Hero"));
   assert.doesNotMatch(src, /use client|\buse(State|Effect|Ref|Memo|Callback|Reducer|SyncExternalStore)\b/, "a server component");
