@@ -35,15 +35,17 @@ const PLACES = ["terminal", "lodging", "park", "food", "market", "museum", "view
 const VEHICLES = ["vehicle-bus", "mode-jeep", "mode-taxi", "mode-tricycle", "mode-van", "mode-grab"];
 const OPAQUE_TILES = ["tile-grass", "tile-path-straight", "tile-path-corner", "tile-road", "tile-water"];
 
-// The 2026-10-29 art drop (_team/tickets/TG-33/art-drop.md): these 36 ship as PNG (the owner's SHIP-AS-PNG.txt),
-// and these 7 stay hand-made SVG (AI output too noisy, or seamless map tiles the map tests rely on).
+// The 2026-10-29 art drop (_team/tickets/TG-33/art-drop.md): these 35 ship as PNG (the owner's SHIP-AS-PNG.txt),
+// and these 8 stay hand-made SVG (AI output too noisy or unclear, or seamless map tiles the map tests rely on).
 const ART_DROP = [
   ...TYPES.flatMap((t) => FRAMES.map((f) => `chibi-${t}-${f}`)),
-  "logo-wordmark", "mode-grab", "mode-jeep", "mode-taxi", "mode-tricycle", "mode-van", "mode-walk",
+  "logo-wordmark", "mode-grab", "mode-jeep", "mode-taxi", "mode-tricycle", "mode-walk",
   ...PLACES.map((p) => `place-${p}`),
   "tile-mountain", "tile-pine", "ui-badge-verified", "ui-heart", "ui-star", "vehicle-bus",
 ];
-const KEPT_SVG = ["ui-dialog-frame", "ui-cursor", "tile-grass", "tile-path-straight", "tile-path-corner", "tile-road", "tile-water"];
+const KEPT_SVG = [
+  "ui-dialog-frame", "ui-cursor", "tile-grass", "tile-path-straight", "tile-path-corner", "tile-road", "tile-water", "mode-van",
+];
 const PNG_CHUNKS = ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"]; // nothing else: no text, time or colour-profile metadata
 
 // ux.md section 1: art-list entries that are not shipped as sprites, each with its reason.
@@ -206,9 +208,9 @@ test("the app icons are the art-drop icon: 512, 192 and 180 PNGs in the 6-colour
 
 // --- T33-19 the art drop ------------------------------------------------------------------------------
 
-test("PNG_ART is exactly the 36 art-drop names; the 7 kept placeholders stay SVG", () => {
+test("PNG_ART is exactly the 35 art-drop names; the 8 kept placeholders stay SVG", () => {
   const names = manifestNames();
-  assert.equal(ART_DROP.length, 36);
+  assert.equal(ART_DROP.length, 35);
   assert.deepEqual([...ART_DROP, ...KEPT_SVG].sort(), [...names].sort(), "art drop + kept SVG = the manifest");
   assert.deepEqual([...PNG_ART].sort(), [...ART_DROP].sort());
   for (const name of KEPT_SVG) assert.equal(spriteSrc(name as SpriteName), `/sprites/${name}.svg`);
@@ -226,6 +228,32 @@ test("every art-drop PNG is its manifest size, palette colours only, alpha 0 or 
       assert.deepEqual(paletteProblems(png, PALETTE_HEXES), []);
       assert.deepEqual(png.chunks.filter((c) => !PNG_CHUNKS.includes(c)), [], "metadata chunks");
       assert.ok(png.pixels.some(([, , , a]) => a === 255), "draws something");
+    });
+  }
+});
+
+test("each art-drop idle-2 is its idle-1 one pixel lower", async (t) => {
+  const clear = (p: number[]) => (p[3] === 0 ? "." : p.join(","));
+  for (const type of TYPES) {
+    await t.test(type, () => {
+      const [one, two] = ["idle-1", "idle-2"].map((f) => decodePng(readFileSync(join(SPRITE_DIR, `chibi-${type}-${f}.png`))));
+      const w = one.w;
+      const lowered = [...Array(w).fill([0, 0, 0, 0]), ...one.pixels.slice(0, -w)];
+      assert.deepEqual(two.pixels.map(clear), lowered.map(clear));
+    });
+  }
+});
+
+// UX review S1: the AI hair had Leaf speckles; rows 8-19 (hat brim, hair and face) carry no Leaf in the fixed art.
+test("the senior's hair and face have no Leaf speckles (rows 8-19 of idle-1 and wave)", async (t) => {
+  for (const name of ["chibi-senior-idle-1", "chibi-senior-wave"]) {
+    await t.test(name, () => {
+      const png = decodePng(readFileSync(join(SPRITE_DIR, `${name}.png`)));
+      const leaf = png.pixels.flatMap(([r, g, b, a], i) => {
+        const y = Math.floor(i / png.w);
+        return a === 255 && y >= 8 && y <= 19 && r === 0x5f && g === 0xb3 && b === 0x6b ? [`(${i % png.w},${y})`] : [];
+      });
+      assert.deepEqual(leaf, []);
     });
   }
 });
