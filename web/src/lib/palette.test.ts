@@ -29,7 +29,14 @@ function gitOk(...args: string[]): boolean {
   }
 }
 /** The branch's base: where it left origin/main, so a main that moved on doesn't count as this PR's change. */
-const mergeBase = () => git("merge-base", "origin/main", "HEAD").trim();
+const mergeBase = () => {
+  try {
+    return git("merge-base", "origin/main", "HEAD").trim();
+  } catch {
+    // CI's shallow checkout of the PR merge commit has no merge base, but there HEAD is main + the PR: diff origin/main
+    return "origin/main";
+  }
+};
 /** The file at the base, or null when it's new. */
 function base(path: string): string | null {
   try {
