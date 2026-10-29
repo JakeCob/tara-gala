@@ -244,6 +244,29 @@ test("TG44-P1 the fence's normaliser catches what it must (self-test)", () => {
   assert.deepEqual(classStrings("<PageShell>", "x y md:z").map(phone), ["x y"]);
 });
 
+// RED audit gap A: P1 compares class strings only, so it can't see a new element (a wrapper with only responsive
+// classes, or an unclassed <div>). This is P1's element half. tg-test3's prototype, as given.
+/** Every JSX element a phone sees: tag names, skipping bare `contents` wrappers and counting <PageShell> as <main>.
+ *  Non-JSX `<x` (TS generics) is the same text on both sides, so it cancels out. */
+function phoneElements(source: string): string[] {
+  const out: string[] = [];
+  for (const m of source.matchAll(/<([A-Za-z][\w.]*)\b((?:[^>"'{]|"[^"]*"|'[^']*'|\{(?:[^{}]|\{[^{}]*\})*\})*)\/?>/g)) {
+    const [, tag, attrs] = m;
+    const cls = attrs.match(/className="([^"]*)"/)?.[1];
+    if (tag === "div" && cls !== undefined && phone(cls) === "contents") continue;
+    out.push(tag === "PageShell" ? "main" : tag);
+  }
+  return out.sort();
+}
+test("TG44-P1b no element appears or disappears for a phone (PR-scoped fence)", (t) => {
+  if (fenceSkipped(t)) return;
+  for (const path of CHANGED) {
+    const was = base(path);
+    assert.ok(was !== null, path);
+    assert.deepEqual(phoneElements(read(path)), phoneElements(was), `${path}: a phone sees the same elements`);
+  }
+});
+
 // ---- P2, P3, P4: permanent fences ----
 
 test("TG44-P2 only md, lg and xl breakpoints; nothing is hidden or shown by width", () => {
@@ -321,4 +344,16 @@ test("TG44-X2 the only existing test edited is pixelTheme.test.ts, with exactly 
   assert.deepEqual(removed, [H1_OLD], "only the h1 line is replaced");
   assert.equal(added.length, ALLOWED_ADDED.length, `added lines: ${added.join(" | ")}`);
   for (const re of ALLOWED_ADDED) assert.ok(added.some((l) => re.test(l)), `an added line matches ${re}`);
+});
+
+// RED audit gap B: P1 only covers its 10 files, so a phone change elsewhere (TripCard, a pixel primitive) would pass.
+// tg-test3's prototype, as given.
+test("TG44-X3 only plan §2.4's files change under web/src (PR-scoped fence)", (t) => {
+  if (fenceSkipped(t)) return;
+  const allowed = new Set([...SCOPE, "src/components/pixel/index.ts", "src/lib/responsive.test.ts", "src/lib/pixelTheme.test.ts"].map((p) => `web/${p}`));
+  const changed = [
+    ...git("diff", "--name-only", "origin/main", "--", "../web/src").split("\n"),
+    ...git("ls-files", "--others", "--exclude-standard", "--", "../web/src").split("\n").map((f) => `web/${f}`),
+  ].filter((f) => f && f !== "web/");
+  for (const f of changed) assert.ok(allowed.has(f), `${f} is outside plan §2.4`);
 });
