@@ -145,13 +145,27 @@ test("T15-G5 stage is decorative and gets sprites only from the manifest", () =>
     assert.match(img, /alt=""/, img);
     assert.match(img, /pixelated/, img);
   }
-  assert.match(stage, /spriteSrc\(chibi\(/);
   assert.match(stage, /spriteSrc\("tile-grass"\)/);
   assert.match(stage, /spriteSrc\("ui-star"\)/);
   assert.doesNotMatch(stage, /\/sprites\//);
-  assert.match(stage, /isPickerType\([^)]*\)\s*\?\s*spriteSrc\(chibi\(/, "child and unknown types get a tag only (T15-SP5, audit N1)");
-  assert.equal((stage.match(/spriteSrc\(chibi\(/g) ?? []).length, 1, "the only chibi src is the guarded one");
+  // TG-48: each passenger is drawn in its own look, by its ordinal among passengers of the same type
+  assert.equal((stage.match(/\bpartyLooks\(party\)/g) ?? []).length, 1, "partyLooks(party) is called once");
+  assert.match(stage, /\blook\s*\?\s*spriteSrc\(chibiLook\(look, live \? live\.frame : "idle-1"\)\)/,
+    "child and unknown types (no look) get a tag only (T15-SP5, audit N1); the spawn frame drives the look's frame");
+  assert.equal((stage.match(/spriteSrc\(chibiLook\(/g) ?? []).length, 1, "the only chibi src is the guarded look");
+  assert.doesNotMatch(stage, /spriteSrc\(chibi\(/, "the stage no longer draws the classic type chibi");
   assert.match(stage, /\{src && \(/, "the chibi img renders only with a src");
+  // Each passenger gets its own look: the i-th of partyLooks, in party order (tg-test3 RED audit: looks[0] / reversed survived)
+  assert.match(stage, /\{party\.map\(\(p, i\) => \{[^}]*?const look = looks\[i\];/, "passenger i is drawn as looks[i]");
+  // Review finding 2 (manager: yes): a look that fails to load hides itself, as TG-45's Sprite does
+  const chibiImg = imgs.find((img) => /src=\{src\}/.test(img)) ?? "";
+  assert.match(chibiImg, /width=\{64\}/);
+  assert.match(chibiImg, /height=\{64\}/);
+  assert.match(chibiImg, /draggable=\{false\}/);
+  assert.match(chibiImg, /onError=\{/, "the chibi img has an onError");
+  assert.match(chibiImg, /style\.visibility\s*=\s*"hidden"/, "a failed look hides itself (no broken-image icon)");
+  assert.match(chibiImg, /console\.warn\("\[tg-party\] sprite failed/, "and logs it");
+  assert.match(stage, /tagLabel\(p\.type\)/, "the tag stays the type");
   assert.match(stage, /\bPX\.screenTag\b/);
   assert.match(root, /pixel-frame bg-screen\b/, "the stage is the fixed game screen (guide 1.3)");
   assert.doesNotMatch(stage, /\bUI\./);
@@ -174,7 +188,20 @@ test("T15-G7 row chibi is 32px on a screen-paper plate", () => {
     assert.match(i, /width=\{32\}\s+height=\{32\}/, i);
     assert.match(i, /className="pixelated block"/, i);
   }
-  assert.match(picker, /spriteSrc\(chibi\([^)]*"idle-1"\)\)/);
+  // TG-48 ux.md §2 (as corrected at the H1 re-check): each row shows one fixed look from the new set, 2 Kayumanggi
+  // (casual-f, pwd-woman) and 2 Light (student-girl, lolo); never the classic TG-33 chibi and never "the next look"
+  const table = picker.match(/const ROW_ICON = (\{[^}]*\}) as const satisfies Record<PassengerType, ChibiLook>;/);
+  assert.ok(table, "ROW_ICON is a const table typed Record<PassengerType, ChibiLook>");
+  assert.deepEqual(JSON.parse(table[1].replace(/(\w+):/g, '"$1":')), {
+    adult: "adult-casual-f", student: "student-girl", senior: "senior-lolo", pwd: "pwd-woman",
+  });
+  assert.match(picker, /spriteSrc\(chibiLook\(ROW_ICON\[t\], "idle-1"\)\)/);
+  assert.doesNotMatch(picker, /spriteSrc\(chibi\(/, "the row no longer shows the classic chibi");
+  assert.doesNotMatch(picker, /lookFor\(t, n\[t\]\)\s*!?\s*,\s*"idle-1"/, "the row icon is not the next look");
+  // the row is still named by the type
+  assert.match(picker, /\{TYPE_LABEL\[t\]\}/);
+  assert.match(picker, /aria-label=\{addLabel\(t\)\}/);
+  assert.match(picker, /aria-label=\{removeLabel\(t\)\}/);
 });
 
 // T15-G8: motion
@@ -275,4 +302,65 @@ test("T15-X2 no animation or motion package", () => {
   for (const n of names) {
     assert.doesNotMatch(n, /motion|gsap|spring|lottie|anime|animate|tailwind-merge/, n);
   }
+});
+
+// --- TG-48 wiring guards -------------------------------------------------------------------------------------
+
+const map = read("src/components/OverworldMap.tsx");
+const componentFiles = walk(new URL("src/", WEB)).filter((u) => /\.(tsx|ts)$/.test(u.pathname) && !/\.test\.ts$|testutil/.test(u.pathname));
+
+test("T48-W1 the map party gets its looks through PartyStage, with no chibi names of its own", () => {
+  assert.match(map, /<PartyStage party=\{itinerary\.party\}/);
+  assert.doesNotMatch(map, /\bchibiLook\b/);
+  assert.doesNotMatch(map, /\bchibi\(/);
+});
+
+test("T48-W2 only PartyStage and PartyPicker call chibiLook, and no component spells out a chibi- sprite name", () => {
+  const callers = componentFiles.filter((u) => /\bchibiLook\(/.test(readFileSync(u, "utf8"))).map((u) => u.pathname.split("/src/")[1]);
+  assert.deepEqual(callers.filter((f) => !f.startsWith("lib/")).sort(), ["components/PartyPicker.tsx", "components/PartyStage.tsx"]);
+  for (const u of componentFiles.filter((x) => /\/(components|app)\//.test(x.pathname))) {
+    assert.doesNotMatch(readFileSync(u, "utf8"), /["'`]chibi-/, u.pathname);
+  }
+});
+
+test("T48-W3 the stage, the map party and the share page all take looks from partyLooks(party), and looks are never stored or sent", () => {
+  assert.doesNotMatch(stage, /useState[^\n]*look/i, "no look held in state");
+  for (const [name, src] of Object.entries({ "PartyStage.tsx": stage, "PartyPicker.tsx": picker })) {
+    assert.doesNotMatch(src, /localStorage|sessionStorage|indexedDB/, `${name}: the stage and picker never store anything`);
+  }
+  for (const [name, src] of Object.entries({ ...NEW_UI, "OverworldMap.tsx": map })) {
+    assert.doesNotMatch(src, /localStorage[^\n]*look|look[^\n]*localStorage/i, `${name}: a look in localStorage`);
+  }
+  const planForm = read("src/lib/planForm.ts");
+  assert.match(planForm, /party:\s*party\.map\(\(p\) => \(\{ type: p\.type \}\)\)/, "the plan request's party is still type-only (TG-20 extra=forbid)");
+  assert.doesNotMatch(planForm, /\blook/i);
+});
+
+test("T48-T2 look ids never reach the screen or the accessibility tree", () => {
+  for (const [name, src] of Object.entries({ "PartyStage.tsx": stage, "PartyPicker.tsx": picker })) {
+    assert.doesNotMatch(src, /\{\s*looks?\s*\}/, `${name}: a look rendered as text`);
+    assert.doesNotMatch(src, /\{\s*looks\[/, `${name}: a look rendered as text`);
+    assert.doesNotMatch(src, /(alt|aria-label|title|data-[\w-]+)=\{[^}]*\blooks?\b/, `${name}: a look in an attribute`);
+  }
+  // Allow-list: the only lines that touch a look (tg-test3 RED audit: {look ?? ""} and a derived word survived)
+  const ALLOWED: Record<string, RegExp[]> = {
+    "PartyStage.tsx": [/^const looks = partyLooks\(party\);$/, /^const look = looks\[i\];$/,
+      /^const src = look \? spriteSrc\(chibiLook\(look, live \? live\.frame : "idle-1"\)\) : null;$/],
+    "PartyPicker.tsx": [/^console\.info\(`\[tg-party\] add type=\$\{t\} size=\$\{next\.length\} look=\$\{lookFor\(t, n\[t\]\)\}`\);$/],
+  };
+  for (const [name, src] of Object.entries({ "PartyStage.tsx": stage, "PartyPicker.tsx": picker })) {
+    for (const line of src.split("\n").map((l) => l.trim()).filter((l) => /\blooks?\b/.test(l) && !/^(\/\/|\*|\/\*)/.test(l))) {
+      assert.ok(ALLOWED[name].some((re) => re.test(line)), `${name}: a look is used outside the allowed lines: ${line}`);
+    }
+  }
+  // ROW_ICON holds look ids too (ux.md §2): only its definition and the row img may name it
+  const rowIcon = picker.split("\n").map((l) => l.trim()).filter((l) => /\bROW_ICON\b/.test(l) && !/^(\/\/|\*|\/\*)/.test(l));
+  for (const line of rowIcon) {
+    assert.ok(/^const ROW_ICON = \{/.test(line) || /^<img src=\{spriteSrc\(chibiLook\(ROW_ICON\[t\], "idle-1"\)\)\}/.test(line),
+      `PartyPicker.tsx: ROW_ICON is used outside its definition and the row img: ${line}`);
+  }
+});
+
+test("T48 the picker's add log names the look the new passenger gets", () => {
+  assert.match(picker, /console\.info\(`\[tg-party\] add type=\$\{t\} size=\$\{next\.length\} look=\$\{lookFor\(t, n\[t\]\)\}`\)/);
 });

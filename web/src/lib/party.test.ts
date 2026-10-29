@@ -18,9 +18,11 @@ import {
   partySummary,
   remove,
   removeLabel,
+  tagLabel,
   type Party,
 } from "./party.ts";
 import { PASSENGER_TYPES, type PassengerType } from "./sprites.ts";
+import * as partyModule from "./party.ts";
 
 const source = readFileSync(new URL("./party.ts", import.meta.url), "utf8");
 
@@ -314,4 +316,136 @@ test("T15-L6 tagLabel names picker types, child, and anything else as Other", as
   assert.deepEqual(PICKER_TYPES.map(tagLabel), ["Adult", "Student", "Senior", "PWD"]);
   assert.equal(tagLabel("child"), "Child");
   for (const t of ["", "<b>x</b>", "constructor", "Adult"]) assert.equal(tagLabel(t), "Other", JSON.stringify(t));
+});
+
+// --- TG-48: each passenger's look, by its ordinal among passengers of the same type ---------------------------
+// Reached through the namespace, so a missing export fails only these tests (RED), not the whole file.
+type LookApi = {
+  LOOKS?: Readonly<Record<string, readonly string[]>>;
+  lookFor?: (type: string, index: number) => string | null;
+  partyLooks?: (p: readonly { type: string }[]) => (string | null)[];
+};
+const api = partyModule as unknown as LookApi;
+function lookFor(type: string, index: number): string | null {
+  assert.equal(typeof api.lookFor, "function", "party.ts exports lookFor");
+  return api.lookFor!(type, index);
+}
+function partyLooks(p: readonly { type: string }[]): (string | null)[] {
+  assert.equal(typeof api.partyLooks, "function", "party.ts exports partyLooks");
+  return api.partyLooks!(p);
+}
+
+// Manager decision on review-plan finding 3: the first adult is a casual look, and genders alternate
+const EXPECTED_LOOKS = {
+  adult: ["adult-casual-f", "adult-casual-m", "adult-filipiniana", "adult-barong"],
+  student: ["student-girl", "student-boy"],
+  senior: ["senior-lola", "senior-lolo"],
+  pwd: ["pwd-woman", "pwd-man"],
+};
+
+test("T48-L1 LOOKS is the ticket table in the agreed order; every look is unique and starts with its type", () => {
+  assert.deepEqual(api.LOOKS, EXPECTED_LOOKS);
+  const all = Object.values(EXPECTED_LOOKS).flat();
+  assert.equal(new Set(all).size, all.length);
+  for (const [type, looks] of Object.entries(EXPECTED_LOOKS)) for (const l of looks) assert.ok(l.startsWith(`${type}-`), l);
+});
+
+test("T48-L2 lookFor cycles per type; non-picker types give null; a bad index gives look 0; it is deterministic", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map((i) => lookFor("adult", i)), [...EXPECTED_LOOKS.adult, ...EXPECTED_LOOKS.adult]);
+  for (const t of ["student", "senior", "pwd"] as const) {
+    assert.deepEqual([0, 1, 2, 3].map((i) => lookFor(t, i)), [...EXPECTED_LOOKS[t], ...EXPECTED_LOOKS[t]], t);
+  }
+  for (const t of ["child", "other", "", "constructor", "__proto__", "toString"]) assert.equal(lookFor(t, 0), null, JSON.stringify(t));
+  for (const i of [-1, 1.5, NaN, Infinity, -Infinity, -0]) assert.equal(lookFor("adult", i), "adult-casual-f", String(i));
+  const first = lookFor("senior", 3);
+  for (let k = 0; k < 1000; k++) assert.equal(lookFor("senior", 3), first);
+});
+
+test("T48-L3 partyLooks counts each type separately, in party order; child gets null", () => {
+  const p = freeze([
+    { type: "adult" }, { type: "student" }, { type: "adult" }, { type: "senior" }, { type: "adult" }, { type: "child" }, { type: "pwd" },
+  ]);
+  assert.deepEqual(partyLooks(p), [
+    "adult-casual-f", "student-girl", "adult-casual-m", "senior-lola", "adult-filipiniana", null, "pwd-woman",
+  ]);
+});
+
+// T48-L4 reuses the seeded mulberry32 above (no Math.random)
+test("T48-L4 looks stay put: adding keeps everyone's look, removing drops only the removed passenger's", () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const rand = mulberry32(seed);
+    let p: Party = DEFAULT_PARTY;
+    for (let step = 0; step < 40; step++) {
+      const t = PICKER_TYPES[Math.floor(rand() * PICKER_TYPES.length)];
+      const before = partyLooks(p);
+      if (rand() < 0.6 && canAdd(p)) {
+        const next = add(p, t);
+        assert.deepEqual(partyLooks(next).slice(0, before.length), before, `seed ${seed} step ${step}: add ${t}`);
+        p = next;
+      } else if (canRemove(p, t)) {
+        const i = p.map((x) => x.type).lastIndexOf(t);
+        const next = remove(p, t);
+        assert.equal(next.length, p.length - 1);
+        assert.deepEqual(next, [...p.slice(0, i), ...p.slice(i + 1)], "remove() drops the last passenger of the type");
+        assert.deepEqual(partyLooks(next), [...before.slice(0, i), ...before.slice(i + 1)], `seed ${seed} step ${step}: remove ${t}`);
+        p = next;
+      }
+    }
+  }
+});
+
+test("T48-L5 a full party of adults cycles the four looks 3, 3, 2, 2; the default party is one casual adult", () => {
+  const looks = partyLooks(fill(MAX_PARTY));
+  const n = new Map<string | null, number>();
+  for (const l of looks) n.set(l, (n.get(l) ?? 0) + 1);
+  assert.deepEqual(Object.fromEntries(n), { "adult-casual-f": 3, "adult-casual-m": 3, "adult-filipiniana": 2, "adult-barong": 2 });
+  assert.deepEqual(partyLooks(DEFAULT_PARTY), ["adult-casual-f"]);
+  assert.deepEqual(partyLooks([]), []);
+});
+
+test("T48-L6 lookFor and partyLooks are pure: no randomness, clock or storage, and the input is not mutated", () => {
+  for (const banned of [/Math\.random/, /\bDate\b/, /\bcrypto\b/, /\bperformance\b/, /localStorage/, /sessionStorage/, /^let\s/m]) {
+    assert.doesNotMatch(source, banned, String(banned));
+  }
+  const real = Math.random;
+  Math.random = () => {
+    throw new Error("Math.random called");
+  };
+  try {
+    const p = freeze([{ type: "pwd" }, { type: "adult" }, { type: "pwd" }]);
+    assert.deepEqual(partyLooks(p), ["pwd-woman", "adult-casual-f", "pwd-man"]);
+    assert.equal(lookFor("student", 1), "student-boy");
+    assert.deepEqual(p, [{ type: "pwd" }, { type: "adult" }, { type: "pwd" }]);
+  } finally {
+    Math.random = real;
+  }
+});
+
+// The labels stay the type (ticket): a snapshot of main's outputs before TG-48, with no look word in any of them
+test("T48-T1 the labels stay the type: tags, labels, hints, button names and summaries are unchanged", () => {
+  const tags = Object.fromEntries(["adult", "student", "senior", "pwd", "child", "other", "unknown"].map((t) => [t, tagLabel(t)]));
+  assert.deepEqual(tags, { adult: "Adult", student: "Student", senior: "Senior", pwd: "PWD", child: "Child", other: "Other", unknown: "Other" });
+  assert.deepEqual(TYPE_LABEL, { adult: "Adult", student: "Student", senior: "Senior", pwd: "PWD" });
+  assert.deepEqual(TYPE_HINT, { adult: "Regular fare", student: "With school ID", senior: "With senior citizen ID", pwd: "With PWD ID" });
+  assert.deepEqual(PICKER_TYPES.map(addLabel), ["Add an adult", "Add a student", "Add a senior", "Add a PWD passenger"]);
+  assert.deepEqual(PICKER_TYPES.map(removeLabel), ["Remove an adult", "Remove a student", "Remove a senior", "Remove a PWD passenger"]);
+  const summaries = [
+    [{ type: "adult" }],
+    [{ type: "adult" }, { type: "student" }, { type: "senior" }, { type: "pwd" }],
+    [{ type: "adult" }, { type: "adult" }, { type: "child" }, { type: "other" }],
+    Array.from({ length: 10 }, () => ({ type: "adult" })),
+    [{ type: "pwd" }, { type: "pwd" }, { type: "senior" }, { type: "student" }, { type: "student" }],
+  ].map((x) => partySummary(x));
+  assert.deepEqual(summaries, [
+    "Party of 1: 1 adult.",
+    "Party of 4: 1 adult, 1 student, 1 senior, 1 PWD.",
+    "Party of 4: 2 adults, 1 child, 1 other.",
+    "Party of 10: 10 adults. Party is full (10 max).",
+    "Party of 5: 2 students, 1 senior, 2 PWD.",
+  ]);
+  const text = [...Object.values(tags), ...Object.values(TYPE_LABEL), ...Object.values(TYPE_HINT), ...summaries,
+    ...PICKER_TYPES.map(addLabel), ...PICKER_TYPES.map(removeLabel)].join(" ").toLowerCase();
+  for (const word of ["barong", "filipiniana", "casual", "lola", "lolo", "girl", "boy", "woman", "man ", "wheelchair"]) {
+    assert.ok(!text.includes(word), `"${word}" in a label`);
+  }
 });

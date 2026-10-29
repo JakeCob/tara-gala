@@ -22,12 +22,15 @@ const PH = [
   "deco-sun-stars", "deco-carabao", "deco-bahay-kubo", "chibi-barong", "chibi-filipiniana",
   "deco-taho-vendor", "deco-parol", "deco-sampaguita", "deco-rice-terraces", "deco-panagbenga-float",
 ];
-// ux §1.3, in order
+// TG-48 ux.md §3: the strip's two people are TG-48's adult looks, not TG-45's pale-faced decor chibis (one cast)
+const RETIRED = ["chibi-barong", "chibi-filipiniana"];
+const LOOKS_ON_STRIP = ["chibi-adult-barong-idle-1", "chibi-adult-filipiniana-idle-1"];
+// ux §1.3, in order (TG-48 swaps the two chibis in place: same size, order and show)
 const ROW = [
   { name: "deco-rice-terraces", show: "md" },
   { name: "deco-bahay-kubo", show: "all" },
-  { name: "chibi-barong", show: "all" },
-  { name: "chibi-filipiniana", show: "all" },
+  { name: "chibi-adult-barong-idle-1", show: "all" },
+  { name: "chibi-adult-filipiniana-idle-1", show: "all" },
   { name: "deco-taho-vendor", show: "md" },
   { name: "deco-carabao", show: "min375" },
   { name: "deco-sampaguita", show: "md" },
@@ -59,7 +62,12 @@ test("T45-H1 homeDecor.ts is a plain module holding ux §1.3's composition and �
   assert.equal(HOME_STRIP_CLASS, STRIP);
   assert.deepEqual(SHOW_CLASS, SHOW);
   const all = [...HOME_ROW, ...HOME_SKY].map((d) => d.name as string);
-  assert.deepEqual([...all].sort(), [...PH].sort(), "each of the 10 decor sprites exactly once");
+  const expected = [...PH.filter((n) => !RETIRED.includes(n)), ...LOOKS_ON_STRIP];
+  assert.deepEqual([...all].sort(), expected.sort(), "the 8 decor sprites and TG-48's two adult looks, each exactly once");
+  for (const name of RETIRED) {
+    assert.ok(!all.includes(name), `${name} is retired from the strip (TG-48 ux §3)`);
+    assert.ok(name in SPRITES && PNG_ART.has(name as SpriteName), `${name} stays shipped, just unused`);
+  }
   assert.ok(!HOME_ROW.some((d) => (d.name as string) === "deco-sun-stars"), "the emblem is only the sun in the sky");
   for (const name of all) {
     assert.ok(name in SPRITES, `${name} in SPRITES`);
@@ -79,7 +87,7 @@ test("T45-H2 the strip fits every width from 320 to 1280; the carabao needs 375"
   const phoneInner = (vw: number) => vw - 32 - 6 - 8 - 56;
   for (const vw of [320, 360]) {
     const items = shown(vw);
-    assert.deepEqual(items.map((d) => d.name), ["deco-bahay-kubo", "chibi-barong", "chibi-filipiniana"], `${vw}`);
+    assert.deepEqual(items.map((d) => d.name), ["deco-bahay-kubo", "chibi-adult-barong-idle-1", "chibi-adult-filipiniana-idle-1"], `${vw}`);
     assert.ok(rowWidth(items, 8) <= phoneInner(vw), `${vw}: ${rowWidth(items, 8)} <= ${phoneInner(vw)}`);
   }
   assert.equal(rowWidth(shown(320), 8), 192);
