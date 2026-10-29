@@ -1,5 +1,6 @@
 // Test helpers for TG-33 sprites (not a test file, not used at runtime).
 // rasterize() reads an SVG back into pixels independently of gridToSvg, so tests can check what is drawn.
+import { PALETTE } from "./pixelSvg.ts";
 
 export type Pixels = (string | null)[][]; // [y][x] -> hex, or null for transparent
 
@@ -95,9 +96,7 @@ export function rasterize(svg: string, name = "svg"): Raster {
   return r;
 }
 
-export const LETTERS: Record<string, string> = {
-  I: "#1d2a24", F: "#167856", L: "#5fb36b", M: "#cfe8c4", C: "#fbf7ee", S: "#ffd65c",
-};
+export const LETTERS: Record<string, string> = { ...PALETTE };
 
 // Grid rows (one letter per cell, "." transparent) at `scale` -> pixels.
 export function gridPixels(rows: string[], scale = 1): Pixels {

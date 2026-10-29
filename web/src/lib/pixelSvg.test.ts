@@ -1,8 +1,9 @@
 // TG-33: the grid -> SVG converter (T33-8) and grid parsing errors (T33-9). Fixtures are in-test only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { PALETTE, gridToSvg, parseGrid } from "./pixelSvg.ts";
-import { gridPixels, gridText, rasterize } from "./pixelSvg.testutil.ts";
+import { LETTERS, gridPixels, gridText, rasterize } from "./pixelSvg.testutil.ts";
 
 const HEAD = (w: number, h: number) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">`;
@@ -112,4 +113,24 @@ test("a missing size header throws", () => {
 test("comments and blank lines are allowed anywhere", () => {
   const g = parseGrid(["# c", "size=2x2", "", "# c2", "IF", "# c3", "LM", ""].join("\n"), "ok.txt");
   assert.deepEqual(g.rows, ["IF", "LM"]);
+});
+
+// --- TG-47 Phase A: the 11-colour palette ----------------------------------------------------------------
+
+test("T47-A4 grids accept the 5 new letters; the original colours keep their path order", () => {
+  const g = parseGrid(gridText(["BRYKT"], { size: "5x1" }), "fixture.txt");
+  assert.deepEqual(g.rows, ["BRYKT"]);
+  const svg = svgOf(["BI"]);
+  const fills = [...svg.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]);
+  assert.deepEqual(fills, ["#1d2a24", "#0038a8"], "Ink's path, then Flag Blue's: new letters come after the 6");
+  assert.deepEqual(Object.entries(PALETTE).slice(0, 6), [
+    ["I", "#1d2a24"], ["F", "#167856"], ["L", "#5fb36b"], ["M", "#cfe8c4"], ["C", "#fbf7ee"], ["S", "#ffd65c"],
+  ], "the original 6, so every committed SVG stays byte-identical");
+});
+
+test("T47-A5 the test rasterizer's colours are PALETTE itself, not a copy", () => {
+  assert.deepEqual(LETTERS, { ...PALETTE });
+  const util = readFileSync(new URL("./pixelSvg.testutil.ts", import.meta.url), "utf8");
+  assert.match(util, /export const LETTERS: Record<string, string> = \{ \.\.\.PALETTE \};/);
+  assert.doesNotMatch(util, /#[0-9a-f]{6}/i, "no hex copy in the testutil");
 });

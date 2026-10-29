@@ -1,8 +1,13 @@
 // Pixel-art grids -> SVG (TG-33). Used by web/sprites-src/build.ts and the sprite tests; nothing imports it at runtime.
 // Grid format (web/sprites-src/<name>.txt): `#` comments, then `size=WxH` (rendered pixels), optional `scale=N` and
 // `seat=N` headers, then one row per line, one letter per cell from PALETTE, or `.` for transparent.
+// PALETTE is the one source of the art colours (TG-47). The new letters come after the original 6, so each committed
+// SVG keeps its path order. Art made before TG-47 still uses only the first 6 (sprites.test.ts NEW_ART_11).
 
-export const PALETTE = { I: "#1d2a24", F: "#167856", L: "#5fb36b", M: "#cfe8c4", C: "#fbf7ee", S: "#ffd65c" } as const;
+export const PALETTE = {
+  I: "#1d2a24", F: "#167856", L: "#5fb36b", M: "#cfe8c4", C: "#fbf7ee", S: "#ffd65c",
+  B: "#0038a8", R: "#ce1126", Y: "#fcd116", K: "#8d5524", T: "#c68642", // TG-47: flag blue, red, yellow; kayumanggi, light skin
+} as const;
 
 export type Grid = { w: number; h: number; scale: number; rows: string[]; headers: Record<string, string> };
 

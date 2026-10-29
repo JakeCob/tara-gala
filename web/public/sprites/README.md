@@ -6,6 +6,8 @@ Still SVG: `ui-dialog-frame`, `ui-cursor`, `tile-grass`, `tile-path-straight`, `
 
 Names and sizes follow `web/sprites-src/art-prompts.md`. To swap in art: export PNGs at exactly the listed size (nearest-neighbour, 6-colour palette, transparent), copy them here with the same base name, add each name to `PNG_ART` in `web/src/lib/sprites.ts`, delete the matching `.svg`, and run the web tests.
 
+New art drawn after TG-47 (TG-48's looks first) may use the 11-colour palette in `web/src/lib/pixelSvg.ts` (the 6 greens plus Flag Blue, Red and Yellow and two skin tones): list its names in `NEW_ART_11` in `web/src/lib/sprites.test.ts`. The skin tones are for art only, never UI. The sprites listed here keep the 6-colour palette.
+
 Also delete that sprite's grid, `web/sprites-src/<name>.txt`: the tests expect a grid only for sprites that are still SVG.
 
 App icon: export `icon-app.png` over `web/public/icon-512.png`, `icon-192.png` and `apple-touch-icon.png` (180×180).
