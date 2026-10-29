@@ -149,6 +149,22 @@ Owner art 2026-10-29, the same palette. One wide scene behind the landing title,
 |---|---|---|
 | `hero-scene.png` | 320×123 | a provincial bus on a pine-lined mountain road up to Baguio, morning sky |
 
+## 9. Diverse Filipino passengers (TG-48)
+Owner request 2026-10-29: women and men across every passenger type, with Filipino dress. Each passenger added gets the next look for its type, in the order below (the first adult is a casual look, and genders alternate); the labels stay the type. Made with the TG-47 **11-colour palette**; every type has one Kayumanggi and one light-skinned look (tg-ux2 H1, owner-approved). Each look has `-idle-1`, `-idle-2` (idle-1 one pixel lower) and `-wave`. Dignified, never a costume or a caricature.
+
+| File | Size | Subject |
+|---|---|---|
+| `chibi-adult-casual-f-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a woman in a casual top and trousers, Kayumanggi skin |
+| `chibi-adult-casual-m-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a man in a casual shirt and trousers, light skin |
+| `chibi-adult-filipiniana-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a woman in a Filipiniana dress with butterfly sleeves and a sash, hair in a bun, light skin |
+| `chibi-adult-barong-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a man in a white embroidered barong tagalog and a woven salakot, Kayumanggi skin |
+| `chibi-student-girl-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a girl in a school uniform, light skin |
+| `chibi-student-boy-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a boy in a school uniform, Kayumanggi skin |
+| `chibi-senior-lola-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a grandmother (lola) with grey hair and a pamaypay fan, Kayumanggi skin |
+| `chibi-senior-lolo-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a grandfather (lolo) with a woven salakot and a cane, light skin |
+| `chibi-pwd-woman-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a woman in a wheelchair, upright and waving, Kayumanggi skin |
+| `chibi-pwd-man-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a man in a wheelchair, upright and sporty, light skin |
+
 ---
 
 ## Checklist for the owner

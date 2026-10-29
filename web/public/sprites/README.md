@@ -31,6 +31,9 @@ TG-45 Philippine decor: owner request 2026-10-29, same pipeline; decorative only
 
 `deco-sun-stars` is the 8-ray sun with three stars: an emblem, not the flag (RA 8491). It's used once, as the sun in the home strip's sky. Don't turn it into flag colours or add a flag.
 
+## Diverse Filipino passengers (TG-48)
+TG-48: 10 passenger looks (owner request 2026-10-29), 3 frames each, in the TG-47 11-colour palette. Each passenger added on `/plan` gets the next look for its type (`lookFor` in `web/src/lib/party.ts`), so everyone keeps their look when another passenger is removed, and a saved party shows the same looks on the map. Every type has a woman and a man (a girl and a boy), and one Kayumanggi and one light-skinned look. The labels stay the type, never the look. The picker rows show one fixed look per type (`ROW_ICON`), and the home strip's two people are the barong and Filipiniana looks, so `chibi-barong`, `chibi-filipiniana` and the 12 classic `chibi-<type>-*` sprites are kept but no longer shown.
+
 ## How the placeholders are made
 Each SVG is generated from a text grid in `web/sprites-src/` (one letter per pixel: `I` Ink, `F` Forest, `L` Leaf, `M` Mint, `C` Cream, `S` Sun, `.` transparent). To change a pixel, edit the grid and run `node web/sprites-src/build.ts` from the repo root. Never hand-edit an SVG: the tests compare each one to its grid.
 
@@ -93,3 +96,33 @@ Sprites carry no `<title>`. The component that shows one sets its alt text (`alt
 | `deco-rice-terraces` | 24×24 | PNG | AI art: stepped mountain rice terraces |
 | `deco-panagbenga-float` | 32×24 | PNG | AI art: a Panagbenga flower-festival float |
 | `hero-scene` | 320×123 | PNG | AI art: the landing hero scene (TG-46), drawn at 2x |
+| `chibi-adult-casual-f-idle-1` | 32×32 | PNG | TG-48 look: a woman in a casual top and trousers, Kayumanggi skin; idle frame 1 |
+| `chibi-adult-casual-f-idle-2` | 32×32 | PNG | TG-48 look: a woman in a casual top and trousers, Kayumanggi skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-adult-casual-f-wave` | 32×32 | PNG | TG-48 look: a woman in a casual top and trousers, Kayumanggi skin; waving |
+| `chibi-adult-casual-m-idle-1` | 32×32 | PNG | TG-48 look: a man in a casual shirt and trousers, light skin; idle frame 1 |
+| `chibi-adult-casual-m-idle-2` | 32×32 | PNG | TG-48 look: a man in a casual shirt and trousers, light skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-adult-casual-m-wave` | 32×32 | PNG | TG-48 look: a man in a casual shirt and trousers, light skin; waving |
+| `chibi-adult-filipiniana-idle-1` | 32×32 | PNG | TG-48 look: a woman in a Filipiniana dress with butterfly sleeves and a sash, hair in a bun, light skin; idle frame 1 |
+| `chibi-adult-filipiniana-idle-2` | 32×32 | PNG | TG-48 look: a woman in a Filipiniana dress with butterfly sleeves and a sash, hair in a bun, light skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-adult-filipiniana-wave` | 32×32 | PNG | TG-48 look: a woman in a Filipiniana dress with butterfly sleeves and a sash, hair in a bun, light skin; waving |
+| `chibi-adult-barong-idle-1` | 32×32 | PNG | TG-48 look: a man in a white embroidered barong tagalog and a woven salakot, Kayumanggi skin; idle frame 1 |
+| `chibi-adult-barong-idle-2` | 32×32 | PNG | TG-48 look: a man in a white embroidered barong tagalog and a woven salakot, Kayumanggi skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-adult-barong-wave` | 32×32 | PNG | TG-48 look: a man in a white embroidered barong tagalog and a woven salakot, Kayumanggi skin; waving |
+| `chibi-student-girl-idle-1` | 32×32 | PNG | TG-48 look: a girl in a school uniform, light skin; idle frame 1 |
+| `chibi-student-girl-idle-2` | 32×32 | PNG | TG-48 look: a girl in a school uniform, light skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-student-girl-wave` | 32×32 | PNG | TG-48 look: a girl in a school uniform, light skin; waving |
+| `chibi-student-boy-idle-1` | 32×32 | PNG | TG-48 look: a boy in a school uniform, Kayumanggi skin; idle frame 1 |
+| `chibi-student-boy-idle-2` | 32×32 | PNG | TG-48 look: a boy in a school uniform, Kayumanggi skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-student-boy-wave` | 32×32 | PNG | TG-48 look: a boy in a school uniform, Kayumanggi skin; waving |
+| `chibi-senior-lola-idle-1` | 32×32 | PNG | TG-48 look: a grandmother (lola) with grey hair and a pamaypay fan, Kayumanggi skin; idle frame 1 |
+| `chibi-senior-lola-idle-2` | 32×32 | PNG | TG-48 look: a grandmother (lola) with grey hair and a pamaypay fan, Kayumanggi skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-senior-lola-wave` | 32×32 | PNG | TG-48 look: a grandmother (lola) with grey hair and a pamaypay fan, Kayumanggi skin; waving |
+| `chibi-senior-lolo-idle-1` | 32×32 | PNG | TG-48 look: a grandfather (lolo) with a woven salakot and a cane, light skin; idle frame 1 |
+| `chibi-senior-lolo-idle-2` | 32×32 | PNG | TG-48 look: a grandfather (lolo) with a woven salakot and a cane, light skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-senior-lolo-wave` | 32×32 | PNG | TG-48 look: a grandfather (lolo) with a woven salakot and a cane, light skin; waving |
+| `chibi-pwd-woman-idle-1` | 32×32 | PNG | TG-48 look: a woman in a wheelchair, upright, Kayumanggi skin; idle frame 1 |
+| `chibi-pwd-woman-idle-2` | 32×32 | PNG | TG-48 look: a woman in a wheelchair, upright, Kayumanggi skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-pwd-woman-wave` | 32×32 | PNG | TG-48 look: a woman in a wheelchair, upright, Kayumanggi skin; waving |
+| `chibi-pwd-man-idle-1` | 32×32 | PNG | TG-48 look: a man in a wheelchair, upright and sporty, light skin; idle frame 1 |
+| `chibi-pwd-man-idle-2` | 32×32 | PNG | TG-48 look: a man in a wheelchair, upright and sporty, light skin; idle frame 2 (idle 1 one pixel lower) |
+| `chibi-pwd-man-wave` | 32×32 | PNG | TG-48 look: a man in a wheelchair, upright and sporty, light skin; waving |

@@ -230,7 +230,7 @@ const placeholders = (...names: string[]) => names.every((n) => !PNG_ART.has(n a
 test("the art-list parser finds all 87 entries (84 sprites + 3 exclusions)", () => {
   const art = parseArtList(readFileSync(ART_LIST, "utf8"));
   assert.equal(art.size, 87, [...art.keys()].join(", "));
-  for (const name of LOOK_DROP) assert.deepEqual(art.get(name), { w: 32, h: 32 }, `${name} in section 8 (TG-48)`);
+  for (const name of LOOK_DROP) assert.deepEqual(art.get(name), { w: 32, h: 32 }, `${name} in section 9 (TG-48)`);
   for (const [name, { w, h }] of PH_DROP) assert.deepEqual(art.get(name), { w, h }, `${name} in section 7 (TG-45)`);
   assert.deepEqual(art.get("ref-style-sheet"), { w: 512, h: 512 });
   assert.deepEqual(art.get("chibi-{type}-walk-1..4"), { w: 32, h: 32 });
