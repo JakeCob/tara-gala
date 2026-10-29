@@ -1,6 +1,6 @@
 // Party state for the chibi passenger picker (TG-15). Plain module: Node's type stripping runs it in tests.
 // The planner form (TG-21), overworld map (TG-22) and share page (TG-23) read the party through these helpers.
-import type { PassengerType } from "./sprites.ts";
+import type { ChibiLook, PassengerType } from "./sprites.ts";
 
 export type Passenger = { type: PassengerType }; // no passenger names, which would end up on the public share page
 export type Party = readonly Passenger[];
@@ -89,4 +89,34 @@ export function addLabel(t: PassengerType): string {
 
 export function removeLabel(t: PassengerType): string {
   return `Remove ${ARTICLE[t]}`;
+}
+
+// TG-48: the looks each type cycles through, in the order passengers are added. The first adult is a casual look and
+// genders alternate (manager decision); every type has one Kayumanggi and one light-skinned look (tg-ux2 H1).
+export const LOOKS: Readonly<Record<PassengerType, readonly ChibiLook[]>> = {
+  adult: ["adult-casual-f", "adult-casual-m", "adult-filipiniana", "adult-barong"],
+  student: ["student-girl", "student-boy"],
+  senior: ["senior-lola", "senior-lolo"],
+  pwd: ["pwd-woman", "pwd-man"],
+};
+
+/** The look of the index-th passenger of this type (0 = the first one added). Child or unknown types: null. */
+export function lookFor(type: string, index: number): ChibiLook | null {
+  if (!isPickerType(type)) return null;
+  const list = LOOKS[type];
+  const i = Number.isInteger(index) && index >= 0 ? index : 0;
+  return list[i % list.length];
+}
+
+/**
+ * Each passenger's look: its ordinal among passengers of the same type, in party order. remove() drops a type's
+ * last passenger, so nobody else's look changes, and a saved party gets the same looks with nothing stored.
+ */
+export function partyLooks(p: readonly { type: string }[]): (ChibiLook | null)[] {
+  const seen = new Map<string, number>();
+  return p.map(({ type }) => {
+    const n = seen.get(type) ?? 0;
+    seen.set(type, n + 1);
+    return lookFor(type, n);
+  });
 }

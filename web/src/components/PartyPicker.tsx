@@ -11,13 +11,18 @@ import {
   canAdd,
   canRemove,
   counts,
+  lookFor,
   partySummary,
   remove,
   removeLabel,
   type Party,
 } from "@/lib/party";
-import { chibi, spriteSrc, type PassengerType } from "@/lib/sprites";
+import { chibiLook, spriteSrc, type ChibiLook, type PassengerType } from "@/lib/sprites";
 import { PX, PixelBox, PixelButton, SectionTitle } from "@/components/pixel";
+
+// The row icon per type: one fixed TG-48 appearance (tg-ux2 ux.md §2), 2 Kayumanggi and 2 light-skinned. The row label
+// names the type; the stage shows each passenger's own appearance.
+const ROW_ICON = { adult: "adult-casual-f", student: "student-girl", senior: "senior-lolo", pwd: "pwd-woman" } as const satisfies Record<PassengerType, ChibiLook>;
 
 type Props = {
   party: Party;
@@ -37,8 +42,8 @@ export default function PartyPicker({ party, onChange, onAdd }: Props) {
     if (!canAdd(party)) return;
     const next = add(party, t);
     onChange(next);
-    console.info(`[tg-party] add type=${t} size=${next.length}`);
-    if (!canAdd(next)) console.info("[tg-party] limit reached");
+    console.info(`[tg-party] add type=${t} size=${next.length} look=${lookFor(t, n[t])}`);
+    if (!canAdd(next)) console.info(`[tg-party] limit reached size=${next.length}`);
     onAdd?.(next.length - 1);
   }
 
@@ -57,7 +62,7 @@ export default function PartyPicker({ party, onChange, onAdd }: Props) {
           <li key={t} role="group" aria-labelledby={`${id}-${t}-label ${id}-${t}-count`} className="flex items-center gap-3 min-h-14">
             <span className={PX.plate}>
               {/* eslint-disable-next-line @next/next/no-img-element -- pixel art: next/image would resample PNG art and needs dangerouslyAllowSVG */}
-              <img src={spriteSrc(chibi(t, "idle-1"))} width={32} height={32} alt="" className="pixelated block" draggable={false} decoding="async" />
+              <img src={spriteSrc(chibiLook(ROW_ICON[t], "idle-1"))} width={32} height={32} alt="" className="pixelated block" draggable={false} decoding="async" />
             </span>
             <span className="min-w-0 flex-1 flex flex-col">
               <span id={`${id}-${t}-label`} className="text-sm font-bold">
