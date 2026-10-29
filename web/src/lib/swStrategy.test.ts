@@ -13,7 +13,7 @@ const APP = "http://localhost:3110";
 const API = "http://localhost:8110";
 const SCRIPT_URL = `${APP}/sw.js?api=${encodeURIComponent(API)}`;
 // Made-up production-shaped origins, to prove nothing is tied to localhost
-const PROD = { app: "https://tara-gala.vercel.app", api: "https://tara-gala-api.up.railway.app" };
+const PROD = { app: "https://tara-gala-ph.vercel.app", api: "https://tara-gala-api.up.railway.app" };
 const LOCAL = { app: APP, api: API };
 const OLD_ISO = "2026-10-30T13:12:00.000Z";
 

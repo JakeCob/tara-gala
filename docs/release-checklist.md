@@ -17,7 +17,7 @@ Hostnames, project and service IDs, and the deploy scripts are in the ops notes 
 - [ ] Redeploy with the ops notes' "Redeploy" steps:
   - `check_vars.py` is all ok;
   - migrations and loaders run only if `supabase/` or `data/` changed;
-  - `railway up` api, then web;
+  - `railway up` the api, then deploy web to Vercel production (the ops notes have a script);
   - both deployments reach `SUCCESS`.
 - [ ] Read the api logs right away, because Railway drops them on the next deploy: `railway logs -s api -p "$P" -e production --lines 200`.
   - There is no `ERROR`.
@@ -47,14 +47,14 @@ Hostnames, project and service IDs, and the deploy scripts are in the ops notes 
 - [ ] Record the SHA, both deployment IDs and the time in the ops notes' "Later deploys" table.
 
 ## 3. Rollback
-1. Run `railway deployment list -s <api|web> -p "$P" -e production --limit 5 --json`. Pick the previous `SUCCESS` ID, and check that it belongs to this project's service.
-2. Run `railway api 'mutation($id: String!) { deploymentRollback(id: $id) }' --var id=<deployment-id>`. Instead of steps 1 and 2, you can `railway up` the previous SHA's export.
+1. **api (Railway):** run `railway deployment list -s api -p "$P" -e production --limit 5 --json`, pick the previous `SUCCESS` ID and check it belongs to this project's service. Then run `railway api 'mutation($id: String!) { deploymentRollback(id: $id) }' --var id=<deployment-id>`. Or `railway up` the previous SHA's export.
+2. **web (Vercel):** `vercel rollback` (or `vercel promote <previous deployment URL>`), with the personal account's config. Or deploy the previous SHA's `web/` again.
 3. Rerun the §2 live checks.
 4. Revert the bad PR on `main` too, so the next deploy doesn't bring it back.
 
 Notes:
 - `railway redeploy` is not a rollback: it rebuilds the latest deployment.
-- **A bad variable:** set it back. A `NEXT_PUBLIC_*` change also needs a web `railway up`.
+- **A bad variable:** set it back. A `NEXT_PUBLIC_*` change on Vercel also needs a web redeploy.
 - **Bad data:** fix the input and rerun the loader or the scraper. Both are idempotent.
 - **Rolling back web changes `sw.js`:** phones show "A new version of Tara Gala is ready." Each traveller taps Reload while online.
 
@@ -103,17 +103,17 @@ Notes:
   - **On:**
     - a key the owner chooses for production, set only on the Railway `api` service (`LLM_PROVIDER`, `LLM_API_KEY`);
     - a monthly spend limit at the provider;
-    - `PLANNER_LIVE=true` on api and `NEXT_PUBLIC_PLANNER_LIVE=true` on web, then a web `railway up`;
+    - `PLANNER_LIVE=true` on api (Railway) and `NEXT_PUBLIC_PLANNER_LIVE=true` on web (Vercel), then a web redeploy;
     - TG-25's end-to-end run.
 - [ ] **Railway spend.** `railway usage --workspace <id>` is well under the workspace's hard limit. Hitting it stops the services.
 
 ## 7. Trip-day fallback
 - **A bus time in doubt:** the operator's counter or page wins. Every card says to confirm with the operator. Use the §4 screenshots.
 - **The api or web is down:** installed phones keep their saved pages offline, under the yellow banner. Roll back (§3).
-- **Kill switches.** Each one is a Railway variable: set it to `false`, apply as shown, then rerun §2. To undo, set it back to `true` the same way.
+- **Kill switches.** Each one is a host variable (api on Railway, web on Vercel): set it to `false`, apply as shown, then rerun §2. To undo, set it back to `true` the same way.
 
 | Symptom | Switch | Applies when | What changes |
 |---|---|---|---|
-| The map misbehaves on a phone | `NEXT_PUBLIC_OVERWORLD_MAP` (web) | after a web `railway up` | `/i/<slug>` shows the list view, with the same facts. Phones pick it up on their next online load. |
-| A ready-made trip is wrong | `PREMADE_ITINERARIES` (api) and `NEXT_PUBLIC_PREMADE_ITINERARIES` (web) | api: Railway restarts it on the change; web: after a `railway up` | `/plan` stops listing them. Share links `/i/<slug>` still open. A phone that saved the list can still show it offline. Fixing the data is usually better. |
-| The service worker serves broken pages | `NEXT_PUBLIC_SERVICE_WORKER` (web) | after a web `railway up` | **Last resort.** On its next online load, each phone unregisters the worker and **deletes every saved page, trips and itineraries included**, so offline use ends. Warn the travellers first. Undoing it means every traveller redoes §4 steps 2 to 5 online. |
+| The map misbehaves on a phone | `NEXT_PUBLIC_OVERWORLD_MAP` (web) | after a web redeploy on Vercel | `/i/<slug>` shows the list view, with the same facts. Phones pick it up on their next online load. |
+| A ready-made trip is wrong | `PREMADE_ITINERARIES` (api) and `NEXT_PUBLIC_PREMADE_ITINERARIES` (web) | api: Railway restarts it on the change; web: after a redeploy on Vercel | `/plan` stops listing them. Share links `/i/<slug>` still open. A phone that saved the list can still show it offline. Fixing the data is usually better. |
+| The service worker serves broken pages | `NEXT_PUBLIC_SERVICE_WORKER` (web) | after a web redeploy on Vercel | **Last resort.** On its next online load, each phone unregisters the worker and **deletes every saved page, trips and itineraries included**, so offline use ends. Warn the travellers first. Undoing it means every traveller redoes §4 steps 2 to 5 online. |
