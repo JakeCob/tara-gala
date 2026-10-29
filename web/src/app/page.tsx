@@ -1,4 +1,5 @@
 import { PageShell, PageTitle, PixelLink } from "@/components/pixel";
+import HomeDecor from "@/components/HomeDecor";
 import TripSearch from "@/components/TripSearch";
 import { flags } from "@/lib/flags";
 import { formMode } from "@/lib/planForm";
@@ -10,6 +11,7 @@ export default function Home() {
         <PageTitle>Tara Gala</PageTitle>
         <p className="text-sm text-muted md:max-w-prose">Every Manila to Baguio bus, straight from the operators.</p>
       </header>
+      <HomeDecor />
       <TripSearch />
       <PixelLink variant="secondary" href="/baguio" className="flex items-center px-4 py-3 text-sm md:self-start">
         <span>
