@@ -22,7 +22,7 @@ function Step({ numeral, sprite, title, line }: { numeral: ReactNode; sprite: Sp
   );
 }
 
-/** How it works (ux §5.5): three steps, 3-up from md. */
+/** How it works (ux §5.5): three steps, one per row up to md (the 106px plates crowd three columns at 768), 3-up from lg. */
 export default function HowItWorks() {
   return (
     <section aria-labelledby="how-it-works" className="flex flex-col gap-3">
@@ -30,7 +30,7 @@ export default function HowItWorks() {
         <SectionTitle id="how-it-works">How it works</SectionTitle>
         <SectionStripe />
       </div>
-      <ol className="flex flex-col gap-3 md:grid md:grid-cols-3 md:gap-4">
+      <ol className="flex flex-col gap-3 md:grid md:grid-cols-1 md:gap-4 lg:grid-cols-3">
         <Step
           numeral={<span aria-hidden="true" className="text-sm font-bold">1.</span>}
           sprite="vehicle-bus"
