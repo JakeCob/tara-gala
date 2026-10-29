@@ -1,6 +1,6 @@
 # Sprites (TG-33)
 
-Art: AI-generated with fal nano-banana, owner-approved, 2026-10-29. 35 sprites and the app icon ship as PNG; the other 8 are hand-made SVG placeholders.
+Art: AI-generated with fal nano-banana, owner-approved, 2026-10-29. 45 sprites and the app icon ship as PNG; the other 8 are hand-made SVG placeholders.
 
 Still SVG: `ui-dialog-frame`, `ui-cursor`, `tile-grass`, `tile-path-straight`, `tile-path-corner`, `tile-road`, `tile-water`, `mode-van`. The AI versions were too noisy (`ui-dialog-frame`, `ui-cursor`) or had garbled pseudo-lettering in its windows (`mode-van`, UX review S2), or the map relies on these tiles being seamless and the map tests check them.
 
@@ -23,6 +23,11 @@ Processing script: `process.py` in the owner's `~/tara-art/` (Pillow, so it stay
 After the UX review, a few pixels were fixed by hand: Leaf speckles in the senior's hair became Mint (with `idle-2` re-derived), and the Sun "beak" on the adult, student and senior wave mouths became Ink. The app icon was redone: a big chibi in front of the bus on a flat Leaf background, no inner frame, readable at 48px.
 
 The tests check every PNG: its size, palette colours only, alpha 0 or 255, no metadata chunks, and at most 4 KB.
+
+## Philippine decor (TG-45)
+TG-45 Philippine decor: owner request 2026-10-29, same pipeline; decorative only. The 10 sprites appear only in the home header strip and on the map's empty grass, with `alt=""` inside `aria-hidden` containers. `chibi-barong` and `chibi-filipiniana` are decor, not passenger types.
+
+`deco-sun-stars` is the 8-ray sun with three stars: an emblem, not the flag (RA 8491). It's used once, as the sun in the home strip's sky. Don't turn it into flag colours or add a flag.
 
 ## How the placeholders are made
 Each SVG is generated from a text grid in `web/sprites-src/` (one letter per pixel: `I` Ink, `F` Forest, `L` Leaf, `M` Mint, `C` Cream, `S` Sun, `.` transparent). To change a pixel, edit the grid and run `node web/sprites-src/build.ts` from the repo root. Never hand-edit an SVG: the tests compare each one to its grid.
@@ -75,3 +80,13 @@ Sprites carry no `<title>`. The component that shows one sets its alt text (`alt
 | `ui-heart` | 8×8 | PNG | AI art: a small heart |
 | `ui-badge-verified` | 16×16 | PNG | AI art: a round badge with a check mark |
 | `logo-wordmark` | 192×48 | PNG | AI art: "Tara Gala" in a chunky pixel font with a small bus and pine |
+| `deco-sun-stars` | 24×24 | PNG | AI art: the 8-ray sun with three stars on a Forest disc: an emblem, never the flag |
+| `deco-carabao` | 32×24 | PNG | AI art: a carabao (water buffalo), side view, with curved horns |
+| `deco-bahay-kubo` | 24×24 | PNG | AI art: a bahay kubo: a nipa hut on stilts with a steep Leaf roof |
+| `chibi-barong` | 32×32 | PNG | AI art: a chibi in a Cream barong tagalog (decor, not a passenger type) |
+| `chibi-filipiniana` | 32×32 | PNG | AI art: a chibi in a Filipiniana dress with butterfly sleeves (decor, not a passenger type) |
+| `deco-taho-vendor` | 32×32 | PNG | AI art: a taho vendor with two buckets on a shoulder pole, Sun hat |
+| `deco-parol` | 16×16 | PNG | AI art: a star-shaped Christmas parol lantern |
+| `deco-sampaguita` | 16×16 | PNG | AI art: sampaguita (jasmine) flowers |
+| `deco-rice-terraces` | 24×24 | PNG | AI art: stepped mountain rice terraces |
+| `deco-panagbenga-float` | 32×24 | PNG | AI art: a Panagbenga flower-festival float |

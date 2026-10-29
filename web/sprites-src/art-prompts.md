@@ -117,6 +117,24 @@ Prompt template (frame):
 
 ---
 
+## 7. Philippine decor (TG-45)
+Owner request 2026-10-29, made with the same pipeline as the TG-33 art. **Decorative only:** the home header strip and the map's empty grass, never data UI. `deco-sun-stars` is the 8-ray sun with three stars, an emblem and **not the flag** (RA 8491): no flag or flag colours anywhere. The strawberry and the ube jar were dropped: they need red or purple, which the palette doesn't have.
+
+| File | Size | Subject |
+|---|---|---|
+| `deco-sun-stars.png` | 24×24 | the 8-ray sun with three stars on a Forest disc: an emblem, never the flag |
+| `deco-carabao.png` | 32×24 | a carabao (water buffalo), side view, with curved horns |
+| `deco-bahay-kubo.png` | 24×24 | a bahay kubo: a nipa hut on stilts with a steep Leaf roof |
+| `chibi-barong.png` | 32×32 | a chibi in a Cream barong tagalog (decor, not a passenger type) |
+| `chibi-filipiniana.png` | 32×32 | a chibi in a Filipiniana dress with butterfly sleeves (decor, not a passenger type) |
+| `deco-taho-vendor.png` | 32×32 | a taho vendor with two buckets on a shoulder pole, Sun hat |
+| `deco-parol.png` | 16×16 | a star-shaped Christmas parol lantern |
+| `deco-sampaguita.png` | 16×16 | sampaguita (jasmine) flowers |
+| `deco-rice-terraces.png` | 24×24 | stepped mountain rice terraces |
+| `deco-panagbenga-float.png` | 32×24 | a Panagbenga flower-festival float |
+
+---
+
 ## Checklist for the owner
 - [ ] S0 reference sheet first; reuse it as the style reference for everything else
 - [ ] 4 chibis × 3 frames (12 files), plus optional walk cycles
