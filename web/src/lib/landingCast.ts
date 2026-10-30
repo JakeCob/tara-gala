@@ -1,6 +1,7 @@
-// The landing's chibi slots (TG-46 ux §5.1, §5.3, §5.5). `index` picks one of a type's looks once TG-48 adds them;
-// until then every index draws the TG-33 sprite for its type. Plain module.
-import { chibi, type ChibiFrame, type PassengerType, type SpriteName } from "./sprites.ts";
+// The landing's chibi slots (TG-46 ux §5.1, §5.3, §5.5). `index` picks one of a type's TG-48 looks, as the party stage
+// does, so the landing is one cast with /plan and the home strip. Plain module.
+import { lookFor } from "./party.ts";
+import { chibiLook, type ChibiFrame, type PassengerType, type SpriteName } from "./sprites.ts";
 
 export type CastSlot = { type: PassengerType; index: number; frame: ChibiFrame };
 
@@ -14,7 +15,7 @@ export const CAST = {
   planStep: { type: "senior", index: 1, frame: "idle-1" },
 } as const satisfies { heroTrio: readonly CastSlot[]; planTile: CastSlot; planStep: CastSlot };
 
-/** The sprite for one slot (TG-48 swaps the looks in here). */
+/** The sprite for one slot: the slot type's look at `index` (TG-48). Every PassengerType has looks, so never null. */
 export function castSprite(slot: CastSlot): SpriteName {
-  return chibi(slot.type, slot.frame);
+  return chibiLook(lookFor(slot.type, slot.index)!, slot.frame);
 }

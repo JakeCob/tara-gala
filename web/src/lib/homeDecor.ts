@@ -6,12 +6,13 @@ export type DecorShow = "all" | "min375" | "md";
 // Literal class strings, so Tailwind finds them. The carabao needs a 375px phone to fit (ux.md 1.3).
 export const SHOW_CLASS: Record<DecorShow, string> = { all: "", min375: "hidden min-[375px]:block", md: "hidden md:block" };
 
-// The grounded row, left to right (ux.md 1.3)
+// The grounded row, left to right (ux.md 1.3). Its two people are TG-48's barong and Filipiniana passenger looks, one
+// cast with the party stage (TG-48 ux.md §3); TG-45's chibi-barong and chibi-filipiniana are kept but no longer shown.
 export const HOME_ROW = [
   { name: "deco-rice-terraces", show: "md" },
   { name: "deco-bahay-kubo", show: "all" },
-  { name: "chibi-barong", show: "all" },
-  { name: "chibi-filipiniana", show: "all" },
+  { name: "chibi-adult-barong-idle-1", show: "all" },
+  { name: "chibi-adult-filipiniana-idle-1", show: "all" },
   { name: "deco-taho-vendor", show: "md" },
   { name: "deco-carabao", show: "min375" },
   { name: "deco-sampaguita", show: "md" },

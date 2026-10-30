@@ -18,6 +18,8 @@ import {
   chibi, modeSprite, placeSprite, spriteSrc,
 } from "./sprites.ts";
 import type { SpriteName } from "./sprites.ts";
+import * as spritesModule from "./sprites.ts";
+import { SPAWN } from "./spawn.ts";
 
 type Size = { w: number; h: number };
 
@@ -33,8 +35,55 @@ const SCHEMA = path("../../../supabase/schema.sql");
 // NEW_ART_11 may use all 11.
 const ART_PALETTE_V1 = ["#1d2a24", "#167856", "#5fb36b", "#cfe8c4", "#fbf7ee", "#ffd65c"];
 const PALETTE_11: string[] = Object.values(PALETTE);
-// Art drawn after TG-47 (TG-48's looks first). Empty until that art lands; an existing sprite never moves here (T47-A3b).
-const NEW_ART_11: string[] = [];
+// TG-48 diverse Filipino passengers: 10 looks x 3 frames, named exactly as ~/tara-art/tg48/SHIP.txt, in the order
+// lookFor cycles them (manager decision on review-plan finding 3: the first adult is casual, genders alternate).
+const LOOK_IDS = [
+  "adult-casual-f", "adult-casual-m", "adult-filipiniana", "adult-barong",
+  "student-girl", "student-boy", "senior-lola", "senior-lolo", "pwd-woman", "pwd-man",
+] as const;
+const LOOK_DROP: string[] = LOOK_IDS.flatMap((look) => ["idle-1", "idle-2", "wave"].map((f) => `chibi-${look}-${f}`));
+// sha256 of the manager's processed files (~/tara-art/tg48/processed/, after the H1 S1/S2 recolour), so the committed
+// PNGs are a byte copy (T48-S4)
+const LOOK_SHA: Record<string, string> = {
+  "chibi-adult-barong-idle-1": "a5a74ede50e27b652f6b235608b8abba5d43adbaf04121680642fe8b79dd22fb",
+  "chibi-adult-barong-idle-2": "fd914158b4f504d5e7fd636c011829cffa602fb55f35c743198d8f663e36fc3d",
+  "chibi-adult-barong-wave": "36014be22e31898f75a6a56d52abe957f490acb8fd1934e59e4d2e811ff633cc",
+  "chibi-adult-casual-f-idle-1": "57e339dc094192aec3df0faf073a0093333045c96bf7f81fa4c7c067c3f648b0",
+  "chibi-adult-casual-f-idle-2": "3f1092f2cd0e573c8876a6443354913b7e0fa45d4612bb8e16100004e45de6d5",
+  "chibi-adult-casual-f-wave": "09ef9057a33b64e62e0d618e2dc7d24e1e6621ad73e427ec9f608926351d1d99",
+  "chibi-adult-casual-m-idle-1": "0b77f09d0e406db437d1e8dc5a1e73c4b3f9224364d9476e46112812f686544e",
+  "chibi-adult-casual-m-idle-2": "c3896cad55f6d01b1b3804a11428266a2bb5f2758e180a1ca2d2153bca56ed3e",
+  "chibi-adult-casual-m-wave": "a83169c283cc233239407006e6bebe55e320c77327e6cd2c3b869db10f2058f7",
+  "chibi-adult-filipiniana-idle-1": "d30090a31d442099d4394f35590235ad6a9e353d38b8962ba9cc9fe8bb5c4fad",
+  "chibi-adult-filipiniana-idle-2": "a4742413fb54075ec93720397d4f9b49ee56b14624e02e16b91fdcdf3de73635",
+  "chibi-adult-filipiniana-wave": "057e3729a5845c5aabac8badd92a98623aee476957ae839ade77a5afdac048b9",
+  "chibi-pwd-man-idle-1": "97a326082c0bc7d2493e015af8ba1c6204d267937f0c75ae9a2779180a393d0c",
+  "chibi-pwd-man-idle-2": "3daf16b494e1b7a1a0d7ffaba689a4357522e2f3a2cfeffd94452d806e1e36b4",
+  "chibi-pwd-man-wave": "1bd9a6cdb14be7958c7b1b200964fc39c8cdebc6039d57f54ff8d8e7fbd4fb49",
+  "chibi-pwd-woman-idle-1": "07556e6019e196ef6ee02ed21be4f3c4a4babedbab71077257e737248d4f9aef",
+  "chibi-pwd-woman-idle-2": "0988e31539aed390eacb0b9929e1220cd6dd20b680fee6b87148f939d7609e24",
+  "chibi-pwd-woman-wave": "20195bed40c9823be4f4ad836137235dfcb82f180a70b41b47469e6efc040e38",
+  "chibi-senior-lola-idle-1": "e92eae2f60f1ceccde6b791e75fe5215d35869972477c30346fca9ffb700aeb8",
+  "chibi-senior-lola-idle-2": "b44480eb7d4d17c3df7c4d36d5dd72463f1f472afe096af7ea989e4cd7e0af91",
+  "chibi-senior-lola-wave": "b20333589291a9003f419c6d878c97a2546ba53573270adc9c3d60c654f01486",
+  "chibi-senior-lolo-idle-1": "e69b27f0f11d84540e90f1190e13b5c0ca2fec7d64318c496a67fd60dc33572b",
+  "chibi-senior-lolo-idle-2": "8fe57128afa3905a043deb30801e7b91ff6d6351f5f9dca71b6edc3ecbc5bec5",
+  "chibi-senior-lolo-wave": "5b6b571b545c42ec64f89ee779221e2bcf99c554d692c8708ac974b6e889674c",
+  "chibi-student-boy-idle-1": "5d42900a33751d204ee61dc01bf1c48ea1f15e64b6292999da0468f48dee3eaa",
+  "chibi-student-boy-idle-2": "c1e41ab7e4c2ddea9ebc80c74513e7250d72a13602689d1261317004a538fa09",
+  "chibi-student-boy-wave": "4f189a4512a69901793cfab00d7bd73127419167372c843b50bc229357a1a6f3",
+  "chibi-student-girl-idle-1": "2b126346f13ec42a9a9d503e52f7a1b71c8822a432e2530e4873a1d42e859edc",
+  "chibi-student-girl-idle-2": "4d3b01ff8fb3d4bde7a75b39a41dbfdae5a4b11a3aad52fd59d14ea81f6beded",
+  "chibi-student-girl-wave": "af59d10ba4fbe330acc663e40d1d0992453b0348f646163fc6b9861bfc85037b",
+};
+// Art drawn after TG-47: TG-48's looks. An existing sprite never moves here (T47-A3b).
+const NEW_ART_11: string[] = [...LOOK_DROP];
+// chibiLook (TG-48) through the namespace, so its absence fails only the tests that use it
+const chibiLook = (look: string, frame: string): string => {
+  const fn = (spritesModule as unknown as { chibiLook?: (l: string, f: string) => string }).chibiLook;
+  if (typeof fn !== "function") throw new Error("sprites.ts does not export chibiLook");
+  return fn(look, frame);
+};
 const paletteFor = (name: string) => (NEW_ART_11.includes(name) ? PALETTE_11 : ART_PALETTE_V1);
 const INK = "#1d2a24";
 const TYPES = ["adult", "student", "senior", "pwd"] as const;
@@ -155,7 +204,7 @@ function checkDir(dir: string, manifest: Record<string, Size>, pngArt: ReadonlyS
 
 function manifestNames(): SpriteName[] {
   const names = Object.keys(SPRITES) as SpriteName[];
-  assert.equal(names.length, 54, "the manifest must list all 54 sprites");
+  assert.equal(names.length, 84, "the manifest must list all 84 sprites (54 + TG-48's 30 looks)");
   return names;
 }
 
@@ -178,9 +227,10 @@ const placeholders = (...names: string[]) => names.every((n) => !PNG_ART.has(n a
 
 // --- T33-1 the art list and the manifest ------------------------------------------------------------
 
-test("the art-list parser finds all 57 entries (54 sprites + 3 exclusions)", () => {
+test("the art-list parser finds all 87 entries (84 sprites + 3 exclusions)", () => {
   const art = parseArtList(readFileSync(ART_LIST, "utf8"));
-  assert.equal(art.size, 57, [...art.keys()].join(", "));
+  assert.equal(art.size, 87, [...art.keys()].join(", "));
+  for (const name of LOOK_DROP) assert.deepEqual(art.get(name), { w: 32, h: 32 }, `${name} in section 9 (TG-48)`);
   for (const [name, { w, h }] of PH_DROP) assert.deepEqual(art.get(name), { w, h }, `${name} in section 7 (TG-45)`);
   assert.deepEqual(art.get("ref-style-sheet"), { w: 512, h: 512 });
   assert.deepEqual(art.get("chibi-{type}-walk-1..4"), { w: 32, h: 32 });
@@ -203,7 +253,7 @@ test("the manifest covers every art-list name and size, minus the documented exc
     assert.deepEqual(SPRITES[name as SpriteName], size, `${name} size`);
   }
   for (const name of Object.keys(SPRITES)) assert.ok(art.has(name), `${name} is not in the art list`);
-  assert.equal(Object.keys(SPRITES).length, 54);
+  assert.equal(Object.keys(SPRITES).length, 84);
 });
 
 test("the irregular sizes are right", () => {
@@ -235,12 +285,14 @@ test("the app icons are the art-drop icon: 512, 192 and 180 PNGs in the 6-colour
 
 // --- T33-19 the art drop ------------------------------------------------------------------------------
 
-test("PNG_ART is exactly the 35 art-drop names plus the 10 TG-45 decor names; the 8 kept placeholders stay SVG", () => {
+test("PNG_ART is exactly the 35 art-drop names, the 10 TG-45 decor names, the TG-46 hero and TG-48's 30 looks; the 8 kept placeholders stay SVG", () => {
   const names = manifestNames();
   assert.equal(ART_DROP.length, 35);
   assert.equal(PH_DROP.size, 10);
-  assert.deepEqual([...ART_DROP, ...PH_NAMES, ...HERO, ...KEPT_SVG].sort(), [...names].sort(), "art drop + decor + hero + kept SVG = the manifest");
-  assert.deepEqual([...PNG_ART].sort(), [...ART_DROP, ...PH_NAMES, ...HERO].sort());
+  assert.equal(LOOK_DROP.length, 30);
+  assert.deepEqual([...ART_DROP, ...PH_NAMES, ...HERO, ...LOOK_DROP, ...KEPT_SVG].sort(), [...names].sort(), "art drop + decor + hero + looks + kept SVG = the manifest");
+  assert.deepEqual([...PNG_ART].sort(), [...ART_DROP, ...PH_NAMES, ...HERO, ...LOOK_DROP].sort());
+  for (const name of LOOK_DROP) assert.deepEqual(SPRITES[name as SpriteName], { w: 32, h: 32 }, `${name}: 32x32`);
   for (const [name, { w, h }] of PH_DROP) assert.deepEqual(SPRITES[name as SpriteName], { w, h }, `${name}: the ticket's size`);
   for (const name of KEPT_SVG) assert.equal(spriteSrc(name as SpriteName), `/sprites/${name}.svg`);
 });
@@ -279,15 +331,127 @@ test("T45-S1 the decor chibis are not passenger types: chibi() never names them"
   assert.equal(named.size, 12);
 });
 
-test("each art-drop idle-2 is its idle-1 one pixel lower", async (t) => {
+test("each art-drop idle-2 is its idle-1 one pixel lower (the classic chibis and TG-48's looks)", async (t) => {
   const clear = (p: number[]) => (p[3] === 0 ? "." : p.join(","));
-  for (const type of TYPES) {
+  for (const type of [...TYPES, ...LOOK_IDS]) {
     await t.test(type, () => {
       const [one, two] = ["idle-1", "idle-2"].map((f) => decodePng(readFileSync(join(SPRITE_DIR, `chibi-${type}-${f}.png`))));
       const w = one.w;
       const lowered = [...Array(w).fill([0, 0, 0, 0]), ...one.pixels.slice(0, -w)];
       assert.deepEqual(two.pixels.map(clear), lowered.map(clear));
     });
+  }
+});
+
+// --- TG-48 diverse Filipino passengers -------------------------------------------------------------------
+
+const lookPng = (name: string) => decodePng(readFileSync(join(SPRITE_DIR, `${name}.png`)));
+const alphaMask = (png: ReturnType<typeof decodePng>) => png.pixels.map(([, , , a]) => (a === 0 ? "." : "#")).join("");
+const pixelKey = (png: ReturnType<typeof decodePng>) => png.pixels.map((p) => (p[3] === 0 ? "." : p.join(","))).join(" ");
+const floorRow = (png: ReturnType<typeof decodePng>) => {
+  let row = -1;
+  png.pixels.forEach(([, , , a], i) => { if (a === 255) row = Math.floor(i / png.w); });
+  return row;
+};
+
+test("T48-S1 chibiLook names every look x frame, in SPRITES and PNG_ART, with its own type first", () => {
+  const re = /^chibi-(adult|student|senior|pwd)-[a-z]+(-[a-z]+)?-(idle-1|idle-2|wave)$/;
+  for (const look of LOOK_IDS) {
+    for (const frame of CHIBI_FRAMES) {
+      const name = chibiLook(look, frame);
+      assert.equal(name, `chibi-${look}-${frame}`);
+      assert.match(name, re);
+      assert.ok(name.startsWith(`chibi-${look.split("-")[0]}-`), `${name}: starts with its type`);
+      assert.ok(name in SPRITES, `${name} in SPRITES`);
+      assert.ok(PNG_ART.has(name as SpriteName), `${name} in PNG_ART`);
+      assert.equal(spriteSrc(name as SpriteName), `/sprites/${name}.png`);
+    }
+  }
+});
+
+test("T48-S2 the 10 looks are 10 different drawings, each wave differs from its idle, and none is a classic chibi", () => {
+  const idles = LOOK_IDS.map((look) => lookPng(`chibi-${look}-idle-1`));
+  assert.equal(new Set(idles.map(pixelKey)).size, 10, "two looks share the same idle-1 pixels");
+  for (const look of LOOK_IDS) {
+    assert.notEqual(alphaMask(lookPng(`chibi-${look}-wave`)), alphaMask(lookPng(`chibi-${look}-idle-1`)), `${look}: wave = idle-1`);
+  }
+  const classics = new Set(TYPES.map((t) => alphaMask(lookPng(`chibi-${t}-idle-1`))));
+  for (const [i, look] of LOOK_IDS.entries()) assert.ok(!classics.has(alphaMask(idles[i])), `${look}: a classic chibi under a look name`);
+});
+
+test("T48-S3 each look's idle-1 stands on its type's classic floor row", async (t) => {
+  for (const look of LOOK_IDS) {
+    await t.test(look, () => {
+      const type = look.split("-")[0];
+      assert.equal(floorRow(lookPng(`chibi-${look}-idle-1`)), floorRow(lookPng(`chibi-${type}-idle-1`)));
+    });
+  }
+});
+
+test("T48-S4 the 30 look PNGs are byte-for-byte the manager's processed art (sha256 pinned)", async (t) => {
+  assert.deepEqual(Object.keys(LOOK_SHA).sort(), [...LOOK_DROP].sort());
+  for (const name of LOOK_DROP) {
+    await t.test(name, () => {
+      const file = join(SPRITE_DIR, `${name}.png`);
+      assert.ok(existsSync(file), `${name}.png is missing`);
+      assert.equal(createHash("sha256").update(readFileSync(file)).digest("hex"), LOOK_SHA[name]);
+    });
+  }
+});
+
+test("T48-P1 every spawn frame of every look is a shipped PNG", () => {
+  assert.deepEqual(SPAWN.map((s) => s.frame), ["wave", "idle-2", "idle-1"]);
+  for (const look of LOOK_IDS) {
+    for (const { frame } of SPAWN) {
+      const name = chibiLook(look, frame);
+      assert.ok(PNG_ART.has(name as SpriteName), `${name} in PNG_ART`);
+      assert.ok(existsSync(join(SPRITE_DIR, `${name}.png`)), `${name}.png on disk`);
+    }
+  }
+});
+
+// H1 (tg-ux2 ux.md §1, owner-approved): guard the recolour so a pre-H1 export can't come back
+const hexOf = ([r, g, b]: number[]) => "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+const KAYUMANGGI = "#8d5524";
+const SKIN_LIGHT = "#c68642";
+// ux.md §1 S1: one of each tone per type, each tone across both genders, modern and traditional dress, and a wheelchair
+const SKIN_TONE: Record<(typeof LOOK_IDS)[number], string> = {
+  "adult-barong": KAYUMANGGI, "adult-casual-f": KAYUMANGGI, "student-boy": KAYUMANGGI, "senior-lola": KAYUMANGGI,
+  "pwd-woman": KAYUMANGGI, "adult-filipiniana": SKIN_LIGHT, "adult-casual-m": SKIN_LIGHT, "student-girl": SKIN_LIGHT,
+  "senior-lolo": SKIN_LIGHT, "pwd-man": SKIN_LIGHT,
+};
+
+test("T48-H1a the seniors' grey hair is Cream, not Mint or Leaf (rows 0-16 of every frame)", async (t) => {
+  const greens = new Set(["#cfe8c4", "#5fb36b"]);
+  for (const look of ["senior-lola", "senior-lolo"]) {
+    for (const frame of FRAMES) {
+      await t.test(`${look}-${frame}`, () => {
+        const png = lookPng(`chibi-${look}-${frame}`);
+        const hits = png.pixels.flatMap((p, i) => {
+          const y = Math.floor(i / png.w);
+          return p[3] === 255 && y <= 16 && greens.has(hexOf(p)) ? [`(${i % png.w},${y})`] : [];
+        });
+        assert.deepEqual(hits, [], "Mint or Leaf in the hair rows");
+      });
+    }
+  }
+});
+
+test("T48-H1b each look's skin is the ux.md §1 tone: the dominant skin colour, at least 3 to 1, in every frame", async (t) => {
+  assert.deepEqual(Object.keys(SKIN_TONE).sort(), [...LOOK_IDS].sort());
+  for (const look of LOOK_IDS) {
+    for (const frame of FRAMES) {
+      await t.test(`${look}-${frame}`, () => {
+        const n: Record<string, number> = { [KAYUMANGGI]: 0, [SKIN_LIGHT]: 0 };
+        for (const p of lookPng(`chibi-${look}-${frame}`).pixels) {
+          const h = hexOf(p);
+          if (p[3] === 255 && h in n) n[h]++;
+        }
+        const want = SKIN_TONE[look];
+        const other = want === KAYUMANGGI ? SKIN_LIGHT : KAYUMANGGI;
+        assert.ok(n[want] >= 3 * n[other] && n[want] > 0, `${want} ${n[want]} vs ${other} ${n[other]}`);
+      });
+    }
   }
 });
 

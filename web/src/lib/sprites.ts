@@ -41,6 +41,17 @@ export const SPRITES = {
   "deco-parol": TILE, "deco-sampaguita": TILE, "deco-rice-terraces": DECO_SQUARE, "deco-panagbenga-float": DECO_WIDE,
   // TG-46 the landing hero, drawn at 2x
   "hero-scene": { w: 320, h: 123 },
+  // TG-48 diverse Filipino passengers: one look per passenger, cycled per type by party.ts lookFor (11-colour palette)
+  "chibi-adult-casual-f-idle-1": CHIBI, "chibi-adult-casual-f-idle-2": CHIBI, "chibi-adult-casual-f-wave": CHIBI,
+  "chibi-adult-casual-m-idle-1": CHIBI, "chibi-adult-casual-m-idle-2": CHIBI, "chibi-adult-casual-m-wave": CHIBI,
+  "chibi-adult-filipiniana-idle-1": CHIBI, "chibi-adult-filipiniana-idle-2": CHIBI, "chibi-adult-filipiniana-wave": CHIBI,
+  "chibi-adult-barong-idle-1": CHIBI, "chibi-adult-barong-idle-2": CHIBI, "chibi-adult-barong-wave": CHIBI,
+  "chibi-student-girl-idle-1": CHIBI, "chibi-student-girl-idle-2": CHIBI, "chibi-student-girl-wave": CHIBI,
+  "chibi-student-boy-idle-1": CHIBI, "chibi-student-boy-idle-2": CHIBI, "chibi-student-boy-wave": CHIBI,
+  "chibi-senior-lola-idle-1": CHIBI, "chibi-senior-lola-idle-2": CHIBI, "chibi-senior-lola-wave": CHIBI,
+  "chibi-senior-lolo-idle-1": CHIBI, "chibi-senior-lolo-idle-2": CHIBI, "chibi-senior-lolo-wave": CHIBI,
+  "chibi-pwd-woman-idle-1": CHIBI, "chibi-pwd-woman-idle-2": CHIBI, "chibi-pwd-woman-wave": CHIBI,
+  "chibi-pwd-man-idle-1": CHIBI, "chibi-pwd-man-idle-2": CHIBI, "chibi-pwd-man-wave": CHIBI,
 } as const satisfies Record<string, { w: number; h: number }>;
 export type SpriteName = keyof typeof SPRITES;
 
@@ -58,6 +69,16 @@ export const PNG_ART: ReadonlySet<SpriteName> = new Set<SpriteName>([
   "deco-sun-stars", "deco-carabao", "deco-bahay-kubo", "chibi-barong",
   "chibi-filipiniana", "deco-taho-vendor", "deco-parol", "deco-sampaguita",
   "deco-rice-terraces", "deco-panagbenga-float", "hero-scene",
+  "chibi-adult-casual-f-idle-1", "chibi-adult-casual-f-idle-2", "chibi-adult-casual-f-wave",
+  "chibi-adult-casual-m-idle-1", "chibi-adult-casual-m-idle-2", "chibi-adult-casual-m-wave",
+  "chibi-adult-filipiniana-idle-1", "chibi-adult-filipiniana-idle-2", "chibi-adult-filipiniana-wave",
+  "chibi-adult-barong-idle-1", "chibi-adult-barong-idle-2", "chibi-adult-barong-wave",
+  "chibi-student-girl-idle-1", "chibi-student-girl-idle-2", "chibi-student-girl-wave",
+  "chibi-student-boy-idle-1", "chibi-student-boy-idle-2", "chibi-student-boy-wave",
+  "chibi-senior-lola-idle-1", "chibi-senior-lola-idle-2", "chibi-senior-lola-wave",
+  "chibi-senior-lolo-idle-1", "chibi-senior-lolo-idle-2", "chibi-senior-lolo-wave",
+  "chibi-pwd-woman-idle-1", "chibi-pwd-woman-idle-2", "chibi-pwd-woman-wave",
+  "chibi-pwd-man-idle-1", "chibi-pwd-man-idle-2", "chibi-pwd-man-wave",
 ]);
 
 export function spriteSrc(name: SpriteName): string {
@@ -66,6 +87,17 @@ export function spriteSrc(name: SpriteName): string {
 
 export function chibi(type: PassengerType, frame: ChibiFrame): SpriteName {
   return `chibi-${type}-${frame}`;
+}
+
+// TG-48: a passenger's look, "<type>-<look>". party.ts LOOKS holds the order each type cycles through.
+export type ChibiLook =
+  | "adult-casual-f" | "adult-casual-m" | "adult-filipiniana" | "adult-barong"
+  | "student-girl" | "student-boy"
+  | "senior-lola" | "senior-lolo"
+  | "pwd-woman" | "pwd-man";
+
+export function chibiLook(look: ChibiLook, frame: ChibiFrame): SpriteName {
+  return `chibi-${look}-${frame}`;
 }
 
 // Takes a string: the API's spot category is a plain string. Unknown values fall back to the generic place.
