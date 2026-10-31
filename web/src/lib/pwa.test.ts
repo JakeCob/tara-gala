@@ -109,7 +109,7 @@ test("offline.html is a self-contained fallback page", () => {
   assert.match(html, /<meta name="viewport" content="width=device-width,\s*initial-scale=1"/);
   assert.match(html, /You're offline/);
   assert.match(html, /This page wasn't saved on this phone yet\. Open it once while you have signal and it'll work offline next time\./);
-  assert.match(html, /<a [^>]*href="\/"[^>]*>Back to bus search<\/a>/);
+  assert.match(html, /<a [^>]*href="\/buses"[^>]*>Back to bus search<\/a>/);
   assert.doesNotMatch(html, /<script/i, "no scripts");
   assert.doesNotMatch(html, /<link[^>]+stylesheet|src="\/_next/, "no external assets: it must render from one cached file");
 });
@@ -162,8 +162,8 @@ test("S1 OfflineBanner is an always-rendered status driven by the worker's messa
 });
 
 test("S1 layout mounts the banner first and the manager last; api.ts only exports API_URL", () => {
-  // TG-51: the Dark mode switch sits under the page, before the manager
-  assert.match(layout, /<body[^>]*>\s*<OfflineBanner \/>\s*\{children\}\s*<ThemeToggle \/>\s*<ServiceWorkerManager \/>\s*<\/body>/);
+  // TG-49: the site header (with TG-51's Dark mode switch) under the banner; the phones' tab bar under the page
+  assert.match(layout, /<body[^>]*>\s*<OfflineBanner \/>\s*<SiteHeader \/>\s*\{children\}\s*<TabBar \/>\s*<ServiceWorkerManager \/>\s*<\/body>/);
   const api = readFileSync(new URL("src/lib/api.ts", WEB), "utf8");
   assert.match(api, /^export const API_URL = process\.env\.NEXT_PUBLIC_API_URL \?\? "http:\/\/localhost:8000";$/m);
 });

@@ -298,8 +298,8 @@ test("footer points to the cards, with no homepage links; the /baguio link stays
   assert.match(footer[0], /^<footer className="mt-auto pt-6 text-xs text-muted">/);
   assert.ok(footer[1].includes("Directions to your terminal are on each trip."));
   assert.doesNotMatch(page, /maps\.google\.com|sakay\.ph/);
-  // TG-46: the /baguio link is a quick action now
-  assert.match(readFileSync(new URL("../components/landing/QuickActions.tsx", import.meta.url), "utf8"), /href="\/baguio"/);
+  // TG-49: the /baguio link is the title screen's In Baguio (and a tab)
+  assert.match(readFileSync(new URL("../components/landing/TitleScreen.tsx", import.meta.url), "utf8"), /href: "\/baguio"/);
 });
 
 test("the empty results live region stays rendered but takes no gap", () => {

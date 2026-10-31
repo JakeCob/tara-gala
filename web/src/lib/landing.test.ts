@@ -25,7 +25,7 @@ async function load<T>(path: string): Promise<T> {
 }
 
 const LANDING = "src/components/landing/";
-const SECTIONS = ["Hero", "QuickActions", "PremadeTrips", "HowItWorks", "Trust", "SectionStripe"];
+const SECTIONS = ["TitleScreen", "Hero", "PremadeTrips", "HowItWorks", "Trust", "SectionStripe"];
 const sectionPath = (name: string) => `${LANDING}${name}.tsx`;
 /** The new landing files that exist (the guards over "every new file" run on these). */
 const landingFiles = () => (has(LANDING) ? readdirSync(new URL(LANDING, WEB)).filter((f) => f.endsWith(".tsx")).map((f) => `${LANDING}${f}`) : []);
@@ -68,33 +68,47 @@ const tokens = (s: string) => s.split(/\s+/).filter(Boolean);
 
 // ================================================================ T46-L: structure
 
-test("T46-L1 page.tsx: one shell holding the sections in reading order; TG-44's two links are gone", () => {
-  const page = source("src/app/page.tsx");
-  assert.equal(page.match(/<PageShell>/g)?.length, 1);
-  const order = ["<Hero />", "<TripSearch />", "<QuickActions />", "<PremadeTrips />", "<HowItWorks />", "<Trust />", "<HomeDecor />", "<footer"];
+function inOrder(page: string, order: string[]) {
   const at = order.map((tag) => {
     assert.equal(page.split(tag).length - 1, 1, `${tag} appears exactly once`);
     return page.indexOf(tag);
   });
   for (let i = 1; i < at.length; i++) assert.ok(at[i] > at[i - 1], `${order[i]} comes after ${order[i - 1]} (DOM order is visual order)`);
+  return at;
+}
+
+// TG-49: / is the game title screen; the bus search, its hero and the trust lines moved to /buses
+test("T49-B1 /buses: one shell with the hero, the search and the trust lines, in reading order", () => {
+  const page = source("src/app/buses/page.tsx");
+  assert.equal(page.match(/<PageShell>/g)?.length, 1);
+  inOrder(page, ["<Hero />", "<TripSearch />", "<Trust />"]);
+  assert.match(page, /title: "Find buses · Tara Gala"/);
+});
+
+test("T46-L1 page.tsx: one shell holding the title screen and the sections in reading order; no back links", () => {
+  const page = source("src/app/page.tsx");
+  assert.equal(page.match(/<PageShell>/g)?.length, 1);
+  const order = ["<TitleScreen />", "<PremadeTrips />", "<HowItWorks />", "<HomeDecor />", "<footer"];
+  const at = inOrder(page, order);
   assert.ok(page.indexOf("</PageShell>") > at.at(-1)!, "the footer is inside the shell");
-  assert.doesNotMatch(page, /<PixelLink\b[^>]*href="\/(baguio|plan)"/, "the quick actions replace TG-44's two links");
+  assert.doesNotMatch(page, /<PixelLink\b[^>]*href="\/(baguio|plan)"/, "the start menu and the tabs replace TG-44's two links");
   assert.doesNotMatch(page, /<header\b/, "the old header is replaced by the hero");
   // The footer (ux §5.7): TG-14's class string kept; the second line added
   assert.match(page, /<footer className="mt-auto pt-6 text-xs text-muted">/);
   const footer = visibleText(page.slice(page.indexOf("<footer")));
   assert.ok(footer.includes("Directions to your terminal are on each trip."));
   assert.ok(footer.includes("Tara Gala isn't affiliated with any bus operator. Ingat sa biyahe!"));
-  assert.doesNotMatch(page, /Title screen|data-title/, "the replay button is PR B");
 });
 
-test("T46-L2 one h1, in the hero, that the title screen can focus later; section headings are SectionTitles", () => {
-  const files = ["src/app/page.tsx", ...SECTIONS.map(sectionPath)].map(source);
-  const titles = files.join("\n").match(/<PageTitle\b[^>]*>/g) ?? [];
-  assert.equal(titles.length, 1, "exactly one PageTitle across page.tsx and landing/*");
-  assert.doesNotMatch(files.join("\n"), /<h1\b/, "no hand-written h1");
-  const hero = source(sectionPath("Hero"));
-  assert.match(hero, /<PageTitle wordmark id="landing-title" tabIndex=\{-1\}>Tara Gala<\/PageTitle>/);
+test("T46-L2 one h1 per page: the title screen's on /, the hero's on /buses; section headings are SectionTitles", () => {
+  const home = ["src/app/page.tsx", ...["TitleScreen", "PremadeTrips", "HowItWorks"].map(sectionPath)].map(source).join("\n");
+  const buses = ["src/app/buses/page.tsx", ...["Hero", "Trust"].map(sectionPath)].map(source).join("\n");
+  for (const [name, files] of [["/", home], ["/buses", buses]]) {
+    assert.equal(files.match(/<PageTitle\b[^>]*>/g)?.length, 1, `exactly one PageTitle on ${name}`);
+    assert.doesNotMatch(files, /<h1\b/, `${name}: no hand-written h1`);
+  }
+  assert.match(source(sectionPath("TitleScreen")), /<PageTitle titleScreen id="landing-title">\s*Tara Gala\s*<\/PageTitle>/);
+  assert.match(source(sectionPath("Hero")), /<PageTitle wordmark id="buses-title">Find buses<\/PageTitle>/);
   for (const name of ["PremadeTrips", "HowItWorks", "Trust"]) {
     assert.match(source(sectionPath(name)), /<SectionTitle\b[^>]*\bid="[\w-]+"/, `${name} has an h2 with an id`);
     assert.doesNotMatch(source(sectionPath(name)), /<h[1-6]\b/, `${name}: headings go through SectionTitle`);
@@ -109,25 +123,31 @@ test("T46-L2 PageTitle gains wordmark, id and tabIndex; PX.wordmark is PX.h1 in 
     PX.wordmark,
     "the same title size, in the Wide cut, on the fixed light screen",
   );
+  assert.equal(PX.titleWordmark, "font-wordmark text-[2.75rem] leading-none font-normal text-screen-ink md:text-[4rem] lg:text-[5rem]");
   const src = source("src/components/pixel/PageTitle.tsx");
-  assert.match(src, /wordmark\s*\?\s*PX\.wordmark\s*:\s*PX\.h1/);
+  assert.match(src, /titleScreen\s*\?\s*PX\.titleWordmark\s*:\s*wordmark\s*\?\s*PX\.wordmark\s*:\s*PX\.h1/);
   assert.match(src, /\bid\?: string/);
   assert.match(src, /\btabIndex\?: number/);
   assert.match(src, /\bwordmark\?: boolean/);
   assert.doesNotMatch(src, /use client/);
 });
 
-test("T46-L3 quick actions: a named nav of three neutral card links; Find buses jumps to the date input", () => {
-  const src = source(sectionPath("QuickActions"));
-  assert.match(src, /<nav aria-label="Quick actions">/);
-  assert.match(src, /<ul\b/);
-  const hrefs = [...src.matchAll(/<PixelCardLink\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["#travel-date", "/plan", "/baguio", "/wallet"]); // TG-50 adds the Trip wallet
-  const plan = src.indexOf('href="/plan"');
-  assert.match(src.slice(0, plan), /\{formMode\(flags\) !== "none" && \(\s*<li\b[^>]*>\s*<PixelCardLink\b[^>]*$/, "Plan a trip only when the planner is on");
-  for (const [, arrow] of src.matchAll(/<span([^>]*)>→<\/span>/g)) assert.match(arrow, /aria-hidden/, "the → is decorative");
-  assert.ok((src.match(/>→</g)?.length ?? 0) >= 1, "the tiles end with an arrow (one shared tile body may write it once)");
-  assert.match(source("src/components/TripSearch.tsx"), /<input\b[^>]*\bid="travel-date"/, "the Find buses target");
+test("T49-T1 the title screen: a named start menu linking straight to each tab, one cursor, nothing blinking", () => {
+  const src = source(sectionPath("TitleScreen"));
+  assert.doesNotMatch(src, /use client|\buse(State|Effect|Ref|Memo|Callback|Reducer|SyncExternalStore)\b/, "a server component");
+  assert.match(src, /<section\s+aria-labelledby="landing-title"/);
+  assert.match(src, /<nav aria-label="Start menu" className="title-menu mt-1">/);
+  const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/wallet"]);
+  assert.match(src, /\.\.\.\(formMode\(flags\) !== "none" \? \[\{ href: "\/plan"/, "Plan a trip only when the planner is on");
+  assert.match(src, /<Link href=\{item\.href\} className=\{PX\.menuItem\}>\s*<span data-cursor="">\s*<MenuCursor\b/);
+  assert.match(src, /<p aria-hidden="true" className=\{PX\.pressStart\}>\s*Press start\s*<\/p>/, "PRESS START is decor, not a control");
+  const css = read("src/app/globals.css");
+  assert.match(css, /@utility title-menu \{[^}]*\[data-cursor\] \{ visibility: hidden; \}/);
+  assert.match(css, /&:not\(:hover, :focus-within\) li:first-child \[data-cursor\], & a:is\(:hover, :focus-visible\) \[data-cursor\] \{ visibility: visible; \}/);
+  const img = src.match(/<img\b[^>]*src=\{spriteSrc\("hero-scene"\)\}[^>]*\/>/)?.[0] ?? "";
+  for (const attr of [/alt=""/, /aria-hidden="true"/, /width=\{640\}/, /height=\{246\}/, /\bpixelated\b/]) assert.match(img, attr, `title img ${attr}`);
+  assert.doesNotMatch(src, /text-brand|text-foreground|text-muted|text-link/, "the title screen is a fixed light screen (ux §0)");
 });
 
 test("T46-L8 activating Find buses moves focus to the date input, not just the scroll (manager GREEN follow-up)", () => {
@@ -142,7 +162,6 @@ test("T46-L8 activating Find buses moves focus to the date input, not just the s
   assert.match(effect, /\.closest\(`a\[href="#\$\{DATE_ID\}"\]`\)/, "any in-page link to the input, the quick action's included");
   assert.match(effect, /document\.getElementById\(DATE_ID\)\?\.focus\(\)/);
   assert.doesNotMatch(effect, /preventDefault/, "the link still scrolls and sets the hash");
-  assert.match(source(sectionPath("QuickActions")), /<PixelCardLink href="#travel-date"/);
 });
 
 test("T46-L9 the jump leaves the whole form, from the From / To row, clear of the sticky offline banner (ux ruling 2)", () => {
@@ -163,7 +182,7 @@ test("T46-L4 the hero: a fixed light screen with decorative art; its text is scr
   for (const attr of [/alt=""/, /aria-hidden="true"/, /draggable=\{false\}/, /width=\{640\}/, /height=\{246\}/, /\bpixelated\b/, /fetchPriority="high"/]) {
     assert.match(img, attr, `hero img ${attr}`);
   }
-  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses, straight from the operators\.<\/p>/);
+  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio trip on file, with fares and where to book\.<\/p>/);
   assert.doesNotMatch(src, /text-brand|text-foreground|text-muted|text-link/, "the hero is a fixed light screen (ux §0)");
   // The trio: decorative and static. TG-49 shows it at every width, since the scene is 2x everywhere now
   assert.match(src, /<div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1">/);
@@ -225,13 +244,12 @@ test("T46-L6 how it works and trust: server sections named by their h2; the step
 
 // ================================================================ T46-C: copy (ux §5)
 
-test("T46-C2 the hero and the quick actions say exactly ux §5.1 and §5.3", () => {
-  const text = copyIn([sectionPath("Hero"), sectionPath("QuickActions")]);
+test("T46-C2 the title screen and the /buses hero say exactly what the owner approved", () => {
+  const text = copyIn([sectionPath("TitleScreen"), sectionPath("Hero")]);
   for (const s of [
-    "Manila to Baguio buses, straight from the operators.", // the owner's S1 call: honest, no "every"
-    "Find buses", "Every trip on file, with fares and where to book.",
-    "Plan a Baguio trip", "Tell us who's coming and your vibe. Tara!",
-    "In Baguio?", "Jeeps, taxis and walks from the terminal.",
+    "Tara Gala", "Manila to Baguio buses, straight from the operators.", // the owner's S1 call: honest, no "every"
+    "Press start", "Find buses", "Plan a trip", "In Baguio", "Trip wallet",
+    "Every Manila to Baguio trip on file, with fares and where to book.", // "on file" keeps it honest
   ]) assert.ok(text.includes(s), s);
 });
 
@@ -349,7 +367,7 @@ test("T46-S2 every sprite the landing names is in TG-33's manifest", async () =>
     for (const m of src.matchAll(/(?:spriteSrc\(|SPRITES\[)"([^"]+)"/g)) names.add(m[1]);
     for (const m of src.matchAll(/"((?:vehicle|mode|tile|ui|deco|place|chibi|hero)-[a-z0-9-]+)"/g)) names.add(m[1]);
   }
-  assert.ok(names.has("hero-scene") && names.has("vehicle-bus") && names.has("mode-jeep") && names.has("ui-badge-verified") && names.has("tile-mountain"));
+  assert.ok(names.has("hero-scene") && names.has("ui-badge-verified") && names.has("tile-mountain"));
   for (const n of names) assert.ok(Object.hasOwn(SPRITES, n), `${n} is a SPRITES key`);
 });
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import WalletHome from "@/components/WalletHome";
-import { PageShell, PageTitle, PixelLink } from "@/components/pixel";
+import { PageShell, PageTitle } from "@/components/pixel";
 
 export const metadata: Metadata = {
   title: "Trip wallet · Tara Gala",
@@ -9,9 +9,6 @@ export const metadata: Metadata = {
 export default function WalletPage() {
   return (
     <PageShell>
-      <PixelLink variant="secondary" href="/" className="inline-flex items-center self-start px-4 text-sm">
-        <span aria-hidden>←&nbsp;</span>Back to bus search
-      </PixelLink>
       <header className="flex flex-col gap-1">
         <PageTitle className="text-balance">Trip wallet</PageTitle>
         <p className="text-sm text-muted md:max-w-prose">

@@ -424,7 +424,7 @@ test("T43-B1 ItineraryView: the 404 and error boxes, Search buses and Try again 
   const src = VIEW_SRC();
   // TG-47 ux §2: both take the red lining (tone="alert"); layout unchanged
   assert.equal(src.match(/<PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">/g)?.length, 2, "the 404 and error boxes");
-  assert.match(src, /<PixelLink variant="secondary" href="\/">\s*Search buses\s*<\/PixelLink>/);
+  assert.match(src, /<PixelLink variant="secondary" href="\/buses">\s*Search buses\s*<\/PixelLink>/);
   assert.match(src, /<PixelButton\s+variant="secondary"\s+aria-disabled=\{state\.retrying \|\| undefined\}\s+onClick=\{retry\}\s*>/);
   assert.doesNotMatch(src, /<button\b|<Link\b/, "no raw button or link left");
   assert.match(src, /<p role="status" className="sr-only">/, "the announced status is unchanged");
@@ -440,7 +440,7 @@ test("T43-B2 ItineraryList: summary, notice, sections and stops use the primitiv
   assert.match(src, /className=\{`\$\{PX\.meta\} tabular-nums`\}>Budget /);
   // TG-47 ux §2: the plan-changed and bus-gone boxes take the red lining (tone="alert"); layout unchanged
   assert.match(src, /<PixelBox as="section" aria-label="Plan changes" tone="alert" className="p-4 flex flex-col gap-1">/);
-  assert.match(src, /<PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">[\s\S]*?<PixelLink variant="secondary" href="\/">\s*Search buses/, "the bus-gone box");
+  assert.match(src, /<PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">[\s\S]*?<PixelLink variant="secondary" href="\/buses">\s*Search buses/, "the bus-gone box");
   assert.match(src, /<PixelBox as="p" className="p-4 text-sm">Free time\. No stops planned for this day\.<\/PixelBox>/);
   assert.match(src, /<PixelBox as="p" className="p-4 text-sm">\{issueNotice\("unknown_leg"\)\}<\/PixelBox>/);
   assert.match(src, /<PixelBox className="p-4 flex flex-col gap-1">/, "the stop box");

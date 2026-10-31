@@ -72,7 +72,7 @@ export default function ItineraryView({ slug }: { slug: string }) {
         <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
           <p className="text-sm font-bold text-danger-text">{NOT_FOUND}</p>
           <p className="text-sm">{NOT_FOUND_BODY}</p>
-          <PixelLink variant="secondary" href="/">
+          <PixelLink variant="secondary" href="/buses">
             Search buses
           </PixelLink>
         </PixelBox>

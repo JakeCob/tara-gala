@@ -830,8 +830,8 @@ test("T21-C1 every pinned string from ux §8", () => {
 const form = readIf("src/components/PlanForm.tsx");
 const fields = readIf("src/components/PlanFields.tsx");
 const results = readIf("src/components/PlanResults.tsx");
-// TG-46: the home /plan link is a quick action now
-const home = read("src/components/landing/QuickActions.tsx");
+// TG-49: the home /plan link is the title screen's Plan a trip
+const home = read("src/components/landing/TitleScreen.tsx");
 const ui = form + fields + results;
 
 test("T21-S1 date inputs use dateBounds, never a hard-coded date", () => {
@@ -891,7 +891,7 @@ test("T21-S5 the branch comes from formMode; home links /plan only when a mode i
   assert.match(form, /formMode\(flags\)/);
   assert.doesNotMatch(ui, /flags\.plannerLive/, "branch on formMode, not ad-hoc flag checks");
   assert.match(home, /formMode\(flags\) !== "none"/);
-  assert.match(home, /href="\/plan"/);
+  assert.match(home, /href: "\/plan"/);
   // RED audit survivors E6 and L6: the fallback button and both result dispatches exist
   assert.match(ui, /showPremadeAction\(/);
   assert.match(ui, /PLAN_COPY\.actions\.seePremade/);

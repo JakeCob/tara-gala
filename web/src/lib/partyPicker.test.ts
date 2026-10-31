@@ -14,8 +14,8 @@ const stage = read("src/components/PartyStage.tsx");
 const useSpawn = read("src/components/useSpawn.ts");
 const form = read("src/components/PlanForm.tsx");
 const page = read("src/app/plan/page.tsx");
-// TG-46: the home /plan link is a quick action now
-const home = read("src/components/landing/QuickActions.tsx");
+// TG-49: the home /plan link is the title screen's Plan a trip
+const home = read("src/components/landing/TitleScreen.tsx");
 const NEW_UI = {
   "PartyPicker.tsx": picker,
   "PartyStage.tsx": stage,
@@ -233,12 +233,9 @@ test("T15-G9 PlanForm owns the party; /plan page shell; home link gated", () => 
   assert.doesNotMatch(page, /use client/);
   assert.match(page, /<PageTitle>Plan your trip<\/PageTitle>/);
   assert.doesNotMatch(page, /<h1\b/, "PageTitle is the h1");
-  assert.ok(
-    tags(page, "PixelLink").some((t) => /href="\/"/.test(t) && /variant="secondary"/.test(t)),
-    '<PixelLink variant="secondary" href="/">',
-  );
+  // TG-49: the tabs replace the page's Back to bus search link
+  assert.doesNotMatch(page, /<PixelLink\b/, "no back link on a tab's page");
   assert.ok(tags(form, "PartyStage").some((t) => /\bfixedRows\b/.test(t)), "the picker's stage keeps its fixed rows (TG-15 Gate 3 S2)");
-  assert.match(page, /<span aria-hidden(="true")?>←(&nbsp;)?<\/span>\s*Back to bus search/);
   assert.match(page, /title:\s*"Plan your trip · Tara Gala"/);
   assert.match(page, /<PlanForm\s*\/>/);
   // TG-21 adds the home link, shown only when a planner mode is on (T21-S5)
@@ -289,10 +286,7 @@ test("T43-P6 A2 files hand-write no frame, fill or press shadow; the share heade
   const share = files["i/[slug]/page.tsx"];
   assert.match(share, /<PageTitle>Your trip<\/PageTitle>/);
   assert.doesNotMatch(share, /<h1\b/, "PageTitle is the h1");
-  assert.ok(
-    tags(share, "PixelLink").some((t) => /href="\/"/.test(t) && /variant="secondary"/.test(t)),
-    '<PixelLink variant="secondary" href="/">',
-  );
+  assert.doesNotMatch(share, /<PixelLink\b/, "TG-49: the Plan tab replaces the share page's back link");
   const button = files["ShareButton.tsx"];
   assert.doesNotMatch(button, /<button\b/);
   assert.ok(tags(button, "PixelButton").some((t) => /variant="primary"/.test(t)), '<PixelButton variant="primary">');

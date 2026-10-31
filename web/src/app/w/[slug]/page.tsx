@@ -21,8 +21,8 @@ async function SlugView({ params }: { params: Promise<{ slug: string }> }) {
 export default function SharedWalletPage({ params }: PageProps<"/w/[slug]">) {
   return (
     <PageShell>
-      <PixelLink variant="secondary" href="/" className="inline-flex items-center self-start px-4 text-sm">
-        <span aria-hidden="true">←&nbsp;</span>Back to bus search
+      <PixelLink variant="secondary" href="/wallet" className="inline-flex items-center self-start px-4 text-sm">
+        <span aria-hidden="true">←&nbsp;</span>Back to trip wallet
       </PixelLink>
       <PageTitle>Trip wallet</PageTitle>
       <Suspense fallback={<p className="text-sm text-muted">Opening the wallet...</p>}>

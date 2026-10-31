@@ -3,7 +3,8 @@ import { Nunito } from "next/font/google";
 import localFont from "next/font/local";
 import OfflineBanner from "@/components/OfflineBanner";
 import ServiceWorkerManager from "@/components/ServiceWorkerManager";
-import ThemeToggle from "@/components/ThemeToggle";
+import SiteHeader from "@/components/SiteHeader";
+import TabBar from "@/components/TabBar";
 import { THEME_BOOT } from "@/lib/theme";
 import "./globals.css";
 
@@ -35,10 +36,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* The saved light or dark choice, applied before first paint (TG-51) */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
-      <body className="min-h-full flex flex-col">
+      {/* Phones keep room under the page for the fixed tab bar (TG-49) */}
+      <body className="min-h-full flex flex-col pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:pb-0">
         <OfflineBanner />
+        <SiteHeader />
         {children}
-        <ThemeToggle />
+        <TabBar />
         <ServiceWorkerManager />
       </body>
     </html>

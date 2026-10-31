@@ -131,7 +131,7 @@ export default function ServiceWorkerManager() {
     <div role="status">
       {show && (
         // pixel-box draws its own hard shadow (TG-49), so the wrapper only positions it
-        <div className="fixed inset-x-4 bottom-4 z-20 mx-auto max-w-md lg:left-auto lg:right-8 lg:w-[28rem]">
+        <div className="fixed inset-x-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 mx-auto max-w-md md:bottom-4 lg:left-auto lg:right-8 lg:w-[28rem]">
           <div className="pixel-box bg-card p-4 flex flex-col gap-3 text-sm">
             <p>A new version of Tara Gala is ready.</p>
             <div className="flex justify-end gap-2">

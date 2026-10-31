@@ -44,11 +44,12 @@ test("TH3 the boot script applies a saved choice and ignores anything else", () 
   assert.equal(boot(null, true), undefined, "blocked storage never breaks the page");
 });
 
-test("TH4 layout runs the boot script in <head> and mounts the switch on every page", () => {
+test("TH4 layout runs the boot script in <head>; the switch is in every page's header (TG-49)", () => {
   const layout = read("src/app/layout.tsx");
   assert.match(layout, /<head>\s*(\{\/\*[^]*?\*\/\}\s*)?<script dangerouslySetInnerHTML=\{\{ __html: THEME_BOOT \}\} \/>\s*<\/head>/);
   assert.match(layout, /<html\b[^>]*\bsuppressHydrationWarning\b[^>]*>/);
-  assert.match(layout, /\{children\}\s*<ThemeToggle \/>/);
+  assert.match(layout, /<SiteHeader \/>/);
+  assert.match(read("src/components/SiteHeader.tsx"), /<div className="ml-auto">\s*<ThemeToggle \/>\s*<\/div>/);
 });
 
 test("TH5 the switch is a labelled switch, saves on this device only and logs no theme or storage contents", () => {

@@ -144,7 +144,7 @@ export default function PlanForm() {
         {mode === "none" ? (
           <PixelBox className="p-4 flex flex-col items-start gap-3">
             <p className="text-sm">{PLAN_COPY.none}</p>
-            <PixelLink variant="secondary" href="/">
+            <PixelLink variant="secondary" href="/buses">
               {PLAN_COPY.actions.searchBuses}
             </PixelLink>
           </PixelBox>

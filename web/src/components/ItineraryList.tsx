@@ -92,7 +92,7 @@ function BusSection({ title, leg, issues }: { title: string; leg: BusLegOut; iss
       ) : (
         <PixelBox tone="alert" className="p-4 flex flex-col items-start gap-3">
           <p className="text-sm text-danger-text">{issueNotice("unknown_trip")}</p>
-          <PixelLink variant="secondary" href="/">
+          <PixelLink variant="secondary" href="/buses">
             Search buses
           </PixelLink>
         </PixelBox>

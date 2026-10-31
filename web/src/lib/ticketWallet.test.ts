@@ -94,8 +94,8 @@ test("W7 the wallet: one primary button that opens a hidden picker of photos; fu
 });
 
 test("W8 home: a fourth quick action (TG-50 made it the Trip wallet, which links to My tickets); four tiles make a 2 by 2 grid from lg", () => {
-  const src = read("src/components/landing/QuickActions.tsx");
-  const hrefs = [...src.matchAll(/<PixelCardLink\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["#travel-date", "/plan", "/baguio", "/wallet"]);
-  assert.match(src, /const cols = formMode\(flags\) !== "none" \? "lg:grid-cols-2" : "lg:grid-cols-3";/);
+  // TG-49: the quick actions became the title screen's start menu
+  const src = read("src/components/landing/TitleScreen.tsx");
+  const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/wallet"]);
 });
