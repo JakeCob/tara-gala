@@ -18,8 +18,8 @@ test("T27-1 manifest has what Chrome and iOS need to install", () => {
   assert.equal(m.id, "/", "a stable id so a later start_url change doesn't make a second app");
   assert.equal(m.name, "Tara Gala");
   assert.equal(m.short_name, "Tara Gala");
-  assert.equal(m.background_color, "#cfe8c4", "the install splash matches the Mint page (TG-42)");
-  assert.equal(m.theme_color, "#167856");
+  assert.equal(m.background_color, "#fff8e7", "the install splash matches the Paper page (TG-49)");
+  assert.equal(m.theme_color, "#fff8e7", "TG-49: the status bar is the Paper page");
   const themeColor = layout.match(/themeColor:\s*"([^"]+)"/)?.[1];
   assert.equal(m.theme_color, themeColor, "manifest and viewport theme colours must match");
   const sizes = (m.icons ?? []).map((i) => i.sizes);
@@ -149,7 +149,8 @@ test("S1 the update prompt matches ux.md", () => {
   assert.equal(manager.match(/min-h-11/g)?.length, 2, "both buttons at least 44px");
   assert.equal(manager.match(/type="button"/g)?.length, 2);
   assert.match(manager, /<div role="status">\s*\{show &&/, "an always-rendered status wrapper");
-  assert.match(manager, /drop-shadow-\[0_6px_0_var\(--color-frame\)\]/);
+  assert.doesNotMatch(manager, /drop-shadow-/, "TG-49: the box carries its own hard shadow");
+  assert.match(manager, /pixel-box bg-card/);
 });
 
 test("S1 OfflineBanner is an always-rendered status driven by the worker's messages", () => {

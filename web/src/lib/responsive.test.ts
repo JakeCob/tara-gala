@@ -128,7 +128,8 @@ test("TG44-S1 PX.shell widens the phone <main> with md/lg/xl tokens only, and ev
 
 test("TG44-S2 PX.h1 steps up from md", async () => {
   const PX = await loadPX();
-  assert.equal(PX.h1, "font-pixel text-[2rem] leading-tight font-bold text-brand md:text-[2.5rem]");
+  // TG-49: the wider signboard face steps 1.75rem to 2.25rem (was 2rem to 2.5rem)
+  assert.equal(PX.h1, "font-pixel text-[1.75rem] leading-tight font-normal text-brand md:text-[2.25rem]");
 });
 
 // ---- H1, F1, L1, I1, D1, U1: the per-page layouts ----
@@ -212,7 +213,7 @@ test("TG44-D1 the sheet stays the native dialog, centred from md", () => {
 
 test("TG44-U1 the update prompt sits bottom-right from lg; the phone keeps its centred card", () => {
   const src = read("src/components/ServiceWorkerManager.tsx");
-  const cls = src.match(/<div className="(fixed [^"]*drop-shadow[^"]*)">/)?.[1] ?? "";
+  const cls = src.match(/<div className="(fixed [^"]*)">/)?.[1] ?? ""; // TG-49: no drop-shadow wrapper class
   const t = tokens(cls);
   for (const keep of ["fixed", "inset-x-4", "bottom-4", "z-20", "mx-auto", "max-w-md"]) assert.ok(t.includes(keep), keep);
   for (const add of ["lg:left-auto", "lg:right-8", "lg:w-[28rem]"]) assert.ok(t.includes(add), add);

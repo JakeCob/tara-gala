@@ -130,8 +130,8 @@ export default function ServiceWorkerManager() {
   return (
     <div role="status">
       {show && (
-        // pixel-box clips its own outer shadow, so the hard drop sits on the wrapper (ux-guide 3.2)
-        <div className="fixed inset-x-4 bottom-4 z-20 mx-auto max-w-md drop-shadow-[0_6px_0_var(--color-frame)] lg:left-auto lg:right-8 lg:w-[28rem]">
+        // pixel-box draws its own hard shadow (TG-49), so the wrapper only positions it
+        <div className="fixed inset-x-4 bottom-4 z-20 mx-auto max-w-md lg:left-auto lg:right-8 lg:w-[28rem]">
           <div className="pixel-box bg-card p-4 flex flex-col gap-3 text-sm">
             <p>A new version of Tara Gala is ready.</p>
             <div className="flex justify-end gap-2">

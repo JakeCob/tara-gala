@@ -269,8 +269,8 @@ test("D1 no package, supabase, api or sw.js change; pwa.test.ts unedited", (t) =
   assert.equal(touched.trim(), "", "TG-47 is colour only");
 });
 
-test("D1 the manifest keeps Forest as the theme colour", () => {
-  assert.match(read("src/app/manifest.ts"), /theme_color:\s*"#167856"/);
+test("D1 the manifest theme colour is the Paper page (TG-49; Forest until then)", () => {
+  assert.match(read("src/app/manifest.ts"), /theme_color:\s*"#fff8e7"/);
 });
 
 // ---- W: where ux §2 puts each colour ----

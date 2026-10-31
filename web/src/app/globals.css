@@ -1,20 +1,21 @@
 @import "tailwindcss";
 
-/* Pixel theme tokens (ux-guide v2 section 1.4). Dark mode follows prefers-color-scheme only.
-   TG-47: Flag Blue to act (primary, link), Flag Red for what changed or failed (danger, danger-text), Flag Yellow
-   as the accent. danger-text is text on card only; danger is the alert box's lining, never text. */
+/* Signboard theme tokens (ux-guide v3 section 1.2, TG-49). Dark mode follows prefers-color-scheme only.
+   Paper page, White cards, Ink frames. Flag Red to act (primary) and for the h1; Flag Blue for links and the box's
+   hard shadow (lift); Flag Yellow to look or book (accent). danger is the alert box's lining, never text. */
 :root {
-  --background: #cfe8c4; --foreground: #1d2a24; --muted: #4f5f57; --card: #fbf7ee;
-  --frame: #1d2a24; --border: #5fb36b; --brand: #167856; --brand-ink: #fbf7ee;
+  --background: #fff8e7; --foreground: #1d2a24; --muted: #5c5446; --card: #ffffff;
+  --frame: #1d2a24; --border: #c9ced3; --brand: #ce1126; --brand-ink: #fff8e7;
   --accent: #fcd116; --accent-ink: #1d2a24; --focus: #1d2a24;
-  --primary: #0038a8; --primary-ink: #fbf7ee; --link: #0038a8; --danger: #ce1126; --danger-text: #ce1126;
+  --primary: #ce1126; --primary-ink: #ffffff; --link: #0038a8; --danger: #ce1126; --danger-text: #ce1126;
+  --lift: #0038a8;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #121815; --foreground: #fbf7ee; --muted: #a3b1aa; --card: #1b2420;
-    --frame: #cfe8c4; --border: #2c3833; --brand: #5fb36b; --brand-ink: #1d2a24; --focus: #ffd65c;
-    /* Flag Blue and Red are too dark for text on the dark card: lighter tints, for text only */
-    --link: #8fb0ff; --danger-text: #ff8a8a;
+    --background: #16130e; --foreground: #fff8e7; --muted: #b9ae9a; --card: #211d16;
+    --frame: #fff8e7; --border: #3a342a; --brand: #ff6b6b; --brand-ink: #16130e; --focus: #fcd116;
+    /* Flag Blue and Red are too dark for text on the dark card: lighter tints, for text and the lift */
+    --link: #8fb0ff; --danger-text: #ff8a8a; --lift: #8fb0ff;
   }
 }
 @theme inline {
@@ -23,9 +24,10 @@
   --color-border: var(--border); --color-brand: var(--brand); --color-brand-ink: var(--brand-ink);
   --color-accent: var(--accent); --color-accent-ink: var(--accent-ink); --color-focus: var(--focus);
   --color-primary: var(--primary); --color-primary-ink: var(--primary-ink); --color-link: var(--link);
-  --color-danger: var(--danger); --color-danger-text: var(--danger-text);
+  --color-danger: var(--danger); --color-danger-text: var(--danger-text); --color-lift: var(--lift);
   --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
-  --font-pixel: var(--font-pixelify), var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+  /* font-pixel keeps its v2 name and now draws the signboard display face (static headings only: no ₱ or →) */
+  --font-pixel: var(--font-sign), var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
 }
 /* The game screen behind sprites is the same in both themes (guide 1.3), and so are its flag colours (TG-47) */
 @theme {
@@ -39,24 +41,22 @@ body { background: var(--background); color: var(--foreground); font-family: var
 :root { color-scheme: light; }
 @media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
 
-/* Pixel shapes (guide 3.2) */
-/* Box with notched pixel corners: chips, signs, the party stage. Not for focusable elements (clip-path would cut their outline). */
+/* Signboard shapes (guide v3 section 3.2). The names are v2's; the look is TG-49's. */
+/* Square sign: chips, plates, the party stage. One Ink frame, no notch and no clip-path. */
 @utility pixel-frame {
   border: 3px solid var(--frame); border-radius: 0;
-  clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px,
-    100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%,
-    3px calc(100% - 3px), 0 calc(100% - 3px));
 }
-/* RPG text box: pixel-frame plus an inner line 3px inside (an inset outline, so it works on any fill and in forced colours). */
+/* Card or panel: the sign plus a hard offset shadow in Blue (lift). The shadow is paint, not layout, so it never
+   widens the page. */
 @utility pixel-box {
   @apply pixel-frame;
-  outline: 3px solid var(--frame); outline-offset: -9px;
+  box-shadow: 5px 5px 0 0 var(--lift);
 }
-/* Buttons and links that look like buttons: square, with a 3px "lip" that presses in. */
+/* Buttons and links that look like buttons: square, with a 3px diagonal Ink lip that presses in. */
 @utility pixel-btn {
-  border: 3px solid var(--frame); border-radius: 0; box-shadow: 0 3px 0 0 var(--frame);
-  /* `translate` (not `transform`), the same property Tailwind v4's translate-y-* sets, so a pressed-in checked pill never shifts 6px */
-  &:active:not(:disabled, [aria-disabled="true"]) { translate: 0 3px; box-shadow: none; }
+  border: 3px solid var(--frame); border-radius: 0; box-shadow: 3px 3px 0 0 var(--frame);
+  /* `translate` (not `transform`), the same property Tailwind v4's translate-* sets, so a pressed-in checked pill never shifts twice */
+  &:active:not(:disabled, [aria-disabled="true"]) { translate: 3px 3px; box-shadow: none; }
   &:disabled, &[aria-disabled="true"] { opacity: .6; box-shadow: none; }
 }
 @utility focus-pixel { &:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } }
