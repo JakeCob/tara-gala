@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-/* Signboard theme tokens (ux-guide v3 section 1.2, TG-49). Dark mode follows prefers-color-scheme only.
+/* Signboard theme tokens (ux-guide v3 section 1.2, TG-49). Dark mode follows prefers-color-scheme
+   unless the switch saved a choice (TG-51).
    Paper page, White cards, Ink frames. Flag Red to act (primary) and for the h1; Flag Blue for links and the box's
    hard shadow (lift); Flag Yellow to look or book (accent). danger is the alert box's lining, never text. */
 :root {
@@ -10,13 +11,21 @@
   --primary: #ce1126; --primary-ink: #ffffff; --link: #0038a8; --danger: #ce1126; --danger-text: #ce1126;
   --lift: #0038a8;
 }
+/* Dark follows the phone unless the Dark mode switch (TG-51) saved a choice as <html data-theme>. The two dark blocks
+   must stay identical (T2 checks). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #16130e; --foreground: #fff8e7; --muted: #b9ae9a; --card: #211d16;
     --frame: #fff8e7; --border: #3a342a; --brand: #ff6b6b; --brand-ink: #16130e; --focus: #fcd116;
     /* Flag Blue and Red are too dark for text on the dark card: lighter tints, for text and the lift */
     --link: #8fb0ff; --danger-text: #ff8a8a; --lift: #8fb0ff;
   }
+}
+:root[data-theme="dark"] {
+  --background: #16130e; --foreground: #fff8e7; --muted: #b9ae9a; --card: #211d16;
+  --frame: #fff8e7; --border: #3a342a; --brand: #ff6b6b; --brand-ink: #16130e; --focus: #fcd116;
+  /* Flag Blue and Red are too dark for text on the dark card: lighter tints, for text and the lift */
+  --link: #8fb0ff; --danger-text: #ff8a8a; --lift: #8fb0ff;
 }
 @theme inline {
   --color-background: var(--background); --color-foreground: var(--foreground);
@@ -41,7 +50,8 @@ body { background: var(--background); color: var(--foreground); font-family: var
 
 /* Native controls (date picker icon, scrollbars) follow the theme (ux.md section 1) */
 :root { color-scheme: light; }
-@media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 /* Signboard shapes (guide v3 section 3.2). The names are v2's; the look is TG-49's. */
 /* Square sign: chips, plates, the party stage. One Ink frame, no notch and no clip-path. */

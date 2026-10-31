@@ -3,6 +3,8 @@ import { Nunito } from "next/font/google";
 import localFont from "next/font/local";
 import OfflineBanner from "@/components/OfflineBanner";
 import ServiceWorkerManager from "@/components/ServiceWorkerManager";
+import ThemeToggle from "@/components/ThemeToggle";
+import { THEME_BOOT } from "@/lib/theme";
 import "./globals.css";
 
 // Self-hosted by next/font under /_next/static/media (no runtime requests to Google). The signboard face (TG-49) is
@@ -27,10 +29,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${nunito.variable} ${sign.variable} ${signWide.variable} h-full antialiased`}>
+    // suppressHydrationWarning: THEME_BOOT sets data-theme on the html element before React hydrates (TG-51)
+    <html lang="en" className={`${nunito.variable} ${sign.variable} ${signWide.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        {/* The saved light or dark choice, applied before first paint (TG-51) */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <OfflineBanner />
         {children}
+        <ThemeToggle />
         <ServiceWorkerManager />
       </body>
     </html>
