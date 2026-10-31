@@ -304,7 +304,7 @@ test("footer points to the cards, with no homepage links; the /baguio link stays
 
 test("the empty results live region stays rendered but takes no gap", () => {
   // ux-review nit 2: display:none (empty:hidden) would drop it from the accessibility tree before its first update
-  assert.match(searchPage, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">/);
+  assert.match(searchPage, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4 md:col-span-full md:mt-6 md:empty:mt-0 lg:mt-8">/); // TG-49: from md, a margin only when filled
   assert.doesNotMatch(searchPage, /empty:hidden/);
 });
 

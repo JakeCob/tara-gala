@@ -161,8 +161,8 @@ test("T46-L4 the hero: a fixed light screen with decorative art; its text is scr
   }
   assert.match(src, /<p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses, straight from the operators\.<\/p>/);
   assert.doesNotMatch(src, /text-brand|text-foreground|text-muted|text-link/, "the hero is a fixed light screen (ux §0)");
-  // The phone-only trio: decorative, static, and hidden by width only because it carries nothing
-  assert.match(src, /<div aria-hidden="true" className="[^"]*\bmd:hidden\b[^"]*">/);
+  // The trio: decorative and static. TG-49 shows it at every width, since the scene is 2x everywhere now
+  assert.match(src, /<div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1">/);
   assert.match(src, /CAST\.heroTrio/);
 });
 
