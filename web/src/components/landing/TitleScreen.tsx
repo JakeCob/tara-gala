@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { MenuCursor, PageTitle, PX } from "@/components/pixel";
 import { flags } from "@/lib/flags";
-import { CAST, castSprite } from "@/lib/landingCast";
 import { formMode } from "@/lib/planForm";
 import { spriteSrc } from "@/lib/sprites";
+import TitleCast from "./TitleCast";
 
 /**
  * The game title screen at / (TG-49, owner: "like a title screen of a game"): the wordmark, PRESS START and a start
@@ -56,12 +56,7 @@ export default function TitleScreen() {
           </ul>
         </nav>
       </div>
-      <div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1 lg:bottom-3 lg:left-6">
-        {CAST.heroTrio.map((slot) => (
-          // eslint-disable-next-line @next/next/no-img-element -- pixel art, as above
-          <img key={slot.type} src={spriteSrc(castSprite(slot))} alt="" width={64} height={64} draggable={false} className="pixelated" />
-        ))}
-      </div>
+      <TitleCast />
     </section>
   );
 }
