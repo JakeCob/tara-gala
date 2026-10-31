@@ -191,6 +191,57 @@ create table itineraries (
 -- }
 
 -- ---------------------------------------------------------------------------
+-- Shared trip wallets (TG-50): who paid what on the trip, and who pays whom at the end.
+-- Private by link: no public policy; the API serves a wallet by its share_slug. Money is whole centavos.
+-- Payout QRs are never stored here: they stay on each person's phone.
+-- ---------------------------------------------------------------------------
+create table wallets (
+  id            uuid primary key default gen_random_uuid(),
+  share_slug    text unique not null default encode(gen_random_bytes(16), 'hex'),  -- 128 bits: the link is the key
+  name          text not null check (char_length(name) between 1 and 40),
+  created_at    timestamptz not null default now()
+);
+
+create table wallet_members (
+  id            uuid primary key default gen_random_uuid(),
+  seq           bigint generated always as identity,  -- keeps the party in the order it was entered
+  wallet_id     uuid not null references wallets(id) on delete cascade,
+  name          text not null check (char_length(name) between 1 and 30),
+  created_at    timestamptz not null default now()
+);
+create unique index wallet_members_name on wallet_members (wallet_id, lower(name));
+
+create table expenses (
+  id              uuid primary key default gen_random_uuid(),
+  wallet_id       uuid not null references wallets(id) on delete cascade,
+  paid_by         uuid not null references wallet_members(id) on delete cascade,
+  amount_centavos integer not null check (amount_centavos between 1 and 10000000),  -- up to PHP 100,000
+  note            text not null check (char_length(note) between 1 and 60),
+  created_at      timestamptz not null default now()
+);
+create index expenses_wallet on expenses (wallet_id);
+
+-- Each person's part of an expense; the parts add up to amount_centavos (checked in the API)
+create table expense_shares (
+  expense_id      uuid not null references expenses(id) on delete cascade,
+  member_id       uuid not null references wallet_members(id) on delete cascade,
+  share_centavos  integer not null check (share_centavos >= 0),
+  primary key (expense_id, member_id)
+);
+
+-- A payment between two people that the group marked as done
+create table settlements (
+  id              uuid primary key default gen_random_uuid(),
+  wallet_id       uuid not null references wallets(id) on delete cascade,
+  from_member     uuid not null references wallet_members(id) on delete cascade,
+  to_member       uuid not null references wallet_members(id) on delete cascade,
+  amount_centavos integer not null check (amount_centavos between 1 and 10000000),
+  created_at      timestamptz not null default now(),
+  check (from_member <> to_member)
+);
+create index settlements_wallet on settlements (wallet_id);
+
+-- ---------------------------------------------------------------------------
 -- Search view: one row per active trip, flattened for the API
 -- ---------------------------------------------------------------------------
 -- security_invoker keeps the view under the same RLS rules as its tables (Supabase flags views without it)
@@ -248,6 +299,11 @@ alter table trip_reports       enable row level security;
 alter table spots              enable row level security;
 alter table last_mile_routes   enable row level security;
 alter table itineraries        enable row level security;
+alter table wallets            enable row level security;
+alter table wallet_members     enable row level security;
+alter table expenses           enable row level security;
+alter table expense_shares     enable row level security;
+alter table settlements        enable row level security;
 
 create policy public_read on operators          for select using (true);
 create policy public_read on terminals          for select using (true);
@@ -258,6 +314,7 @@ create policy public_read on spots              for select using (true);
 create policy public_read on last_mile_routes   for select using (true);
 -- trip_reports: no public policy yet (service role only)
 -- itineraries: no public policy (TG-32). Party names are private; share links are served by the API.
+-- wallets, wallet_members, expenses, expense_shares, settlements: no public policy (TG-50). Same as itineraries.
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP
