@@ -237,7 +237,7 @@ test("TG44-U1 the update prompt sits bottom-right from lg; the phone keeps its c
   for (const keep of ["fixed", "inset-x-4", "mx-auto", "max-w-md"]) assert.ok(t.includes(keep), keep);
   for (const add of ["lg:left-auto", "lg:right-8", "lg:w-[28rem]"]) assert.ok(t.includes(add), add);
   // TG-49: on phones the card sits above the fixed tab bar (and over it, z-40 > z-30); from md the bar is gone
-  for (const add of ["bottom-[calc(4.75rem+env(safe-area-inset-bottom))]", "md:bottom-4", "z-40"]) assert.ok(t.includes(add), add);
+  for (const add of ["bottom-[calc(5.25rem+env(safe-area-inset-bottom))]", "md:bottom-4", "z-40"]) assert.ok(t.includes(add), add);
 });
 
 // ---- P1: phones unchanged (PR-scoped fence) ----
