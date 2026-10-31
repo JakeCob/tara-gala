@@ -158,9 +158,9 @@ test("TG44-H1 home: from md the hero and the form share the first row, the resul
   assert.match(page, /<footer className="mt-auto pt-6 text-xs text-muted">/, "the footer is unchanged");
 });
 
-test("TG-49 quick actions: stacked to md, a row of tiles from lg", () => {
+test("TG-49 quick actions: stacked to md, a grid of tiles from lg (2 by 2 with TG-50's fourth)", () => {
   const src = read("src/components/landing/QuickActions.tsx");
-  assert.match(src, /const cols = formMode\(flags\) !== "none" \? "lg:grid-cols-3" : "lg:grid-cols-2";/);
+  assert.match(src, /const cols = formMode\(flags\) !== "none" \? "lg:grid-cols-2" : "lg:grid-cols-3";/);
   assert.match(src, /<ul className=\{cx\("flex flex-col gap-3 lg:grid lg:gap-4", cols\)\}>/);
 });
 

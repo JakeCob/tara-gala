@@ -291,6 +291,8 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/ItineraryList.tsx", 'issueNotice("unknown_trip")', "alert"],
   ["src/components/LastMile.tsx", "Could not reach the server", "alert"],
   ["src/components/TripSearch.tsx", "Could not reach the schedule server", "alertText"],
+  ["src/components/TicketWallet.tsx", "{notice.text}", "alertText"], // TG-50: a refused or failed save or delete
+  ["src/components/TicketWallet.tsx", "can&apos;t save tickets here", "alertText"], // TG-50: no IndexedDB
 ];
 const tsxFiles = () =>
   git("ls-files", "src/**/*.tsx", "src/*.tsx").split("\n").filter(Boolean).map((f) => f.replace(/^web\//, ""));
