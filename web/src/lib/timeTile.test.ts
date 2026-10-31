@@ -9,7 +9,7 @@ const TILE = "inline-block pixel-frame bg-accent px-2 py-0.5 text-2xl leading-ti
 const tileValue = async () => ((await import("../components/pixel/classes.ts")).PX as unknown as { timeTile?: string }).timeTile;
 test("T49P2-T1 PX.timeTile is exactly ux §2.1's string", async () => assert.equal(await tileValue(), TILE));
 test("T49P2-T2 the card shows the time in the tile, centred against the fare; nothing else is inside it", () => {
-  assert.match(read(CARD), /<div className="flex items-center justify-between gap-2">\s*<span className=\{PX\.timeTile\}>\{formatTime\(t\.departure_time\)\}<\/span>/);
+  assert.match(read(CARD), /<div className="flex flex-wrap items-center justify-between gap-2">\s*<span className=\{PX\.timeTile\}>\{formatTime\(t\.departure_time\)\}<\/span>/);
   assert.doesNotMatch(read(CARD), /items-baseline/);
 });
 test("T49P2-T3 the tile is a sign, not a control (T13 can't see it through PX, so this pins it)", async () => {

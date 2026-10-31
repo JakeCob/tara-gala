@@ -8,7 +8,7 @@ export default function TripCard({ trip: t, notice }: { trip: Trip; notice?: str
   return (
     <PixelBox as="li">
       {notice && <p className="text-sm font-semibold text-danger-text">{notice}</p>}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className={PX.timeTile}>{formatTime(t.departure_time)}</span>
         {t.fare_php != null && <span className="font-bold tabular-nums">₱{t.fare_php.toLocaleString("en-PH")}</span>}
       </div>
