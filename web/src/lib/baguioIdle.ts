@@ -2,9 +2,11 @@
 // with no runtime imports; BaguioIdle.tsx renders it. Same shape as homeDecor.ts, so Tailwind finds the class strings.
 import type { DecorShow } from "./homeDecor";
 
-// Left to right (ux.md 3.2): the walk from the terminal out to the spots. md-only sprites don't fit a phone.
+// Left to right (ux.md 3.2): the walk from the terminal out to the spots. md-only sprites don't fit a phone, and the
+// sticker needs a 375px one.
 export const BAGUIO_IDLE_ROW = [
   { name: "place-terminal", show: "all" },
+  { name: "chibi-senior-lola-wave", show: "min375" }, // one static frame, waving at the terminal (ux.md section 4)
   { name: "mode-jeep", show: "all" },
   { name: "place-market", show: "md" },
   { name: "mode-taxi", show: "all" },
