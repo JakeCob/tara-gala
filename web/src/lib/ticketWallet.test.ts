@@ -48,16 +48,17 @@ test("W4 newest first; the added line is the Manila date", () => {
 });
 
 test("W5 tickets never leave the phone: no network call in the wallet code, and its logs carry no label", () => {
-  for (const path of ["src/lib/ticketWallet.ts", "src/lib/ticketStore.ts", "src/components/TicketWallet.tsx"]) {
+  for (const path of ["src/lib/ticketWallet.ts", "src/lib/ticketStore.ts", "src/lib/idb.ts", "src/components/TicketWallet.tsx", "src/components/PhotoViewer.tsx"]) {
     const src = read(path);
     assert.doesNotMatch(src, /\bfetch\(|XMLHttpRequest|sendBeacon|API_URL/, `${path}: no network`);
     for (const [, args] of src.matchAll(/console\.\w+\(([^;]*)\);/g)) {
       assert.doesNotMatch(args, /label|file\.name|fileName/, `${path}: a log names a ticket: ${args}`);
     }
   }
-  const store = read("src/lib/ticketStore.ts");
-  assert.match(store, /indexedDB\.open\("tara-gala-wallet", 1\)/);
-  assert.match(store, /createObjectStore\("tickets", \{ keyPath: "id" \}\)/);
+  assert.match(read("src/lib/ticketStore.ts"), /idbStore<StoredTicket>\("tara-gala-wallet", "tickets"\)/);
+  const idb = read("src/lib/idb.ts");
+  assert.match(idb, /indexedDB\.open\(dbName, 1\)/);
+  assert.match(idb, /createObjectStore\(storeName, \{ keyPath: "id" \}\)/);
 });
 
 test("W6 /tickets: one shell, says where the photos live, and the service worker precaches it", () => {
@@ -68,7 +69,7 @@ test("W6 /tickets: one shell, says where the photos live, and the service worker
   assert.match(page, /only on this phone/i, "the privacy promise is on the page");
   assert.match(page, /<TicketWallet \/>/);
   const sw = read("public/sw.js");
-  assert.match(sw, /const PRECACHE_PAGES = \["\/", "\/baguio", "\/plan", "\/tickets"\];/);
+  assert.match(sw, /const PRECACHE_PAGES = \[[^\]]*"\/tickets"[^\]]*\];/);
   assert.doesNotMatch(sw, /SW_VERSION = "2026-10-31\.1"/, "SW_VERSION bumped");
 });
 
@@ -81,17 +82,20 @@ test("W7 the wallet: one primary button that opens a hidden picker of photos; fu
   assert.match(input, /accept="image\/png,image\/jpeg,image\/webp,image\/gif"/);
   assert.match(input, /\bmultiple\b/);
   assert.match(input, /\bhidden\b/, "the button is the control; the input stays out of the tab order");
-  assert.match(src, /<dialog\b/);
-  assert.match(src, /\.showModal\(\)/);
-  assert.match(src, /wakeLock/, "the screen stays on while a ticket is shown at the gate");
-  assert.match(src, /URL\.revokeObjectURL/, "object URLs are freed");
+  assert.match(src, /<PhotoViewer photo=\{shown\} onClose=\{\(\) => setShown\(null\)\} logTag="tg-tickets" \/>/);
+  // TG-50: the viewer is shared with the payout QR
+  const viewer = read("src/components/PhotoViewer.tsx");
+  assert.match(viewer, /<dialog\b/);
+  assert.match(viewer, /\.showModal\(\)/);
+  assert.match(viewer, /wakeLock/, "the screen stays on while a ticket is shown at the gate");
+  assert.match(viewer, /URL\.revokeObjectURL/, "object URLs are freed");
   assert.doesNotMatch(src, /focus:outline/, "T14");
   assert.match(src, /navigator\.storage\?\.persist/, "asks the browser not to evict the tickets");
 });
 
-test("W8 home: a My tickets quick action; four tiles make a 2 by 2 grid from lg", () => {
+test("W8 home: a fourth quick action (TG-50 made it the Trip wallet, which links to My tickets); four tiles make a 2 by 2 grid from lg", () => {
   const src = read("src/components/landing/QuickActions.tsx");
   const hrefs = [...src.matchAll(/<PixelCardLink\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["#travel-date", "/plan", "/baguio", "/tickets"]);
+  assert.deepEqual(hrefs, ["#travel-date", "/plan", "/baguio", "/wallet"]);
   assert.match(src, /const cols = formMode\(flags\) !== "none" \? "lg:grid-cols-2" : "lg:grid-cols-3";/);
 });

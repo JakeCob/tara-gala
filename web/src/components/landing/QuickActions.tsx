@@ -27,7 +27,7 @@ function TileBody({ sprite, title, line }: { sprite: SpriteName; title: string; 
 /** The quick actions under the search (ux §5.3): neutral tiles, the sprites are the colour. */
 export default function QuickActions() {
   // A grid from lg only: at md, three tiles in the 720px shell squeeze each line to a word or two (TG-49). Four tiles
-  // (TG-50's My tickets) make a 2 by 2
+  // (TG-50's Trip wallet) make a 2 by 2
   const cols = formMode(flags) !== "none" ? "lg:grid-cols-2" : "lg:grid-cols-3";
   return (
     <nav aria-label="Quick actions">
@@ -50,8 +50,8 @@ export default function QuickActions() {
           </PixelCardLink>
         </li>
         <li className="grid">
-          <PixelCardLink href="/tickets" className={TILE}>
-            <TileBody sprite="place-terminal" title="My tickets" line="Your e-tickets, saved on this phone for the terminal." />
+          <PixelCardLink href="/wallet" className={TILE}>
+            <TileBody sprite="place-terminal" title="Trip wallet" line="Your e-tickets, and who paid what on the trip." />
           </PixelCardLink>
         </li>
       </ul>
