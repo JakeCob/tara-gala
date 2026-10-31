@@ -24,10 +24,11 @@ function TileBody({ sprite, title, line }: { sprite: SpriteName; title: string; 
   );
 }
 
-/** The three quick actions under the search (ux §5.3): neutral tiles, the sprites are the colour. */
+/** The quick actions under the search (ux §5.3): neutral tiles, the sprites are the colour. */
 export default function QuickActions() {
-  // A row from lg only: at md, three tiles in the 720px shell squeeze each line to a word or two (TG-49)
-  const cols = formMode(flags) !== "none" ? "lg:grid-cols-3" : "lg:grid-cols-2";
+  // A grid from lg only: at md, three tiles in the 720px shell squeeze each line to a word or two (TG-49). Four tiles
+  // (TG-50's My tickets) make a 2 by 2
+  const cols = formMode(flags) !== "none" ? "lg:grid-cols-2" : "lg:grid-cols-3";
   return (
     <nav aria-label="Quick actions">
       <ul className={cx("flex flex-col gap-3 lg:grid lg:gap-4", cols)}>
@@ -46,6 +47,11 @@ export default function QuickActions() {
         <li className="grid">
           <PixelCardLink href="/baguio" className={TILE}>
             <TileBody sprite="mode-jeep" title="In Baguio?" line="Jeeps, taxis and walks from the terminal." />
+          </PixelCardLink>
+        </li>
+        <li className="grid">
+          <PixelCardLink href="/tickets" className={TILE}>
+            <TileBody sprite="place-terminal" title="My tickets" line="Your e-tickets, saved on this phone for the terminal." />
           </PixelCardLink>
         </li>
       </ul>
