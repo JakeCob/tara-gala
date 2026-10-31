@@ -600,10 +600,12 @@ function walkFiles(dir: URL, out: URL[] = []): URL[] {
   return out;
 }
 
-// TG-49: the signboard display face (Bungee, OFL) replaces Pixelify Sans, self-hosted by next/font like Nunito
-test("T18 layout.tsx loads Nunito and the signboard face through next/font/google", () => {
+// TG-49: the signboard display face (Cubao Free, OFL) replaces Pixelify Sans, self-hosted by next/font like Nunito
+test("T18 layout.tsx loads Nunito through next/font/google and the signboard face through next/font/local", () => {
   const layout = read("src/app/layout.tsx");
-  assert.match(layout, /import\s*\{\s*Bungee,\s*Nunito\s*\}\s*from\s*"next\/font\/google"/);
+  assert.match(layout, /import\s*\{\s*Nunito\s*\}\s*from\s*"next\/font\/google"/);
+  assert.match(layout, /import\s+localFont\s+from\s*"next\/font\/local"/);
+  assert.doesNotMatch(layout, /Bungee/);
   assert.doesNotMatch(layout, /Pixelify/);
   assert.match(
     layout,
@@ -611,8 +613,10 @@ test("T18 layout.tsx loads Nunito and the signboard face through next/font/googl
   );
   assert.match(
     layout,
-    /Bungee\(\{\s*weight:\s*"400",\s*subsets:\s*\["latin"\],\s*display:\s*"swap",\s*variable:\s*"--font-sign"\s*\}\)/,
+    /localFont\(\{\s*src:\s*"\.\.\/fonts\/Cubao_Free_Regular\.otf",\s*display:\s*"swap",\s*variable:\s*"--font-sign"\s*\}\)/,
   );
+  // OFL 1.1 travels with the font file
+  assert.match(read("src/fonts/OFL.txt"), /Copyright \(c\) 2018, Aaron Amar[\s\S]*SIL Open Font License, Version 1\.1/);
   const html = layout.match(/<html\b[^>]*>/)?.[0] ?? "";
   assert.match(html, /lang="en"/);
   assert.match(html, /className=\{`\$\{nunito\.variable\} \$\{sign\.variable\} h-full antialiased`\}/);
