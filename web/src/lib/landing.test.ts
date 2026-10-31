@@ -94,22 +94,26 @@ test("T46-L2 one h1, in the hero, that the title screen can focus later; section
   assert.equal(titles.length, 1, "exactly one PageTitle across page.tsx and landing/*");
   assert.doesNotMatch(files.join("\n"), /<h1\b/, "no hand-written h1");
   const hero = source(sectionPath("Hero"));
-  assert.match(hero, /<PageTitle onScreen id="landing-title" tabIndex=\{-1\}>Tara Gala<\/PageTitle>/);
+  assert.match(hero, /<PageTitle wordmark id="landing-title" tabIndex=\{-1\}>Tara Gala<\/PageTitle>/);
   for (const name of ["PremadeTrips", "HowItWorks", "Trust"]) {
     assert.match(source(sectionPath(name)), /<SectionTitle\b[^>]*\bid="[\w-]+"/, `${name} has an h2 with an id`);
     assert.doesNotMatch(source(sectionPath(name)), /<h[1-6]\b/, `${name}: headings go through SectionTitle`);
   }
 });
 
-test("T46-L2 PageTitle gains onScreen, id and tabIndex; PX.h1Screen is PX.h1 with screen-ink", async () => {
+test("T46-L2 PageTitle gains wordmark, id and tabIndex; PX.wordmark is PX.h1 in the Wide cut with screen-ink", async () => {
   const { PX } = await load<{ PX: Record<string, string> }>("src/components/pixel/classes.ts");
-  assert.equal(PX.h1Screen, "font-pixel text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]"); // TG-49
-  assert.equal(PX.h1.replace("text-brand", "text-screen-ink"), PX.h1Screen, "the same title, on the fixed light screen");
+  assert.equal(PX.wordmark, "font-wordmark text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]"); // TG-49
+  assert.equal(
+    PX.h1.replace("font-pixel", "font-wordmark").replace("text-brand", "text-screen-ink"),
+    PX.wordmark,
+    "the same title size, in the Wide cut, on the fixed light screen",
+  );
   const src = source("src/components/pixel/PageTitle.tsx");
-  assert.match(src, /onScreen\s*\?\s*PX\.h1Screen\s*:\s*PX\.h1/);
+  assert.match(src, /wordmark\s*\?\s*PX\.wordmark\s*:\s*PX\.h1/);
   assert.match(src, /\bid\?: string/);
   assert.match(src, /\btabIndex\?: number/);
-  assert.match(src, /\bonScreen\?: boolean/);
+  assert.match(src, /\bwordmark\?: boolean/);
   assert.doesNotMatch(src, /use client/);
 });
 

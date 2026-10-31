@@ -6,9 +6,11 @@ import ServiceWorkerManager from "@/components/ServiceWorkerManager";
 import "./globals.css";
 
 // Self-hosted by next/font under /_next/static/media (no runtime requests to Google). The signboard face (TG-49) is
-// Cubao Free by Aaron Amar (OFL, src/fonts/OFL.txt), for static headings only: it has no → (ux-guide 2.2).
+// Cubao Free by Aaron Amar (OFL, src/fonts/OFL.txt), for static headings only: it has no → (ux-guide 2.2). The Wide
+// cut draws only the "Tara Gala" wordmark on the home hero.
 const nunito = Nunito({ subsets: ["latin", "latin-ext"], display: "swap", variable: "--font-nunito" });
 const sign = localFont({ src: "../fonts/Cubao_Free_Regular.otf", display: "swap", variable: "--font-sign" });
+const signWide = localFont({ src: "../fonts/Cubao_Free_Wide.otf", display: "swap", variable: "--font-sign-wide" });
 
 export const metadata: Metadata = {
   title: "Tara Gala",
@@ -25,7 +27,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${nunito.variable} ${sign.variable} h-full antialiased`}>
+    <html lang="en" className={`${nunito.variable} ${sign.variable} ${signWide.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <OfflineBanner />
         {children}

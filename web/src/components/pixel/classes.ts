@@ -41,8 +41,8 @@ export const PX = {
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
   // TG-49: the signboard face is wide and has one weight (400), so titles step down and never synthesise bold
   h1: "font-pixel text-[1.75rem] leading-tight font-normal text-brand md:text-[2.25rem]",
-  // TG-46: the same title on the hero, a fixed light screen
-  h1Screen: "font-pixel text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
+  // TG-46: the same title on the hero, a fixed light screen; the app name there is Cubao's Wide cut
+  wordmark: "font-wordmark text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
   h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",

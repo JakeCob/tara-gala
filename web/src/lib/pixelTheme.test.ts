@@ -21,7 +21,7 @@ type PXShape = {
   screenChip: string;
   input: string;
   h1: string;
-  h1Screen: string;
+  wordmark: string;
   h2: string;
   dataHeading: string;
   meta: string;
@@ -375,7 +375,7 @@ const EXPECTED_PX: PXShape = {
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
   // TG-49: the signboard face is wide and has one weight (400), so titles step down and never synthesise bold
   h1: "font-pixel text-[1.75rem] leading-tight font-normal text-brand md:text-[2.25rem]",
-  h1Screen: "font-pixel text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
+  wordmark: "font-wordmark text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
   h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
@@ -615,11 +615,16 @@ test("T18 layout.tsx loads Nunito through next/font/google and the signboard fac
     layout,
     /localFont\(\{\s*src:\s*"\.\.\/fonts\/Cubao_Free_Regular\.otf",\s*display:\s*"swap",\s*variable:\s*"--font-sign"\s*\}\)/,
   );
+  // the Wide cut draws the home wordmark only
+  assert.match(
+    layout,
+    /localFont\(\{\s*src:\s*"\.\.\/fonts\/Cubao_Free_Wide\.otf",\s*display:\s*"swap",\s*variable:\s*"--font-sign-wide"\s*\}\)/,
+  );
   // OFL 1.1 travels with the font file
   assert.match(read("src/fonts/OFL.txt"), /Copyright \(c\) 2018, Aaron Amar[\s\S]*SIL Open Font License, Version 1\.1/);
   const html = layout.match(/<html\b[^>]*>/)?.[0] ?? "";
   assert.match(html, /lang="en"/);
-  assert.match(html, /className=\{`\$\{nunito\.variable\} \$\{sign\.variable\} h-full antialiased`\}/);
+  assert.match(html, /className=\{`\$\{nunito\.variable\} \$\{sign\.variable\} \$\{signWide\.variable\} h-full antialiased`\}/);
 });
 
 test("T18 no font or stylesheet is fetched from anywhere else", () => {
