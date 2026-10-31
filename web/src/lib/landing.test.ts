@@ -118,7 +118,7 @@ test("T46-L3 quick actions: a named nav of three neutral card links; Find buses 
   assert.match(src, /<nav aria-label="Quick actions">/);
   assert.match(src, /<ul\b/);
   const hrefs = [...src.matchAll(/<PixelCardLink\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["#travel-date", "/plan", "/baguio", "/tickets"]); // TG-50 adds My tickets
+  assert.deepEqual(hrefs, ["#travel-date", "/plan", "/baguio", "/wallet"]); // TG-50 adds the Trip wallet
   const plan = src.indexOf('href="/plan"');
   assert.match(src.slice(0, plan), /\{formMode\(flags\) !== "none" && \(\s*<li\b[^>]*>\s*<PixelCardLink\b[^>]*$/, "Plan a trip only when the planner is on");
   for (const [, arrow] of src.matchAll(/<span([^>]*)>→<\/span>/g)) assert.match(arrow, /aria-hidden/, "the → is decorative");

@@ -293,6 +293,11 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/TripSearch.tsx", "Could not reach the schedule server", "alertText"],
   ["src/components/TicketWallet.tsx", "{notice.text}", "alertText"], // TG-50: a refused or failed save or delete
   ["src/components/TicketWallet.tsx", "can&apos;t save tickets here", "alertText"], // TG-50: no IndexedDB
+  ["src/components/WalletView.tsx", "{notice.text}", "alertText"], // TG-50: a write that failed
+  ["src/components/WalletView.tsx", "No signal, and this wallet", "alertText"], // TG-50: the wallet didn't load
+  ["src/components/WalletHome.tsx", "{error}", "alertText"], // TG-50: start-a-wallet problems
+  ["src/components/PayoutQr.tsx", "{notice.text}", "alertText"], // TG-50: a refused or failed QR save
+  ["src/components/PayoutQr.tsx", "can&apos;t keep a QR here", "alertText"], // TG-50: no IndexedDB
 ];
 const tsxFiles = () =>
   git("ls-files", "src/**/*.tsx", "src/*.tsx").split("\n").filter(Boolean).map((f) => f.replace(/^web\//, ""));

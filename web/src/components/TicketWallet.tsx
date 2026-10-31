@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
+import { BlobImage, PhotoViewer } from "@/components/PhotoViewer";
 import { clearTickets, deleteTicket, listTickets, saveTicket } from "@/lib/ticketStore";
 import { addedLine, checkTicketFile, ticketLabel, type StoredTicket } from "@/lib/ticketWallet";
 
@@ -10,18 +11,6 @@ type Notice = { text: string; error: boolean };
 
 const NONE: StoredTicket[] = [];
 const ADD_ID = "add-tickets";
-
-/** A stored photo. Its object URL goes straight onto the element and is freed when the photo changes or unmounts. */
-function BlobImage({ blob, alt, ...rest }: { blob: Blob; alt: string } & Omit<ComponentPropsWithoutRef<"img">, "src" | "alt">) {
-  const img = useRef<HTMLImageElement>(null);
-  useEffect(() => {
-    const url = URL.createObjectURL(blob);
-    if (img.current) img.current.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [blob]);
-  // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL, which next/image can't load
-  return <img ref={img} alt={alt} {...rest} />;
-}
 
 async function readWallet(): Promise<Wallet> {
   try {
@@ -44,8 +33,6 @@ export default function TicketWallet() {
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<StoredTicket | null>(null);
   const picker = useRef<HTMLInputElement>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const wake = useRef<WakeLockSentinel | null>(null);
   const tickets = wallet.state === "ready" ? wallet.tickets : NONE;
 
   useEffect(() => {
@@ -128,23 +115,6 @@ export default function TicketWallet() {
     }
   }
 
-  async function show(t: StoredTicket) {
-    setShown(t);
-    dialog.current?.showModal();
-    try {
-      wake.current = (await navigator.wakeLock?.request("screen")) ?? null;
-    } catch {
-      wake.current = null; // refused (battery saver, or no permission): the ticket still shows
-    }
-    console.info("[tg-tickets] show wakeLock=%s", wake.current !== null);
-  }
-
-  function onClose() {
-    wake.current?.release().catch(() => {});
-    wake.current = null;
-    setShown(null);
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <input ref={picker} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={onFiles} />
@@ -188,7 +158,7 @@ export default function TicketWallet() {
                   <p className={cx(PX.dataHeading, "min-w-0 break-words")}>{t.label}</p>
                   <p className={PX.meta}>{addedLine(t.addedAt)}</p>
                   <div className="flex flex-wrap gap-2">
-                    <PixelButton variant="accent" aria-label={`Show ${t.label}`} onClick={() => show(t)}>
+                    <PixelButton variant="accent" aria-label={`Show ${t.label}`} onClick={() => setShown(t)}>
                       Show
                     </PixelButton>
                     <PixelButton variant="secondary" aria-label={`Delete ${t.label}`} onClick={() => remove(t)}>
@@ -205,18 +175,7 @@ export default function TicketWallet() {
         </>
       )}
 
-      {/* Full screen on the fixed light screen, whatever the theme: QR scanners want a light page */}
-      <dialog ref={dialog} onClose={onClose} aria-label={shown?.label ?? "Ticket"} className="m-0 h-dvh max-h-none w-full max-w-none bg-screen-paper p-0 text-screen-ink">
-        <div className="mx-auto flex h-full max-w-md flex-col gap-3 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="min-w-0 break-words text-sm font-bold">{shown?.label}</p>
-            <PixelButton variant="secondary" autoFocus onClick={() => dialog.current?.close()}>
-              Close
-            </PixelButton>
-          </div>
-          {shown && <BlobImage blob={shown.blob} alt={`Ticket: ${shown.label}`} className="min-h-0 w-full flex-1 object-contain" />}
-        </div>
-      </dialog>
+      <PhotoViewer photo={shown} onClose={() => setShown(null)} logTag="tg-tickets" />
     </div>
   );
 }
