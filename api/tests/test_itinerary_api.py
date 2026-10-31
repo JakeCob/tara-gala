@@ -299,8 +299,18 @@ GET_ROUTES = {
     "/health", "/terminals", "/trips", "/spots", "/last-mile",
     "/premade-itineraries",  # TG-24: model = 'premade' rows only
     "/itineraries/{share_slug}",  # TG-23: one row by exact slug
+    "/wallets/{share_slug}",  # TG-50: one wallet by exact slug; never touches itineraries
 }
-OTHER_ROUTES = {("POST", "/plan")}  # TG-20: inserts a planner row, never reads the table
+OTHER_ROUTES = {
+    ("POST", "/plan"),  # TG-20: inserts a planner row, never reads the table
+    # TG-50 shared trip wallets: every route is under one exact wallet slug; there is no wallet listing either
+    ("POST", "/wallets"),
+    ("POST", "/wallets/{share_slug}/members"),
+    ("POST", "/wallets/{share_slug}/expenses"),
+    ("DELETE", "/wallets/{share_slug}/expenses/{expense_id}"),
+    ("POST", "/wallets/{share_slug}/settlements"),
+    ("DELETE", "/wallets/{share_slug}/settlements/{settlement_id}"),
+}
 
 
 def test_no_hidden_or_renamed_listing_route():
@@ -310,7 +320,8 @@ def test_no_hidden_or_renamed_listing_route():
     served = {(m, r.path) for r in app.routes for m in (getattr(r, "methods", None) or set()) if m != "HEAD"}
     assert served == {("GET", p) for p in GET_ROUTES} | OTHER_ROUTES
     takes_slug = [r.path for r in app.routes if "{" in getattr(r, "path", "")]
-    assert takes_slug == ["/itineraries/{share_slug}"]  # the only parameterised path is the exact-slug read
+    # the only parameterised itinerary path is the exact-slug read; TG-50's wallet paths all start at one exact slug
+    assert [p for p in takes_slug if not p.startswith("/wallets/{share_slug}")] == ["/itineraries/{share_slug}"]
 
 
 def test_only_exact_slug_and_premade_reads_touch_itineraries():

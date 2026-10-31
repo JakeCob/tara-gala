@@ -20,6 +20,7 @@ from .planner import router as planner_router
 from .premade import router as premade_router
 from .schedule import arrival as _arrival  # noqa: F401  re-exported: TG-12 tests use main._arrival
 from .trip_rows import CONFIRM_NOTE, trip_from_row  # noqa: F401  CONFIRM_NOTE re-exported
+from .wallets import router as wallets_router
 
 configure_logging()  # the API's only logging setup; must run before anything logs
 logger = logging.getLogger("tara_gala.api")
@@ -49,7 +50,7 @@ app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
-    allow_methods=["GET", "POST"],  # POST for /plan (TG-20)
+    allow_methods=["GET", "POST", "DELETE"],  # POST for /plan (TG-20); POST and DELETE for wallets (TG-50)
     allow_headers=["*"],
 )
 
@@ -133,3 +134,4 @@ app.include_router(last_mile_router)
 app.include_router(premade_router)
 app.include_router(planner_router)
 app.include_router(itineraries_router)
+app.include_router(wallets_router)
