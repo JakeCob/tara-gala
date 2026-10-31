@@ -1071,8 +1071,16 @@ test("T43-F4 both Try again handlers focus the submit button before restarting",
   assert.ok(listRetry.indexOf(FOCUS) < listRetry.indexOf("loadPremade("), "focus before loadPremade(");
 });
 
-// T43-X1: no dependency, schema or API change (skips without origin/main, like T43-O5)
+// T43-X1: no dependency, schema or API change (skips without origin/main, like T43-O5). PR-scoped: once TG-43 is on
+// main it skips, like the TG-44 and TG-47 fences, so later tickets can change the schema and API (TG-50 does).
 test("T43-X1 package files, supabase/ and api/ are unchanged against origin/main", (t) => {
+  try {
+    execFileSync("git", ["cat-file", "-e", "origin/main:web/src/lib/planForm.test.ts"], { cwd: ROOT, stdio: "ignore" });
+    t.skip("TG-43 merged: PR-scoped fence");
+    return;
+  } catch {
+    // TG-43 isn't on main yet (or origin/main isn't fetched): the fence applies
+  }
   let diff: string;
   try {
     diff = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/package.json", "web/package-lock.json", "supabase", "api"], {
