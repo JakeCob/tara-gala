@@ -22,7 +22,7 @@ export default function Hero() {
         className="pixelated absolute bottom-0 left-[min(0px,calc(100%_-_400px))] h-[246px] w-[640px] max-w-none"
       />
       <div className="relative flex flex-col gap-1 p-4">
-        <PageTitle onScreen id="landing-title" tabIndex={-1}>Tara Gala</PageTitle>
+        <PageTitle wordmark id="landing-title" tabIndex={-1}>Tara Gala</PageTitle>
         <p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses, straight from the operators.</p>
       </div>
       <div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1">

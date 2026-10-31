@@ -2,8 +2,8 @@ import { PX, cx } from "./classes";
 
 type Props = {
   className?: "text-balance";
-  /** On the fixed game screen, which stays light in dark mode (guide 1.3) */
-  onScreen?: boolean;
+  /** The home hero's "Tara Gala": the Wide cut, on the fixed game screen, which stays light in dark mode (guide 1.3) */
+  wordmark?: boolean;
   id?: string;
   /** -1 so a later script can move focus here (TG-46 PR B), never a Tab stop */
   tabIndex?: number;
@@ -11,9 +11,9 @@ type Props = {
 };
 
 /** The page h1 in the pixel font. Static text only: the font has no ₱ or →. className may add text-balance. */
-export function PageTitle({ className, onScreen, id, tabIndex, children }: Props) {
+export function PageTitle({ className, wordmark, id, tabIndex, children }: Props) {
   return (
-    <h1 id={id} tabIndex={tabIndex} className={cx(onScreen ? PX.h1Screen : PX.h1, className)}>
+    <h1 id={id} tabIndex={tabIndex} className={cx(wordmark ? PX.wordmark : PX.h1, className)}>
       {children}
     </h1>
   );
