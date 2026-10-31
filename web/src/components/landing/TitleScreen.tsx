@@ -3,13 +3,13 @@ import { MenuCursor, PageTitle, PX } from "@/components/pixel";
 import { flags } from "@/lib/flags";
 import { formMode } from "@/lib/planForm";
 import { spriteSrc } from "@/lib/sprites";
-import StartMenu from "./StartMenu";
+import TitleBlink from "./TitleBlink";
 import TitleCast from "./TitleCast";
 
 /**
  * The game title screen at / (TG-49, owner: "like a title screen of a game"): the wordmark, PRESS START and a start
  * menu over the mountain scene, on a fixed light screen. The menu goes straight to each tab, so it never costs a tap.
- * The cursor sits on the first item until another is hovered or focused (globals.css title-menu), and blinks (StartMenu).
+ * The cursor sits on the first item until another is hovered or focused (globals.css title-menu); it and PRESS START blink (TitleBlink).
  */
 export default function TitleScreen() {
   const menu = [
@@ -39,23 +39,25 @@ export default function TitleScreen() {
           Tara Gala
         </PageTitle>
         <p className="text-sm font-semibold text-screen-ink md:text-base">Manila to Baguio buses, straight from the operators.</p>
-        <p aria-hidden="true" className={PX.pressStart}>
-          Press start
-        </p>
-        <StartMenu>
-          <ul className="pixel-box flex min-w-60 flex-col border-screen-ink bg-screen-paper py-2 text-left">
-            {menu.map((item) => (
-              <li key={item.href}>
-                <Link href={item.href} className={PX.menuItem}>
-                  <span data-cursor="">
-                    <MenuCursor className="h-3 w-3" />
-                  </span>
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </StartMenu>
+        <TitleBlink>
+          <p aria-hidden="true" data-blinks="" className={PX.pressStart}>
+            Press start
+          </p>
+          <nav aria-label="Start menu" className="title-menu mt-1">
+            <ul className="pixel-box flex min-w-60 flex-col border-screen-ink bg-screen-paper py-2 text-left">
+              {menu.map((item) => (
+                <li key={item.href}>
+                  <Link href={item.href} className={PX.menuItem}>
+                    <span data-cursor="" data-blinks="">
+                      <MenuCursor className="h-3 w-3" />
+                    </span>
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </TitleBlink>
       </div>
       <TitleCast />
     </section>
