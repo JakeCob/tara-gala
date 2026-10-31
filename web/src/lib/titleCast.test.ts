@@ -41,3 +41,15 @@ test("TC3 the trio is decorative, keeps every frame loaded, and stays still for 
   assert.match(src, /return \(\) => window\.clearInterval\(timer\);/);
   assert.match(read("src/components/landing/TitleScreen.tsx"), /<TitleCast \/>/);
 });
+
+test("TC4 the start menu's cursor blinks once a second, steady for reduced motion, the server and a hidden tab", () => {
+  const src = read("src/components/landing/StartMenu.tsx");
+  assert.match(src, /^"use client";/);
+  assert.match(src, /export const BLINK_MS = 500;/);
+  assert.match(src, /"\(prefers-reduced-motion: reduce\)"/);
+  assert.match(src, /useSyncExternalStore\(subscribeStill, [^,]+, \(\) => true\)/, "steady on the server");
+  assert.match(src, /if \(still\) return;/);
+  assert.match(src, /if \(!document\.hidden\) setLit/);
+  assert.match(src, /return \(\) => window\.clearInterval\(timer\);/);
+  assert.match(src, /data-blink=\{still \|\| lit \? "on" : "off"\}/);
+});

@@ -132,11 +132,13 @@ test("T46-L2 PageTitle gains wordmark, id and tabIndex; PX.wordmark is PX.h1 in 
   assert.doesNotMatch(src, /use client/);
 });
 
-test("T49-T1 the title screen: a named start menu linking straight to each tab, one cursor, nothing blinking", () => {
+test("T49-T1 the title screen: a named start menu linking straight to each tab, one blinking cursor", () => {
   const src = source(sectionPath("TitleScreen"));
   assert.doesNotMatch(src, /use client|\buse(State|Effect|Ref|Memo|Callback|Reducer|SyncExternalStore)\b/, "a server component");
   assert.match(src, /<section\s+aria-labelledby="landing-title"/);
-  assert.match(src, /<nav aria-label="Start menu" className="title-menu mt-1">/);
+  assert.match(src, /<StartMenu>\s*<ul\b/);
+  const menu = source(sectionPath("StartMenu"));
+  assert.match(menu, /<nav aria-label="Start menu" className="title-menu mt-1" data-blink=\{still \|\| lit \? "on" : "off"\}>/);
   const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/wallet"]);
   assert.match(src, /\.\.\.\(formMode\(flags\) !== "none" \? \[\{ href: "\/plan"/, "Plan a trip only when the planner is on");
@@ -145,6 +147,8 @@ test("T49-T1 the title screen: a named start menu linking straight to each tab, 
   const css = read("src/app/globals.css");
   assert.match(css, /@utility title-menu \{[^}]*\[data-cursor\] \{ visibility: hidden; \}/);
   assert.match(css, /&:not\(:hover, :focus-within\) li:first-child \[data-cursor\], & a:is\(:hover, :focus-visible\) \[data-cursor\] \{ visibility: visible; \}/);
+  assert.match(css, /&\[data-blink="off"\] \[data-cursor\] \{ opacity: 0; \}/);
+  assert.match(css, /&\[data-blink="off"\] a:focus-visible \[data-cursor\] \{ opacity: 1; \}/, "keyboard focus keeps its marker");
   const img = src.match(/<img\b[^>]*src=\{spriteSrc\("hero-scene"\)\}[^>]*\/>/)?.[0] ?? "";
   for (const attr of [/alt=""/, /aria-hidden="true"/, /width=\{640\}/, /height=\{246\}/, /\bpixelated\b/]) assert.match(img, attr, `title img ${attr}`);
   assert.doesNotMatch(src, /text-brand|text-foreground|text-muted|text-link/, "the title screen is a fixed light screen (ux §0)");
