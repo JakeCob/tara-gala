@@ -19,3 +19,16 @@ export const CAST = {
 export function castSprite(slot: CastSlot): SpriteName {
   return chibiLook(lookFor(slot.type, slot.index)!, slot.frame);
 }
+
+// TG-49: the title screen's trio comes alive. A tick every TICK_MS steps each chibi between its two idle frames, out of
+// step with its neighbours, and once a round one of them waves, in turn. Pure, so the timing is tested without timers.
+export const TICK_MS = 400;
+const ROUND = 20; // ticks per round: 8 seconds
+const WAVE = [12, 13, 14, 15]; // the round's ticks that wave: 1.6 seconds
+
+/** The frame chibi `slot` (0, 1 or 2 of the trio) shows at `tick` */
+export function castFrame(slot: number, tick: number): ChibiFrame {
+  const round = Math.floor(tick / ROUND);
+  if (round % CAST.heroTrio.length === slot && WAVE.includes(tick % ROUND)) return "wave";
+  return (tick + slot) % 2 === 0 ? "idle-1" : "idle-2";
+}
