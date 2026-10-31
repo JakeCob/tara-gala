@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#167856">
+<meta name="theme-color" content="#fff8e7">
 <title>Tara Gala · offline</title>
 <!-- Served by the service worker when a page wasn't saved (TG-27). Self-contained: no scripts, no other files. -->
 <style>
-  /* The pixel theme's palette, inline: a standalone page can't read the app's tokens (TG-42 ux.md 4.3) */
+  /* The signboard theme's palette, inline: a standalone page can't read the app's tokens (TG-42 ux.md 4.3, TG-49) */
   body {
     margin: 0;
     min-height: 100vh;
     padding: 0 1rem;
     box-sizing: border-box;
-    background: #cfe8c4;
+    background: #fff8e7;
     color: #1d2a24;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     line-height: 1.5;
@@ -23,12 +23,11 @@
     max-width: 28rem;
     margin: 2rem auto;
     padding: 1.5rem;
-    background: #fbf7ee;
+    background: #ffffff;
     border: 3px solid #1d2a24;
-    outline: 3px solid #1d2a24;
-    outline-offset: -9px;
+    box-shadow: 5px 5px 0 #0038a8;
   }
-  h1 { color: #167856; font-size: 1.5rem; font-weight: 800; margin: 0 0 0.75rem; }
+  h1 { color: #ce1126; font-size: 1.5rem; font-weight: 800; margin: 0 0 0.75rem; }
   p { margin: 0 0 1.5rem; }
   a {
     display: inline-flex;
@@ -37,19 +36,19 @@
     padding: 0 1rem;
     border: 3px solid #1d2a24;
     border-radius: 0;
-    box-shadow: 0 3px 0 #1d2a24;
-    background: #167856;
-    color: #fbf7ee;
+    box-shadow: 3px 3px 0 #1d2a24;
+    background: #ce1126;
+    color: #ffffff;
     font-weight: 700;
     text-decoration: none;
   }
   a:focus-visible { outline: 3px solid #1d2a24; outline-offset: 2px; }
   @media (prefers-color-scheme: dark) {
-    body { background: #121815; color: #fbf7ee; }
-    main { background: #1b2420; border-color: #cfe8c4; outline-color: #cfe8c4; }
-    h1 { color: #5fb36b; }
-    a { background: #5fb36b; color: #1d2a24; border-color: #cfe8c4; box-shadow: 0 3px 0 #cfe8c4; }
-    a:focus-visible { outline-color: #ffd65c; }
+    body { background: #16130e; color: #fff8e7; }
+    main { background: #211d16; border-color: #fff8e7; box-shadow: 5px 5px 0 #8fb0ff; }
+    h1 { color: #ff6b6b; }
+    a { border-color: #fff8e7; box-shadow: 3px 3px 0 #fff8e7; }
+    a:focus-visible { outline-color: #fcd116; }
   }
 </style>
 </head>

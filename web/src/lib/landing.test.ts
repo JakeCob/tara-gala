@@ -103,7 +103,7 @@ test("T46-L2 one h1, in the hero, that the title screen can focus later; section
 
 test("T46-L2 PageTitle gains onScreen, id and tabIndex; PX.h1Screen is PX.h1 with screen-ink", async () => {
   const { PX } = await load<{ PX: Record<string, string> }>("src/components/pixel/classes.ts");
-  assert.equal(PX.h1Screen, "font-pixel text-[2rem] leading-tight font-bold text-screen-ink md:text-[2.5rem]");
+  assert.equal(PX.h1Screen, "font-pixel text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]"); // TG-49
   assert.equal(PX.h1.replace("text-brand", "text-screen-ink"), PX.h1Screen, "the same title, on the fixed light screen");
   const src = source("src/components/pixel/PageTitle.tsx");
   assert.match(src, /onScreen\s*\?\s*PX\.h1Screen\s*:\s*PX\.h1/);
@@ -215,7 +215,8 @@ test("T46-L6 how it works and trust: server sections named by their h2; the step
   assert.match(how, /<ol\b/);
   for (const n of ["1.", "2.", "3."]) assert.match(how, new RegExp(`<span aria-hidden="true"[^>]*>${n.replace(".", "\\.")}</span>`), `step ${n} is decorative`);
   assert.match(source(sectionPath("PremadeTrips")), /<SectionStripe \/>/);
-  assert.equal(source(sectionPath("SectionStripe")).match(/<div\b[^>]*\/>/)?.[0], '<div aria-hidden="true" className="mt-1 h-[3px] w-12 bg-flag-blue" />');
+  // TG-49: bg-lift (Flag Blue in light, the light Blue tint in dark), so the rule shows on the dark page
+  assert.equal(source(sectionPath("SectionStripe")).match(/<div\b[^>]*\/>/)?.[0], '<div aria-hidden="true" className="mt-1 h-[3px] w-12 bg-lift" />');
 });
 
 // ================================================================ T46-C: copy (ux §5)
@@ -261,7 +262,7 @@ test("T46-C4 how it works and trust say exactly ux §5.5, and claim nothing we c
 
 // ================================================================ T46-K: theme (TG-47 rules), targets, scanners
 
-test("T46-K1/K2/K5 tokens only; no blue-and-red fill together; no decorative red or yellow; the stripe is the only flag-blue", () => {
+test("T46-K1/K2/K5 tokens only; no blue-and-red fill together; no decorative red or yellow; no flag-blue on the landing", () => {
   const files = landingFiles();
   assert.ok(files.length >= SECTIONS.length, "the landing sections exist");
   for (const path of files) {
@@ -269,12 +270,13 @@ test("T46-K1/K2/K5 tokens only; no blue-and-red fill together; no decorative red
     assert.doesNotMatch(src, /#[0-9a-f]{3,8}\b|\brgba?\(/i, `${path}: no raw colour`);
     for (const cls of classStrings(src)) {
       const t = tokens(cls).map((x) => x.split(":").pop()!);
-      const blue = t.some((x) => /^(bg|text|border)-(primary|flag-blue|link)\b/.test(x));
-      const red = t.some((x) => /^(bg|text|border)-(danger|danger-text|flag-red)\b/.test(x));
+      // TG-49: primary is Red; lift is Blue
+      const blue = t.some((x) => /^(bg|text|border)-(flag-blue|link|lift)\b/.test(x));
+      const red = t.some((x) => /^(bg|text|border)-(primary|danger|danger-text|flag-red)\b/.test(x));
       assert.ok(!(blue && red), `${path}: "${cls}" pairs blue and red`);
     }
     assert.doesNotMatch(src, /\b(bg|text|border)-flag-(red|yellow)\b|\bbg-danger\b/, `${path}: no decorative red or yellow (ux §0)`);
-    if (!path.endsWith("SectionStripe.tsx")) assert.doesNotMatch(src, /\bbg-flag-blue\b/, `${path}: flag-blue only in the stripe`);
+    assert.doesNotMatch(src, /\bbg-flag-blue\b/, `${path}: the landing's Blue is the lift token (TG-49)`);
   }
 });
 

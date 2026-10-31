@@ -122,19 +122,23 @@ function contrast(a: string | undefined, b: string | undefined): number {
 // The art palette has one source, pixelSvg.ts (TG-47: the 6 greens, Flag Blue, Red and Yellow, two skin tones)
 const PALETTE: Record<string, string> = { ...ART_PALETTE };
 const SKIN = ["#8d5524", "#c68642"]; // art only, never a UI token (ux §0.6)
-const MUTED_LIGHT = "#4f5f57";
+const MUTED_LIGHT = "#4f5f57"; // the screen's muted text (screen-muted)
+// TG-49 (ux-guide v3, the signboard look): the UI's own colours beside the art palette. Paper is the page, White the
+// card, Chrome the decorative divider, Dust the muted text.
+const SIGNBOARD = { paper: "#fff8e7", white: "#ffffff", chrome: "#c9ced3", dust: "#5c5446" };
 
 const LIGHT = {
-  background: "#cfe8c4", foreground: "#1d2a24", muted: "#4f5f57", card: "#fbf7ee",
-  frame: "#1d2a24", border: "#5fb36b", brand: "#167856", "brand-ink": "#fbf7ee",
-  accent: "#fcd116", "accent-ink": "#1d2a24", focus: "#1d2a24", // TG-47: accent is Flag Yellow (was Sun)
-  // TG-47 ux §1.1: Blue to act, Red for what changed or failed
-  primary: "#0038a8", "primary-ink": "#fbf7ee", link: "#0038a8", danger: "#ce1126", "danger-text": "#ce1126",
+  background: "#fff8e7", foreground: "#1d2a24", muted: "#5c5446", card: "#ffffff",
+  frame: "#1d2a24", border: "#c9ced3", brand: "#ce1126", "brand-ink": "#fff8e7",
+  accent: "#fcd116", "accent-ink": "#1d2a24", focus: "#1d2a24",
+  // TG-49: Red to act (the jeepney's "go"), Blue for links and the box's hard shadow (lift), Yellow to look or book
+  primary: "#ce1126", "primary-ink": "#ffffff", link: "#0038a8", danger: "#ce1126", "danger-text": "#ce1126",
+  lift: "#0038a8",
 };
 const DARK_OVERRIDES = {
-  background: "#121815", foreground: "#fbf7ee", muted: "#a3b1aa", card: "#1b2420",
-  frame: "#cfe8c4", border: "#2c3833", brand: "#5fb36b", "brand-ink": "#1d2a24", focus: "#ffd65c",
-  link: "#8fb0ff", "danger-text": "#ff8a8a", // TG-47: UI-only tints (Flag Blue and Red can't be text on the dark card)
+  background: "#16130e", foreground: "#fff8e7", muted: "#b9ae9a", card: "#211d16",
+  frame: "#fff8e7", border: "#3a342a", brand: "#ff6b6b", "brand-ink": "#16130e", focus: "#fcd116",
+  link: "#8fb0ff", "danger-text": "#ff8a8a", lift: "#8fb0ff", // UI-only tints: Flag Blue and Red can't be text on the dark card
 };
 // TG-47: the flag colours for the game screen (map banners), fixed in both themes like screen-*
 const FIXED_FLAG = { "--color-flag-blue": "#0038a8", "--color-flag-red": "#ce1126", "--color-flag-yellow": "#fcd116" };
@@ -148,8 +152,8 @@ const TOKEN_NAMES = Object.keys(LIGHT);
 test("T2 tokens match guide 1.2 in light and dark", () => {
   const { lightVars, darkVars, dark } = tokenModes();
   const pick = (o: Record<string, string>) => Object.fromEntries(TOKEN_NAMES.filter((k) => k in o).map((k) => [k, o[k]]));
-  assert.deepEqual(pick(lightVars), LIGHT, "the 16 light :root variables");
-  assert.deepEqual(pick(darkVars), DARK_OVERRIDES, "dark overrides 11 tokens; accent, accent-ink, primary, primary-ink and danger are inherited");
+  assert.deepEqual(pick(lightVars), LIGHT, "the 17 light :root variables");
+  assert.deepEqual(pick(darkVars), DARK_OVERRIDES, "dark overrides 12 tokens; accent, accent-ink, primary, primary-ink and danger are inherited");
   assert.deepEqual(pick(dark), { ...LIGHT, ...DARK_OVERRIDES });
 });
 
@@ -174,7 +178,8 @@ test("T2 the screen tokens are fixed and every token is a Tailwind colour", () =
     assert.equal(inline[`--color-${name}`], `var(--${name})`, `@theme inline --color-${name}`);
   }
   assert.match(inline["--font-sans"] ?? "", /^var\(--font-nunito\)/);
-  assert.match(inline["--font-pixel"] ?? "", /^var\(--font-pixelify\),\s*var\(--font-nunito\)/);
+  // TG-49: font-pixel keeps its name and now draws the signboard display face
+  assert.match(inline["--font-pixel"] ?? "", /^var\(--font-sign\),\s*var\(--font-nunito\)/);
 });
 
 test("T2 native controls follow the theme and the body uses the body font (ux.md 1)", () => {
@@ -194,13 +199,15 @@ test("T2 globals.css has guide 3.2's utilities", () => {
     assert.ok(found.length, `@utility ${name}`);
     return found.map((b) => `${b.path.slice(1).join(" ")} { ${b.body} }`).join("\n");
   };
+  // TG-49: square signboard corners (no notch, no clip-path), one frame, and a hard offset shadow
   assert.match(util("pixel-frame"), /border:\s*3px solid var\(--frame\)/);
-  assert.match(util("pixel-frame"), /clip-path:\s*polygon\(/);
+  assert.match(util("pixel-frame"), /border-radius:\s*0/);
+  assert.doesNotMatch(util("pixel-frame"), /clip-path/);
   assert.match(util("pixel-box"), /@apply pixel-frame/);
-  assert.match(util("pixel-box"), /outline:\s*3px solid var\(--frame\)/);
-  assert.match(util("pixel-box"), /outline-offset:\s*-9px/);
-  assert.match(util("pixel-btn"), /box-shadow:\s*0 3px 0 0 var\(--frame\)/);
-  assert.match(util("pixel-btn"), /&:active:not\(:disabled, \[aria-disabled="true"\]\)\s*\{\s*translate:\s*0 3px;\s*box-shadow:\s*none;?\s*\}/);
+  assert.match(util("pixel-box"), /box-shadow:\s*5px 5px 0 0 var\(--lift\)/);
+  assert.doesNotMatch(util("pixel-box"), /outline/, "one frame, not the v2 double line");
+  assert.match(util("pixel-btn"), /box-shadow:\s*3px 3px 0 0 var\(--frame\)/);
+  assert.match(util("pixel-btn"), /&:active:not\(:disabled, \[aria-disabled="true"\]\)\s*\{\s*translate:\s*3px 3px;\s*box-shadow:\s*none;?\s*\}/);
   assert.match(util("pixel-btn"), /&:disabled, &\[aria-disabled="true"\]\s*\{\s*opacity:\s*\.6;\s*box-shadow:\s*none;?\s*\}/);
   assert.match(util("focus-pixel"), /&:focus-visible\s*\{\s*outline:\s*3px solid var\(--focus\);\s*outline-offset:\s*2px;?\s*\}/);
   assert.match(util("focus-pixel-within"), /&:has\(:focus-visible\)\s*\{\s*outline:\s*3px solid var\(--focus\);\s*outline-offset:\s*2px;?\s*\}/);
@@ -208,21 +215,22 @@ test("T2 globals.css has guide 3.2's utilities", () => {
 });
 
 // T3 (B1)
-test("T3 art palette is exactly 11 colours and the light tokens use only them", () => {
+test("T3 art palette is exactly 11 colours and the light tokens use only it plus the signboard colours", () => {
   const { lightVars, darkVars } = tokenModes();
   const palette = new Set(Object.values(PALETTE));
   assert.deepEqual([...palette], [
     "#1d2a24", "#167856", "#5fb36b", "#cfe8c4", "#fbf7ee", "#ffd65c", "#0038a8", "#ce1126", "#fcd116", "#8d5524", "#c68642",
   ], "pixelSvg.ts PALETTE, in order (the one deliberate copy)");
+  const ui = new Set([...palette, ...Object.values(SIGNBOARD)]);
   for (const name of TOKEN_NAMES) {
     assert.ok(lightVars[name], `light --${name} is set`);
-    assert.ok(palette.has(lightVars[name]) || lightVars[name] === MUTED_LIGHT, `light --${name} ${lightVars[name]} is off-palette`);
+    assert.ok(ui.has(lightVars[name]), `light --${name} ${lightVars[name]} is off-palette`);
   }
   for (const hex of Object.values(SCREEN)) {
     assert.ok(palette.has(hex) || hex === MUTED_LIGHT, `screen token ${hex}`);
   }
-  const offPalette = new Set(Object.values(darkVars).filter((hex) => !palette.has(hex)));
-  assert.deepEqual([...offPalette].sort(), ["#121815", "#1b2420", "#2c3833", "#8fb0ff", "#a3b1aa", "#ff8a8a"], "the only non-palette dark values");
+  const offPalette = new Set(Object.values(darkVars).filter((hex) => !ui.has(hex)));
+  assert.deepEqual([...offPalette].sort(), ["#16130e", "#211d16", "#3a342a", "#8fb0ff", "#b9ae9a", "#ff6b6b", "#ff8a8a"], "the only non-palette dark values");
   // Skin tones are art only (ux §0.6): no token in either mode uses one
   for (const [mode, vars] of [["light", lightVars], ["dark", { ...lightVars, ...darkVars }]] as const) {
     for (const [name, hex] of Object.entries(vars)) assert.ok(!SKIN.includes(hex), `${mode} --${name} is a skin tone`);
@@ -272,11 +280,10 @@ test("T4 every text pair used is AA (4.5:1) in both modes", () => {
   }
 });
 
-// T5 (B15)
-test("T5 brand on background is large-text only in light mode", () => {
+// T5 (B15). TG-49: the Red h1 passes AA on Paper at any size (Forest on Mint was large-text only)
+test("T5 brand on background is AA in both modes", () => {
   const { lightVars, dark } = tokenModes();
-  const light = contrast(lightVars.brand, lightVars.background);
-  assert.ok(light >= 3.0 && light < 4.5, `light brand on background is ${light.toFixed(2)}: h1 size only`);
+  assert.ok(contrast(lightVars.brand, lightVars.background) >= 4.5, "light brand on background");
   assert.ok(contrast(dark.brand, dark.background) >= 4.5, "dark brand on background");
 });
 
@@ -309,20 +316,20 @@ test("T7 known-failing pairs stay banned", () => {
   assert.ok(contrast(dark.focus, dark.accent) < 3.0, `dark focus on accent: ${msg}`);
   assert.ok(contrast(lightVars.focus, lightVars.brand) < 3.0, `light focus on brand: ${msg}`);
   assert.ok(contrast(dark.focus, dark.brand) < 3.0, `dark focus on brand: ${msg}`);
-  // Leaf (light border) and Flag Yellow (accent) never carry text on Cream (card) or Mint (background)
+  // Chrome (light border) and Flag Yellow (accent) never carry text on White (card) or Paper (background)
   for (const fg of ["border", "accent"]) {
     for (const bg of ["card", "background"]) {
       assert.ok(contrast(lightVars[fg], lightVars[bg]) < 4.5, `light ${fg} on ${bg}: ${msg}`);
     }
   }
   for (const name of ["primary", "danger", "danger-text"]) assert.ok(lightVars[name], `light --${name} is set`);
-  // TG-47 ux §3: no control on a Blue or Red surface (Ink focus on Blue is 1.51), Sun focus on Yellow is 1.05
+  // No control on a Red surface (Ink focus on Red is 2.65), and Yellow focus on Yellow is 1.0 in dark mode
   assert.ok(contrast(lightVars.focus, lightVars.primary) < 3.0, `light focus on primary: ${msg}`);
   assert.ok(contrast(lightVars.focus, lightVars.danger) < 3.0, `light focus on danger: ${msg}`);
-  // Red text only on card: on the Mint page it's 4.28
-  assert.ok(contrast(lightVars["danger-text"], lightVars.background) < 4.5, `light danger-text on background: ${msg}`);
-  // Ink text never on Blue or Red: Cream only
+  assert.ok(contrast(lightVars.focus, lightVars.lift) < 3.0, `light focus on lift (Blue): ${msg}`);
+  // Ink text never on Blue or Red: White or Paper only
   assert.ok(contrast(lightVars.foreground, lightVars.primary) < 4.5, `Ink on primary: ${msg}`);
+  assert.ok(contrast(lightVars.foreground, lightVars.link) < 4.5, `Ink on Flag Blue: ${msg}`);
   assert.ok(contrast(lightVars.foreground, lightVars.danger) < 4.5, `Ink on danger: ${msg}`);
   // Raw Flag Blue and Red can't be text on the dark card, hence the dark link and danger-text tints
   assert.ok(contrast(lightVars.primary, dark.card) < 4.5, `Flag Blue on the dark card: ${msg}`);
@@ -347,9 +354,9 @@ const EXPECTED_PX: PXShape = {
   box: {
     skin: "pixel-box bg-card",
     layout: "p-4 flex flex-col gap-2",
-    // TG-47 ux §7 Option B: the double frame's 3px gap turns Red on all four sides; no element, no layout change
-    alert: "shadow-[inset_0_0_0_6px_var(--danger)]",
-    alertText: "shadow-[inset_0_0_0_6px_var(--danger)] text-danger-text", // a one-sentence box is its own lead
+    // TG-49: a Red inner line and a Red hard shadow in place of the Blue lift; no element, no layout change
+    alert: "shadow-[inset_0_0_0_3px_var(--danger),5px_5px_0_0_var(--danger)]",
+    alertText: "shadow-[inset_0_0_0_3px_var(--danger),5px_5px_0_0_var(--danger)] text-danger-text", // a one-sentence box is its own lead
   },
   btn: {
     primary: { skin: "pixel-btn focus-pixel min-h-11 bg-primary font-bold text-primary-ink", layout: "px-4 py-3" },
@@ -359,23 +366,24 @@ const EXPECTED_PX: PXShape = {
     iconBrand: { skin: "pixel-btn focus-pixel min-h-11 min-w-11 bg-card text-link", layout: "inline-flex items-center justify-center text-xl leading-none" },
   },
   choice: {
-    skin: "group/choice pixel-btn focus-pixel-within min-h-11 cursor-pointer bg-card font-semibold has-checked:bg-primary has-checked:text-primary-ink has-checked:translate-y-[3px] has-checked:shadow-none has-[[aria-disabled=true]]:opacity-60 has-[[aria-disabled=true]]:shadow-none",
+    skin: "group/choice pixel-btn focus-pixel-within min-h-11 cursor-pointer bg-card font-semibold has-checked:bg-primary has-checked:text-primary-ink has-checked:translate-x-[3px] has-checked:translate-y-[3px] has-checked:shadow-none has-[[aria-disabled=true]]:opacity-60 has-[[aria-disabled=true]]:shadow-none",
     layout: "flex items-center justify-center gap-1 px-2 py-2 text-center text-sm leading-tight",
   },
   chip: "pixel-frame bg-card px-2 py-1 text-sm",
   chipHighlight: "pixel-frame bg-accent text-accent-ink px-2 py-1 text-sm", // TG-47 ux §2, colour only (plan §6.2)
   screenChip: "pixel-frame bg-screen-paper text-screen-ink px-2 py-1 text-sm",
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
-  h1: "font-pixel text-[2rem] leading-tight font-bold text-brand md:text-[2.5rem]",
-  h1Screen: "font-pixel text-[2rem] leading-tight font-bold text-screen-ink md:text-[2.5rem]",
-  h2: "font-pixel text-xl font-semibold",
+  // TG-49: the signboard face is wide and has one weight (400), so titles step down and never synthesise bold
+  h1: "font-pixel text-[1.75rem] leading-tight font-normal text-brand md:text-[2.25rem]",
+  h1Screen: "font-pixel text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
+  h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",
   inlineLink: "underline underline-offset-2 focus-pixel text-link",
   // TG-43 ux §4: the sprite plate (stepper rows, stop sprites), the stage tag, the budget's ₱ prefix;
   // plan §3.2: the share page's decorative step numeral
   plate: "pixel-frame bg-screen-paper p-0.5 inline-flex shrink-0",
-  numeral: "font-pixel text-xl font-semibold",
+  numeral: "font-pixel text-xl font-normal",
   screenTag: "pixel-frame bg-screen-paper text-screen-ink px-1 text-xs font-semibold",
   inputPrefix: "inline-flex items-center border-3 border-r-0 border-frame bg-card px-3 text-base font-bold text-foreground",
   // TG-44 ux §2: the page shell
@@ -530,9 +538,9 @@ test("B4 PixelCardLink keeps focus off the clipped box (decision 4)", () => {
   assert.match(source, /PX\.box\.skin/, "the inner box carries the pixel-box skin");
 });
 
-test("B4 DialogBox puts the hard shadow on a wrapper around the box", () => {
+test("B4 DialogBox takes the box's own hard shadow, with no wrapper drop-shadow (TG-49: no clip-path to dodge)", () => {
   const source = primitive("DialogBox");
-  assert.match(source, /drop-shadow-\[0_6px_0_var\(--color-frame\)\]/);
+  assert.doesNotMatch(source, /drop-shadow-/);
   assert.match(source, /PX\.box\.skin/);
   assert.match(source, /p-4 flex flex-col gap-3/);
 });
@@ -592,20 +600,22 @@ function walkFiles(dir: URL, out: URL[] = []): URL[] {
   return out;
 }
 
-test("T18 layout.tsx loads Nunito and Pixelify Sans through next/font/google", () => {
+// TG-49: the signboard display face (Bungee, OFL) replaces Pixelify Sans, self-hosted by next/font like Nunito
+test("T18 layout.tsx loads Nunito and the signboard face through next/font/google", () => {
   const layout = read("src/app/layout.tsx");
-  assert.match(layout, /import\s*\{\s*Nunito,\s*Pixelify_Sans\s*\}\s*from\s*"next\/font\/google"/);
+  assert.match(layout, /import\s*\{\s*Bungee,\s*Nunito\s*\}\s*from\s*"next\/font\/google"/);
+  assert.doesNotMatch(layout, /Pixelify/);
   assert.match(
     layout,
     /Nunito\(\{\s*subsets:\s*\["latin",\s*"latin-ext"\],\s*display:\s*"swap",\s*variable:\s*"--font-nunito"\s*\}\)/,
   );
   assert.match(
     layout,
-    /Pixelify_Sans\(\{\s*subsets:\s*\["latin"\],\s*display:\s*"swap",\s*variable:\s*"--font-pixelify"\s*\}\)/,
+    /Bungee\(\{\s*weight:\s*"400",\s*subsets:\s*\["latin"\],\s*display:\s*"swap",\s*variable:\s*"--font-sign"\s*\}\)/,
   );
   const html = layout.match(/<html\b[^>]*>/)?.[0] ?? "";
   assert.match(html, /lang="en"/);
-  assert.match(html, /className=\{`\$\{nunito\.variable\} \$\{pixelify\.variable\} h-full antialiased`\}/);
+  assert.match(html, /className=\{`\$\{nunito\.variable\} \$\{sign\.variable\} h-full antialiased`\}/);
 });
 
 test("T18 no font or stylesheet is fetched from anywhere else", () => {
@@ -789,7 +799,7 @@ test("T21 offline.html palette equals the tokens, in light and dark", () => {
   assert.ok(hexes.length >= 8, "the page sets its own colours");
   for (const hex of hexes) assert.ok(allowed.has(hex), `offline.html ${hex} isn't a token value`);
   assert.match(html, /@media \(prefers-color-scheme: dark\)/);
-  for (const hex of ["#121815", "#1b2420", "#5fb36b", "#ffd65c"]) assert.ok(hexes.includes(hex), `dark ${hex}`);
+  for (const hex of ["#16130e", "#211d16", "#ff6b6b", "#fcd116"]) assert.ok(hexes.includes(hex), `dark ${hex}`);
   assert.doesNotMatch(html, /border-radius:(?!\s*0[;\s}])/, "square corners only");
 });
 
@@ -843,17 +853,19 @@ test("T43-U2 globals.css outlines a date input whenever focus is inside it", () 
 
 // ---------------------------------------------------------------- TG-47 B/C: flag-colour tokens, contrast, no flag
 
-// T47-T1: ux §1.1's 7 new or changed tokens, per mode. "same" in dark means inherited, never redeclared.
+// T47-T1, revised for TG-49 (ux-guide v3 §1.2): the action, link, alert and accent tokens per mode. "same" in dark means
+// inherited, never redeclared.
 test("T47-T1 the new and changed tokens have ux's exact values in light and dark", () => {
   const { lightVars, darkVars, dark } = tokenModes();
   const ux: [name: string, light: string, dark: string][] = [
-    ["primary", "#0038a8", "#0038a8"],
-    ["primary-ink", "#fbf7ee", "#fbf7ee"],
+    ["primary", "#ce1126", "#ce1126"],
+    ["primary-ink", "#ffffff", "#ffffff"],
     ["link", "#0038a8", "#8fb0ff"],
     ["danger", "#ce1126", "#ce1126"],
     ["danger-text", "#ce1126", "#ff8a8a"],
     ["accent", "#fcd116", "#fcd116"],
     ["accent-ink", "#1d2a24", "#1d2a24"],
+    ["lift", "#0038a8", "#8fb0ff"],
   ];
   for (const [name, l, d] of ux) {
     assert.equal(lightVars[name], l, `light --${name}`);
@@ -866,7 +878,7 @@ test("T47-T1 the new and changed tokens have ux's exact values in light and dark
 test("T47-T2 the new tokens are Tailwind colours; the flag colours are fixed hexes", () => {
   const { all } = tokenModes();
   const inline = Object.assign({}, ...all.filter((b) => b.path.length === 1 && b.path[0] === "@theme inline").map((b) => decls(b.body)));
-  for (const name of ["primary", "primary-ink", "link", "danger", "danger-text"]) {
+  for (const name of ["primary", "primary-ink", "link", "danger", "danger-text", "lift"]) {
     assert.equal(inline[`--color-${name}`], `var(--${name})`, `@theme inline --color-${name}`);
   }
   const fixed = Object.assign({}, ...all.filter((b) => b.path.length === 1 && b.path[0] === "@theme").map((b) => decls(b.body)));
@@ -880,27 +892,32 @@ test("T47-T2 the new tokens are Tailwind colours; the flag colours are fixed hex
 // own precision), so a token edit that still passes AA but changes the table shows up as a ux change.
 type Row = { fg: string; bg: string; mode: "light" | "dark" | "fixed"; min: number | null; ux: number; dp: 1 | 2; where: string };
 const UX_TABLE: Row[] = [
-  { fg: "primary-ink", bg: "primary", mode: "light", min: 4.5, ux: 9.22, dp: 2, where: "primary buttons, checked pills, cursor" },
-  { fg: "primary-ink", bg: "primary", mode: "dark", min: 4.5, ux: 9.22, dp: 2, where: "primary buttons, checked pills, cursor" },
+  { fg: "primary-ink", bg: "primary", mode: "light", min: 4.5, ux: 5.63, dp: 2, where: "primary buttons, checked pills, cursor (TG-49: Red to act)" },
+  { fg: "primary-ink", bg: "primary", mode: "dark", min: 4.5, ux: 5.63, dp: 2, where: "primary buttons, checked pills, cursor (TG-49: Red to act)" },
   { fg: "--color-screen-paper", bg: "--color-flag-blue", mode: "fixed", min: 4.5, ux: 9.22, dp: 2, where: "map banners" },
-  { fg: "link", bg: "card", mode: "light", min: 4.5, ux: 9.22, dp: 2, where: "links, Maps, the swap glyph" },
-  { fg: "link", bg: "card", mode: "dark", min: 4.5, ux: 7.44, dp: 2, where: "links, Maps, the swap glyph" },
-  { fg: "link", bg: "background", mode: "light", min: 4.5, ux: 7.5, dp: 2, where: "a link on the page" },
-  { fg: "link", bg: "background", mode: "dark", min: 4.5, ux: 8.42, dp: 2, where: "a link on the page" },
+  { fg: "link", bg: "card", mode: "light", min: 4.5, ux: 9.85, dp: 2, where: "links, Maps, the swap glyph" },
+  { fg: "link", bg: "card", mode: "dark", min: 4.5, ux: 7.85, dp: 2, where: "links, Maps, the swap glyph" },
+  { fg: "link", bg: "background", mode: "light", min: 4.5, ux: 9.31, dp: 2, where: "a link on the page" },
+  { fg: "link", bg: "background", mode: "dark", min: 4.5, ux: 8.66, dp: 2, where: "a link on the page" },
   { fg: "accent-ink", bg: "accent", mode: "light", min: 4.5, ux: 10.13, dp: 2, where: "Book, stale banner, highlight chip" },
   { fg: "accent-ink", bg: "accent", mode: "dark", min: 4.5, ux: 10.13, dp: 2, where: "Book, stale banner, highlight chip" },
-  { fg: "danger-text", bg: "card", mode: "light", min: 4.5, ux: 5.26, dp: 2, where: "alert leads, card warnings" },
-  { fg: "danger-text", bg: "card", mode: "dark", min: 4.5, ux: 7.01, dp: 2, where: "alert leads, card warnings" },
-  { fg: "danger-text", bg: "background", mode: "dark", min: 4.5, ux: 7.93, dp: 2, where: "dark only (light is banned, T7)" },
+  { fg: "danger-text", bg: "card", mode: "light", min: 4.5, ux: 5.63, dp: 2, where: "alert leads, card warnings" },
+  { fg: "danger-text", bg: "card", mode: "dark", min: 4.5, ux: 7.39, dp: 2, where: "alert leads, card warnings" },
+  { fg: "danger-text", bg: "background", mode: "light", min: 4.5, ux: 5.31, dp: 2, where: "TG-49: Red on Paper passes, unlike Red on Mint" },
+  { fg: "danger-text", bg: "background", mode: "dark", min: 4.5, ux: 8.16, dp: 2, where: "a red line on the page" },
+  { fg: "brand", bg: "background", mode: "light", min: 4.5, ux: 5.31, dp: 2, where: "TG-49: the Red h1 at any size" },
+  { fg: "brand", bg: "background", mode: "dark", min: 4.5, ux: 6.68, dp: 2, where: "the dark h1" },
   { fg: "danger", bg: "frame", mode: "light", min: null, ux: 2.65, dp: 2, where: "the alert lining, decorative (never text, C2)" },
-  { fg: "danger", bg: "frame", mode: "dark", min: null, ux: 4.28, dp: 2, where: "the alert lining, decorative (never text, C2)" },
-  { fg: "frame", bg: "background", mode: "light", min: 3, ux: 11.4, dp: 1, where: "the frame defines every control" },
-  { fg: "frame", bg: "card", mode: "light", min: 3, ux: 13.9, dp: 1, where: "the frame defines every control" },
-  { fg: "frame", bg: "card", mode: "dark", min: 3, ux: 12.1, dp: 1, where: "the frame defines every control" },
-  { fg: "focus", bg: "card", mode: "light", min: 3, ux: 13.9, dp: 1, where: "focus around a Blue or Yellow control" },
-  { fg: "focus", bg: "background", mode: "light", min: 3, ux: 11.4, dp: 1, where: "focus around a Blue or Yellow control" },
-  { fg: "focus", bg: "card", mode: "dark", min: 3, ux: 11.4, dp: 1, where: "focus around a Blue or Yellow control" },
-  { fg: "focus", bg: "background", mode: "dark", min: 3, ux: 12.9, dp: 1, where: "focus around a Blue or Yellow control" },
+  { fg: "danger", bg: "frame", mode: "dark", min: null, ux: 5.31, dp: 2, where: "the alert lining, decorative (never text, C2)" },
+  { fg: "lift", bg: "background", mode: "light", min: 3, ux: 9.31, dp: 2, where: "the box's hard shadow (decorative, but it reads as an edge)" },
+  { fg: "lift", bg: "background", mode: "dark", min: 3, ux: 8.66, dp: 2, where: "the box's hard shadow (decorative, but it reads as an edge)" },
+  { fg: "frame", bg: "background", mode: "light", min: 3, ux: 14.1, dp: 1, where: "the frame defines every control" },
+  { fg: "frame", bg: "card", mode: "light", min: 3, ux: 14.9, dp: 1, where: "the frame defines every control" },
+  { fg: "frame", bg: "card", mode: "dark", min: 3, ux: 15.8, dp: 1, where: "the frame defines every control" },
+  { fg: "focus", bg: "card", mode: "light", min: 3, ux: 14.9, dp: 1, where: "focus around a Red or Yellow control" },
+  { fg: "focus", bg: "background", mode: "light", min: 3, ux: 14.1, dp: 1, where: "focus around a Red or Yellow control" },
+  { fg: "focus", bg: "card", mode: "dark", min: 3, ux: 11.4, dp: 1, where: "focus around a Red or Yellow control" },
+  { fg: "focus", bg: "background", mode: "dark", min: 3, ux: 12.6, dp: 1, where: "focus around a Red or Yellow control" },
 ];
 
 test("T47-C1 ux §3's contrast table holds, number for number, in both themes", () => {
@@ -921,7 +938,7 @@ test("T47-C1 ux §3's contrast table holds, number for number, in both themes", 
 // grouped by variant prefix (has-checked:, md:, …), and each bg-X with a text-Y in the same group is a pair.
 const COLOUR_NAMES = [
   "background", "foreground", "muted", "card", "frame", "border", "brand", "brand-ink", "accent", "accent-ink", "focus",
-  "primary", "primary-ink", "link", "danger", "danger-text", "screen", "screen-paper", "screen-ink", "screen-muted",
+  "primary", "primary-ink", "link", "danger", "danger-text", "lift", "screen", "screen-paper", "screen-ink", "screen-muted",
   "flag-blue", "flag-red", "flag-yellow",
 ];
 const colourOf = (token: string, prop: "bg" | "text" | "border") => {
@@ -980,13 +997,14 @@ test("T47-C3 the pair scanner finds pairs per variant group and ignores sizes", 
   assert.deepEqual(colourPairs('"bg-card text-sm text-center font-bold"'), []);
   assert.deepEqual(colourPairs('"bg-primary text-link"'), [["link", "primary"]]);
   assert.ok(!APPROVED_PAIRS.has("link/primary"), "a link on Blue is not approved");
-  assert.ok(!APPROVED_PAIRS.has("danger-text/background"), "red text on the Mint page is not approved");
+  assert.ok(!APPROVED_PAIRS.has("foreground/primary"), "Ink on the Red button is not approved");
   assert.ok(APPROVED_PAIRS.has("screen-paper/flag-blue"), "the map banner pair is approved");
 });
 
 // T47-F1: no literal flag (RA 8491, ux §0.5)
-const BLUE = ["primary", "flag-blue", "link"];
-const RED = ["danger", "danger-text", "flag-red"];
+// TG-49: primary is Flag Red; Blue is the link and the lift (hard shadow)
+const BLUE = ["flag-blue", "link", "lift"];
+const RED = ["primary", "danger", "danger-text", "flag-red"];
 const YELLOW = ["accent", "flag-yellow"];
 function flagProblems(literal: string): string[] {
   const t = tokensOf(literal.replace(/^["'`]|["'`]$/g, "")).map(bare);
@@ -1022,10 +1040,11 @@ test("T47-F1 no element combines flag colours; no flag gradient, triangle or sun
     assert.ok(m[1].split(",").length !== 3, `no triangle clip-path: polygon(${m[1]})`);
   }
   // the checker itself
-  assert.deepEqual(flagProblems('"bg-primary border-flag-red"'), ["Blue and Red fills or borders in one element"]);
+  assert.deepEqual(flagProblems('"bg-primary border-flag-red"'), [], "TG-49: primary is Red, so this is one colour");
   assert.deepEqual(flagProblems('"bg-flag-blue border-flag-yellow"'), ["two flag colours in one element"]);
-  assert.deepEqual(flagProblems('"pixel-box bg-card shadow-[inset_0_0_0_6px_var(--danger)]"'), [], "the Red lining alone is fine");
-  assert.deepEqual(flagProblems('"bg-primary shadow-[inset_0_0_0_6px_var(--danger)]"'), ["Blue and Red fills or borders in one element"]);
+  assert.deepEqual(flagProblems('"pixel-box bg-card shadow-[inset_0_0_0_3px_var(--danger),5px_5px_0_0_var(--danger)]"'), [], "the Red lining alone is fine");
+  assert.deepEqual(flagProblems('"bg-flag-blue shadow-[inset_0_0_0_3px_var(--danger)]"'), ["Blue and Red fills or borders in one element"]);
+  assert.deepEqual(flagProblems('"bg-primary border-flag-blue"'), ["Blue and Red fills or borders in one element"], "TG-49: primary is Red");
 });
 
 // The colour PRs keep classes.ts's rule in its header, now with Blue (ux §5)

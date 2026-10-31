@@ -1,13 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Nunito, Pixelify_Sans } from "next/font/google";
+import { Bungee, Nunito } from "next/font/google";
 import OfflineBanner from "@/components/OfflineBanner";
 import ServiceWorkerManager from "@/components/ServiceWorkerManager";
 import "./globals.css";
 
-// Self-hosted by next/font under /_next/static/media (no runtime requests to Google). Pixelify is for static
-// headings only: it has no ₱ or → (ux-guide 2.2).
+// Self-hosted by next/font under /_next/static/media (no runtime requests to Google). The signboard face (TG-49) is
+// for static headings only: it has no ₱ or → (ux-guide 2.2). Swapping in a Filipino jeepney face is this one line.
 const nunito = Nunito({ subsets: ["latin", "latin-ext"], display: "swap", variable: "--font-nunito" });
-const pixelify = Pixelify_Sans({ subsets: ["latin"], display: "swap", variable: "--font-pixelify" });
+const sign = Bungee({ weight: "400", subsets: ["latin"], display: "swap", variable: "--font-sign" });
 
 export const metadata: Metadata = {
   title: "Tara Gala",
@@ -17,14 +17,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#167856",
+  themeColor: "#fff8e7",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${nunito.variable} ${pixelify.variable} h-full antialiased`}>
+    <html lang="en" className={`${nunito.variable} ${sign.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <OfflineBanner />
         {children}
