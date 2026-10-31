@@ -50,7 +50,7 @@ export const PX = {
   menuItem: "focus-pixel flex min-h-11 items-center gap-2 px-4 font-pixel text-lg font-normal text-screen-ink",
   // The header's app name (home to the title screen) and the tabs, in the header from md and the bar on phones
   logo: "focus-pixel inline-flex min-h-11 items-center bg-card font-wordmark text-xl leading-none font-normal text-brand md:text-2xl",
-  tab: "focus-pixel flex min-h-11 items-center justify-center bg-card px-3 font-pixel text-base font-normal text-foreground border-transparent aria-[current=page]:border-brand aria-[current=page]:text-brand",
+  tab: "focus-pixel flex items-center justify-center bg-card px-3 font-pixel text-base font-normal text-foreground border-transparent aria-[current=page]:border-brand aria-[current=page]:text-brand",
   h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",

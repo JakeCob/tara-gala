@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PX, cx } from "@/components/pixel";
+import TabIcon from "@/components/TabIcon";
 import { flags } from "@/lib/flags";
 import { formMode } from "@/lib/planForm";
 import { currentTab, visibleTabs } from "@/lib/tabs";
@@ -17,7 +18,8 @@ export default function TabBar() {
       <ul className={cx("mx-auto grid max-w-md", tabs.length === 4 ? "grid-cols-4" : "grid-cols-3")}>
         {tabs.map((tab) => (
           <li key={tab.href} className="grid">
-            <Link href={tab.href} aria-current={current === tab.href ? "page" : undefined} className={cx(PX.tab, "min-h-14 border-t-4")}>
+            <Link href={tab.href} aria-current={current === tab.href ? "page" : undefined} className={cx(PX.tab, "min-h-16 flex-col gap-0.5 border-t-4 pt-1 text-sm")}>
+              <TabIcon tab={tab.href} scale={2} />
               {tab.label}
             </Link>
           </li>

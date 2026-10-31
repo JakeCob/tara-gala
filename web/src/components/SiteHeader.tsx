@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PX, cx } from "@/components/pixel";
+import TabIcon from "@/components/TabIcon";
 import ThemeToggle from "@/components/ThemeToggle";
 import { flags } from "@/lib/flags";
 import { formMode } from "@/lib/planForm";
@@ -23,7 +24,8 @@ export default function SiteHeader() {
           <ul className="flex gap-1">
             {tabs.map((tab) => (
               <li key={tab.href}>
-                <Link href={tab.href} aria-current={current === tab.href ? "page" : undefined} className={cx(PX.tab, "border-b-4")}>
+                <Link href={tab.href} aria-current={current === tab.href ? "page" : undefined} className={cx(PX.tab, "min-h-11 gap-2 border-b-4")}>
+                  <TabIcon tab={tab.href} scale={1} />
                   {tab.label}
                 </Link>
               </li>
