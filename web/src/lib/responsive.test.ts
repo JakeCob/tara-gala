@@ -134,21 +134,41 @@ test("TG44-S2 PX.h1 steps up from md", async () => {
 
 // ---- H1, F1, L1, I1, D1, U1: the per-page layouts ----
 
-test("TG44-H1 home: form left, results right from md; the links stay after TripSearch", () => {
-  const search = read("src/components/TripSearch.tsx");
-  assert.match(
-    search,
-    /return \(\s*<div className="flex flex-col gap-4 md:grid md:grid-cols-\[20rem_minmax\(0,1fr\)\] md:grid-rows-\[auto_1fr\] md:gap-6 md:items-start lg:grid-cols-\[22rem_minmax\(0,1fr\)\] lg:gap-8">/,
-  );
-  assert.match(search, /<PixelBox as="form" onSubmit=\{onSearch\} className="p-4 flex flex-col gap-3 md:row-span-2">/);
-  assert.match(search, /<ul className="flex flex-col gap-3 md:grid md:grid-cols-\[repeat\(auto-fill,minmax\(20rem,1fr\)\)\] md:gap-4">/);
-  assert.match(search, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">/, "the live wrapper is unchanged");
+test("TG44-H1 home: from md the hero and the form share the first row, the results run full width under both (TG-49)", () => {
   const page = read("src/app/page.tsx");
+  // TG-49 desktop: the form sat in a 20rem column beside an empty results column until a search, and the hero stopped
+  // short of the tiles' right edge. Now one grid holds the hero (left), the form (right) and, through TripSearch's
+  // contents root, the status lines and cards on full-width rows below. The xl column makes the hero exactly 640px,
+  // the scene's 2x width, inside the 1088px xl shell.
+  assert.match(
+    page,
+    /<div className="flex flex-col gap-5 md:grid md:grid-cols-\[minmax\(0,1fr\)_20rem\] md:gap-x-6 md:gap-y-0 lg:grid-cols-\[minmax\(0,1fr\)_22rem\] lg:gap-x-8 xl:grid-cols-\[minmax\(0,1fr\)_26rem\]">\s*<Hero \/>\s*<TripSearch \/>\s*<\/div>/,
+  );
+  const search = read("src/components/TripSearch.tsx");
+  assert.match(search, /return \(\s*<div className="flex flex-col gap-4 md:contents">/);
+  assert.match(search, /<PixelBox as="form" onSubmit=\{onSearch\} className="p-4 flex flex-col gap-3 md:justify-center">/);
+  assert.match(search, /<ul className="flex flex-col gap-3 md:col-span-full md:mt-4 md:grid md:grid-cols-\[repeat\(auto-fill,minmax\(20rem,1fr\)\)\] md:gap-4">/);
+  // The grid has no row gap, because an empty row would still take one: the live wrapper gets a margin only once it
+  // has something in it, and the cards sit a step under it
+  assert.match(search, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4 md:col-span-full md:mt-6 md:empty:mt-0 lg:mt-8">/);
   // TG-46: the tagline moved to the hero, on its fixed light screen; the two links became the quick actions
   assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses/);
   const at = page.indexOf("<TripSearch />");
   assert.ok(at > 0 && page.indexOf("<QuickActions />") > at, "the quick actions come after TripSearch in the DOM (tab order = visual order)");
   assert.match(page, /<footer className="mt-auto pt-6 text-xs text-muted">/, "the footer is unchanged");
+});
+
+test("TG-49 quick actions: stacked to md, a row of tiles from lg", () => {
+  const src = read("src/components/landing/QuickActions.tsx");
+  assert.match(src, /const cols = formMode\(flags\) !== "none" \? "lg:grid-cols-3" : "lg:grid-cols-2";/);
+  assert.match(src, /<ul className=\{cx\("flex flex-col gap-3 lg:grid lg:gap-4", cols\)\}>/);
+});
+
+test("TG-49 hero: one 2x scene at every width, filling its grid cell from md", () => {
+  const src = read("src/components/landing/Hero.tsx");
+  assert.match(src, /<section className="pixel-frame bg-screen relative h-\[252px\] overflow-hidden md:h-auto md:min-h-\[252px\]">/);
+  assert.match(src, /className="pixelated absolute bottom-0 left-\[min\(0px,calc\(100%_-_400px\)\)\] h-\[246px\] w-\[640px\] max-w-none"/);
+  assert.doesNotMatch(src, /md:max-w-\[966px\]|md:w-\[960px\]/, "the 3x scene and its 966px cap are gone");
 });
 
 const WRAP = '<div className="contents md:flex md:flex-col md:gap-4">';

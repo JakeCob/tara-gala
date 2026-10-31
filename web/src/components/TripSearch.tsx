@@ -62,9 +62,11 @@ export default function TripSearch() {
     }
   }
 
+  // From md the root dissolves into page.tsx's grid: the form takes the cell beside the hero, and the status lines and
+  // cards take full-width rows under both (TG-49)
   return (
-    <div className="flex flex-col gap-4 md:grid md:grid-cols-[20rem_minmax(0,1fr)] md:grid-rows-[auto_1fr] md:gap-6 md:items-start lg:grid-cols-[22rem_minmax(0,1fr)] lg:gap-8">
-      <PixelBox as="form" onSubmit={onSearch} className="p-4 flex flex-col gap-3 md:row-span-2">
+    <div className="flex flex-col gap-4 md:contents">
+      <PixelBox as="form" onSubmit={onSearch} className="p-4 flex flex-col gap-3 md:justify-center">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
           <div className="min-w-0 break-words">
             <div className="text-muted">From</div>
@@ -109,8 +111,9 @@ export default function TripSearch() {
       </PixelBox>
 
       {/* Status lines are announced; the cards stay outside so a screen reader doesn't read every one.
-          empty:-mt-4 cancels its gap before the first status without hiding it (display:none would drop the live region) */}
-      <div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4">
+          empty:-mt-4 cancels its gap before the first status without hiding it (display:none would drop the live region);
+          from md, in page.tsx's grid, it takes a top margin only once it has something in it */}
+      <div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4 md:col-span-full md:mt-6 md:empty:mt-0 lg:mt-8">
         {status === "error" && (
           <PixelBox as="p" tone="alertText" className="p-4 text-sm">
             Could not reach the schedule server. Check your connection and try again.
@@ -134,7 +137,7 @@ export default function TripSearch() {
       </div>
 
       {status === "done" && trips.length > 0 && (
-        <ul className="flex flex-col gap-3 md:grid md:grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] md:gap-4">
+        <ul className="flex flex-col gap-3 md:col-span-full md:mt-4 md:grid md:grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] md:gap-4">
           {trips.map((t) => (
             <TripCard key={t.trip_id} trip={t} />
           ))}

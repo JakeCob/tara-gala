@@ -26,10 +26,11 @@ function TileBody({ sprite, title, line }: { sprite: SpriteName; title: string; 
 
 /** The three quick actions under the search (ux §5.3): neutral tiles, the sprites are the colour. */
 export default function QuickActions() {
-  const cols = formMode(flags) !== "none" ? "md:grid-cols-3" : "md:grid-cols-2";
+  // A row from lg only: at md, three tiles in the 720px shell squeeze each line to a word or two (TG-49)
+  const cols = formMode(flags) !== "none" ? "lg:grid-cols-3" : "lg:grid-cols-2";
   return (
     <nav aria-label="Quick actions">
-      <ul className={cx("flex flex-col gap-3 md:grid md:gap-4", cols)}>
+      <ul className={cx("flex flex-col gap-3 lg:grid lg:gap-4", cols)}>
         <li className="grid">
           <PixelCardLink href="#travel-date" className={TILE}>
             <TileBody sprite="vehicle-bus" title="Find buses" line="Every trip on file, with fares and where to book." />
