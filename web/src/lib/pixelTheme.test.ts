@@ -18,6 +18,7 @@ type PXShape = {
   choice: Skinned;
   chip: string;
   chipHighlight: string; // TG-47 ux §2
+  timeTile: string;
   screenChip: string;
   input: string;
   h1: string;
@@ -394,6 +395,7 @@ const EXPECTED_PX: PXShape = {
   },
   chip: "pixel-frame bg-card px-2 py-1 text-sm",
   chipHighlight: "pixel-frame bg-accent text-accent-ink px-2 py-1 text-sm", // TG-47 ux §2, colour only (plan §6.2)
+  timeTile: "inline-block pixel-frame bg-accent px-2 py-0.5 text-2xl leading-tight font-extrabold tabular-nums text-accent-ink", // TG-49 PR 2 ux §2.1: the one trip datum that takes a colour
   screenChip: "pixel-frame bg-screen-paper text-screen-ink px-2 py-1 text-sm",
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
   // TG-49: the signboard face is wide and has one weight (400), so titles step down and never synthesise bold
