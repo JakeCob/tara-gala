@@ -83,22 +83,28 @@ function decls(body: string): Record<string, string> {
 }
 
 const DARK = /^@media\s*\(prefers-color-scheme:\s*dark\)$/;
-const isRoot = (b: Block) => b.path[b.path.length - 1] === ":root";
+// TG-51: the phone's dark setting applies unless the switch chose light; the switch's dark choice applies always
+const SYSTEM_DARK_ROOT = ':root:not([data-theme="light"])';
+const CHOSEN_DARK_ROOT = ':root[data-theme="dark"]';
+const isRoot = (b: Block) => [":root", SYSTEM_DARK_ROOT, CHOSEN_DARK_ROOT].includes(b.path[b.path.length - 1]);
+const isSystemDark = (b: Block) => b.path.length === 2 && DARK.test(b.path[0]) && b.path[1] === SYSTEM_DARK_ROOT;
+const isChosenDark = (b: Block) => b.path.length === 1 && b.path[0] === CHOSEN_DARK_ROOT;
 
 function tokenModes() {
   const css = read("src/app/globals.css");
   const all = blocks(css);
   const light: Record<string, string> = {};
   const darkOnly: Record<string, string> = {};
+  const chosenDark: Record<string, string> = {};
   for (const b of all.filter(isRoot)) {
-    const target = b.path.length === 1 ? light : b.path.length === 2 && DARK.test(b.path[0]) ? darkOnly : null;
+    const target = isSystemDark(b) ? darkOnly : isChosenDark(b) ? chosenDark : b.path.join() === ":root" ? light : null;
     if (target) Object.assign(target, decls(b.body));
   }
   const vars = (o: Record<string, string>) =>
     Object.fromEntries(Object.entries(o).filter(([k]) => k.startsWith("--")).map(([k, v]) => [k.slice(2), v.toLowerCase()]));
   const lightVars = vars(light);
   const darkVars = vars(darkOnly);
-  return { css, all, light, darkOnly, lightVars, darkVars, dark: { ...lightVars, ...darkVars } };
+  return { css, all, light, darkOnly, chosenDark, lightVars, darkVars, dark: { ...lightVars, ...darkVars } };
 }
 
 // ---- contrast (WCAG 2.x) ----
@@ -157,6 +163,18 @@ test("T2 tokens match guide 1.2 in light and dark", () => {
   assert.deepEqual(pick(dark), { ...LIGHT, ...DARK_OVERRIDES });
 });
 
+// TG-51
+test("T2 the switch's dark choice uses exactly the phone's dark tokens, and a light choice overrides the phone", () => {
+  const { all, darkOnly, chosenDark } = tokenModes();
+  assert.ok(Object.keys(darkOnly).length > 10, "the system dark block");
+  assert.deepEqual(chosenDark, darkOnly, ':root[data-theme="dark"] repeats the system dark block declaration for declaration');
+  for (const b of all) {
+    if (DARK.test(b.path[0] ?? "") && b.path.length > 1) {
+      assert.equal(b.path[1], SYSTEM_DARK_ROOT, "every system dark rule steps aside for a saved light choice");
+    }
+  }
+});
+
 test("T2 the screen tokens are fixed and every token is a Tailwind colour", () => {
   const { all } = tokenModes();
   const theme = all.filter((b) => b.path.length === 1 && b.path[0] === "@theme").map((b) => decls(b.body));
@@ -165,7 +183,7 @@ test("T2 the screen tokens are fixed and every token is a Tailwind colour", () =
     assert.equal(fixed[name]?.toLowerCase(), hex, `${name} in a plain @theme block`);
   }
   for (const b of all) {
-    if (DARK.test(b.path[0] ?? "")) {
+    if (DARK.test(b.path[0] ?? "") || isChosenDark(b)) {
       assert.doesNotMatch(b.body, /--color-screen/, "screen tokens must not change in dark mode");
       assert.doesNotMatch(b.body, /--color-flag/, "the flag colours are the game screen's: fixed in dark mode too");
     }

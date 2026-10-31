@@ -162,7 +162,8 @@ test("S1 OfflineBanner is an always-rendered status driven by the worker's messa
 });
 
 test("S1 layout mounts the banner first and the manager last; api.ts only exports API_URL", () => {
-  assert.match(layout, /<body[^>]*>\s*<OfflineBanner \/>\s*\{children\}\s*<ServiceWorkerManager \/>\s*<\/body>/);
+  // TG-51: the Dark mode switch sits under the page, before the manager
+  assert.match(layout, /<body[^>]*>\s*<OfflineBanner \/>\s*\{children\}\s*<ThemeToggle \/>\s*<ServiceWorkerManager \/>\s*<\/body>/);
   const api = readFileSync(new URL("src/lib/api.ts", WEB), "utf8");
   assert.match(api, /^export const API_URL = process\.env\.NEXT_PUBLIC_API_URL \?\? "http:\/\/localhost:8000";$/m);
 });
