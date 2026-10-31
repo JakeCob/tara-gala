@@ -77,8 +77,11 @@ body { background: var(--background); color: var(--foreground); font-family: var
    input, so focus-pixel can't draw at that Tab stop; :focus-within does (TG-43 UX review S2) */
 input[type=date]:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
 @utility pixelated { image-rendering: pixelated; }
-/* The title screen's start menu (TG-49): one cursor, on the first item until another is hovered or focused */
+/* The title screen's start menu (TG-49): one cursor, on the first item until another is hovered or focused. StartMenu
+   flips data-blink to make it blink; a keyboard focus ring keeps it lit, so the focused item never loses its marker. */
 @utility title-menu {
   & [data-cursor] { visibility: hidden; }
   &:not(:hover, :focus-within) li:first-child [data-cursor], & a:is(:hover, :focus-visible) [data-cursor] { visibility: visible; }
+  &[data-blink="off"] [data-cursor] { opacity: 0; }
+  &[data-blink="off"] a:focus-visible [data-cursor] { opacity: 1; }
 }
