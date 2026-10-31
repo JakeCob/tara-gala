@@ -12,11 +12,12 @@ function subscribeStill(onChange: () => void) {
 }
 
 /**
- * The title screen's start menu (TG-49). Its ▶ cursor blinks like a game's, once a second (owner: "make the menu
- * cursor blink"): data-blink flips on a timer and globals.css's title-menu fades the cursor on "off". Steady under
- * reduced motion, on the server render, and while the tab is hidden.
+ * The title screen's blinking part (TG-49): PRESS START and the start menu's ▶ cursor flash together once a second,
+ * like a game's (owner: "make the menu cursor blink", "make press start blink too"). data-blink flips on a timer and
+ * globals.css fades every [data-blinks] inside on "off". Steady under reduced motion, on the server render, and while
+ * the tab is hidden.
  */
-export default function StartMenu({ children }: { children: ReactNode }) {
+export default function TitleBlink({ children }: { children: ReactNode }) {
   const still = useSyncExternalStore(subscribeStill, () => window.matchMedia(STILL_QUERY).matches, () => true);
   const [lit, setLit] = useState(true);
 
@@ -29,8 +30,8 @@ export default function StartMenu({ children }: { children: ReactNode }) {
   }, [still]);
 
   return (
-    <nav aria-label="Start menu" className="title-menu mt-1" data-blink={still || lit ? "on" : "off"}>
+    <div className="flex flex-col items-center gap-3" data-blink={still || lit ? "on" : "off"}>
       {children}
-    </nav>
+    </div>
   );
 }

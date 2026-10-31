@@ -42,8 +42,8 @@ test("TC3 the trio is decorative, keeps every frame loaded, and stays still for 
   assert.match(read("src/components/landing/TitleScreen.tsx"), /<TitleCast \/>/);
 });
 
-test("TC4 the start menu's cursor blinks once a second, steady for reduced motion, the server and a hidden tab", () => {
-  const src = read("src/components/landing/StartMenu.tsx");
+test("TC4 PRESS START and the menu cursor blink once a second, steady for reduced motion, the server and a hidden tab", () => {
+  const src = read("src/components/landing/TitleBlink.tsx");
   assert.match(src, /^"use client";/);
   assert.match(src, /export const BLINK_MS = 500;/);
   assert.match(src, /"\(prefers-reduced-motion: reduce\)"/);
