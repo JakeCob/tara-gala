@@ -9,7 +9,7 @@ const IDLE = "src/components/BaguioIdle.tsx"; const DATA = "src/lib/baguioIdle.t
 const has = (p: string) => { assert.ok(existsSync(new URL(p, WEB)), `${p} exists`); return read(p); };
 type Row = { name: SpriteName; show: "all" | "md" | "min375" };
 const data = async () => { has(DATA); return (await import("./baguioIdle.ts" as string)) as { BAGUIO_IDLE_ROW: readonly Row[]; BAGUIO_IDLE_SCENE_CLASS: string; BAGUIO_IDLE_COPY: { lead: string; line: string } }; };
-const ROW: Row[] = [{ name: "place-terminal", show: "all" }, { name: "mode-jeep", show: "all" }, { name: "place-market", show: "md" }, { name: "mode-taxi", show: "all" }, { name: "place-cafe", show: "md" }, { name: "mode-walk", show: "all" }, { name: "place-viewpoint", show: "md" }, { name: "place-park", show: "all" }];
+const ROW: Row[] = [{ name: "place-terminal", show: "all" }, { name: "chibi-senior-lola-wave", show: "min375" }, { name: "mode-jeep", show: "all" }, { name: "place-market", show: "md" }, { name: "mode-taxi", show: "all" }, { name: "place-cafe", show: "md" }, { name: "mode-walk", show: "all" }, { name: "place-viewpoint", show: "md" }, { name: "place-park", show: "all" }];
 test("T49P2-E1 the box says exactly ux §3.3, as two plain paragraphs", async () => {
   const { BAGUIO_IDLE_COPY } = await data();
   assert.deepEqual(BAGUIO_IDLE_COPY, { lead: "Tara, pick your terminal above.", line: "We'll show the jeeps, taxis and walks from there to the top spots." });
@@ -70,12 +70,28 @@ test("T49P2-E7b the row fits: ux §3.2's arithmetic, from SPRITES at 2x", async 
   const w = (n: SpriteName) => SPRITES[n].w * 2; const h = (n: SpriteName) => SPRITES[n].h * 2;
   const sum = (r: readonly Row[], gap: number) => r.reduce((a, d) => a + w(d.name), 0) + (r.length - 1) * gap;
   const phone = BAGUIO_IDLE_ROW.filter((d) => d.show === "all");
-  assert.equal(phone.length, 5); assert.equal(BAGUIO_IDLE_ROW.length, 8);
+  assert.equal(phone.length, 5); assert.equal(BAGUIO_IDLE_ROW.length, 9); // the sticker is min375, so it isn't in `phone`
   assert.equal(sum(phone, 8), 256); assert.ok(sum(phone, 8) <= 320 - 32 - 6);
-  assert.equal(sum(BAGUIO_IDLE_ROW, 16), 480); assert.ok(480 <= 720 - 6);
-  assert.equal(sum(BAGUIO_IDLE_ROW, 24), 536); assert.ok(536 <= 960 - 6);
+  assert.equal(sum(BAGUIO_IDLE_ROW, 16), 560); assert.ok(560 <= 720 - 6);
+  assert.equal(sum(BAGUIO_IDLE_ROW, 24), 624); assert.ok(624 <= 960 - 6);
   for (const d of BAGUIO_IDLE_ROW) assert.ok(h(d.name) <= 96 - 3 - 8, d.name);
 });
+test("T49P2-S1 item 5: the sticker follows the terminal, one static frame, and only from 375", async () => {
+  const { BAGUIO_IDLE_ROW } = await data();
+  const { SHOW_CLASS } = await import("./homeDecor.ts");
+  assert.deepEqual(BAGUIO_IDLE_ROW[1], { name: "chibi-senior-lola-wave", show: "min375" });
+  assert.equal(SHOW_CLASS.min375, "hidden min-[375px]:block");
+  assert.ok(Object.hasOwn(SPRITES, "chibi-senior-lola-wave") && PNG_ART.has("chibi-senior-lola-wave"));
+  assert.deepEqual(BAGUIO_IDLE_ROW.filter((d) => d.name.startsWith("chibi-")).map((d) => d.name), ["chibi-senior-lola-wave"], "one sticker, no frame swap");
+  const shown = BAGUIO_IDLE_ROW.filter((d) => d.show !== "md");
+  const row = shown.reduce((a, d) => a + SPRITES[d.name].w * 2, 0) + (shown.length - 1) * 8;
+  const inner = (vw: number) => vw - 32 - 6;
+  assert.equal(row, 328);
+  assert.ok(row <= inner(375) && row <= inner(380), "it fits from 375");
+  assert.ok(row > inner(320) && row > inner(360), "it can't show at 320 or 360, so the 375 threshold is needed");
+  assert.ok(SPRITES["chibi-senior-lola-wave"].h * 2 <= 96 - 3 - 8, "64 fits h-24");
+});
+
 test("T49P2-E12 no layout shift and no motion: fixed heights, sized spans, and T22's ban on the .ts file it skips", async () => {
   const { BAGUIO_IDLE_SCENE_CLASS } = await data();
   assert.match(BAGUIO_IDLE_SCENE_CLASS, /(^|\s)h-24(\s|$)/); assert.match(BAGUIO_IDLE_SCENE_CLASS, /(^|\s)md:h-32(\s|$)/);
