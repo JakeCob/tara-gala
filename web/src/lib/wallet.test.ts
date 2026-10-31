@@ -152,8 +152,9 @@ test("V10 the wallet screen: one primary (Add expense), Show my QR on the paymen
 });
 
 test("V11 home: the fourth quick action is the trip wallet, which links on to tickets", () => {
-  const src = read("src/components/landing/QuickActions.tsx");
-  const hrefs = [...src.matchAll(/<PixelCardLink\b[^>]*\bhref="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["#travel-date", "/plan", "/baguio", "/wallet"]);
+  // TG-49: the quick actions became the title screen's start menu
+  const src = read("src/components/landing/TitleScreen.tsx");
+  const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/wallet"]);
   assert.match(read("src/components/WalletHome.tsx"), /href="\/tickets"/);
 });

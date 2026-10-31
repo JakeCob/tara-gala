@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 export default function TicketsPage() {
   return (
     <PageShell>
-      <PixelLink variant="secondary" href="/" className="inline-flex items-center self-start px-4 text-sm">
-        <span aria-hidden>←&nbsp;</span>Back to bus search
+      <PixelLink variant="secondary" href="/wallet" className="inline-flex items-center self-start px-4 text-sm">
+        <span aria-hidden>←&nbsp;</span>Back to trip wallet
       </PixelLink>
       <header className="flex flex-col gap-1">
         <PageTitle className="text-balance">My tickets</PageTitle>

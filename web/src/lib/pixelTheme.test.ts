@@ -22,6 +22,11 @@ type PXShape = {
   input: string;
   h1: string;
   wordmark: string;
+  titleWordmark: string; // TG-49 title screen
+  pressStart: string;
+  menuItem: string;
+  logo: string; // TG-49 site header and tabs
+  tab: string;
   h2: string;
   dataHeading: string;
   meta: string;
@@ -394,6 +399,11 @@ const EXPECTED_PX: PXShape = {
   // TG-49: the signboard face is wide and has one weight (400), so titles step down and never synthesise bold
   h1: "font-pixel text-[1.75rem] leading-tight font-normal text-brand md:text-[2.25rem]",
   wordmark: "font-wordmark text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
+  titleWordmark: "font-wordmark text-[2.75rem] leading-none font-normal text-screen-ink md:text-[4rem] lg:text-[5rem]",
+  pressStart: "font-pixel text-sm font-normal uppercase tracking-widest text-screen-ink",
+  menuItem: "focus-pixel flex min-h-11 items-center gap-2 px-4 font-pixel text-lg font-normal text-screen-ink",
+  logo: "focus-pixel inline-flex min-h-11 items-center bg-card font-wordmark text-xl leading-none font-normal text-brand md:text-2xl",
+  tab: "focus-pixel flex min-h-11 items-center justify-center bg-card px-3 font-pixel text-base font-normal text-foreground border-transparent aria-[current=page]:border-brand aria-[current=page]:text-brand",
   h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",

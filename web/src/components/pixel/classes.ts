@@ -43,6 +43,14 @@ export const PX = {
   h1: "font-pixel text-[1.75rem] leading-tight font-normal text-brand md:text-[2.25rem]",
   // TG-46: the same title on the hero, a fixed light screen; the app name there is Cubao's Wide cut
   wordmark: "font-wordmark text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
+  // The title screen's app name at / (TG-49), the biggest type in the app
+  titleWordmark: "font-wordmark text-[2.75rem] leading-none font-normal text-screen-ink md:text-[4rem] lg:text-[5rem]",
+  // The title screen's decorative PRESS START and its start menu items
+  pressStart: "font-pixel text-sm font-normal uppercase tracking-widest text-screen-ink",
+  menuItem: "focus-pixel flex min-h-11 items-center gap-2 px-4 font-pixel text-lg font-normal text-screen-ink",
+  // The header's app name (home to the title screen) and the tabs, in the header from md and the bar on phones
+  logo: "focus-pixel inline-flex min-h-11 items-center bg-card font-wordmark text-xl leading-none font-normal text-brand md:text-2xl",
+  tab: "focus-pixel flex min-h-11 items-center justify-center bg-card px-3 font-pixel text-base font-normal text-foreground border-transparent aria-[current=page]:border-brand aria-[current=page]:text-brand",
   h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
   meta: "text-xs text-muted",

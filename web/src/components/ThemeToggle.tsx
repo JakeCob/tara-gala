@@ -30,7 +30,7 @@ function subscribe(onChange: () => void) {
   };
 }
 
-/** The Dark mode switch under every page (TG-51). TG-49 PR 2 may move it into the route-board header. */
+/** The Dark mode switch (TG-51), at the right of every page's header (TG-49). */
 export default function ThemeToggle() {
   // null on the server: the saved choice lives in this browser only
   const theme = useSyncExternalStore(subscribe, current, () => null);
@@ -49,11 +49,9 @@ export default function ThemeToggle() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-md justify-end px-4 pb-6 md:max-w-3xl md:px-6 lg:max-w-5xl lg:px-8 xl:max-w-6xl">
-      <PixelButton variant="secondary" role="switch" aria-checked={dark} onClick={flip} className="inline-flex items-center gap-2 px-4 text-sm">
-        Dark mode
-        <span aria-hidden="true" className="text-muted">{theme === null ? "" : dark ? "On" : "Off"}</span>
-      </PixelButton>
-    </div>
+    <PixelButton variant="secondary" role="switch" aria-checked={dark} onClick={flip} className="inline-flex items-center gap-2 px-3 text-sm">
+      Dark mode
+      <span aria-hidden="true" className="text-muted">{theme === null ? "" : dark ? "On" : "Off"}</span>
+    </PixelButton>
   );
 }

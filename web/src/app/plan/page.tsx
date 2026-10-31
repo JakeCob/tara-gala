@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PlanForm from "@/components/PlanForm";
-import { PageShell, PageTitle, PixelLink } from "@/components/pixel";
+import { PageShell, PageTitle } from "@/components/pixel";
 
 export const metadata: Metadata = {
   title: "Plan your trip · Tara Gala",
@@ -10,9 +10,6 @@ export const metadata: Metadata = {
 export default function PlanPage() {
   return (
     <PageShell>
-      <PixelLink variant="secondary" href="/" className="inline-flex items-center self-start px-4 text-sm">
-        <span aria-hidden="true">←&nbsp;</span>Back to bus search
-      </PixelLink>
       <PageTitle>Plan your trip</PageTitle>
       <PlanForm />
     </PageShell>

@@ -134,8 +134,8 @@ test("TG44-S2 PX.h1 steps up from md", async () => {
 
 // ---- H1, F1, L1, I1, D1, U1: the per-page layouts ----
 
-test("TG44-H1 home: from md the hero and the form share the first row, the results run full width under both (TG-49)", () => {
-  const page = read("src/app/page.tsx");
+test("TG44-H1 /buses: from md the hero and the form share the first row, the results run full width under both (TG-49)", () => {
+  const page = read("src/app/buses/page.tsx");
   // TG-49 desktop: the form sat in a 20rem column beside an empty results column until a search, and the hero stopped
   // short of the tiles' right edge. Now one grid holds the hero (left), the form (right) and, through TripSearch's
   // contents root, the status lines and cards on full-width rows below. The xl column makes the hero exactly 640px,
@@ -151,22 +151,21 @@ test("TG44-H1 home: from md the hero and the form share the first row, the resul
   // The grid has no row gap, because an empty row would still take one: the live wrapper gets a margin only once it
   // has something in it, and the cards sit a step under it
   assert.match(search, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4 md:col-span-full md:mt-6 md:empty:mt-0 lg:mt-8">/);
-  // TG-46: the tagline moved to the hero, on its fixed light screen; the two links became the quick actions
-  assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">Manila to Baguio buses/);
+  // TG-46: the tagline sits in the hero, on its fixed light screen
+  assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio trip/);
   const at = page.indexOf("<TripSearch />");
-  assert.ok(at > 0 && page.indexOf("<QuickActions />") > at, "the quick actions come after TripSearch in the DOM (tab order = visual order)");
-  assert.match(page, /<footer className="mt-auto pt-6 text-xs text-muted">/, "the footer is unchanged");
+  assert.ok(at > 0 && page.indexOf("<Trust />") > at, "the trust lines come after TripSearch in the DOM (tab order = visual order)");
 });
 
-test("TG-49 quick actions: stacked to md, a grid of tiles from lg (2 by 2 with TG-50's fourth)", () => {
-  const src = read("src/components/landing/QuickActions.tsx");
-  assert.match(src, /const cols = formMode\(flags\) !== "none" \? "lg:grid-cols-2" : "lg:grid-cols-3";/);
-  assert.match(src, /<ul className=\{cx\("flex flex-col gap-3 lg:grid lg:gap-4", cols\)\}>/);
+test("TG-49 title screen: centred, 640px from md and 960px from lg, with the scene at 2x then 3x", () => {
+  const src = read("src/components/landing/TitleScreen.tsx");
+  assert.match(src, /className="pixel-frame bg-screen relative mx-auto flex min-h-\[38rem\] w-full flex-col items-center overflow-hidden md:max-w-\[640px\] lg:min-h-\[42rem\] lg:max-w-\[960px\]"/);
+  assert.match(src, /className="pixelated absolute bottom-0 left-\[min\(0px,calc\(100%_-_400px\)\)\] h-\[246px\] w-\[640px\] max-w-none md:left-0 lg:h-\[369px\] lg:w-\[960px\]"/);
 });
 
 test("TG-49 hero: one 2x scene at every width, filling its grid cell from md", () => {
   const src = read("src/components/landing/Hero.tsx");
-  assert.match(src, /<section className="pixel-frame bg-screen relative h-\[252px\] overflow-hidden md:h-auto md:min-h-\[252px\]">/);
+  assert.match(src, /<section aria-labelledby="buses-title" className="pixel-frame bg-screen relative h-\[252px\] overflow-hidden md:h-auto md:min-h-\[252px\]">/);
   assert.match(src, /className="pixelated absolute bottom-0 left-\[min\(0px,calc\(100%_-_400px\)\)\] h-\[246px\] w-\[640px\] max-w-none"/);
   assert.doesNotMatch(src, /md:max-w-\[966px\]|md:w-\[960px\]/, "the 3x scene and its 966px cap are gone");
 });
@@ -235,8 +234,10 @@ test("TG44-U1 the update prompt sits bottom-right from lg; the phone keeps its c
   const src = read("src/components/ServiceWorkerManager.tsx");
   const cls = src.match(/<div className="(fixed [^"]*)">/)?.[1] ?? ""; // TG-49: no drop-shadow wrapper class
   const t = tokens(cls);
-  for (const keep of ["fixed", "inset-x-4", "bottom-4", "z-20", "mx-auto", "max-w-md"]) assert.ok(t.includes(keep), keep);
+  for (const keep of ["fixed", "inset-x-4", "mx-auto", "max-w-md"]) assert.ok(t.includes(keep), keep);
   for (const add of ["lg:left-auto", "lg:right-8", "lg:w-[28rem]"]) assert.ok(t.includes(add), add);
+  // TG-49: on phones the card sits above the fixed tab bar (and over it, z-40 > z-30); from md the bar is gone
+  for (const add of ["bottom-[calc(4.75rem+env(safe-area-inset-bottom))]", "md:bottom-4", "z-40"]) assert.ok(t.includes(add), add);
 });
 
 // ---- P1: phones unchanged (PR-scoped fence) ----
