@@ -298,6 +298,7 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/WalletView.tsx", "No signal, and this wallet", "alertText"], // TG-50: the wallet didn't load
   ["src/components/WalletHome.tsx", "{error}", "alertText"], // TG-50: start-a-wallet problems
   ["src/components/PayoutQr.tsx", "{notice.text}", "alertText"], // TG-50: a refused or failed QR save
+  ["src/components/ProofDialog.tsx", "{problem}", "alertText"], // TG-53: a save, upload or remove that failed, in the dialog
   ["src/components/PayoutQr.tsx", "can&apos;t keep a QR here", "alertText"], // TG-50: no IndexedDB
   ["src/components/TripHome.tsx", "{error}", "alertText"], // TG-52: start-a-trip problems
   ["src/components/TripView.tsx", "{notice.text}", "alertText"], // TG-52: a write that failed
