@@ -16,6 +16,21 @@ export type Hotel = {
   booking_ref: string;
   notes: string;
 };
+export type FileKind = "ticket" | "payout_qr" | "hotel_proof" | "photo";
+/** A file the party shares on the trip (PR 2): its bytes come from fileUrl(). */
+export type TripFile = {
+  id: string;
+  kind: FileKind;
+  label: string;
+  member_id: string | null;
+  content_type: string;
+  bytes: number;
+  delete_after: string | null;
+  created_at: string;
+};
+export const MAX_FILE_BYTES = 5 * 1024 * 1024; // the API's cap
+export const MAX_SHARED_TICKETS = 30;
+
 export type Trip = {
   share_slug: string;
   name: string;
@@ -25,6 +40,7 @@ export type Trip = {
   itinerary_slug: string | null;
   wallet: { share_slug: string; name: string } | null;
   hotel: Hotel | null;
+  files: TripFile[];
 };
 
 // ---------------------------------------------------------------- pure
@@ -96,6 +112,11 @@ const DETAIL: Record<string, string> = {
   itinerary_not_found: "That plan link doesn't work. Copy it again from the plan's Share button.",
   wallet_not_found: "That wallet link doesn't work. Copy it again from the wallet.",
   name_mismatch: "That isn't the trip's name. Type it exactly to delete the trip.",
+  not_an_image: "That file isn't a picture. Use a photo or screenshot (PNG, JPEG, WebP or GIF).",
+  too_big: "That picture is too big to share (over 5 MB). Take a screenshot of it instead.",
+  bad_label: "Give the ticket a short name, up to 40 letters.",
+  too_many_tickets: "This trip already holds 30 tickets. Remove some first.",
+  unknown_member: "That person isn't in this trip's wallet. Refresh and try again.",
 };
 
 /** One plain sentence for a failed call. */
@@ -116,14 +137,14 @@ export function tripFailureMessage(r: { why: TripFailure; detail?: string }): st
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-async function call(path: string, init?: { method: Method; body?: unknown }): Promise<TripResult | { ok: true; trip: null }> {
+async function call(path: string, init?: { method: Method; body?: unknown; raw?: Blob }): Promise<TripResult | { ok: true; trip: null }> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       cache: "no-store",
       method: init?.method ?? "GET",
-      headers: init?.body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+      headers: init?.raw ? { "content-type": init.raw.type } : init?.body !== undefined ? { "content-type": "application/json" } : undefined,
+      body: init?.raw ?? (init?.body !== undefined ? JSON.stringify(init.body) : undefined),
     });
   } catch {
     return { ok: false, why: "offline" };
@@ -153,12 +174,37 @@ export const tripApi = {
   setHotel: (slug: string, hotel: Hotel) => one(call(`${at(slug)}/hotel`, { method: "PUT", body: hotel })),
   removeHotel: (slug: string) => one(call(`${at(slug)}/hotel`, { method: "DELETE" })),
   remove: (slug: string, name: string) => call(at(slug), { method: "DELETE", body: { name } }),
+  /** Uploads one picture as the raw body; the rest rides in the query (no multipart). */
+  addFile: (slug: string, kind: Exclude<FileKind, "photo">, picture: Blob, opts: { label?: string; member_id?: string } = {}) => {
+    const q = new URLSearchParams({ kind });
+    if (opts.label) q.set("label", opts.label);
+    if (opts.member_id) q.set("member_id", opts.member_id);
+    return one(call(`${at(slug)}/files?${q}`, { method: "POST", raw: picture }));
+  },
+  deleteFile: (slug: string, id: string) => one(call(`${at(slug)}/files/${encodeURIComponent(id)}`, { method: "DELETE" })),
 };
+
+export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;
+
+/** A shared file's picture, or null. A CORS fetch (not an <img>), so the service worker can keep it for offline. */
+export async function fetchFile(slug: string, id: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(fileUrl(slug, id));
+    return res.ok ? await res.blob() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Deleted from the trip on Sun, Nov 22": when a ticket or QR leaves the server. */
+export function deleteLine(day: string | null): string {
+  return day ? `Deleted from the trip after ${datesLine(day, day)}` : "";
+}
 
 // ---------------------------------------------------------------- what this phone remembers
 
-/** A trip this phone has opened. */
-export type KnownTrip = { slug: string; name: string; start_date: string };
+/** A trip this phone has opened. wallet_slug lets a wallet page find the trip that holds its payout QRs. */
+export type KnownTrip = { slug: string; name: string; start_date: string; wallet_slug?: string | null };
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 const KEY = "tg-trips";
 
@@ -185,7 +231,8 @@ export function knownTrips(store: Storage | null = storage()): KnownTrip[] {
     if (!Array.isArray(raw)) return [];
     return raw.filter(
       (t): t is KnownTrip =>
-        !!t && typeof t.slug === "string" && TRIP_SLUG.test(t.slug) && typeof t.name === "string" && typeof t.start_date === "string",
+        !!t && typeof t.slug === "string" && TRIP_SLUG.test(t.slug) && typeof t.name === "string" && typeof t.start_date === "string" &&
+        (t.wallet_slug === undefined || t.wallet_slug === null || (typeof t.wallet_slug === "string" && WALLET_SLUG.test(t.wallet_slug))),
     );
   } catch {
     return [];

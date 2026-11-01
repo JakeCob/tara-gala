@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  datesLine, forgetTrip, hotelMapsUrl, hotelTime, knownTrips, parseKnownTrips, rememberTrip, slugFromLink, toInput, toWallTime,
+  datesLine, deleteLine, forgetTrip, hotelMapsUrl, hotelTime, knownTrips, parseKnownTrips, rememberTrip, slugFromLink, toInput, toWallTime,
   tripFailureMessage, tripProblem,
 } from "./trip.ts";
 
@@ -102,5 +102,81 @@ test("TS8 the trip's logs carry the action and the outcome, never a name, hotel 
       assert.match(args, /^"\[tg-trip\] [a-z-%]+[^"]*"/, `${file}: ${args}`);
       assert.doesNotMatch(args, /name|hotel\.|slug|link|address|booking|notes/i, `${file}: ${args}`);
     }
+  }
+});
+
+// ---------------------------------------------------------------- TG-52 PR 2: shared tickets and payout QRs
+
+test("TS9 an upload is the raw picture with its type; the kind, label and person ride in the query", async () => {
+  const { tripApi } = await import("./trip.ts");
+  const seen: { url: string; init: RequestInit }[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    seen.push({ url, init });
+    return new Response(JSON.stringify({ share_slug: TRIP, files: [] }), { status: 201 });
+  }) as typeof fetch;
+  try {
+    const picture = new Blob([new Uint8Array([0x89, 0x50])], { type: "image/png" });
+    await tripApi.addFile(TRIP, "ticket", picture, { label: "Victory Liner Nov 6" });
+    await tripApi.addFile(TRIP, "payout_qr", picture, { member_id: "m1" });
+    await tripApi.deleteFile(TRIP, "f1");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.match(seen[0].url, new RegExp(`/sessions/${TRIP}/files\\?kind=ticket&label=Victory\\+Liner\\+Nov\\+6$`));
+  assert.equal(seen[0].init.method, "POST");
+  assert.deepEqual(seen[0].init.headers, { "content-type": "image/png" });
+  assert.ok(seen[0].init.body instanceof Blob);
+  assert.match(seen[1].url, /\?kind=payout_qr&member_id=m1$/);
+  assert.match(seen[2].url, new RegExp(`/sessions/${TRIP}/files/f1$`));
+  assert.equal(seen[2].init.method, "DELETE");
+});
+
+test("TS10 big pictures are redrawn to fit 2400 px; small ones go as they are", async () => {
+  const { fitScale, fitForUpload } = await import("./shrink.ts");
+  assert.equal(fitScale(1200, 800), 1);
+  assert.equal(fitScale(4800, 3600), 0.5);
+  assert.equal(fitScale(3000, 6000), 0.4);
+  const small = new Blob([new Uint8Array(10)], { type: "image/png" });
+  assert.equal(await fitForUpload(small), small);
+});
+
+test("TS11 shared files say when they leave the trip; upload problems read plainly", () => {
+  assert.equal(deleteLine("2026-11-22"), "Deleted from the trip after Sun, Nov 22");
+  assert.equal(deleteLine(null), "");
+  assert.match(tripFailureMessage({ why: "rejected", detail: "not_an_image" }), /isn't a picture/);
+  assert.match(tripFailureMessage({ why: "rejected", detail: "too_big" }), /over 5 MB/);
+  assert.match(tripFailureMessage({ why: "rejected", detail: "unknown_member" }), /isn't in this trip's wallet/);
+});
+
+test("TS12 this phone notes each trip's wallet, so the wallet page finds its payout QRs", () => {
+  const store = memory();
+  rememberTrip({ slug: TRIP, name: "Baguio", start_date: "2026-11-06", wallet_slug: WALLET }, store);
+  assert.equal(knownTrips(store)[0].wallet_slug, WALLET);
+  assert.deepEqual(parseKnownTrips(`[{"slug":"${TRIP}","name":"x","start_date":"2026-11-06","wallet_slug":"nope"}]`), [], "a bad wallet slug drops the entry");
+  assert.equal(parseKnownTrips(`[{"slug":"${TRIP}","name":"x","start_date":"2026-11-06"}]`).length, 1, "PR 1's entries still read");
+  const wallet = read("src/components/WalletView.tsx");
+  assert.match(wallet, /knownTrips\(\)\.find\(\(t\) => t\.wallet_slug === slug\)/);
+  assert.match(wallet, /r\.trip\.wallet\?\.share_slug !== slug/, "only the trip that still holds this wallet");
+});
+
+test("TS13 shared files open offline: the service worker keeps them, and opening the trip fetches each once", () => {
+  assert.match(read("public/sw.js"), /\/\^\\\/sessions\\\/\[0-9a-f\]\{32\}\\\/files\\\/\[0-9a-f-\]\{36\}\$\//);
+  const view = read("src/components/TripView.tsx");
+  assert.match(view, /keepFilesOffline\(r\.trip\);/);
+  assert.match(read("src/lib/trip.ts"), /const res = await fetch\(fileUrl\(slug, id\)\);/, "a CORS fetch, not an opaque <img>");
+  assert.doesNotMatch(read("src/components/TripFiles.tsx"), /<img\b|src=\{fileUrl/);
+});
+
+test("TS14 tickets on this phone are shared only when someone taps Add to trip", () => {
+  const src = read("src/components/TicketWallet.tsx");
+  assert.match(src, /onClick=\{\(\) => shareToTrip\(t\)\}>\s*Add to trip/);
+  assert.equal(src.match(/tripApi\.addFile\(/g)?.length, 1, "one upload, inside shareToTrip");
+});
+
+test("TS15 the file logs carry the kind and outcome, never a label, name or link", () => {
+  for (const file of ["src/components/TripFiles.tsx", "src/components/TicketWallet.tsx", "src/components/WalletView.tsx"]) {
+    const logs = [...read(file).matchAll(/console\.(?:info|warn|error)\(([^;]*)\);/g)].map((m) => m[1]);
+    for (const args of logs) assert.doesNotMatch(args, /label|(?<!err)\.name\b|slug|fileUrl/i, `${file}: ${args}`);
   }
 });

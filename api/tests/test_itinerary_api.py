@@ -302,6 +302,7 @@ GET_ROUTES = {
     "/itineraries/{share_slug}",  # TG-23: one row by exact slug
     "/wallets/{share_slug}",  # TG-50: one wallet by exact slug; never touches itineraries
     "/sessions/{share_slug}",  # TG-52: one trip session by exact slug, with its own linked itinerary's slug
+    "/sessions/{share_slug}/files/{file_id}",  # TG-52 PR 2: one shared file, inside its own trip only
 }
 OTHER_ROUTES = {
     ("POST", "/plan"),  # TG-20: inserts a planner row, never reads the table
@@ -323,6 +324,8 @@ OTHER_ROUTES = {
     ("DELETE", "/sessions/{share_slug}/wallet"),
     ("PUT", "/sessions/{share_slug}/hotel"),
     ("DELETE", "/sessions/{share_slug}/hotel"),
+    ("POST", "/sessions/{share_slug}/files"),  # TG-52 PR 2: tickets, payout QRs, the hotel screenshot
+    ("DELETE", "/sessions/{share_slug}/files/{file_id}"),
 }
 
 

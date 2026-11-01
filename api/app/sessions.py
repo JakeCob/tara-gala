@@ -1,5 +1,6 @@
 """Trip sessions (TG-52): one secret link for the whole trip. A session points at an itinerary (a saved or ready-made
-plan) and a shared wallet, and holds the hotel. Later PRs add shared tickets and QRs, check-ins and photos.
+plan) and a shared wallet, and holds the hotel and the files the party shares (trip_files.py: tickets, payout QRs,
+the hotel's screenshot). Later PRs add check-ins and photos.
 
 Like a wallet, a session has no owner and no accounts: anyone with its share link can read it and write to it. The
 slug is 128 random bits and is the only key. Opening a session shows its wallet's and itinerary's links too, so the
@@ -18,7 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
-from . import db
+from . import db, storage
 from .itineraries import SLUG as ITINERARY_SLUG
 from .limits import RateLimiter, client_ip, ip_hash
 from .wallets import SLUG as WALLET_SLUG
@@ -30,6 +31,8 @@ SLUG = re.compile(r"^[0-9a-f]{32}$")
 NOT_FOUND = "Trip not found"
 NOINDEX = {"X-Robots-Tag": "noindex"}
 MAX_DAYS = 30  # the same cap as the table's check
+RETAIN_DAYS = 14  # tickets, payout QRs and the hotel's screenshot go this long after the trip (owner, 2026-11-01)
+EXPIRING = ("ticket", "payout_qr", "hotel_proof")
 
 # Per-IP limits, in process memory like the wallets' (limits.py): reset on every deploy
 CREATE_PER_HOUR = 20
@@ -119,6 +122,17 @@ class HotelOut(BaseModel):
     notes: str
 
 
+class FileOut(BaseModel):
+    id: UUID
+    kind: str
+    label: str
+    member_id: UUID | None
+    content_type: str
+    bytes: int
+    delete_after: date | None
+    created_at: datetime
+
+
 class SessionOut(BaseModel):
     share_slug: str
     name: str
@@ -128,6 +142,7 @@ class SessionOut(BaseModel):
     itinerary_slug: str | None
     wallet: WalletLink | None
     hotel: HotelOut | None
+    files: list[FileOut]
 
 
 # ---------------------------------------------------------------- database
@@ -169,6 +184,11 @@ def _load(conn, session_id: UUID) -> SessionOut:
         "select name, address, check_in, check_out, booking_ref, notes from session_hotels where session_id = %s",
         (session_id,),
     ).fetchone()
+    files = conn.execute(
+        """select id, kind, label, member_id, content_type, bytes, delete_after, created_at from session_files
+           where session_id = %s order by kind, created_at, id""",
+        (session_id,),
+    ).fetchall()
     return SessionOut(
         share_slug=s["share_slug"],
         name=s["name"],
@@ -178,6 +198,7 @@ def _load(conn, session_id: UUID) -> SessionOut:
         itinerary_slug=s["itinerary_slug"],
         wallet=WalletLink(share_slug=s["wallet_slug"], name=s["wallet_name"]) if s["wallet_slug"] else None,
         hotel=HotelOut(**hotel) if hotel else None,
+        files=[FileOut(**f) for f in files],
     )
 
 
@@ -188,7 +209,10 @@ def _private(response: Response) -> None:
 
 def _shape(s: SessionOut) -> str:
     days = (s.return_date - s.start_date).days + 1
-    return f"days={days} itinerary={'yes' if s.itinerary_slug else 'no'} wallet={'yes' if s.wallet else 'no'} hotel={'yes' if s.hotel else 'no'}"
+    return (
+        f"days={days} itinerary={'yes' if s.itinerary_slug else 'no'} wallet={'yes' if s.wallet else 'no'} "
+        f"hotel={'yes' if s.hotel else 'no'} files={len(s.files)}"
+    )
 
 
 def _write(share_slug: str, request: Request, action: str, change) -> SessionOut:
@@ -240,6 +264,11 @@ def update_session(share_slug: str, body: SessionPatch, request: Request, respon
         conn.execute(
             "update trip_sessions set name = coalesce(%s, name), start_date = %s, return_date = %s where id = %s",
             (body.name, start, back, session_id),
+        )
+        # The private files' deadline follows the trip home
+        conn.execute(
+            "update session_files set delete_after = %s where session_id = %s and kind = any(%s)",
+            (back + timedelta(days=RETAIN_DAYS), session_id, list(EXPIRING)),
         )
 
     session = _write(share_slug, request, "update", change)
@@ -328,7 +357,7 @@ def remove_hotel(share_slug: str, request: Request, response: Response) -> Sessi
 
 @router.delete("/sessions/{share_slug}", status_code=204)
 def delete_session(share_slug: str, body: DeleteIn, request: Request) -> Response:
-    """Deletes the session and its hotel. The itinerary and the wallet stay: they have their own links."""
+    """Deletes the session, its hotel and its files. The itinerary and the wallet stay: they have their own links."""
     _limit(WRITE_LIMITER, request, "delete")
     with db.get_conn() as conn:
         session_id = _session_id(conn, share_slug, lock=True)
@@ -336,6 +365,13 @@ def delete_session(share_slug: str, body: DeleteIn, request: Request) -> Respons
         if body.name.strip().casefold() != name.casefold():
             logger.info("session delete refused share_slug=%s reason=name_mismatch", share_slug)
             raise HTTPException(422, "name_mismatch")
+        paths = [r["storage_path"] for r in conn.execute("select storage_path from session_files where session_id = %s", (session_id,))]
         conn.execute("delete from trip_sessions where id = %s", (session_id,))
-    logger.info("session delete share_slug=%s", share_slug)
+    try:
+        if paths:
+            storage.store().delete(paths)
+    except storage.StorageError:
+        # The rows are gone, so nothing can reach the bytes; log it so the objects can be swept by hand
+        logger.warning("session delete storage cleanup failed share_slug=%s files=%d", share_slug, len(paths))
+    logger.info("session delete share_slug=%s files=%d", share_slug, len(paths))
     return Response(status_code=204, headers=NOINDEX)
