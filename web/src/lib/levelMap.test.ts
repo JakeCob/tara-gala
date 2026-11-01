@@ -1,6 +1,7 @@
 // TG-52: the trip as a game level map, one world per day. Run with `npm test` (node --test, type stripping).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { Guide, GuideRow, Mark } from "./guide.ts";
 import { marksByKey } from "./guide.ts";
 import { COLUMNS, GAP_PX, GOAL_POINT, PAD_PX, levelPoints, levels, placeMapsUrl, roadPath, startPoint, startWorld, worldHeight } from "./levelMap.ts";
@@ -54,4 +55,22 @@ test("LM4 the map opens on the group's world, else the first world not finished"
 
 test("LM5 a level's place opens in Google Maps by name", () => {
   assert.equal(placeMapsUrl("BenCab Museum"), "https://www.google.com/maps/search/?api=1&query=BenCab%20Museum%2C%20Benguet%2C%20Philippines");
+});
+
+test("LM6 a level's badge and a world's tab stay on one line", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /absolute -bottom-3 left-1\/2 -translate-x-1\/2 whitespace-nowrap /, "the badge is shrink-to-fit, so \"3-10\" would break at the hyphen");
+  assert.match(map, /className="min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm"/, "three tabs fit 320 only with text-xs and px-1");
+  assert.doesNotMatch(map, /· \{ls\.filter/, "no dot in the tab");
+});
+
+test("LM7 closing a photo leaves its level dialog open", () => {
+  // React bubbles a nested dialog's close through the component tree, and the viewer sits inside the level dialog
+  assert.match(readFileSync("src/components/LevelMap.tsx", "utf8"), /onClose=\{\(e\) => e\.target === e\.currentTarget && onClose\(\)\}/);
+});
+
+test("LM8 the map still opens with the guide's title and summary, as the guide page did", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /\{guide\.title\}<\/h2>/);
+  assert.match(map, /\{guide\.summary && <p /);
 });

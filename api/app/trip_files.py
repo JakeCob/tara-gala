@@ -30,7 +30,7 @@ logger = logging.getLogger("tara_gala.api")
 
 MANILA = ZoneInfo("Asia/Manila")
 KINDS = ("ticket", "payout_qr", "hotel_proof", "photo")
-ROW_KEY = re.compile(r"^d[1-9]-\d{2}$")
+ROW_KEY = re.compile(r"^d[1-9]-[0-9]{2}$")
 MAX_BYTES = 5 * 1024 * 1024  # the table's cap
 MAX_TICKETS = 30
 MAX_PHOTOS = 300  # about 90 MB at the phone's ~300 KB each: inside the free 1 GB
@@ -126,10 +126,12 @@ async def add_file(
     if kind == "ticket" and not 1 <= len(label) <= 40:
         raise HTTPException(422, "bad_label")
     if kind == "photo" and len(label) > 40:
+        logger.info("trip file refused share_slug=%s kind=%s reason=bad_label", share_slug, kind)
         raise HTTPException(422, "bad_label")
     if kind not in ("ticket", "photo"):
         label = ""
     if row_key is not None and (kind != "photo" or not ROW_KEY.fullmatch(row_key)):
+        logger.info("trip file refused share_slug=%s kind=%s reason=bad_row_key", share_slug, kind)
         raise HTTPException(422, "bad_row_key")
     if (kind == "payout_qr") != (member_id is not None):
         raise HTTPException(422, "unknown_member")

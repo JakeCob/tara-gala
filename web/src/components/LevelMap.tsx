@@ -25,6 +25,8 @@ type Props = {
   /** The trip's ticks and picks; without them the map is read-only (the plan's own page) */
   marks?: readonly Mark[];
   busy?: boolean;
+  /** The last write's failure: the trip's own notice sits behind the level dialog, so the dialog repeats it */
+  problem?: string | null;
   onTick?: (key: string, done: boolean) => void;
   onPick?: (pickKey: string, option: string) => void;
   photos?: Photos;
@@ -40,7 +42,7 @@ const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, onTick, onPick, photos }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, onTick, onPick, photos }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -58,14 +60,21 @@ export default function LevelMap({ guide, marks, busy, onTick, onPick, photos }:
 
   return (
     <div className="flex flex-col gap-4">
+      <header className="flex flex-col gap-1">
+        <h2 className="text-xl font-bold text-balance">{guide.title}</h2>
+        {guide.summary && <p className="text-sm text-muted md:max-w-prose">{guide.summary}</p>}
+      </header>
+
       <nav aria-label="Days" className="flex flex-wrap gap-2">
         {guide.days.map((d) => {
           const ls = levels(d, byKey);
+          const done = ls.filter((l) => l.done).length;
           return (
             <PixelButton key={d.day} variant={d.day === world ? "primary" : "secondary"} aria-pressed={d.day === world}
-              className="flex-1 px-3 text-sm" onClick={() => setWorld(d.day)}>
+              aria-label={marks ? `World ${d.day}, ${done} of ${ls.length} done` : `World ${d.day}`}
+              className="min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm" onClick={() => setWorld(d.day)}>
               <span className="font-bold">World {d.day}</span>
-              {marks && <span className="ml-1 tabular-nums">· {ls.filter((l) => l.done).length}/{ls.length}</span>}
+              {marks && <span className="ml-1 tabular-nums">{done}/{ls.length}</span>}
             </PixelButton>
           );
         })}
@@ -100,7 +109,7 @@ export default function LevelMap({ guide, marks, busy, onTick, onPick, photos }:
       )}
 
       {/* The world: a fixed light screen in both themes, like the title screen and the overworld map */}
-      <section aria-label={`World ${day.day} map`} className="pixel-frame bg-screen relative w-full overflow-hidden" style={{ height }}>
+      <section aria-label={`World ${day.day} map`} className="pixel-frame bg-screen relative mx-auto w-full max-w-md overflow-hidden" style={{ height }}>
         <svg aria-hidden="true" className="absolute inset-0 h-full w-full" viewBox={`0 0 100 ${height}`} preserveAspectRatio="none">
           <path d={roadPath(points, start, GOAL_POINT)} fill="none" className="stroke-screen-ink" strokeWidth={30} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           <path d={roadPath(points, start, GOAL_POINT)} fill="none" className="stroke-screen-paper" strokeWidth={3} strokeDasharray="10 12" vectorEffect="non-scaling-stroke" />
@@ -125,7 +134,7 @@ export default function LevelMap({ guide, marks, busy, onTick, onPick, photos }:
                   className={cx("focus-pixel absolute flex items-center justify-center pixel-frame", l.done ? "bg-screen-paper" : "bg-screen")}
                   style={{ left: `calc(${p.x}% - ${TILE_PX / 2}px)`, top: p.y - TILE_PX / 2, width: TILE_PX, height: TILE_PX }}>
                   {icon ? <Sprite name={icon} scale={2} className={cx(!l.done && marks && "opacity-70")} /> : <span className="text-lg font-bold text-screen-ink">?</span>}
-                  <span aria-hidden="true" className="absolute -bottom-3 left-1/2 -translate-x-1/2 border-2 border-screen-ink bg-screen-paper px-1 text-xs font-bold leading-tight text-screen-ink tabular-nums">{l.label}</span>
+                  <span aria-hidden="true" className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap border-2 border-screen-ink bg-screen-paper px-1 text-xs font-bold leading-tight text-screen-ink tabular-nums">{l.label}</span>
                   {l.done && <span aria-hidden="true" className="absolute -top-3 -right-3"><Sprite name="ui-badge-verified" scale={2} /></span>}
                   {isHere && <span aria-hidden="true" data-party="" className="absolute -top-9 left-1/2 -translate-x-1/2"><Sprite name={chibi("adult", "idle-1")} scale={1} /></span>}
                 </button>
@@ -167,15 +176,15 @@ export default function LevelMap({ guide, marks, busy, onTick, onPick, photos }:
       {menu === "album" && photos && <Album photos={photos} guide={guide} busy={busy} />}
 
       {current && (
-        <LevelDialog level={current} live={live} busy={busy} photos={photos} shots={photosAt(current.row.key)}
+        <LevelDialog level={current} live={live} busy={busy} problem={problem} photos={photos} shots={photosAt(current.row.key)}
           onClose={() => setOpen(null)} onTick={onTick} />
       )}
     </div>
   );
 }
 
-function LevelDialog({ level, live, busy, photos, shots, onClose, onTick }: {
-  level: Level; live: boolean; busy?: boolean; photos?: Photos; shots: TripFile[]; onClose: () => void; onTick?: (key: string, done: boolean) => void;
+function LevelDialog({ level, live, busy, problem, photos, shots, onClose, onTick }: {
+  level: Level; live: boolean; busy?: boolean; problem?: string | null; photos?: Photos; shots: TripFile[]; onClose: () => void; onTick?: (key: string, done: boolean) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -188,11 +197,12 @@ function LevelDialog({ level, live, busy, photos, shots, onClose, onTick }: {
   async function show(f: TripFile) {
     if (!photos) return;
     const blob = await fetchFile(photos.slug, f.id);
+    console.info("[tg-trip] file show kind=%s ok=%s", f.kind, blob ? "yes" : "no");
     if (blob) setShown({ blob, label: `Level ${level.label}` });
   }
 
   return (
-    <dialog ref={dialog} onClose={onClose} aria-label={`Level ${level.label}`}
+    <dialog ref={dialog} onClose={(e) => e.target === e.currentTarget && onClose()} aria-label={`Level ${level.label}`}
       className="m-auto w-[min(28rem,calc(100%-2rem))] bg-transparent p-0 backdrop:bg-black/50">
       <div className="pixel-box flex flex-col gap-3 bg-screen-paper p-4 text-screen-ink">
         <p className="text-sm font-bold tabular-nums">Level {level.label} · {formatTime(r.time)}</p>
@@ -233,6 +243,7 @@ function LevelDialog({ level, live, busy, photos, shots, onClose, onTick }: {
             </PixelButton>
           </div>
         )}
+        {problem && <p role="alert" className="pixel-frame bg-screen px-2 py-1 text-sm font-semibold text-screen-ink">{problem}</p>}
         <PixelButton variant="secondary" className="self-end px-4 text-sm" autoFocus onClick={() => dialog.current?.close()}>
           Close
         </PixelButton>
@@ -363,6 +374,7 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
   };
   async function show(f: TripFile) {
     const blob = await fetchFile(photos.slug, f.id);
+    console.info("[tg-trip] file show kind=%s ok=%s", f.kind, blob ? "yes" : "no");
     if (blob) setShown({ blob, label: where(f.row_key) });
   }
   return (

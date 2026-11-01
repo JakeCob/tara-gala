@@ -107,6 +107,7 @@ def test_a_file_is_only_reachable_through_its_own_trip(client):
         (PNG, "image/png", {"kind": "ticket", "label": "x" * 41}, "bad_label"),
         (PNG, "image/png", {"kind": "selfie"}, "bad_kind"),
         (PNG, "image/png", {"kind": "photo", "row_key": "day2"}, "bad_row_key"),
+        (PNG, "image/png", {"kind": "photo", "row_key": "d1-\u0660\u0661"}, "bad_row_key"),  # \d alone takes these; the column doesn't
         (PNG, "image/png", {"kind": "ticket", "label": "x", "row_key": "d1-01"}, "bad_row_key"),
         (PNG, "image/png", {"kind": "photo", "label": "x" * 41}, "bad_label"),
         (PNG, "image/png", {"kind": "payout_qr"}, "unknown_member"),

@@ -134,21 +134,25 @@ export default function TripView({ slug }: { slug: string }) {
             files: trip.files,
             onAdd: async (rowKey, picked) => {
               let added = 0;
+              let skipped = 0;
               for (const file of picked) {
                 const photo = await fitPhoto(file);
                 if (!photo) {
-                  setNotice({ text: "One picture couldn't be shrunk to share. Try a screenshot of it.", error: true });
+                  skipped++;
                   continue;
                 }
                 const ok = await write("photo-add", () => tripApi.addFile(slug, "photo", photo, rowKey ? { row_key: rowKey } : {}), "");
                 if (!ok) return;
                 added++;
               }
-              if (added) setNotice({ text: `${added} photo${added === 1 ? "" : "s"} added.`, error: false });
+              console.info("[tg-trip] photo-add added=%d skipped=%d", added, skipped);
+              if (skipped) setNotice({ text: `${skipped === 1 ? "One picture" : `${skipped} pictures`} couldn't be shrunk to share. Try a screenshot instead.`, error: true });
+              else if (added) setNotice({ text: `${added} photo${added === 1 ? "" : "s"} added.`, error: false });
             },
             onDelete: (file) => void write("photo-delete", () => tripApi.deleteFile(slug, file.id), "Photo deleted."),
           }}
           busy={busy}
+          problem={notice?.error ? notice.text : null}
           onTick={(key, done) =>
             write(done ? "tick" : "untick", () => (done ? tripApi.mark(slug, key, "done") : tripApi.unmark(slug, key)), done ? "Ticked." : "Unticked.")
           }
