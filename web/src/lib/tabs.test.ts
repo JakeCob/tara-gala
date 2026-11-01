@@ -10,15 +10,16 @@ const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
 
 test("TB1 four tabs in order; Plan only while a planner mode is on", () => {
   assert.deepEqual(visibleTabs(true).map((t) => [t.href, t.label]), [
-    ["/buses", "Buses"], ["/plan", "Plan"], ["/baguio", "Baguio"], ["/wallet", "Wallet"],
+    ["/buses", "Buses"], ["/plan", "Plan"], ["/baguio", "Baguio"], ["/trip", "Trip"], // TG-52: Trip replaces Wallet
   ]);
-  assert.deepEqual(visibleTabs(false).map((t) => t.href), ["/buses", "/baguio", "/wallet"]);
+  assert.deepEqual(visibleTabs(false).map((t) => t.href), ["/buses", "/baguio", "/trip"]);
 });
 
 test("TB2 each page marks its tab; the title screen marks none", () => {
   const cases: [string, string | null][] = [
     ["/", null], ["/buses", "/buses"], ["/plan", "/plan"], ["/i/premade-chill", "/plan"], ["/baguio", "/baguio"],
-    ["/wallet", "/wallet"], ["/tickets", "/wallet"], ["/w/0123456789abcdef0123456789abcdef", "/wallet"],
+    ["/trip", "/trip"], ["/t/0123456789abcdef0123456789abcdef", "/trip"], // TG-52: the trip holds the wallet and tickets
+    ["/wallet", "/trip"], ["/tickets", "/trip"], ["/w/0123456789abcdef0123456789abcdef", "/trip"], ["/tripx", null],
     ["/busesx", null], ["/planner", null], ["/nope", null], ["", null],
   ];
   for (const [path, tab] of cases) assert.equal(currentTab(path), tab, path);

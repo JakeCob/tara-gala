@@ -289,7 +289,8 @@ def test_no_listing_and_read_only(client, planner):
     for method in ("POST", "PUT", "PATCH", "DELETE"):
         assert client.request(method, f"/itineraries/{slug}").status_code == 405, method
     paths = {p for p in client.get("/openapi.json").json()["paths"] if "itinerar" in p}
-    assert paths == {"/itineraries/{share_slug}", "/premade-itineraries"}
+    # TG-52: a trip session links one itinerary by its exact slug; it never lists them
+    assert paths == {"/itineraries/{share_slug}", "/premade-itineraries", "/sessions/{share_slug}/itinerary"}
 
 
 # Every route the API serves, including include_in_schema=False ones. A new route of any method must be
@@ -300,6 +301,7 @@ GET_ROUTES = {
     "/premade-itineraries",  # TG-24: model = 'premade' rows only
     "/itineraries/{share_slug}",  # TG-23: one row by exact slug
     "/wallets/{share_slug}",  # TG-50: one wallet by exact slug; never touches itineraries
+    "/sessions/{share_slug}",  # TG-52: one trip session by exact slug, with its own linked itinerary's slug
 }
 OTHER_ROUTES = {
     ("POST", "/plan"),  # TG-20: inserts a planner row, never reads the table
@@ -310,6 +312,17 @@ OTHER_ROUTES = {
     ("DELETE", "/wallets/{share_slug}/expenses/{expense_id}"),
     ("POST", "/wallets/{share_slug}/settlements"),
     ("DELETE", "/wallets/{share_slug}/settlements/{settlement_id}"),
+    # TG-52 trip sessions: every route is under one exact session slug; there is no session listing. Linking an
+    # itinerary needs its exact slug, as reading it does
+    ("POST", "/sessions"),
+    ("PATCH", "/sessions/{share_slug}"),
+    ("DELETE", "/sessions/{share_slug}"),
+    ("PUT", "/sessions/{share_slug}/itinerary"),
+    ("DELETE", "/sessions/{share_slug}/itinerary"),
+    ("PUT", "/sessions/{share_slug}/wallet"),
+    ("DELETE", "/sessions/{share_slug}/wallet"),
+    ("PUT", "/sessions/{share_slug}/hotel"),
+    ("DELETE", "/sessions/{share_slug}/hotel"),
 }
 
 
@@ -320,8 +333,9 @@ def test_no_hidden_or_renamed_listing_route():
     served = {(m, r.path) for r in app.routes for m in (getattr(r, "methods", None) or set()) if m != "HEAD"}
     assert served == {("GET", p) for p in GET_ROUTES} | OTHER_ROUTES
     takes_slug = [r.path for r in app.routes if "{" in getattr(r, "path", "")]
-    # the only parameterised itinerary path is the exact-slug read; TG-50's wallet paths all start at one exact slug
-    assert [p for p in takes_slug if not p.startswith("/wallets/{share_slug}")] == ["/itineraries/{share_slug}"]
+    # the only parameterised itinerary path is the exact-slug read; TG-50's wallet and TG-52's session paths all start
+    # at one exact slug
+    assert [p for p in takes_slug if not p.startswith(("/wallets/{share_slug}", "/sessions/{share_slug}"))] == ["/itineraries/{share_slug}"]
 
 
 def test_only_exact_slug_and_premade_reads_touch_itineraries():
@@ -331,7 +345,9 @@ def test_only_exact_slug_and_premade_reads_touch_itineraries():
         n = len(re.findall(r"\b(?:from|join)\s+(?:public\.)?itineraries\b", p.read_text(encoding="utf-8"), re.I))
         if n:
             readers[p.name] = n
-    assert readers == {"itineraries.py": 1, "premade.py": 1}
+    # TG-52 sessions.py: the session's own linked itinerary (a join on its id), and one exact-slug lookup to link one
+    assert readers == {"itineraries.py": 1, "premade.py": 1, "sessions.py": 2}
+    assert "from itineraries where share_slug = %s" in (APP / "sessions.py").read_text(encoding="utf-8")
     assert "where model = %s" in (APP / "premade.py").read_text(encoding="utf-8")
 
 

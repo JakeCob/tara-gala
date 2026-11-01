@@ -507,7 +507,8 @@ def test_readme_owner_steps():
     s = cron_section()
     assert "/root/.config/tara-gala-scraper.env" in s
     assert "/tmp/" not in s  # no predictable temp path for root to write through (code review 2)
-    assert "DATABASE_PUBLIC_URL" in s and "jacob-rafal's Projects" in s  # which Railway project (code review 3)
+    # which database (code review 3): since 2026-11-01 the Supabase project's session pooler, not Railway Postgres
+    assert "Session pooler" in s and "`tara-gala` project" in s and "DATABASE_PUBLIC_URL" not in s
     assert "trailing space" in s
     assert "railway variables" not in s  # the dashboard path is enough; no half-explained CLI pipe (delta nit 2)
     assert "chmod 600" in s or "install -m 600" in s

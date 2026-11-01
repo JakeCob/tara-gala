@@ -141,7 +141,7 @@ test("T49-T1 the title screen: a named start menu linking straight to each tab, 
   assert.match(src, /<span data-cursor="" data-blinks="">/);
   assert.match(source(sectionPath("TitleBlink")), /<div className="flex flex-col items-center gap-3" data-blink=\{still \|\| lit \? "on" : "off"\}>/);
   const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/wallet"]);
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/trip"]); // TG-52: the trip, which holds the wallet
   assert.match(src, /\.\.\.\(formMode\(flags\) !== "none" \? \[\{ href: "\/plan"/, "Plan a trip only when the planner is on");
   assert.match(src, /<Link href=\{item\.href\} className=\{PX\.menuItem\}>\s*<span data-cursor="" data-blinks="">\s*<MenuCursor\b/);
   assert.match(src, /<p aria-hidden="true" data-blinks="" className=\{PX\.pressStart\}>/, "PRESS START is decor, not a control");
@@ -253,7 +253,7 @@ test("T46-C2 the title screen and the /buses hero say exactly what the owner app
   const text = copyIn([sectionPath("TitleScreen"), sectionPath("Hero")]);
   for (const s of [
     "Tara Gala", "Manila to Baguio buses, straight from the operators.", // the owner's S1 call: honest, no "every"
-    "Press start", "Find buses", "Plan a trip", "In Baguio", "Trip wallet",
+    "Press start", "Find buses", "Plan a trip", "In Baguio", "My trip", // TG-52: the owner chose "My trip"
     "Every Manila to Baguio trip on file, with fares and where to book.", // "on file" keeps it honest
   ]) assert.ok(text.includes(s), s);
 });

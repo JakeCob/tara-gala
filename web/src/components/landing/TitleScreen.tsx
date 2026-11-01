@@ -18,7 +18,7 @@ export default function TitleScreen() {
     { href: "/buses", label: "Find buses" },
     ...(formMode(flags) !== "none" ? [{ href: "/plan", label: "Plan a trip" }] : []),
     { href: "/baguio", label: "In Baguio" },
-    { href: "/wallet", label: "Trip wallet" },
+    { href: "/trip", label: "My trip" },
   ];
   return (
     <section
