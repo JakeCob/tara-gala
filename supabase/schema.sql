@@ -242,6 +242,35 @@ create table settlements (
 create index settlements_wallet on settlements (wallet_id);
 
 -- ---------------------------------------------------------------------------
+-- Trip sessions (TG-52): one secret link for the whole trip. It points at an itinerary and a wallet, and holds the
+-- hotel. Private by link, like the wallets: no public policy; the API serves a session by its share_slug.
+-- ---------------------------------------------------------------------------
+create table trip_sessions (
+  id            uuid primary key default gen_random_uuid(),
+  share_slug    text unique not null default encode(gen_random_bytes(16), 'hex'),  -- 128 bits: the link is the key
+  name          text not null check (char_length(name) between 1 and 40),
+  start_date    date not null,
+  return_date   date not null,
+  itinerary_id  uuid references itineraries(id) on delete set null,
+  wallet_id     uuid references wallets(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  check (return_date between start_date and start_date + 30)
+);
+
+-- The trip's place to stay: one per session, typed in by the party (never from our data). Times are Manila wall time.
+create table session_hotels (
+  session_id    uuid primary key references trip_sessions(id) on delete cascade,
+  name          text not null check (char_length(name) between 1 and 80),
+  address       text not null default '' check (char_length(address) <= 200),
+  check_in      timestamp,
+  check_out     timestamp,
+  booking_ref   text not null default '' check (char_length(booking_ref) <= 40),
+  notes         text not null default '' check (char_length(notes) <= 300),
+  updated_at    timestamptz not null default now(),
+  check (check_out is null or check_in is null or check_out > check_in)
+);
+
+-- ---------------------------------------------------------------------------
 -- Search view: one row per active trip, flattened for the API
 -- ---------------------------------------------------------------------------
 -- security_invoker keeps the view under the same RLS rules as its tables (Supabase flags views without it)
@@ -304,6 +333,8 @@ alter table wallet_members     enable row level security;
 alter table expenses           enable row level security;
 alter table expense_shares     enable row level security;
 alter table settlements        enable row level security;
+alter table trip_sessions      enable row level security;
+alter table session_hotels     enable row level security;
 
 create policy public_read on operators          for select using (true);
 create policy public_read on terminals          for select using (true);
@@ -315,6 +346,7 @@ create policy public_read on last_mile_routes   for select using (true);
 -- trip_reports: no public policy yet (service role only)
 -- itineraries: no public policy (TG-32). Party names are private; share links are served by the API.
 -- wallets, wallet_members, expenses, expense_shares, settlements: no public policy (TG-50). Same as itineraries.
+-- trip_sessions, session_hotels: no public policy (TG-52). Same as the wallets.
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP

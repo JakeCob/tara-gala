@@ -97,5 +97,6 @@ test("W8 home: a fourth quick action (TG-50 made it the Trip wallet, which links
   // TG-49: the quick actions became the title screen's start menu
   const src = read("src/components/landing/TitleScreen.tsx");
   const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/wallet"]);
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/trip"]); // TG-52: My trip, which links on to the wallets and tickets
+  assert.match(read("src/components/TripHome.tsx"), /href="\/wallet"/);
 });

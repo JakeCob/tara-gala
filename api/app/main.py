@@ -18,6 +18,7 @@ from .itineraries import router as itineraries_router
 from .last_mile import router as last_mile_router
 from .planner import router as planner_router
 from .premade import router as premade_router
+from .sessions import router as sessions_router
 from .schedule import arrival as _arrival  # noqa: F401  re-exported: TG-12 tests use main._arrival
 from .trip_rows import CONFIRM_NOTE, trip_from_row  # noqa: F401  CONFIRM_NOTE re-exported
 from .wallets import router as wallets_router
@@ -50,7 +51,7 @@ app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
-    allow_methods=["GET", "POST", "DELETE"],  # POST for /plan (TG-20); POST and DELETE for wallets (TG-50)
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],  # POST for /plan (TG-20); POST and DELETE for wallets (TG-50); PUT and PATCH for trip sessions (TG-52)
     allow_headers=["*"],
 )
 
@@ -135,3 +136,4 @@ app.include_router(premade_router)
 app.include_router(planner_router)
 app.include_router(itineraries_router)
 app.include_router(wallets_router)
+app.include_router(sessions_router)

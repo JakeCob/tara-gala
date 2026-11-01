@@ -75,9 +75,9 @@ Cron runs `scraper/cron.sh`, installed as `/usr/local/sbin/tara-gala-scrape`. Ea
 - keeps its own venv there, reinstalled only when `api/requirements.txt` changes;
 - logs `START`, `END rc=…`, and any `FAILED`, `WARNING` or `SKIPPED` line, plus the scraper's own output, to `/var/log/tara-gala-scraper.log`. It warns when the last successful scrape is more than 36 hours old.
 
-**Owner steps** (as root on the VPS, once the Railway database exists; nothing here is installed automatically):
+**Owner steps** (as root on the VPS; nothing here is installed automatically):
 
-1. Create the env file. The value is the Railway Postgres `DATABASE_PUBLIC_URL` (the public proxy URL, which works from the VPS): Railway dashboard → **jacob-rafal's Projects** workspace → `tara-gala` → `Postgres` → Variables → `DATABASE_PUBLIC_URL`. Never take it from a project in another workspace. Paste it in the editor, never on the command line, so it stays out of your shell history:
+1. Create the env file. The value is the Supabase project's session pooler URI (Supabase dashboard → the `tara-gala` project → **Connect** → Session pooler). The database moved from Railway to Supabase on 2026-11-01. Never take it from a project in another organisation. Paste it in the editor, never on the command line, so it stays out of your shell history:
    ```sh
    mkdir -p -m 700 /root/.config
    install -m 600 /dev/null /root/.config/tara-gala-scraper.env
@@ -237,17 +237,18 @@ Values are trimmed and case-insensitive. `1`, `true`, `yes`, `on` mean on; `0`, 
 Tests: the API flag tests run with the normal pytest command (section 5). The web tests run with `cd web && npm test`, which uses Node's built-in `node --test` and needs Node 22.18 or later for TypeScript type stripping. CI runs them as they are (section 9).
 
 ## 8. Deploy (Railway API, Vercel web)
-- **Railway** (one project, `production` environment): `Postgres` (Railway's Postgres) and `api` (FastAPI), on its Railway-provided domain, port 8080.
+- **Supabase:** the Postgres database (free tier, region `ap-northeast-2`). It moved from Railway Postgres on 2026-11-01; the Railway database is deleted. Free projects pause after a week with no traffic: un-pause from the dashboard.
+- **Railway** (one project, `production` environment): `api` (FastAPI), on its Railway-provided domain, port 8080.
 - **Vercel:** `web` (Next.js), the owner's personal account, project `tara-gala-ph`, on its `vercel.app` domain. It moved from Railway on 2026-10-29.
 
 - **Build config in the repo:**
   - `api/railway.json` (Railpack builder, start command bound to `0.0.0.0:8080`, health check on `/health`) and `api/.python-version` (3.12). `/health` runs `select 1`, so a deploy that can't reach the database fails its health check, and the previous deployment keeps serving.
   - Vercel builds `web/` as a standard Next.js project (`web/.node-version` 24). `web/railway.json` is kept only as a fallback, in case web ever goes back to Railway.
 - **Variables live only on the hosts, never in the repo:**
-  - `api` (Railway): `DATABASE_URL` (the reference `${{Postgres.DATABASE_URL}}`, private network), `PORT`, `ALLOWED_ORIGINS` (the web origin; it's comma-separated, so another origin can be added), `LOG_LEVEL`, `PLANNER_LIVE`, `PREMADE_ITINERARIES`, `REAL_MAP`, and `RAILPACK_DEPLOY_APT_PACKAGES` (`tzdata`, for `Asia/Manila`).
+  - `api` (Railway): `DATABASE_URL` (Supabase's session pooler URI: IPv4, which Railway needs; the direct `db.<ref>.supabase.co` host is IPv6 only), `PORT`, `ALLOWED_ORIGINS` (the web origin; it's comma-separated, so another origin can be added), `LOG_LEVEL`, `PLANNER_LIVE`, `PREMADE_ITINERARIES`, `REAL_MAP`, and `RAILPACK_DEPLOY_APT_PACKAGES` (`tzdata`, for `Asia/Manila`).
   - `web` (Vercel, production): `NEXT_PUBLIC_API_URL` (the api origin), `NEXT_PUBLIC_PLANNER_LIVE`, `NEXT_PUBLIC_PREMADE_ITINERARIES`, `NEXT_PUBLIC_REAL_MAP`, `NEXT_PUBLIC_SERVICE_WORKER`, `NEXT_PUBLIC_OVERWORLD_MAP` and `NEXT_TELEMETRY_DISABLED`. `NEXT_PUBLIC_*` values are inlined at build time, so deploy again after any change.
   - No LLM key and no Supabase variables.
-- `DATABASE_PUBLIC_URL` (Postgres' TCP proxy) is used only from the VPS, for the schema, the migrations, and the scraper and loader runs (sections 1, 3 and 4). It is never set on `api`.
+- From the VPS, the schema, the migrations, and the scraper and loader runs (sections 1, 3 and 4) use the same Supabase database, through the `DATABASE_URL` in the git-ignored `.env`.
 - **Redeploy after a merge to `main`:**
   1. Export a clean copy of `main` (`git archive`).
   2. Apply `supabase/schema.sql` if it's new, and every file in `supabase/migrations/` (safe to rerun). Run the loaders if `data/` changed.
