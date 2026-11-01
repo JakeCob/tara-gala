@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MenuCursor, PageTitle, PX } from "@/components/pixel";
+import { MenuCursor, PageTitle, Placard, PX } from "@/components/pixel";
 import { flags } from "@/lib/flags";
 import { formMode } from "@/lib/planForm";
 import { spriteSrc } from "@/lib/sprites";
@@ -7,7 +7,7 @@ import TitleBlink from "./TitleBlink";
 import TitleCast from "./TitleCast";
 
 /**
- * The game title screen at / (TG-49, owner: "like a title screen of a game"): the wordmark, PRESS START and a start
+ * The game title screen at / (TG-49, owner: "like a title screen of a game"): the wordmark on a jeepney signboard, PRESS START and a start
  * menu over the mountain scene, on a fixed light screen. The menu goes straight to each tab, so it never costs a tap.
  * The cursor sits on the first item until another is hovered or focused (globals.css title-menu); it and PRESS START blink (TitleBlink).
  */
@@ -35,9 +35,11 @@ export default function TitleScreen() {
         className="pixelated absolute bottom-0 left-[min(0px,calc(100%_-_400px))] h-[246px] w-[640px] max-w-none md:left-0 lg:h-[369px] lg:w-[960px]"
       />
       <div className="relative flex flex-col items-center gap-3 px-4 pt-10 text-center lg:pt-14">
-        <PageTitle titleScreen id="landing-title">
-          Tara Gala
-        </PageTitle>
+        <Placard size="lg">
+          <PageTitle titleScreen id="landing-title">
+            Tara Gala
+          </PageTitle>
+        </Placard>
         <p className="text-sm font-semibold text-screen-ink md:text-base">Manila to Baguio buses, straight from the operators.</p>
         <TitleBlink>
           <p aria-hidden="true" data-blinks="" className={PX.pressStart}>

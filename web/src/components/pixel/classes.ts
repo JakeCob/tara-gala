@@ -45,12 +45,19 @@ export const PX = {
   // TG-46: the same title on the hero, a fixed light screen; the app name there is Cubao's Wide cut
   wordmark: "font-wordmark text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
   // The title screen's app name at / (TG-49), the biggest type in the app
-  titleWordmark: "font-wordmark text-[2.75rem] leading-none font-normal text-screen-ink md:text-[4rem] lg:text-[5rem]",
+  titleWordmark: "font-wordmark text-[2.75rem] leading-none font-normal placard-letters md:text-[4rem] lg:text-[5rem]",
   // The title screen's decorative PRESS START and its start menu items
   pressStart: "font-pixel text-sm font-normal uppercase tracking-widest text-screen-ink",
   menuItem: "focus-pixel flex min-h-11 items-center gap-2 px-4 font-pixel text-lg font-normal text-screen-ink",
   // The header's app name (home to the title screen) and the tabs, in the header from md and the bar on phones
-  logo: "focus-pixel inline-flex min-h-11 items-center bg-card font-wordmark text-xl leading-none font-normal text-brand md:text-2xl",
+  logo: "focus-pixel inline-flex min-h-11 items-center",
+  // The jeepney signboard (Placard): the header's small one and the title screen's big one. Fixed sign colours in
+  // both themes (globals.css placard, placard-letters)
+  placard: "placard inline-flex flex-col items-center gap-1 px-2.5 pt-1.5 pb-1",
+  placardName: "font-wordmark text-base leading-none font-normal whitespace-nowrap placard-letters md:text-xl",
+  placardRoute: "font-pixel text-[0.625rem] leading-none font-normal uppercase tracking-widest text-screen-ink",
+  placardLg: "placard flex flex-col items-center gap-2 px-5 pt-4 pb-3 md:gap-3 md:px-8 md:pt-6 md:pb-4",
+  placardRouteLg: "font-pixel text-sm leading-none font-normal uppercase tracking-widest text-screen-ink md:text-base",
   tab: "focus-pixel flex items-center justify-center bg-card px-3 font-pixel text-base font-normal text-foreground border-transparent aria-[current=page]:border-brand aria-[current=page]:text-brand",
   h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
