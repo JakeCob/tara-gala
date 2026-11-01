@@ -27,8 +27,7 @@ PLANNER_PARTY = [{"type": "adult", "name": NAME, "phone": PHONE}, {"type": "stud
 NOT_FOUND = b'{"detail":"Itinerary not found"}'
 TOP_FIELDS = {
     "share_slug", "premade", "trip_date", "return_date", "party", "budget_php", "vibe", "created_at",
-    "outbound", "return", "days", "plan", "issues",
-}
+    "outbound", "return", "days", "plan", "issues", "guide"}  # TG-52: None unless the itinerary has a guide
 OUT = ("vl-cubao", "07:00", "regular_aircon")
 NIGHT = ("vl-cubao", "22:00", "regular_aircon")
 NO_MINUTES = ("vl-cubao", "09:00", "deluxe")
@@ -326,6 +325,8 @@ OTHER_ROUTES = {
     ("DELETE", "/sessions/{share_slug}/hotel"),
     ("POST", "/sessions/{share_slug}/files"),  # TG-52 PR 2: tickets, payout QRs, the hotel screenshot
     ("DELETE", "/sessions/{share_slug}/files/{file_id}"),
+    ("PUT", "/sessions/{share_slug}/marks/{key}"),  # TG-52 PR 3: the shared checklist and picks
+    ("DELETE", "/sessions/{share_slug}/marks/{key}"),
 }
 
 
@@ -349,7 +350,9 @@ def test_only_exact_slug_and_premade_reads_touch_itineraries():
         if n:
             readers[p.name] = n
     # TG-52 sessions.py: the session's own linked itinerary (a join on its id), and one exact-slug lookup to link one
-    assert readers == {"itineraries.py": 1, "premade.py": 1, "sessions.py": 2}
+    # TG-52 PR 3 trip_marks.py: the guide of the trip's own linked itinerary (a join on the session's id)
+    assert readers == {"itineraries.py": 1, "premade.py": 1, "sessions.py": 2, "trip_marks.py": 1}
+    assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "trip_marks.py").read_text(encoding="utf-8")
     assert "from itineraries where share_slug = %s" in (APP / "sessions.py").read_text(encoding="utf-8")
     assert "where model = %s" in (APP / "premade.py").read_text(encoding="utf-8")
 
@@ -413,7 +416,7 @@ def test_logs_never_carry_party_budget_or_plan(client, planner, caplog):
     caplog.set_level(logging.DEBUG)
     get(client, slug)
     lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.getMessage().startswith("itinerary ")]
-    assert lines == [f"itinerary get share_slug={slug} premade=False days=3 stops=6 issues=0 codes=-"]
+    assert lines == [f"itinerary get share_slug={slug} premade=False days=3 stops=6 issues=0 codes=- guide=no"]
     first_spot = plan["days"][0]["stops"][0]["spot_id"]
     for rec in caplog.records:
         msg = rec.getMessage()

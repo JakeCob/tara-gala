@@ -18,6 +18,7 @@ import {
   type StopOut,
 } from "@/lib/itinerary";
 import { placeSprite, spriteSrc } from "@/lib/sprites";
+import GuideView from "@/components/GuideView";
 import LegCard from "@/components/LegCard";
 import OverworldMap from "@/components/OverworldMap";
 import ShareButton from "@/components/ShareButton";
@@ -55,13 +56,17 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
         </PixelBox>
       )}
 
+      {/* TG-52: a plan with a guide (the owner's real trip) shows its day tables, buses, pick, budget and to-dos, in place
+          of the bus and day sections; on a trip the same guide is the shared checklist (TripView) */}
+      {it.guide && <GuideView guide={it.guide} />}
+
       {map ? (
         <>
           <p className="text-sm">Tap a stop or a ride for details.</p>
           {confirmNote && <p className={PX.meta}>{confirmNote}</p>}
           <OverworldMap itinerary={it} />
         </>
-      ) : (
+      ) : it.guide ? null : (
         <>
           <BusSection title="Bus to Baguio" leg={it.outbound} issues={issuesFor("outbound", it.issues)} />
 

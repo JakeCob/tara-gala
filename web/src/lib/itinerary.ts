@@ -1,6 +1,7 @@
 // The share page /i/[slug] (TG-23): its data types and pure helpers. Plain module with type-only imports,
 // so Node's type stripping runs it in tests. Copy is from tickets/TG-23/ux.md.
 import type { Trip } from "./api.ts";
+import type { Guide } from "./guide.ts";
 import type { LastMileLeg, Spot } from "./lastMile.ts";
 
 export type PartyMember = { type: string; name: string | null };
@@ -29,6 +30,7 @@ export type Itinerary = {
   days: DayOut[];
   plan: unknown;
   issues: PlanIssue[];
+  guide?: Guide | null; // TG-52: the day tables, buses, pick, budget, to-do and sources, when the plan has them
 };
 
 // Same pattern as SLUG in api/app/itineraries.py (a test compares them). An invalid slug shows the 404

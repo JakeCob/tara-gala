@@ -27,3 +27,9 @@ good-shepherd-convent,Good Shepherd Sisters Convent,shopping,16.422326,120.62612
 la-trinidad-strawberry-farm,La Trinidad Strawberry Farm,other,16.453122,120.581917,"In La Trinidad, Benguet (outside Baguio).",,
 # tam-awan-village: agent-researched (tg-data) - owner to verify. lat/lng https://www.openstreetmap.org/way/209022152 (Nominatim; checked 2026-10-29)
 tam-awan-village,Tam-awan Village,other,16.429956,120.576908,"Arts village at 366-C Longlong Road, Pinsao Proper.",,
+# bell-church: TG-52, from the owner's Nov 6-8 itinerary; unconfirmed. lat/lng https://www.openstreetmap.org/relation/15619959 (Nominatim; checked 2026-11-01), agrees with https://en.wikipedia.org/wiki/Bell_Church_(temple). Hours and fee not sourced: confirm locally.
+bell-church,Bell Church,church,16.4314726,120.5989019,"Chinese Taoist-Buddhist temple in Ambiong, La Trinidad, at the Baguio boundary. Short stop. Hours and fee unconfirmed.",,
+# mt-yangbew: TG-52, from the owner's Nov 6-8 itinerary; unconfirmed. lat/lng https://www.openstreetmap.org/node/4301842886 (Nominatim; checked 2026-11-01). Fee ~50 from https://wanderlog.com/place/details/2010716 (a review there says a 30 environmental fee): confirm locally. Hike length from https://www.pinoymountaineer.com/2020/02/hiking-matters-636-easy-hikes-near-baguio-city-mt-yangbew.html
+mt-yangbew,Mt. Yangbew,viewpoint,16.4539741,120.6084949,"Easy 30 to 40 minute hike in Tawang, La Trinidad, for the sunrise; also called Mt. Jumbo. Fee about 50 pesos, unconfirmed.",,50
+# sm-city-baguio: TG-52, from the owner's Nov 6-8 itinerary; unconfirmed. lat/lng https://www.openstreetmap.org/relation/15871764 (Nominatim; checked 2026-11-01). A baggage counter is not sourced: confirm with the mall.
+sm-city-baguio,SM City Baguio,shopping,16.4089430,120.5991740,"Mall on Luneta Hill, Upper Session Road. The plan leaves bags here after checkout: confirm the baggage counter first.",,

@@ -8,7 +8,10 @@ import {
   type Hotel, type Trip, type TripFailure, type TripResult, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
   slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
+import GuideView from "./GuideView";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
+import { fetchItinerary } from "@/lib/api";
+import type { Guide } from "@/lib/guide";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
 
 type Load = { state: "loading" } | { state: "ready"; trip: Trip } | { state: "error"; why: TripFailure };
@@ -56,12 +59,32 @@ export default function TripView({ slug }: { slug: string }) {
     };
   }, [slug, reloads]);
 
-  // Others change the trip from their phones: fetch again whenever this one comes back to the app
+  // Others change the trip from their phones: fetch again whenever this one comes back to the app, and every
+  // 30 seconds while it's open, so the progress map moves on every phone
   useEffect(() => {
     const onVisible = () => document.visibilityState === "visible" && setReloads((n) => n + 1);
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(() => document.visibilityState === "visible" && setReloads((n) => n + 1), 30_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
   }, []);
+
+  // The plan's guide (day tables, buses, pick, budget, to-dos): the trip's checklist and progress map
+  const planSlug = load.state === "ready" ? load.trip.itinerary_slug : null;
+  const [guide, setGuide] = useState<{ plan: string; guide: Guide | null } | null>(null);
+  useEffect(() => {
+    if (!planSlug) return;
+    let live = true;
+    fetchItinerary(planSlug).then(
+      (it) => live && setGuide({ plan: planSlug, guide: it?.guide ?? null }),
+      () => undefined, // offline with no copy: the rest of the trip still shows
+    );
+    return () => {
+      live = false;
+    };
+  }, [planSlug]);
 
   if (load.state === "loading") return <p className="text-sm text-muted">Opening the trip...</p>;
   if (load.state === "error") {
@@ -91,10 +114,30 @@ export default function TripView({ slug }: { slug: string }) {
   }
 
   const onFail = (text: string) => setNotice({ text, error: true });
+  const theGuide = guide?.plan === trip.itinerary_slug ? guide.guide : null;
   return (
+    <div className="flex flex-col gap-6">
+    <TripHeader trip={trip} busy={busy} write={write} />
+    {theGuide && (
+      <section aria-labelledby="progress-title" className="flex flex-col gap-3">
+        <SectionTitle id="progress-title">Trip progress</SectionTitle>
+        <p className="text-sm text-muted md:max-w-prose">
+          Tick each step as the group does it, from any phone. The group shows at the last place ticked.
+        </p>
+        <GuideView
+          guide={theGuide}
+          checklistFirst
+          marks={trip.marks}
+          busy={busy}
+          onTick={(key, done) =>
+            write(done ? "tick" : "untick", () => (done ? tripApi.mark(slug, key, "done") : tripApi.unmark(slug, key)), done ? "Ticked." : "Unticked.")
+          }
+          onPick={(pickKey, option) => write("pick", () => tripApi.mark(slug, `pick:${pickKey}`, option), `Picked ${option}.`)}
+        />
+      </section>
+    )}
     <div className="flex flex-col gap-5 md:grid md:grid-cols-2 md:items-start md:gap-6">
       <div className="flex flex-col gap-5">
-        <TripHeader trip={trip} busy={busy} write={write} />
         <PlanSection trip={trip} busy={busy} write={write} />
         <SharedTickets trip={trip} busy={busy} write={write} onFail={onFail} />
         <WalletSection trip={trip} busy={busy} write={write} setNotice={setNotice} />
@@ -120,6 +163,7 @@ export default function TripView({ slug }: { slug: string }) {
           }}
         />
       </div>
+    </div>
     </div>
   );
 }

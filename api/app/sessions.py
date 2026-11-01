@@ -133,6 +133,12 @@ class FileOut(BaseModel):
     created_at: datetime
 
 
+class MarkOut(BaseModel):
+    key: str  # "row:d2-05", "todo:03" or "pick:sunrise" (trip_marks.py)
+    value: str
+    updated_at: datetime
+
+
 class SessionOut(BaseModel):
     share_slug: str
     name: str
@@ -143,6 +149,7 @@ class SessionOut(BaseModel):
     wallet: WalletLink | None
     hotel: HotelOut | None
     files: list[FileOut]
+    marks: list[MarkOut]
 
 
 # ---------------------------------------------------------------- database
@@ -189,6 +196,9 @@ def _load(conn, session_id: UUID) -> SessionOut:
            where session_id = %s order by kind, created_at, id""",
         (session_id,),
     ).fetchall()
+    marks = conn.execute(
+        "select key, value, updated_at from session_marks where session_id = %s order by updated_at, key", (session_id,)
+    ).fetchall()
     return SessionOut(
         share_slug=s["share_slug"],
         name=s["name"],
@@ -199,6 +209,7 @@ def _load(conn, session_id: UUID) -> SessionOut:
         wallet=WalletLink(share_slug=s["wallet_slug"], name=s["wallet_name"]) if s["wallet_slug"] else None,
         hotel=HotelOut(**hotel) if hotel else None,
         files=[FileOut(**f) for f in files],
+        marks=[MarkOut(**m) for m in marks],
     )
 
 
@@ -211,7 +222,7 @@ def _shape(s: SessionOut) -> str:
     days = (s.return_date - s.start_date).days + 1
     return (
         f"days={days} itinerary={'yes' if s.itinerary_slug else 'no'} wallet={'yes' if s.wallet else 'no'} "
-        f"hotel={'yes' if s.hotel else 'no'} files={len(s.files)}"
+        f"hotel={'yes' if s.hotel else 'no'} files={len(s.files)} marks={len(s.marks)}"
     )
 
 

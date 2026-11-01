@@ -49,6 +49,8 @@ RLS: public read on reference tables; all writes go through the API with the ser
 }
 ```
 
+A curated itinerary may also carry a `guide` next to that shape (TG-52, owner-approved 2026-11-01): day rows of time, plan and note (each may point at a spot or terminal, or be plain text), a pick-one choice, bus tables, a budget, a to-do list and sources. It is checked by `api/app/guide.py` and loaded from `data/itineraries/` by `data/load_itinerary.py`. Its bus rows name trips by id, so every time and fare still comes from `trips`. The planner's own output stays the strict shape above. On a trip session the guide's rows and to-dos are the shared checklist (`session_marks`).
+
 ## Build schedule
 1. Oct 24 to 25, data: run schema, hand-enter trips for all 3 operators, one evening on the Victory Liner scraper
 2. Oct 26 to 30, core screens: FastAPI trip search on Railway, Next.js PWA shell, schedule search with booking links, chibi passenger picker, 10 to 15 Baguio last-mile routes, Sakay/Google Maps deep link
