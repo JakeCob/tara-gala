@@ -84,6 +84,7 @@ Sprites carry no `<title>`. The component that shows one sets its alt text (`alt
 | `ui-star` | 8×8 | PNG | AI art: a sparkle |
 | `ui-heart` | 8×8 | PNG | AI art: a small heart |
 | `ui-badge-verified` | 16×16 | PNG | AI art: a round badge with a check mark |
+| `ui-ticket` | 16×10 | SVG | hand-drawn (TG-49), for the title screen's drifting tickets: a Sun bus ticket with a Forest stub, a perforated line and two printed lines |
 | `logo-wordmark` | 192×48 | PNG | AI art: "Tara Gala" in a chunky pixel font with a small bus and pine |
 | `deco-sun-stars` | 24×24 | PNG | AI art: the 8-ray sun with three stars on a Forest disc: an emblem, never the flag |
 | `deco-carabao` | 32×24 | PNG | AI art: a carabao (water buffalo), side view, with curved horns |

@@ -114,6 +114,7 @@ Prompt template:
 | `ui-star.png` | 8×8 | a sparkle or star (for "spawn" effects) |
 | `ui-heart.png` | 8×8 | a small heart |
 | `ui-badge-verified.png` | 16×16 | a round badge with a check mark ("checked" data) |
+| `ui-ticket.png` | 16×10 | a bus ticket: Sun, with a Forest stub, a perforated line and two printed lines, notched at the sides |
 
 Prompt template (frame):
 > A 24×24 pixel art 9-slice UI panel border for a retro handheld RPG dialog box: rounded double outline, 8px corners, flat cream fill, no shading. [shared style line, but WITHOUT "transparent background"]
