@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Guide, GuideRow, Mark } from "./guide.ts";
 import { marksByKey } from "./guide.ts";
-import { COLUMNS, GAP_PX, GOAL_POINT, PAD_PX, levelPoints, levels, placeMapsUrl, roadPath, startPoint, startWorld, worldHeight } from "./levelMap.ts";
+import { COLUMNS, GAP_PX, GOAL_POINT, PAD_PX, TILE_PX, UNIT, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, startPoint, startWorld, worldHeight } from "./levelMap.ts";
 
 const row = (key: string, extra: Partial<GuideRow> = {}): GuideRow => ({
   key, time: "09:00", plan: key, note: "", place: { kind: "spot", id: key, name: key, category: "park", lodging: false },
@@ -35,14 +35,28 @@ test("LM2 levels climb the screen from START to GOAL, zig-zagging between two co
   assert.ok(pts.every((p, i) => i === 0 || p.y === pts[i - 1].y - GAP_PX), "each level one gap above the last");
   assert.ok(startPoint(4).y > pts[0].y && GOAL_POINT.y < pts[3].y, "START below the first, GOAL above the last");
   assert.ok(pts[3].y - GAP_PX / 2 > GOAL_POINT.y);
+  assert.deepEqual([GAP_PX, PAD_PX], [120, 132], "room for three lines of sign, and for GOAL under the world's bar");
 });
 
-test("LM3 the road is one path through START, every level and GOAL", () => {
-  const pts = levelPoints(3);
-  const d = roadPath(pts, startPoint(3), GOAL_POINT);
-  assert.match(d, /^M 50 \d+/);
-  assert.equal(d.match(/ C /g)?.length, 4, "three levels: four curves");
-  assert.ok(d.endsWith(`${GOAL_POINT.x} ${GOAL_POINT.y}`));
+test("LM3 the road is 3px cells on the screen's real width, through START, every level and GOAL", () => {
+  const pts = levelPoints(7);
+  const H = worldHeight(7);
+  for (const W of [282, 342, 442]) {
+    const stops = roadStops(pts, startPoint(7), GOAL_POINT, W);
+    const road = pixelRoad(stops, W, H);
+    assert.deepEqual(road, pixelRoad(stops, W, H), "deterministic");
+    for (const run of [...road.curb, ...road.asphalt, ...road.dash]) {
+      assert.ok(run.x % UNIT === 0 && run.y % UNIT === 0 && run.w % UNIT === 0, `on the grid: ${JSON.stringify(run)}`);
+      assert.ok(run.x >= 0 && run.y >= 0 && run.x + run.w <= W && run.y + UNIT <= H, `in bounds: ${JSON.stringify(run)}`);
+    }
+    for (const stop of stops) {
+      const hit = road.asphalt.some((r) => stop.x >= r.x - UNIT && stop.x <= r.x + r.w + UNIT && Math.abs(stop.y - r.y) <= UNIT);
+      assert.ok(hit, `the road reaches ${JSON.stringify(stop)}`);
+    }
+    assert.ok(road.curb.length >= road.asphalt.length / 2 && road.dash.length > 0, "three layers");
+    assert.ok(runsPath(road.asphalt).length < 20_000, "a small path");
+  }
+  assert.equal(runsPath([{ x: 3, y: 6, w: 9 }]), "M3 6h9v3h-9z");
 });
 
 test("LM4 the map opens on the group's world, else the first world not finished", () => {
@@ -57,9 +71,9 @@ test("LM5 a level's place opens in Google Maps by name", () => {
   assert.equal(placeMapsUrl("BenCab Museum"), "https://www.google.com/maps/search/?api=1&query=BenCab%20Museum%2C%20Benguet%2C%20Philippines");
 });
 
-test("LM6 a level's badge and a world's tab stay on one line", () => {
+test("LM6 a level's tag and a world's tab stay on one line", () => {
   const map = readFileSync("src/components/LevelMap.tsx", "utf8");
-  assert.match(map, /absolute -bottom-3 left-1\/2 -translate-x-1\/2 whitespace-nowrap /, "the badge is shrink-to-fit, so \"3-10\" would break at the hyphen");
+  assert.match(map, /absolute -bottom-3 left-1\/2 -translate-x-1\/2 whitespace-nowrap", PX\.screenTag/, "the tag is shrink-to-fit, so \"3-10\" would break at the hyphen");
   assert.match(map, /className="min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm"/, "three tabs fit 320 only with text-xs and px-1");
   assert.doesNotMatch(map, /· \{ls\.filter/, "no dot in the tab");
 });
@@ -73,4 +87,86 @@ test("LM8 the map still opens with the guide's title and summary, as the guide p
   const map = readFileSync("src/components/LevelMap.tsx", "utf8");
   assert.match(map, /\{guide\.title\}<\/h2>/);
   assert.match(map, /\{guide\.summary && <p /);
+});
+
+test("LM9 the next level is the first not done", () => {
+  const byKey = marksByKey([mark("row:d1-01")]);
+  assert.equal(nextLevel(levels(guide.days[0], byKey)), "d1-02");
+  assert.equal(nextLevel(levels(guide.days[0], marksByKey([mark("row:d1-01"), mark("row:d1-02")]))), null, "all done");
+});
+
+test("LM10 scenery is seeded, fits the free column, and never touches a tile", () => {
+  const pts = levelPoints(10);
+  const H = worldHeight(10);
+  const FIXED = new Set(["tile-pine", "tile-mountain", "deco-sampaguita", "deco-rice-terraces", "deco-bahay-kubo", "deco-carabao"]);
+  for (const W of [282, 342, 442]) {
+    assert.deepEqual(levelScenery(pts, W, 7), levelScenery(pts, W, 7), "deterministic");
+    assert.notDeepEqual(levelScenery(pts, W, 7), levelScenery(pts, W, 8), "the seed changes it");
+    for (let seed = 0; seed < 60; seed++) {
+      const items = levelScenery(pts, W, seed);
+      assert.ok(items.length >= pts.length, "every level gets some");
+      for (const d of items) {
+        assert.ok(FIXED.has(d.name), d.name);
+        assert.ok(d.x >= 3 && d.x + d.w <= W - 3 && d.y >= 0 && d.y + d.h <= H, `in the world at ${W}: ${JSON.stringify(d)}`);
+        for (const p of pts) {
+          const tile = { l: (p.x / 100) * W - TILE_PX / 2, t: p.y - TILE_PX / 2 };
+          const apart = d.x + d.w <= tile.l - 3 || d.x >= tile.l + TILE_PX + 3 || d.y + d.h <= tile.t || d.y >= tile.t + TILE_PX;
+          assert.ok(apart, `clear of the tile at ${W}: ${JSON.stringify(d)} ${JSON.stringify(p)}`);
+        }
+      }
+    }
+  }
+  assert.ok(!levelScenery(pts, 282, 3).some((d) => d.w === 48 && d.name !== "deco-carabao"), "48px sprites don't fit a 320 phone's column");
+  const all = [...Array(60).keys()].flatMap((seed) => levelScenery(pts, 342, seed));
+  assert.ok(all.some((d) => d.w === 48), "they do at 380");
+  assert.ok(all.filter((d) => d.name === "deco-carabao").length >= 60, "a carabao at the corners");
+  const pines = levelScenery(pts, 342, 0).filter((d) => d.name === "tile-pine");
+  assert.ok(pines.length === 0 || pines.length >= 2, "pines come in clusters");
+  assert.doesNotMatch(readFileSync("src/lib/levelMap.ts", "utf8"), /Math\.random|deco-sun-stars/, "seeded; never the emblem");
+});
+
+test("LM11 the world is a game screen: a pixel road, grass, framed in Ink in both themes, capped at a phone's width", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.doesNotMatch(map, /preserveAspectRatio|non-scaling-stroke/, "no stretched vector road");
+  assert.match(map, /shapeRendering="crispEdges"/);
+  assert.match(map, /new ResizeObserver\(/);
+  assert.match(map, /usableWidth\(/);
+  assert.match(map, /backgroundImage: `url\(\$\{spriteSrc\("tile-grass"\)\}\)`, backgroundSize: "32px"/);
+  for (const v of ["--frame", "--focus", "--foreground"]) assert.ok(map.includes(`"${v}": "var(--color-screen-ink)"`), v);
+  assert.match(map, /w-full md:mx-auto md:max-w-md/);
+  assert.match(map, /wide && "lg:grid lg:grid-cols-\[28rem_minmax\(0,1fr\)\] lg:grid-rows-\[repeat\(7,auto\)_1fr\]/);
+  assert.match(map, /lg:col-start-1 lg:row-span-full/);
+  assert.match(readFileSync("src/components/TripView.tsx", "utf8"), /<LevelMap\n\s+wide\n/, "the trip page has the width; \/i\/ doesn't");
+  assert.match(map, /grid grid-cols-3 gap-2 lg:col-start-2 lg:flex lg:flex-wrap/, "the trip menu");
+});
+
+test("LM12 one level is one button, with a name from its content; nothing fades", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.doesNotMatch(map, /aria-label=\{`Level \$\{l\.label\}, /);
+  assert.match(map, /<span className="sr-only">Level \{l\.label\}, <\/span>/);
+  assert.match(map, /sr-only">, done</);
+  assert.match(map, /sr-only">, the group is here</);
+  assert.doesNotMatch(map.slice(0, map.indexOf("function WorldGround")), /opacity-70|line-clamp/);
+  assert.match(map, /bg-flag-yellow/, "the next level");
+  assert.match(map, /placeIcon\(l\.row\.place\) \?\? "place-other"/);
+  assert.match(map, /chibiLook\(GROUP, "idle-1"\)\} scale=\{2\} className="max-w-none"/, "a shrink-to-fit box would squeeze it to half the tile");
+  assert.doesNotMatch(map, /chibi\("adult"/, "TG-48: one cast");
+});
+
+test("LM13 the level dialog is themed, and opens with focus on Close", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /pixel-box flex flex-col gap-3 bg-card p-4 text-foreground/);
+  assert.doesNotMatch(map, /autoFocus/);
+  assert.ok(map.indexOf("Close\n") < map.indexOf("Mark done!"), "Close first in the dialog");
+  assert.match(map, /tone="alertText"/);
+  assert.match(map, /role="alert"/);
+  assert.match(map, /e\.target === e\.currentTarget && e\.currentTarget\.close\(\)/, "a backdrop tap closes");
+  assert.match(map, /className=\{PX\.inlineLink\} href=\{placeMapsUrl/);
+});
+
+test("LM14 a World tab scrolls to the next level; first load doesn't", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /scrollIntoView\(\{ block: "center", behavior: /);
+  assert.match(map, /prefers-reduced-motion: reduce/);
+  assert.match(map, /tabTapped\.current = true/);
 });
