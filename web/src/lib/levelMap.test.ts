@@ -68,7 +68,8 @@ test("LM4 the map opens on the group's world, else the first world not finished"
 });
 
 test("LM5 a level's place opens in Google Maps by name", () => {
-  assert.equal(placeMapsUrl("BenCab Museum"), "https://www.google.com/maps/search/?api=1&query=BenCab%20Museum%2C%20Benguet%2C%20Philippines");
+  assert.equal(placeMapsUrl({ name: "BenCab Museum", kind: "spot" }), "https://www.google.com/maps/search/?api=1&query=BenCab%20Museum%2C%20Benguet%2C%20Philippines");
+  assert.equal(placeMapsUrl({ name: "Victory Liner Cubao", kind: "terminal" }), "https://www.google.com/maps/search/?api=1&query=Victory%20Liner%20Cubao%2C%20Philippines", "Cubao isn't in Benguet");
 });
 
 test("LM6 a level's tag and a world's tab stay on one line", () => {
@@ -138,6 +139,8 @@ test("LM11 the world is a game screen: a pixel road, grass, framed in Ink in bot
   assert.match(map, /lg:col-start-1 lg:row-span-full/);
   assert.match(readFileSync("src/components/TripView.tsx", "utf8"), /<LevelMap\n\s+wide\n/, "the trip page has the width; \/i\/ doesn't");
   assert.match(map, /grid grid-cols-3 gap-2 lg:col-start-2 lg:flex lg:flex-wrap/, "the trip menu");
+  assert.match(map, /<Sprite name="ui-star" scale=\{1\} \/>Goal<Sprite name="ui-star" scale=\{1\} \/>/, "GOAL");
+  assert.match(map, /PX\.pressStart\)\} style=\{\{ left: `\$\{start\.x\}%`, top: start\.y \}\}>\s+Start\s+<\/span>/, "START");
 });
 
 test("LM12 one level is one button, with a name from its content; nothing fades", () => {
@@ -169,4 +172,24 @@ test("LM14 a World tab scrolls to the next level; first load doesn't", () => {
   assert.match(map, /scrollIntoView\(\{ block: "center", behavior: /);
   assert.match(map, /prefers-reduced-motion: reduce/);
   assert.match(map, /tabTapped\.current = true/);
+});
+
+test("LM15 Mark done and Add photos keep focus while busy, and the dialog says what happened", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  const dialog = map.slice(map.indexOf("function LevelDialog"), map.indexOf("function Buses"));
+  assert.equal(dialog.match(/aria-disabled=\{busy\}/g)?.length, 2);
+  assert.doesNotMatch(dialog, /<PixelButton[^>]*(?<!aria-)disabled=\{busy\}/, "disabling the focused button drops focus to the body");
+  assert.doesNotMatch(dialog, /aria-pressed/, "the label already says it");
+  assert.match(dialog, /!busy && onTick\?\.\(/);
+  assert.match(dialog, /!busy && picker\.current\?\.click\(\)/);
+  assert.match(dialog, /<p role="status" className="text-sm empty:sr-only">\{said\}<\/p>/, "always mounted, or a screen reader misses it");
+  assert.match(map, /onClick=\{\(\) => \{ onOpenLevel\?\.\(\); setOpen\(l\); \}\}/, "the last write's notice doesn't follow you to another level");
+});
+
+test("LM16 the Album loads a page of photos at a time, not all 300 at once", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  const album = map.slice(map.indexOf("function Album"));
+  assert.match(map, /const ALBUM_PAGE = 24;/);
+  assert.match(album, /all\.slice\(0, shownCount\)\.map\(/);
+  assert.match(album, /Show \{Math\.min\(ALBUM_PAGE, all\.length - shownCount\)\} more/);
 });

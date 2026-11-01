@@ -95,6 +95,29 @@ def test_bus_tables_come_from_the_schedule_data_with_the_booked_trips_marked(bar
     assert "1,032" not in text and "1151" not in text and "₱1" not in text
 
 
+def test_what_the_owner_left_unconfirmed_still_says_so():
+    """Owner decision: Bell Church, Mt. Yangbew and SM City Baguio, and their fees and hours, stay marked unconfirmed."""
+    guide = json.loads(ITINERARY.read_text())["guide"]
+    rows = {r["key"]: r for d in guide["days"] for r in d["rows"]}
+    assert "Hours unconfirmed" in rows["d2-05"]["note"]
+    assert "(confirm it first)" in rows["d3-05"]["note"]
+    option_a = next(o for d in guide["days"] if d.get("pick") for o in d["pick"]["options"] if o["id"] == "A")
+    assert "(confirm)" in option_a["what"]
+    assert next(t for t in guide["todo"] if t["key"] == "todo-04")["text"].startswith("Confirm ")
+    spots = (ROOT / "data" / "spots.csv").read_text().splitlines()
+    spot = lambda slug: next(line for line in spots if line.startswith(f"{slug},"))  # noqa: E731
+    assert "Hours and fee unconfirmed" in spot("bell-church")
+    assert "Fee about 50 pesos, unconfirmed" in spot("mt-yangbew")
+    assert "confirm the baggage counter first" in spot("sm-city-baguio")
+
+
+def test_the_sunrise_rows_follow_the_pick():
+    rows = {r["key"]: r for d in json.loads(ITINERARY.read_text())["guide"]["days"] for r in d["rows"]}
+    assert rows["d2-01"]["show_if"] == {"pick": "sunrise", "is": "A"}
+    assert rows["d2-02"]["show_if"] == {"pick": "sunrise", "is": "B"}
+    assert rows["d3-01"]["hide_if"] == {"pick": "sunrise", "is": "B"}
+
+
 def test_a_changed_fare_shows_without_touching_the_file(barkada, client):
     import psycopg
 

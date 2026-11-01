@@ -29,6 +29,9 @@ type Props = {
   busy?: boolean;
   /** The last write's failure: the trip's own notice sits behind the level dialog, so the dialog repeats it */
   problem?: string | null;
+  /** The last write's success, for the same reason */
+  said?: string;
+  onOpenLevel?: () => void;
   onTick?: (key: string, done: boolean) => void;
   onPick?: (pickKey: string, option: string) => void;
   photos?: Photos;
@@ -39,6 +42,7 @@ type Props = {
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+const ALBUM_PAGE = 24; // the album downloads what it shows: about 7 MB a page, against 90 MB for a full trip
 const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of the one cast (TG-48)
 
 /**
@@ -47,7 +51,7 @@ const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of t
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, onTick, onPick, photos, wide }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, wide }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -174,7 +178,7 @@ export default function LevelMap({ guide, marks, busy, problem, onTick, onPick, 
               const shots = photosAt(l.row.key).length;
               return (
                 <li key={l.row.key} data-level={l.row.key} className="contents">
-                  <button type="button" onClick={() => setOpen(l)} data-next={l.row.key === next ? "" : undefined}
+                  <button type="button" onClick={() => { onOpenLevel?.(); setOpen(l); }} data-next={l.row.key === next ? "" : undefined}
                     className={cx("focus-pixel absolute flex -translate-y-1/2 items-center gap-2 text-left", !left && "flex-row-reverse", isHere && "z-10")}
                     style={left ? { left: `calc(${p.x}% - ${TILE_PX / 2}px)`, right: 8, top: p.y } : { right: `calc(${100 - p.x}% - ${TILE_PX / 2}px)`, left: 8, top: p.y }}>
                     <span className="sr-only">Level {l.label}, </span>
@@ -224,7 +228,7 @@ export default function LevelMap({ guide, marks, busy, problem, onTick, onPick, 
       {menu === "album" && photos && <div className="lg:col-start-2"><Album photos={photos} guide={guide} busy={busy} /></div>}
 
       {current && (
-        <LevelDialog level={current} live={live} busy={busy} problem={problem} photos={photos} shots={photosAt(current.row.key)}
+        <LevelDialog level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)}
           onClose={() => setOpen(null)} onTick={onTick} />
       )}
     </div>
@@ -255,8 +259,8 @@ function WorldGround({ W, count, world }: { W: number; count: number; world: num
   );
 }
 
-function LevelDialog({ level, live, busy, problem, photos, shots, onClose, onTick }: {
-  level: Level; live: boolean; busy?: boolean; problem?: string | null; photos?: Photos; shots: TripFile[]; onClose: () => void; onTick?: (key: string, done: boolean) => void;
+function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose, onTick }: {
+  level: Level; live: boolean; busy?: boolean; problem?: string | null; said?: string; photos?: Photos; shots: TripFile[]; onClose: () => void; onTick?: (key: string, done: boolean) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -291,14 +295,14 @@ function LevelDialog({ level, live, busy, problem, photos, shots, onClose, onTic
         {r.place?.name && (
           <p className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-semibold">{r.place.name}</span>
-            <a className={PX.inlineLink} href={placeMapsUrl(r.place.name)} target="_blank" rel="noopener noreferrer">
+            <a className={PX.inlineLink} href={placeMapsUrl({ name: r.place.name, kind: r.place.kind })} target="_blank" rel="noopener noreferrer">
               Google Maps<span aria-hidden="true">&nbsp;↗</span>
             </a>
           </p>
         )}
         {live && (
-          <PixelButton variant={level.done ? "secondary" : "primary"} className="px-4 py-3" disabled={busy} aria-pressed={level.done}
-            onClick={() => onTick?.(rowMark(r), !level.done)}>
+          <PixelButton variant={level.done ? "secondary" : "primary"} className="px-4 py-3" aria-disabled={busy}
+            onClick={() => !busy && onTick?.(rowMark(r), !level.done)}>
             {level.done ? "Done ✓ (tap to undo)" : "Mark done!"}
           </PixelButton>
         )}
@@ -318,12 +322,13 @@ function LevelDialog({ level, live, busy, problem, photos, shots, onClose, onTic
             )}
             <input ref={picker} type="file" accept={ACCEPT} multiple hidden
               onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ""; if (files.length) photos.onAdd(r.key, files); }} />
-            <PixelButton variant="secondary" className="self-start px-4 text-sm" disabled={busy} onClick={() => picker.current?.click()}>
+            <PixelButton variant="secondary" className="self-start px-4 text-sm" aria-disabled={busy} onClick={() => !busy && picker.current?.click()}>
               Add photos here
             </PixelButton>
           </div>
         )}
         {problem && <PixelBox as="p" tone="alertText" role="alert" className="p-2 text-sm">{problem}</PixelBox>}
+        <p role="status" className="text-sm empty:sr-only">{said}</p>
       </div>
       <PhotoViewer photo={shown} onClose={() => setShown(null)} logTag="tg-trip" />
     </dialog>
@@ -441,6 +446,7 @@ function Sources({ guide }: { guide: Guide }) {
 function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: boolean }) {
   const picker = useRef<HTMLInputElement>(null);
   const [shown, setShown] = useState<{ blob: Blob; label: string } | null>(null);
+  const [shownCount, setShownCount] = useState(ALBUM_PAGE);
   const all = photos.files.filter((f) => f.kind === "photo").slice().reverse();
   const where = (key: string | null) => {
     for (const d of guide.days) {
@@ -467,7 +473,7 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
         <p className="text-sm">No photos yet.</p>
       ) : (
         <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {all.map((f) => (
+          {all.slice(0, shownCount).map((f) => (
             <PixelBox as="li" key={f.id} className="flex flex-col gap-2 p-2">
               <button type="button" className="focus-pixel self-center" aria-label={`Show the photo at ${where(f.row_key)}`} onClick={() => show(f)}>
                 <Thumb slug={photos.slug} file={f} alt="" />
@@ -480,6 +486,11 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
             </PixelBox>
           ))}
         </ul>
+      )}
+      {all.length > shownCount && (
+        <PixelButton variant="secondary" className="self-start px-4 text-sm" onClick={() => setShownCount((n) => n + ALBUM_PAGE)}>
+          Show {Math.min(ALBUM_PAGE, all.length - shownCount)} more
+        </PixelButton>
       )}
       <PhotoViewer photo={shown} onClose={() => setShown(null)} logTag="tg-trip" />
     </section>

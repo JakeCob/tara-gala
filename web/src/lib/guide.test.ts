@@ -44,6 +44,11 @@ test("GD2 before a pick every option's rows show; after it, only the picked one'
   assert.equal(rowShows(guide.days[2].rows[0], marksByKey([mark("pick:sunrise", "A")])), true);
 });
 
+test("GD3b a level the pick hid doesn't hold the group: it stands on the latest tick still on the map", () => {
+  const marks = [mark("row:d2-03", "done", "2026-11-07T01:00:00Z"), mark("row:d2-02", "done", "2026-11-07T02:00:00Z"), mark("pick:sunrise", "A", "2026-11-07T03:00:00Z")];
+  assert.deepEqual(whereNow(guide, marks), { day: 2, key: "d2-03" });
+});
+
 test("GD3 the group stands at the latest-ticked row that has a place, whatever order rows were ticked in", () => {
   assert.equal(whereNow(guide, []), null);
   assert.deepEqual(whereNow(guide, [mark("row:d1-01", "done", "2026-11-06T01:30:00Z")]), { day: 1, key: "d1-01" });
@@ -83,7 +88,7 @@ test("GD6 the trip page shows the level map above the rest, live, with photos, a
   assert.match(map, /data-party=""/);
   assert.match(map, /Mark done!/);
   assert.match(map, /Add photos here/);
-  assert.doesNotMatch(map, /₱1,?032/, "fares only from the trip rows");
+  assert.doesNotMatch(map, /fare_php \?\? |₱1,?032/, "fares only from the trip rows");
 });
 
 test("GD7 the plan's own page shows its level map read-only", () => {

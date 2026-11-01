@@ -2,7 +2,7 @@
 // after their pixel ROAD MAP reference). One world per day; each row of the day is a level on a road that winds up the
 // screen from START to GOAL. Pure geometry here, so it's tested without a browser.
 
-import { type Guide, type GuideDay, type GuideRow, type Mark, rowMark, rowShows, whereNow } from "./guide.ts";
+import { type Guide, type GuideDay, type GuidePlace, type GuideRow, type Mark, rowMark, rowShows, whereNow } from "./guide.ts";
 import type { SpriteName } from "./sprites.ts";
 
 export const GAP_PX = 120; // between two levels, up the screen; the longest sign is 82px tall at 320
@@ -158,7 +158,7 @@ export function startWorld(guide: Guide, marks: readonly Mark[]): number {
   return open?.day ?? guide.days[0]?.day ?? 1;
 }
 
-/** A Google Maps search for a level's place, by its name (spots outside the city, like BenCab, still resolve). */
-export function placeMapsUrl(name: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, Benguet, Philippines`)}`;
+/** A Google Maps search for a level's place, by its name. Spots get Benguet (ones outside the city, like BenCab, still resolve); terminals don't, as Cubao is in Quezon City. */
+export function placeMapsUrl({ name, kind }: { name: string; kind: GuidePlace["kind"] }): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${kind === "terminal" ? "" : "Benguet, "}Philippines`)}`;
 }

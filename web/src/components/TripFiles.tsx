@@ -13,17 +13,18 @@ type Shown = { blob: Blob; label: string } | null;
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
 /** One shared picture, fetched once (the service worker keeps a copy for offline). */
-export function useFile(slug: string, file: TripFile | undefined) {
+function useFile(slug: string, file: TripFile | undefined) {
   const [got, setGot] = useState<{ id: string; blob: Blob | null } | null>(null);
+  const id = file?.id; // by id: a poll or write brings new objects for the same files
   useEffect(() => {
-    if (!file) return;
+    if (!id) return;
     let live = true;
-    fetchFile(slug, file.id).then((blob) => live && setGot({ id: file.id, blob }));
+    fetchFile(slug, id).then((blob) => live && setGot({ id, blob }));
     return () => {
       live = false;
     };
-  }, [slug, file]);
-  return file && got?.id === file.id ? got.blob : null;
+  }, [slug, id]);
+  return id && got?.id === id ? got.blob : null;
 }
 
 export function Thumb({ slug, file, alt }: { slug: string; file: TripFile; alt: string }) {

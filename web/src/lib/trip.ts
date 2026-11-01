@@ -32,7 +32,6 @@ export type TripFile = {
 };
 export const MAX_FILE_BYTES = 5 * 1024 * 1024; // the API's cap
 export const MAX_SHARED_TICKETS = 30;
-export const MAX_PHOTOS = 300;
 
 export type Trip = {
   share_slug: string;
@@ -199,14 +198,28 @@ export const tripApi = {
 
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;
 
+const FILES_IN_MEMORY = 60; // about 18 MB of photos: a few Album pages, so reopening one downloads nothing
+const fetched = new Map<string, Promise<Blob | null>>(); // a file's bytes never change for its id
+
 /** A shared file's picture, or null. A CORS fetch (not an <img>), so the service worker can keep it for offline. */
-export async function fetchFile(slug: string, id: string): Promise<Blob | null> {
-  try {
-    const res = await fetch(fileUrl(slug, id));
-    return res.ok ? await res.blob() : null;
-  } catch {
-    return null;
+export function fetchFile(slug: string, id: string): Promise<Blob | null> {
+  const known = fetched.get(id);
+  if (known) return known;
+  const got = (async () => {
+    try {
+      const res = await fetch(fileUrl(slug, id));
+      return res.ok ? await res.blob() : null;
+    } catch {
+      return null;
+    }
+  })();
+  fetched.set(id, got);
+  void got.then((blob) => blob || fetched.delete(id)); // offline or gone: try again next time
+  for (const oldest of fetched.keys()) {
+    if (fetched.size <= FILES_IN_MEMORY) break;
+    fetched.delete(oldest);
   }
+  return got;
 }
 
 /** "Deleted from the trip on Sun, Nov 22": when a ticket or QR leaves the server. */

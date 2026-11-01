@@ -19,9 +19,15 @@ export async function fitPhoto(picture: Blob): Promise<Blob | null> {
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      bitmap.close();
+      return null; // without a drawing, toBlob would give a blank picture
+    }
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
     const photo = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/jpeg", 0.82));
+    canvas.width = 0; // iOS caps total canvas memory: free it before the next photo in a batch
     return photo && photo.size <= MAX_FILE_BYTES ? photo : null;
   } catch {
     return null;

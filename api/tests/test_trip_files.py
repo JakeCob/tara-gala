@@ -48,6 +48,7 @@ def fake_store(monkeypatch):
 
     monkeypatch.setattr(app.main, "start_sweeper", lambda stop: None)  # no background thread in tests
     monkeypatch.setattr(tf, "UPLOAD_LIMITER", RateLimiter(tf.UPLOADS_PER_HOUR))
+    monkeypatch.setattr(tf, "PHOTO_LIMITER", RateLimiter(tf.PHOTOS_PER_HOUR))
     monkeypatch.setattr(s, "CREATE_LIMITER", RateLimiter(s.CREATE_PER_HOUR))
     monkeypatch.setattr(s, "WRITE_LIMITER", RateLimiter(s.WRITES_PER_HOUR))
     from app import wallets
@@ -259,7 +260,25 @@ def test_a_photo_is_tagged_with_its_checklist_row_and_never_expires(client, fake
     assert len(fake_store.objects) == 2
 
 
+def test_photos_have_their_own_upload_limit_above_the_cap(client, monkeypatch, fake_store):
+    assert tf.PHOTOS_PER_HOUR > tf.MAX_PHOTOS, "one wifi can add a trip's whole album in an hour"
+    monkeypatch.setattr(tf, "UPLOAD_LIMITER", RateLimiter(1))
+    slug, _ = trip_with_wallet(client)
+    for _ in range(3):
+        assert upload(client, slug, data=JPEG, content_type="image/jpeg", kind="photo").status_code == 201
+    assert upload(client, slug, kind="ticket", label="Ana").status_code == 201, "photos don't use up the tickets' limit"
+    assert upload(client, slug, kind="ticket", label="Ben").status_code == 429
+
+
+def test_a_photo_must_be_a_picture(client, fake_store):
+    slug, _ = trip_with_wallet(client)
+    r = upload(client, slug, data=b"not a picture at all", content_type="image/jpeg", kind="photo")
+    assert (r.status_code, r.json()["detail"]) == (422, "not_an_image")
+    assert not fake_store.objects
+
+
 def test_photos_stop_at_300_and_anyone_can_delete_one(client, monkeypatch, fake_store):
+    assert tf.MAX_PHOTOS == 300, "the owner's cap"
     slug, _ = trip_with_wallet(client)
     monkeypatch.setattr(tf, "MAX_PHOTOS", 1)
     fid = upload(client, slug, kind="photo").json()["files"][0]["id"]

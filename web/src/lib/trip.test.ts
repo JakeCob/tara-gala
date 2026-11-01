@@ -163,7 +163,7 @@ test("TS12 this phone notes each trip's wallet, so the wallet page finds its pay
 test("TS13 shared files open offline: the service worker keeps them, and opening the trip fetches each once", () => {
   assert.match(read("public/sw.js"), /\/\^\\\/sessions\\\/\[0-9a-f\]\{32\}\\\/files\\\/\[0-9a-f-\]\{36\}\$\//);
   const view = read("src/components/TripView.tsx");
-  assert.match(view, /keepFilesOffline\(r\.trip\);/);
+  assert.match(view, /keepFilesOffline\(r\.trip, keptFiles\.current\);/);
   assert.match(read("src/lib/trip.ts"), /const res = await fetch\(fileUrl\(slug, id\)\);/, "a CORS fetch, not an opaque <img>");
   assert.doesNotMatch(read("src/components/TripFiles.tsx"), /<img\b|src=\{fileUrl/);
 });
@@ -179,4 +179,54 @@ test("TS15 the file logs carry the kind and outcome, never a label, name or link
     const logs = [...read(file).matchAll(/console\.(?:info|warn|error)\(([^;]*)\);/g)].map((m) => m[1]);
     for (const args of logs) assert.doesNotMatch(args, /label|(?<!err)\.name\b|slug|fileUrl/i, `${file}: ${args}`);
   }
+});
+
+test("TR-F1 a file is fetched once: its bytes never change for an id, and a failure isn't kept", async () => {
+  const { fetchFile } = await import("./trip.ts");
+  const real = globalThis.fetch;
+  let calls = 0;
+  let up = false;
+  globalThis.fetch = (async () => {
+    calls++;
+    if (!up) throw new Error("offline");
+    return new Response("x");
+  }) as typeof fetch;
+  try {
+    assert.equal(await fetchFile("s", "tr-f1"), null);
+    up = true;
+    const [a, b] = await Promise.all([fetchFile("s", "tr-f1"), fetchFile("s", "tr-f1")]);
+    assert.ok(a && a === b, "two callers at once share one download");
+    assert.equal(await fetchFile("s", "tr-f1"), a);
+    assert.equal(calls, 2, "the failure, then one download");
+    for (let i = 0; i < 200; i++) await fetchFile("s", `tr-f1-${i}`);
+    assert.equal(calls, 202);
+    await fetchFile("s", "tr-f1");
+    assert.equal(calls, 203, "only so many stay in memory");
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test("TR-F2 a thumb fetches by the file's id, not its object: a poll makes new objects with the same ids", () => {
+  const files = readFileSync("src/components/TripFiles.tsx", "utf8");
+  assert.match(files, /\}, \[slug, id\]\);/);
+  assert.doesNotMatch(files, /\}, \[slug, file\]\);/);
+  const view = readFileSync("src/components/TripView.tsx", "utf8");
+  assert.match(view, /function keepFilesOffline\(trip: Trip, kept: Set<string>\)/, "tickets are kept once, not on every poll");
+  assert.match(view, /f\.kind !== "photo" && !kept\.has\(f\.id\)/);
+});
+
+test("TR-F3 trip photos are 1600px at most, and a browser that can't draw gives null, not a blank picture", async () => {
+  const { PHOTO_SIDE } = await import("./shrink.ts");
+  assert.equal(PHOTO_SIDE, 1600);
+  const src = readFileSync("src/lib/shrink.ts", "utf8");
+  const photo = src.slice(src.indexOf("export async function fitPhoto"), src.indexOf("/** The picture as is"));
+  assert.match(photo, /if \(!context\) \{/);
+  assert.doesNotMatch(photo, /getContext\("2d"\)\?\./);
+  assert.match(photo, /canvas\.width = 0;/, "iOS caps total canvas memory: free each one");
+});
+
+test("TR-F4 a batch that stops early says how many landed", () => {
+  const view = readFileSync("src/components/TripView.tsx", "utf8");
+  assert.match(view, /`\$\{added\} of \$\{picked\.length\} photos added\. \$\{n\.text\}`/);
 });

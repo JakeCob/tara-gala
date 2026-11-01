@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, type PremadeSummary } from "@/lib/api";
@@ -25,9 +25,12 @@ const remember = (trip: Trip) =>
   rememberTrip({ slug: trip.share_slug, name: trip.name, start_date: trip.start_date, wallet_slug: trip.wallet?.share_slug ?? null });
 
 /** Fetch every shared ticket, QR and booking once, so the service worker keeps them: tickets have to open at the
- * terminal offline. Photos are kept as they're viewed instead: up to 300 of them is too much to fetch up front. */
-function keepFilesOffline(trip: Trip) {
-  for (const f of trip.files) if (f.kind !== "photo") void fetchFile(trip.share_slug, f.id);
+ * terminal offline. Not again on each 30-second poll. Photos are kept as they're viewed instead: up to 300 of them is
+ * too much to fetch up front. */
+function keepFilesOffline(trip: Trip, kept: Set<string>) {
+  for (const f of trip.files) {
+    if (f.kind !== "photo" && !kept.has(f.id)) void fetchFile(trip.share_slug, f.id).then((blob) => blob && kept.add(f.id));
+  }
 }
 
 /**
@@ -41,6 +44,7 @@ export default function TripView({ slug }: { slug: string }) {
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const keptFiles = useRef(new Set<string>());
 
   useEffect(() => {
     let live = true;
@@ -49,7 +53,7 @@ export default function TripView({ slug }: { slug: string }) {
       console.info("[tg-trip] load ok=%s", r.ok ? "yes" : r.why);
       if (r.ok) {
         remember(r.trip);
-        keepFilesOffline(r.trip);
+        keepFilesOffline(r.trip, keptFiles.current);
         setLoad({ state: "ready", trip: r.trip });
       } else {
         // Offline with a copy on screen: keep showing it; the offline banner says so
@@ -143,7 +147,10 @@ export default function TripView({ slug }: { slug: string }) {
                   continue;
                 }
                 const ok = await write("photo-add", () => tripApi.addFile(slug, "photo", photo, rowKey ? { row_key: rowKey } : {}), "");
-                if (!ok) return;
+                if (!ok) {
+                  if (added) setNotice((n) => n && { ...n, text: `${added} of ${picked.length} photos added. ${n.text}` });
+                  return;
+                }
                 added++;
               }
               console.info("[tg-trip] photo-add added=%d skipped=%d", added, skipped);
@@ -154,6 +161,8 @@ export default function TripView({ slug }: { slug: string }) {
           }}
           busy={busy}
           problem={notice?.error ? notice.text : null}
+          said={notice && !notice.error ? notice.text : ""}
+          onOpenLevel={() => setNotice(null)}
           onTick={(key, done) =>
             write(done ? "tick" : "untick", () => (done ? tripApi.mark(slug, key, "done") : tripApi.unmark(slug, key)), done ? "Ticked." : "Unticked.")
           }

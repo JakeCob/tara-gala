@@ -37,6 +37,8 @@ MAX_PHOTOS = 300  # about 90 MB at the phone's ~300 KB each: inside the free 1 G
 NOT_FOUND = "File not found"
 UPLOADS_PER_HOUR = 120
 UPLOAD_LIMITER = RateLimiter(UPLOADS_PER_HOUR)
+PHOTOS_PER_HOUR = 400  # above MAX_PHOTOS: a group on one wifi can add the whole album in one go
+PHOTO_LIMITER = RateLimiter(PHOTOS_PER_HOUR)
 SWEEP_EVERY_SECONDS = 3600
 
 
@@ -119,7 +121,7 @@ async def add_file(
     member_id: UUID | None = Query(None, description="whose payout QR"),
     row_key: str | None = Query(None, description="a photo's checklist row, e.g. d2-05"),
 ) -> SessionOut:
-    _limit(UPLOAD_LIMITER, request, "file-add")
+    _limit(PHOTO_LIMITER if kind == "photo" else UPLOAD_LIMITER, request, "file-add")
     if kind not in KINDS:
         raise HTTPException(422, "bad_kind")
     label = label.strip()

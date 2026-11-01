@@ -62,7 +62,8 @@ export function rowShows(row: GuideRow, picks: ReadonlyMap<string, Mark>): boole
 
 /** The ticked row with a place that was ticked last: where the party is now. Null before any such tick. */
 export function whereNow(guide: Guide, marks: readonly Mark[]): { day: number; key: string } | null {
-  const rows = new Map(guide.days.flatMap((d) => d.rows.filter((r) => r.place).map((r) => [rowMark(r), { day: d.day, key: r.key }] as const)));
+  const byKey = marksByKey(marks);
+  const rows = new Map(guide.days.flatMap((d) => d.rows.filter((r) => r.place && rowShows(r, byKey)).map((r) => [rowMark(r), { day: d.day, key: r.key }] as const)));
   let best: { day: number; key: string; at: string } | null = null;
   for (const m of marks) {
     const row = rows.get(m.key);
