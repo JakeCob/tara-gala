@@ -26,7 +26,7 @@ test("TB2 each page marks its tab; the title screen marks none", () => {
 
 test("TB3 header: the wordmark goes home, the tabs show from md, the Dark mode switch sits at the right", () => {
   const src = read("src/components/SiteHeader.tsx");
-  assert.match(src, /<Link href="\/" className=\{PX\.logo\}>\s*Tara Gala\s*<\/Link>/);
+  assert.match(src, /<Link href="\/" className=\{PX\.logo\}>\s*<Placard size="sm">\s*<span className=\{PX\.placardName\}>Tara Gala<\/span>\s*<\/Placard>\s*<\/Link>/, "the signboard logo (TG-49 placard)");
   assert.match(src, /<nav aria-label="Main" className="hidden md:block">/);
   assert.match(src, /aria-current=\{current === tab\.href \? "page" : undefined\}/);
   assert.match(src, /<div className="ml-auto">\s*<ThemeToggle \/>\s*<\/div>/);

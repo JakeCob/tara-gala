@@ -5,6 +5,7 @@ export { DialogBox } from "./DialogBox";
 export { MenuCursor } from "./MenuCursor";
 export { PageShell } from "./PageShell";
 export { PageTitle } from "./PageTitle";
+export { Placard } from "./Placard";
 export { PixelBox } from "./PixelBox";
 export { PixelButton } from "./PixelButton";
 export { PixelCardLink } from "./PixelCardLink";

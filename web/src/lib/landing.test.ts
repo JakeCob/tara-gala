@@ -123,7 +123,8 @@ test("T46-L2 PageTitle gains wordmark, id and tabIndex; PX.wordmark is PX.h1 in 
     PX.wordmark,
     "the same title size, in the Wide cut, on the fixed light screen",
   );
-  assert.equal(PX.titleWordmark, "font-wordmark text-[2.75rem] leading-none font-normal text-screen-ink md:text-[4rem] lg:text-[5rem]");
+  // TG-49 placard: the title screen's name is painted signboard letters (red, Ink outline and shadow), not screen-ink
+  assert.equal(PX.titleWordmark, "font-wordmark text-[2.75rem] leading-none font-normal placard-letters md:text-[4rem] lg:text-[5rem]");
   const src = source("src/components/pixel/PageTitle.tsx");
   assert.match(src, /titleScreen\s*\?\s*PX\.titleWordmark\s*:\s*wordmark\s*\?\s*PX\.wordmark\s*:\s*PX\.h1/);
   assert.match(src, /\bid\?: string/);
