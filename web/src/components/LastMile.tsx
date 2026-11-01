@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { PixelBox, PixelButton, PixelChoice } from "@/components/pixel";
+import BaguioIdle from "@/components/BaguioIdle";
 import { fetchLastMile } from "@/lib/api";
 import { BAGUIO_TERMINALS, groupByDestination, type LastMileLeg } from "@/lib/lastMile";
 import LegCard from "@/components/LegCard";
@@ -51,6 +52,8 @@ export default function LastMile() {
           ))}
         </div>
       </fieldset>
+
+      {status === "idle" && <BaguioIdle />}
 
       <div aria-live="polite" className="flex flex-col gap-3">
         {status === "loading" && <p className="text-sm text-muted md:max-w-prose">Loading routes...</p>}

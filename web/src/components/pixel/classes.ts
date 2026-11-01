@@ -36,6 +36,7 @@ export const PX = {
   },
   chip: "pixel-frame bg-card px-2 py-1 text-sm",
   chipHighlight: "pixel-frame bg-accent text-accent-ink px-2 py-1 text-sm", // the chip in Flag Yellow, same box
+  timeTile: "inline-block pixel-frame bg-accent px-2 py-0.5 text-2xl leading-tight font-extrabold tabular-nums text-accent-ink", // TG-49 PR 2: the one trip datum that takes a colour; a sign, not a control
   screenChip: "pixel-frame bg-screen-paper text-screen-ink px-2 py-1 text-sm",
   // rounded-none is the one deliberate rounding class: it resets the rounded iOS date input
   input: "min-h-11 rounded-none border-3 border-frame bg-card px-3 py-2 text-base text-foreground focus-pixel",
