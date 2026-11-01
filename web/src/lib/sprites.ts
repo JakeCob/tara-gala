@@ -29,12 +29,12 @@ export const SPRITES = {
   "place-market": PLACE, "place-museum": PLACE, "place-viewpoint": PLACE, "place-shopping": PLACE,
   "place-church": PLACE, "place-cafe": PLACE, "place-other": PLACE,
   "vehicle-bus": { w: 48, h: 24 },
+  "vehicle-plane": { w: 24, h: 12 }, // TG-49 the title screen's sky
   "mode-jeep": MODE, "mode-taxi": MODE, "mode-tricycle": MODE, "mode-van": MODE, "mode-grab": MODE,
   "mode-walk": TILE,
   "ui-dialog-frame": { w: 24, h: 24 }, // 9-slice, 8px corners
   "ui-cursor": UI, "ui-star": UI, "ui-heart": UI,
   "ui-badge-verified": TILE,
-  "ui-ticket": { w: 16, h: 10 }, // TG-49 the title screen's drifting tickets
   "logo-wordmark": { w: 192, h: 48 },
   // TG-45 Philippine decor, home strip and map scenery only. chibi-barong and chibi-filipiniana are decor, not passenger types (TG-45)
   "deco-sun-stars": DECO_SQUARE, "deco-carabao": DECO_WIDE, "deco-bahay-kubo": DECO_SQUARE,

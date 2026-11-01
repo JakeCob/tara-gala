@@ -121,8 +121,8 @@ const PH_DROP = new Map([
 const PH_NAMES = [...PH_DROP.keys()];
 // TG-46 the landing hero: one 320×123 scene in the original 6 colours, so existing art (T47-A3b), with an 8 KB budget
 const HERO = ["hero-scene"];
-// TG-49 the title screen's drifting tickets: drawn by hand as a grid, so SVG like the kept placeholders, in the 6 colours
-const TITLE_SVG = ["ui-ticket"];
+// TG-49 the title screen's planes: drawn by hand as a grid, so SVG like the kept placeholders, in the 6 colours
+const TITLE_SVG = ["vehicle-plane"];
 const PNG_CHUNKS = ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"]; // nothing else: no text, time or colour-profile metadata
 
 // ux.md section 1: art-list entries that are not shipped as sprites, each with its reason.
@@ -206,7 +206,7 @@ function checkDir(dir: string, manifest: Record<string, Size>, pngArt: ReadonlyS
 
 function manifestNames(): SpriteName[] {
   const names = Object.keys(SPRITES) as SpriteName[];
-  assert.equal(names.length, 85, "the manifest must list all 85 sprites (54 + TG-48's 30 looks + TG-49's ticket)");
+  assert.equal(names.length, 85, "the manifest must list all 85 sprites (54 + TG-48's 30 looks + TG-49's plane)");
   return names;
 }
 
@@ -287,7 +287,7 @@ test("the app icons are the art-drop icon: 512, 192 and 180 PNGs in the 6-colour
 
 // --- T33-19 the art drop ------------------------------------------------------------------------------
 
-test("PNG_ART is exactly the 35 art-drop names, the 10 TG-45 decor names, the TG-46 hero and TG-48's 30 looks; the 8 kept placeholders and TG-49's ticket stay SVG", () => {
+test("PNG_ART is exactly the 35 art-drop names, the 10 TG-45 decor names, the TG-46 hero and TG-48's 30 looks; the 8 kept placeholders and TG-49's plane stay SVG", () => {
   const names = manifestNames();
   assert.equal(ART_DROP.length, 35);
   assert.equal(PH_DROP.size, 10);

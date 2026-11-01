@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cx } from "@/components/pixel";
 import { spriteSrc } from "@/lib/sprites";
-import { ROAD_SPRITES, TICKET, TRAFFIC_MS, flipped, moverSize, moverY, startTraffic, stepMover, type Mover } from "@/lib/titleTraffic";
+import { ROAD_SPRITES, PLANE, TRAFFIC_MS, flipped, moverSize, moverY, startTraffic, stepMover, type Mover } from "@/lib/titleTraffic";
 
 const STILL_QUERY = "(prefers-reduced-motion: reduce)";
 const SKY_SHARE = 0.45; // the top of the scene, behind the sign and the menu
@@ -16,7 +16,7 @@ function subscribeStill(onChange: () => void) {
 
 /**
  * The title screen's traffic (TG-49, titleTraffic.ts): vehicles drive along the bottom of the scene behind the trio,
- * and tickets drift across the sky behind the sign and the menu. Each road mover stacks every vehicle and shows one, so
+ * and planes cross the sky behind the sign and the menu. Each road mover stacks every vehicle and shows one, so
  * a new vehicle never flickers in. It's drawn once the scene's size is known, and stands still for reduced motion and
  * while the tab is hidden.
  */
@@ -59,7 +59,7 @@ export default function TitleTraffic() {
             className={cx("absolute left-0 grid", road ? "bottom-1 lg:bottom-3" : "top-0")}
             style={{ transform: move }}
           >
-            {(road ? ROAD_SPRITES : [TICKET]).map((name) => (
+            {(road ? ROAD_SPRITES : [PLANE]).map((name) => (
               // eslint-disable-next-line @next/next/no-img-element -- pixel art: next/image would resample it
               <img
                 key={name}
