@@ -45,6 +45,8 @@
   --color-screen: #cfe8c4; --color-screen-paper: #fbf7ee;
   --color-screen-ink: #1d2a24; --color-screen-muted: #4f5f57;
   --color-flag-blue: #0038a8; --color-flag-red: #ce1126; --color-flag-yellow: #fcd116;
+  /* The jeepney route sign's paint (TG-49 Placard): a black board, lime and red letters */
+  --color-sign-board: #000000; --color-sign-lime: #afff00; --color-sign-red: #fc354c;
 }
 body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
 
@@ -77,18 +79,14 @@ body { background: var(--background); color: var(--foreground); font-family: var
    input, so focus-pixel can't draw at that Tab stop; :focus-within does (TG-43 UX review S2) */
 input[type=date]:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
 @utility pixelated { image-rendering: pixelated; }
-/* The jeepney signboard (TG-49, Placard): a cream board in a thick Ink frame with a thin inner trim line and a hard
-   shadow, and red letters with an Ink outline and drop shadow. It's a painted sign, so the same in both themes. */
+/* The jeepney route sign (TG-49, Placard): a black board with the name stacked one word per line, the first in lime
+   and the second in red, like the painted signs over a jeepney's windscreen. It's paint, so the same in both themes. */
 @utility placard {
-  background: var(--color-screen-paper); border: 3px solid var(--color-screen-ink); border-radius: 0;
-  box-shadow: inset 0 0 0 2px var(--color-screen-paper), inset 0 0 0 4px var(--color-screen-ink), 3px 3px 0 0 var(--color-screen-ink);
+  background: var(--color-sign-board); border-radius: 0;
 }
 @utility placard-letters {
-  color: var(--color-flag-red);
-  text-shadow:
-    -0.04em 0 0 var(--color-screen-ink), 0.04em 0 0 var(--color-screen-ink), 0 -0.04em 0 var(--color-screen-ink),
-    0 0.04em 0 var(--color-screen-ink), -0.04em -0.04em 0 var(--color-screen-ink), 0.04em -0.04em 0 var(--color-screen-ink),
-    -0.04em 0.04em 0 var(--color-screen-ink), 0.04em 0.04em 0 var(--color-screen-ink), 0.1em 0.1em 0 var(--color-screen-ink);
+  width: min-content; text-align: center; color: var(--color-sign-red);
+  &::first-line { color: var(--color-sign-lime); }
 }
 /* The title screen's start menu (TG-49): one cursor, on the first item until another is hovered or focused */
 @utility title-menu {
