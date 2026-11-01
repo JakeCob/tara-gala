@@ -105,7 +105,10 @@ def test_a_file_is_only_reachable_through_its_own_trip(client):
         (b"%PDF-1.7", "application/pdf", {"kind": "ticket", "label": "x"}, "not_an_image"),
         (PNG, "image/png", {"kind": "ticket", "label": ""}, "bad_label"),
         (PNG, "image/png", {"kind": "ticket", "label": "x" * 41}, "bad_label"),
-        (PNG, "image/png", {"kind": "photo"}, "bad_kind"),
+        (PNG, "image/png", {"kind": "selfie"}, "bad_kind"),
+        (PNG, "image/png", {"kind": "photo", "row_key": "day2"}, "bad_row_key"),
+        (PNG, "image/png", {"kind": "ticket", "label": "x", "row_key": "d1-01"}, "bad_row_key"),
+        (PNG, "image/png", {"kind": "photo", "label": "x" * 41}, "bad_label"),
         (PNG, "image/png", {"kind": "payout_qr"}, "unknown_member"),
     ],
 )
@@ -236,3 +239,48 @@ def test_files_table_is_private_and_the_migration_reruns(dsn):
         conn.execute("drop table session_files")
         conn.execute(sql)
         assert conn.execute("select count(*) from pg_class where relname = 'session_files'").fetchone()[0] == 1
+
+
+# ---------------------------------------------------------------- PR 4: the trip's photos
+
+def test_a_photo_is_tagged_with_its_checklist_row_and_never_expires(client, fake_store):
+    slug, _ = trip_with_wallet(client)
+    r = upload(client, slug, data=JPEG, content_type="image/jpeg", kind="photo", row_key="d1-05", label="Boating!")
+    assert r.status_code == 201, r.text
+    [f] = r.json()["files"]
+    assert (f["kind"], f["row_key"], f["label"], f["delete_after"]) == ("photo", "d1-05", "Boating!", None)
+    assert upload(client, slug, data=JPEG, content_type="image/jpeg", kind="photo").json()["files"][1]["row_key"] is None, "a row is optional"
+    assert client.get(f"/sessions/{slug}/files/{f['id']}").content == JPEG
+    # The trip's dates moving doesn't give photos a deadline, and the sweep never takes them
+    files = client.patch(f"/sessions/{slug}", json={"return_date": "2026-11-10"}).json()["files"]
+    assert {x["delete_after"] for x in files} == {None}
+    assert tf.sweep(date(2027, 1, 1)) == 0
+    assert len(fake_store.objects) == 2
+
+
+def test_photos_stop_at_300_and_anyone_can_delete_one(client, monkeypatch, fake_store):
+    slug, _ = trip_with_wallet(client)
+    monkeypatch.setattr(tf, "MAX_PHOTOS", 1)
+    fid = upload(client, slug, kind="photo").json()["files"][0]["id"]
+    r = upload(client, slug, kind="photo")
+    assert r.status_code == 422 and r.json()["detail"] == "too_many_photos"
+    assert upload(client, slug, kind="ticket", label="T").status_code == 201, "tickets count separately"
+    assert client.delete(f"/sessions/{slug}/files/{fid}").status_code == 200
+    assert upload(client, slug, kind="photo").status_code == 201
+
+
+def test_deleting_the_trip_deletes_its_photos(client, fake_store):
+    slug, _ = trip_with_wallet(client)
+    upload(client, slug, kind="photo", row_key="d2-01")
+    client.request("DELETE", f"/sessions/{slug}", json={"name": "Baguio Nov 6"})
+    assert fake_store.objects == {}
+
+
+def test_the_photo_migration_reruns(dsn):
+    sql = (ROOT / "supabase" / "migrations" / "2026-11-02_tg52_photo_row_key.sql").read_text(encoding="utf-8")
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute(sql)
+        conn.execute("alter table session_files drop column row_key")
+        conn.execute(sql)
+        conn.execute(sql)
+        assert conn.execute("select count(*) from information_schema.columns where table_name = 'session_files' and column_name = 'row_key'").fetchone()[0] == 1

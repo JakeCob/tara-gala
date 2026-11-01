@@ -18,7 +18,7 @@ import {
   type StopOut,
 } from "@/lib/itinerary";
 import { placeSprite, spriteSrc } from "@/lib/sprites";
-import GuideView from "@/components/GuideView";
+import LevelMap from "@/components/LevelMap";
 import LegCard from "@/components/LegCard";
 import OverworldMap from "@/components/OverworldMap";
 import ShareButton from "@/components/ShareButton";
@@ -56,9 +56,9 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
         </PixelBox>
       )}
 
-      {/* TG-52: a plan with a guide (the owner's real trip) shows its day tables, buses, pick, budget and to-dos, in place
-          of the bus and day sections; on a trip the same guide is the shared checklist (TripView) */}
-      {it.guide && <GuideView guide={it.guide} />}
+      {/* TG-52: a plan with a guide (the owner's real trip) shows as a level map, one world per day, in place of the bus
+          and day sections; on a trip the same map is the shared checklist (TripView) */}
+      {it.guide && <LevelMap guide={it.guide} />}
 
       {map ? (
         <>

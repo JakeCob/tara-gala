@@ -130,6 +130,7 @@ class FileOut(BaseModel):
     content_type: str
     bytes: int
     delete_after: date | None
+    row_key: str | None  # a photo's checklist row ("d2-05")
     created_at: datetime
 
 
@@ -192,7 +193,7 @@ def _load(conn, session_id: UUID) -> SessionOut:
         (session_id,),
     ).fetchone()
     files = conn.execute(
-        """select id, kind, label, member_id, content_type, bytes, delete_after, created_at from session_files
+        """select id, kind, label, member_id, content_type, bytes, delete_after, row_key, created_at from session_files
            where session_id = %s order by kind, created_at, id""",
         (session_id,),
     ).fetchall()

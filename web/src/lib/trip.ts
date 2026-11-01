@@ -27,10 +27,12 @@ export type TripFile = {
   content_type: string;
   bytes: number;
   delete_after: string | null;
+  row_key: string | null; // a photo's checklist row ("d2-05")
   created_at: string;
 };
 export const MAX_FILE_BYTES = 5 * 1024 * 1024; // the API's cap
 export const MAX_SHARED_TICKETS = 30;
+export const MAX_PHOTOS = 300;
 
 export type Trip = {
   share_slug: string;
@@ -118,6 +120,8 @@ const DETAIL: Record<string, string> = {
   too_big: "That picture is too big to share (over 5 MB). Take a screenshot of it instead.",
   bad_label: "Give the ticket a short name, up to 40 letters.",
   too_many_tickets: "This trip already holds 30 tickets. Remove some first.",
+  too_many_photos: "This trip already holds 300 photos. Delete some first.",
+  bad_row_key: "That level isn't in this trip's plan. Refresh and try again.",
   unknown_member: "That person isn't in this trip's wallet. Refresh and try again.",
   unknown_key: "That row isn't in this trip's plan any more. Refresh and try again.",
   no_guide: "This trip's plan has no checklist.",
@@ -179,10 +183,11 @@ export const tripApi = {
   removeHotel: (slug: string) => one(call(`${at(slug)}/hotel`, { method: "DELETE" })),
   remove: (slug: string, name: string) => call(at(slug), { method: "DELETE", body: { name } }),
   /** Uploads one picture as the raw body; the rest rides in the query (no multipart). */
-  addFile: (slug: string, kind: Exclude<FileKind, "photo">, picture: Blob, opts: { label?: string; member_id?: string } = {}) => {
+  addFile: (slug: string, kind: FileKind, picture: Blob, opts: { label?: string; member_id?: string; row_key?: string } = {}) => {
     const q = new URLSearchParams({ kind });
     if (opts.label) q.set("label", opts.label);
     if (opts.member_id) q.set("member_id", opts.member_id);
+    if (opts.row_key) q.set("row_key", opts.row_key);
     return one(call(`${at(slug)}/files?${q}`, { method: "POST", raw: picture }));
   },
   /** Tick a row or to-do ("done"), or make a pick ("B"); anyone can, in any order */

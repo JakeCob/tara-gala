@@ -13,7 +13,7 @@ type Shown = { blob: Blob; label: string } | null;
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
 /** One shared picture, fetched once (the service worker keeps a copy for offline). */
-function useFile(slug: string, file: TripFile | undefined) {
+export function useFile(slug: string, file: TripFile | undefined) {
   const [got, setGot] = useState<{ id: string; blob: Blob | null } | null>(null);
   useEffect(() => {
     if (!file) return;
@@ -26,7 +26,7 @@ function useFile(slug: string, file: TripFile | undefined) {
   return file && got?.id === file.id ? got.blob : null;
 }
 
-function Thumb({ slug, file, alt }: { slug: string; file: TripFile; alt: string }) {
+export function Thumb({ slug, file, alt }: { slug: string; file: TripFile; alt: string }) {
   const blob = useFile(slug, file);
   const box = "h-24 w-[72px] shrink-0 border-2 border-frame bg-screen-paper object-cover object-top";
   return blob ? <BlobImage blob={blob} alt={alt} width={72} height={96} className={box} /> : <span aria-hidden="true" className={box} />;

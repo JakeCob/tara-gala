@@ -8,9 +8,10 @@ import {
   type Hotel, type Trip, type TripFailure, type TripResult, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
   slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
-import GuideView from "./GuideView";
+import LevelMap from "./LevelMap";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
 import { fetchItinerary } from "@/lib/api";
+import { fitPhoto } from "@/lib/shrink";
 import type { Guide } from "@/lib/guide";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
 
@@ -23,9 +24,10 @@ const NO_HOTEL: Hotel = { name: "", address: "", check_in: null, check_out: null
 const remember = (trip: Trip) =>
   rememberTrip({ slug: trip.share_slug, name: trip.name, start_date: trip.start_date, wallet_slug: trip.wallet?.share_slug ?? null });
 
-/** Fetch every shared file once, so the service worker keeps them: tickets have to open at the terminal offline */
+/** Fetch every shared ticket, QR and booking once, so the service worker keeps them: tickets have to open at the
+ * terminal offline. Photos are kept as they're viewed instead: up to 300 of them is too much to fetch up front. */
 function keepFilesOffline(trip: Trip) {
-  for (const f of trip.files) void fetchFile(trip.share_slug, f.id);
+  for (const f of trip.files) if (f.kind !== "photo") void fetchFile(trip.share_slug, f.id);
 }
 
 /**
@@ -122,12 +124,30 @@ export default function TripView({ slug }: { slug: string }) {
       <section aria-labelledby="progress-title" className="flex flex-col gap-3">
         <SectionTitle id="progress-title">Trip progress</SectionTitle>
         <p className="text-sm text-muted md:max-w-prose">
-          Tick each step as the group does it, from any phone. The group shows at the last place ticked.
+          Each stop is a level. Tap one to mark it done or add photos, from any phone. The group stands on the last level done.
         </p>
-        <GuideView
+        <LevelMap
           guide={theGuide}
-          checklistFirst
           marks={trip.marks}
+          photos={{
+            slug,
+            files: trip.files,
+            onAdd: async (rowKey, picked) => {
+              let added = 0;
+              for (const file of picked) {
+                const photo = await fitPhoto(file);
+                if (!photo) {
+                  setNotice({ text: "One picture couldn't be shrunk to share. Try a screenshot of it.", error: true });
+                  continue;
+                }
+                const ok = await write("photo-add", () => tripApi.addFile(slug, "photo", photo, rowKey ? { row_key: rowKey } : {}), "");
+                if (!ok) return;
+                added++;
+              }
+              if (added) setNotice({ text: `${added} photo${added === 1 ? "" : "s"} added.`, error: false });
+            },
+            onDelete: (file) => void write("photo-delete", () => tripApi.deleteFile(slug, file.id), "Photo deleted."),
+          }}
           busy={busy}
           onTick={(key, done) =>
             write(done ? "tick" : "untick", () => (done ? tripApi.mark(slug, key, "done") : tripApi.unmark(slug, key)), done ? "Ticked." : "Unticked.")

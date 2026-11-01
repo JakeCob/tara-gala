@@ -69,20 +69,24 @@ test("GD5 a day's progress counts only the rows that show", () => {
   assert.deepEqual(dayProgress(guide.days[1], marks), { done: 1, total: 2 });
 });
 
-test("GD6 the trip page shows the progress map above the rest, live, and refreshes every 30 seconds", () => {
+test("GD6 the trip page shows the level map above the rest, live, with photos, and refreshes every 30 seconds", () => {
   const view = read("src/components/TripView.tsx");
   assert.match(view, /<SectionTitle id="progress-title">Trip progress<\/SectionTitle>/);
-  assert.ok(view.indexOf('id="progress-title"') < view.indexOf("<PlanSection"), "the checklist comes first");
+  assert.ok(view.indexOf('id="progress-title"') < view.indexOf("<PlanSection"), "the map comes first");
+  assert.match(view, /<LevelMap\b/);
   assert.match(view, /tripApi\.mark\(slug, key, "done"\)/);
   assert.match(view, /tripApi\.unmark\(slug, key\)/);
+  assert.match(view, /tripApi\.addFile\(slug, "photo", photo, rowKey \? \{ row_key: rowKey \} : \{\}\)/, "a photo carries its level");
+  assert.match(view, /const photo = await fitPhoto\(file\);/, "shrunk on the phone first");
   assert.match(view, /30_000/);
-  const gv = read("src/components/GuideView.tsx");
-  assert.match(gv, /<span className="sr-only">The group is here<\/span>/);
-  assert.match(gv, /type="checkbox"/);
-  assert.doesNotMatch(gv, /fare_php \?\? |₱1,?032/, "fares only from the trip rows");
+  const map = read("src/components/LevelMap.tsx");
+  assert.match(map, /data-party=""/);
+  assert.match(map, /Mark done!/);
+  assert.match(map, /Add photos here/);
+  assert.doesNotMatch(map, /₱1,?032/, "fares only from the trip rows");
 });
 
-test("GD7 the plan's own page shows its guide read-only", () => {
+test("GD7 the plan's own page shows its level map read-only", () => {
   const list = read("src/components/ItineraryList.tsx");
-  assert.match(list, /\{it\.guide && <GuideView guide=\{it\.guide\} \/>\}/);
+  assert.match(list, /\{it\.guide && <LevelMap guide=\{it\.guide\} \/>\}/);
 });

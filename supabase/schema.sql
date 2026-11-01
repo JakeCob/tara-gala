@@ -271,7 +271,7 @@ create table session_hotels (
 );
 
 -- Files the party shares on a trip (TG-52 PR 2): bus tickets, each person's payout QR and the hotel's booking
--- screenshot (photos come in PR 4). The bytes live in a private Supabase Storage bucket at storage_path
+-- screenshot, and the trip's photos (PR 4). The bytes live in a private Supabase Storage bucket at storage_path
 -- ("<session id>/<file id>"); the API serves them to people with the trip's link. Tickets, QRs and the hotel
 -- screenshot are deleted 14 days after the trip (delete_after); photos stay until someone deletes them.
 create table session_files (
@@ -284,6 +284,7 @@ create table session_files (
   content_type  text not null check (content_type in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')),
   bytes         integer not null check (bytes between 1 and 5242880),  -- up to 5 MB
   delete_after  date,
+  row_key       text check (row_key ~ '^d[1-9]-[0-9]{2}$'),  -- a photo's checklist row: where the group was (PR 4)
   created_at    timestamptz not null default now(),
   check ((kind = 'payout_qr') = (member_id is not null))
 );
