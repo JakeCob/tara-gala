@@ -342,11 +342,11 @@ test("fetchItinerary encodes the slug", async () => {
 
 // --- T23-W11 guards, review nit 3 ---------------------------------------------------------------------
 
-test("itinerary.ts is a plain module: type-only imports from api or lastMile (ux.md's date helper is re-done, not imported)", () => {
+test("itinerary.ts is a plain module: type-only imports from api, lastMile or guide (ux.md's date helper is re-done, not imported)", () => {
   const src = readFileSync(new URL("./itinerary.ts", import.meta.url), "utf8");
   const imports = src.match(/^\s*import\b.*$/gm) ?? [];
   for (const line of imports) {
-    assert.match(line, /^import type \{[^}]*\} from "(\.\/|@\/lib\/)(api|lastMile)(\.ts)?";$/, line);
+    assert.match(line, /^import type \{[^}]*\} from "(\.\/|@\/lib\/)(api|lastMile|guide)(\.ts)?";$/, line);
   }
   assert.doesNotMatch(src, /\bimport\s*\(/);
   assert.doesNotMatch(src, /"use client"/);

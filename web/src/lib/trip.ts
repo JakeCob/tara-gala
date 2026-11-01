@@ -2,6 +2,7 @@
 // link is the key (no accounts), and this phone remembers the trips it has opened.
 
 import { API_URL } from "./api.ts";
+import type { Mark } from "./guide.ts";
 import { SLUG_PATTERN } from "./itinerary.ts";
 import { WALLET_SLUG } from "./wallet.ts";
 
@@ -41,6 +42,7 @@ export type Trip = {
   wallet: { share_slug: string; name: string } | null;
   hotel: Hotel | null;
   files: TripFile[];
+  marks: Mark[]; // PR 3: the shared checklist's ticks and the picks
 };
 
 // ---------------------------------------------------------------- pure
@@ -117,6 +119,8 @@ const DETAIL: Record<string, string> = {
   bad_label: "Give the ticket a short name, up to 40 letters.",
   too_many_tickets: "This trip already holds 30 tickets. Remove some first.",
   unknown_member: "That person isn't in this trip's wallet. Refresh and try again.",
+  unknown_key: "That row isn't in this trip's plan any more. Refresh and try again.",
+  no_guide: "This trip's plan has no checklist.",
 };
 
 /** One plain sentence for a failed call. */
@@ -181,6 +185,10 @@ export const tripApi = {
     if (opts.member_id) q.set("member_id", opts.member_id);
     return one(call(`${at(slug)}/files?${q}`, { method: "POST", raw: picture }));
   },
+  /** Tick a row or to-do ("done"), or make a pick ("B"); anyone can, in any order */
+  mark: (slug: string, key: string, value: string) =>
+    one(call(`${at(slug)}/marks/${encodeURIComponent(key)}`, { method: "PUT", body: { value } })),
+  unmark: (slug: string, key: string) => one(call(`${at(slug)}/marks/${encodeURIComponent(key)}`, { method: "DELETE" })),
   deleteFile: (slug: string, id: string) => one(call(`${at(slug)}/files/${encodeURIComponent(id)}`, { method: "DELETE" })),
 };
 

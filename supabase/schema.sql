@@ -291,6 +291,16 @@ create index session_files_session on session_files (session_id);
 create unique index session_files_one_qr on session_files (session_id, member_id) where kind = 'payout_qr';
 create unique index session_files_one_proof on session_files (session_id) where kind = 'hotel_proof';
 
+-- The trip's shared checklist and picks (TG-52 PR 3): a tick on a day row of the itinerary's guide ("row:d2-05"), a
+-- tick on a to-do ("todo:03"), or a pick ("pick:sunrise" = "B"). Unticking deletes the row. Keys come from the guide.
+create table session_marks (
+  session_id    uuid not null references trip_sessions(id) on delete cascade,
+  key           text not null check (key ~ '^(row:d[1-9]-[0-9]{2}|todo:[0-9]{2}|pick:[a-z]{1,20})$'),
+  value         text not null check (value ~ '^(done|[A-Z])$'),
+  updated_at    timestamptz not null default now(),
+  primary key (session_id, key)
+);
+
 -- ---------------------------------------------------------------------------
 -- Search view: one row per active trip, flattened for the API
 -- ---------------------------------------------------------------------------
@@ -357,6 +367,7 @@ alter table settlements        enable row level security;
 alter table trip_sessions      enable row level security;
 alter table session_hotels     enable row level security;
 alter table session_files      enable row level security;
+alter table session_marks      enable row level security;
 
 create policy public_read on operators          for select using (true);
 create policy public_read on terminals          for select using (true);
@@ -368,7 +379,7 @@ create policy public_read on last_mile_routes   for select using (true);
 -- trip_reports: no public policy yet (service role only)
 -- itineraries: no public policy (TG-32). Party names are private; share links are served by the API.
 -- wallets, wallet_members, expenses, expense_shares, settlements: no public policy (TG-50). Same as itineraries.
--- trip_sessions, session_hotels, session_files: no public policy (TG-52). Same as the wallets.
+-- trip_sessions, session_hotels, session_files, session_marks: no public policy (TG-52). Same as the wallets.
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP

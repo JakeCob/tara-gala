@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Path, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from . import db, schedule
+from . import guide as guides
 from .last_mile import LastMileLeg, Spot, legs_by_id, spots_by_id
 from .models import Trip
 from .plan_validation import MODEL_PREMADE, BusLeg, PlanError, check_plan, load_refs, parse_plan
@@ -76,8 +77,9 @@ class ItineraryOut(BaseModel):
     outbound: BusLegOut
     return_: BusLegOut = Field(serialization_alias="return")
     days: list[DayOut]
-    plan: dict  # the stored plan, verbatim (CLAUDE.md shape)
+    plan: dict  # the stored plan (CLAUDE.md shape), without its guide
     issues: list[PlanIssue]  # what has changed since it was saved, from TG-24's validator
+    guide: guides.GuideOut | None = None  # TG-52: day tables, bus tables, pick, budget, to-do and sources, if it has one
 
 
 def _codes(errors: list[PlanError]) -> str:
@@ -133,7 +135,10 @@ def get_itinerary(
             logger.info("itinerary not found share_slug=%s", share_slug)
             raise HTTPException(404, NOT_FOUND, headers=NOINDEX)
 
-        plan, errors = parse_plan(row["plan"])
+        # TG-52: a guide rides next to the plan; the plan itself stays the planner's strict shape
+        stored = dict(row["plan"]) if isinstance(row["plan"], dict) else row["plan"]
+        guide_raw = stored.pop("guide", None) if isinstance(stored, dict) else None
+        plan, errors = parse_plan(stored)
         if plan is None:
             logger.error("itinerary unreadable share_slug=%s codes=%s", share_slug, _codes(errors))
             raise HTTPException(500, "Itinerary is unreadable")
@@ -143,6 +148,19 @@ def get_itinerary(
         trips = {r["trip_id"]: r for r in conn.execute(TRIP_ROWS_SQL, ([plan.outbound.trip_id, plan.return_.trip_id],))}
         spots = spots_by_id(conn, {s.spot_id for s in stops})
         legs = legs_by_id(conn, {s.leg.last_mile_route_id for s in stops})
+        the_guide = None
+        if guide_raw is not None:
+            g, problems = guides.parse_guide(guide_raw)
+            if g is None:
+                logger.warning("itinerary guide unreadable share_slug=%s problems=%d", share_slug, len(problems))
+            else:
+                ids = list(guides.trip_ids(g) - set(trips))
+                if ids:
+                    trips.update({r["trip_id"]: r for r in conn.execute(TRIP_ROWS_SQL, (ids,))})
+                places = [r.place for d in g.days for r in d.rows] + [o.place for d in g.days if d.pick for o in d.pick.options]
+                terminal_ids = list({p.terminal_id for p in places if p and p.terminal_id})
+                terminal_names = {r["id"]: r["name"] for r in conn.execute("select id, name from terminals where id = any(%s)", (terminal_ids,))}
+                the_guide = guides.build(g, trips, spots_by_id(conn, guides.spot_ids(g)), terminal_names)
 
     def bus(leg: BusLeg) -> BusLegOut:
         r = trips.get(leg.trip_id)  # an inactive trip is still built; issues says why
@@ -167,8 +185,8 @@ def get_itinerary(
     response.headers["Cache-Control"] = "private, no-cache"  # party names are personal
     response.headers.update(NOINDEX)
     logger.info(
-        "itinerary get share_slug=%s premade=%s days=%d stops=%d issues=%d codes=%s",
-        share_slug, premade, len(days), len(stops), len(errors), _codes(errors),
+        "itinerary get share_slug=%s premade=%s days=%d stops=%d issues=%d codes=%s guide=%s",
+        share_slug, premade, len(days), len(stops), len(errors), _codes(errors), "yes" if the_guide else "no",
     )
     return ItineraryOut(
         share_slug=row["share_slug"],
@@ -182,6 +200,7 @@ def get_itinerary(
         outbound=bus(plan.outbound),
         return_=bus(plan.return_),
         days=days,
-        plan=row["plan"],
+        plan=stored,
         issues=[PlanIssue(code=e.code, path=e.path, message=e.message) for e in errors],
+        guide=the_guide,
     )
