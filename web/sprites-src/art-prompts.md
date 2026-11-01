@@ -102,6 +102,7 @@ Prompt template:
 | `mode-tricycle.png` | 24×16 | a Philippine motorcycle-sidecar tricycle |
 | `mode-van.png` | 24×16 | a white passenger van |
 | `mode-grab.png` | 24×16 | a generic ride-hailing car with a phone and pin icon (**no brand colours or logos**) |
+| `vehicle-plane.png` | 24×12 | a small airliner, side view, facing right, no airline colours or logos (title-screen sky) |
 
 Prompt template:
 > A single pixel art sprite, {size} pixels: {subject}. [shared style line]
@@ -114,7 +115,6 @@ Prompt template:
 | `ui-star.png` | 8×8 | a sparkle or star (for "spawn" effects) |
 | `ui-heart.png` | 8×8 | a small heart |
 | `ui-badge-verified.png` | 16×16 | a round badge with a check mark ("checked" data) |
-| `ui-ticket.png` | 16×10 | a bus ticket: Sun, with a Forest stub, a perforated line and two printed lines, notched at the sides |
 
 Prompt template (frame):
 > A 24×24 pixel art 9-slice UI panel border for a retro handheld RPG dialog box: rounded double outline, 8px corners, flat cream fill, no shading. [shared style line, but WITHOUT "transparent background"]

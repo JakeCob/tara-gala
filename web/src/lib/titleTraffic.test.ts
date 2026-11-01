@@ -1,11 +1,11 @@
-// TG-49 traffic on the title screen (owner: "add moving pixel objects ... like jeepneys, tickets, bus").
+// TG-49 traffic on the title screen (owner: "add moving pixel objects ... like jeepneys, tickets, bus"; then planes, not tickets).
 // Run with `npm test` (node --test, type stripping).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SPRITES } from "./sprites.ts";
 import {
-  BACK_LANE_PX, ROAD, ROAD_SPRITES, SCALE, SPEED, TICKET, TRAFFIC_MS, flipped, moverSize, moverY, startTraffic, stepMover, type Mover,
+  BACK_LANE_PX, LANES, PLANE, ROAD, ROAD_SPRITES, SCALE, SPEED, TRAFFIC_MS, flipped, moverSize, moverY, startTraffic, stepMover, type Mover,
 } from "./titleTraffic.ts";
 
 const WEB = new URL("../../", import.meta.url);
@@ -32,17 +32,19 @@ function run(width: number, sky: number, ticks: number, seed: number) {
   return history;
 }
 
-test("TT1 the opening scene: a jeepney on the road, a bus waiting, two tickets in the sky; the still scene is the same", () => {
-  const [bus, jeep, ...tickets] = startTraffic(380, 270, seeded(1));
+test("TT1 the opening scene: two jeepneys on the road, a bus waiting, two planes in the sky; the still scene is the same", () => {
+  const [bus, jeep, jeep2, ...planes] = startTraffic(380, 270, seeded(1));
   assert.equal(TRAFFIC_MS, 100);
   assert.equal(SCALE, 3);
   assert.deepEqual([jeep.lane, jeep.sprite, jeep.wait, jeep.y], ["road", "mode-jeep", 0, 0]);
   assert.ok(jeep.x >= 0 && jeep.x + moverSize("mode-jeep").w <= 380, `the jeepney is on screen at ${jeep.x}`);
   assert.deepEqual([bus.lane, bus.sprite, bus.y], ["road", "vehicle-bus", BACK_LANE_PX]);
   assert.ok(bus.wait > 0, "the bus waits off screen");
-  for (const t of tickets) {
-    assert.deepEqual([t.lane, t.sprite, t.wait], ["sky", TICKET, 0]);
-    assert.ok(t.x >= 0 && t.x + moverSize(TICKET).w <= 380 && t.y >= 0 && t.y + moverSize(TICKET).h <= 270, `ticket at ${t.x},${t.y}`);
+  assert.deepEqual([jeep2.lane, jeep2.sprite, jeep2.wait, jeep2.y, jeep2.dir], ["road", "mode-jeep", 0, BACK_LANE_PX * 2, -1], "a second jeepney, the other way, further back");
+  assert.ok(jeep2.x >= 0 && jeep2.x + moverSize("mode-jeep").w <= 380, `the second jeepney is on screen at ${jeep2.x}`);
+  for (const t of planes) {
+    assert.deepEqual([t.lane, t.sprite, t.wait], ["sky", PLANE, 0]);
+    assert.ok(t.x >= 0 && t.x + moverSize(PLANE).w <= 380 && t.y >= 0 && t.y + moverSize(PLANE).h <= 270, `plane at ${t.x},${t.y}`);
   }
   const still = startTraffic(380, 270, () => 0);
   const moving = startTraffic(380, 270, seeded(9));
@@ -52,9 +54,9 @@ test("TT1 the opening scene: a jeepney on the road, a bus waiting, two tickets i
 test("TT2 sprites are drawn at 3x, and step whole art pixels", () => {
   assert.deepEqual(moverSize("vehicle-bus"), { w: 144, h: 72 });
   assert.deepEqual(moverSize("mode-jeep"), { w: 72, h: 48 });
-  assert.deepEqual(moverSize(TICKET), { w: 48, h: 30 });
-  assert.deepEqual(SPRITES[TICKET], { w: 16, h: 10 });
-  for (const name of [...ROAD_SPRITES, TICKET]) assert.equal((SPEED[name] ?? 0) % SCALE, 0, `${name} speed`);
+  assert.deepEqual(moverSize(PLANE), { w: 72, h: 36 });
+  assert.deepEqual(SPRITES[PLANE], { w: 24, h: 12 });
+  for (const name of [...ROAD_SPRITES, PLANE]) assert.equal((SPEED[name] ?? 0) % SCALE, 0, `${name} speed`);
 });
 
 test("TT3 a vehicle drives its way at its speed, leaves, waits off screen, then a new one comes on at the far edge", () => {
@@ -80,11 +82,11 @@ test("TT4 over 20 minutes: every vehicle comes by both ways, jeepneys and buses 
       const { w, h } = moverSize(m.sprite);
       assert.ok(m.x >= -w && m.x <= 960, `${m.sprite} at x ${m.x}`);
       if (m.lane === "sky") {
-        assert.equal(m.sprite, TICKET);
-        assert.equal(m.dir, 1, "tickets drift one way, with the wind");
-        assert.ok(moverY(m) >= 0 && moverY(m) + h <= 300, `ticket at y ${moverY(m)}`);
+        assert.equal(m.sprite, PLANE);
+        assert.ok(moverY(m) >= 0 && moverY(m) + h <= 300, `plane at y ${moverY(m)}`);
+        if (m.age === 0) seen.set(`plane ${m.dir}`, (seen.get(`plane ${m.dir}`) ?? 0) + 1);
       } else {
-        assert.ok([0, BACK_LANE_PX].includes(m.y));
+        assert.ok((LANES as readonly number[]).includes(m.y));
         const key = `${m.sprite} ${m.dir}`;
         if (m.age === 0) seen.set(key, (seen.get(key) ?? 0) + 1);
       }
@@ -92,17 +94,19 @@ test("TT4 over 20 minutes: every vehicle comes by both ways, jeepneys and buses 
   }
   for (const name of ROAD_SPRITES) for (const dir of [1, -1]) assert.ok(seen.get(`${name} ${dir}`), `${name} going ${dir}`);
   const count = (name: string) => (seen.get(`${name} 1`) ?? 0) + (seen.get(`${name} -1`) ?? 0);
-  assert.ok(count("mode-jeep") > count("mode-taxi") && count("vehicle-bus") > count("mode-tricycle"), JSON.stringify([...seen]));
+  assert.ok(count("mode-jeep") > count("vehicle-bus") && count("vehicle-bus") > count("mode-taxi") && count("vehicle-bus") > count("mode-tricycle"), JSON.stringify([...seen]));
+  assert.ok(seen.get("plane 1") && seen.get("plane -1"), "planes fly both ways");
   const shown = history.map((f) => f.filter((m) => m.lane === "road" && m.wait === 0).length);
   assert.ok(shown.filter((n) => n > 0).length > shown.length / 2, "a vehicle is on the road most of the time");
 });
 
-test("TT5 a vehicle going against the way its art faces is drawn mirrored; a ticket bobs one art pixel", () => {
+test("TT5 a vehicle going against the way its art faces is drawn mirrored; a plane bobs one art pixel", () => {
   const m = (sprite: Mover["sprite"], dir: 1 | -1): Mover => ({ lane: "road", sprite, x: 0, y: 0, dir, wait: 0, age: 0 });
   assert.deepEqual([flipped(m("vehicle-bus", 1)), flipped(m("vehicle-bus", -1))], [false, true]);
   assert.deepEqual([flipped(m("mode-jeep", 1)), flipped(m("mode-jeep", -1))], [false, true]);
   assert.deepEqual([flipped(m("mode-tricycle", 1)), flipped(m("mode-tricycle", -1))], [true, false], "the tricycle's art faces left");
-  const t: Mover = { lane: "sky", sprite: TICKET, x: 0, y: 12, dir: 1, wait: 0, age: 0 };
+  assert.deepEqual([flipped({ ...m("mode-jeep", 1), sprite: PLANE }), flipped({ ...m("mode-jeep", -1), sprite: PLANE })], [false, true], "a plane faces the way it flies");
+  const t: Mover = { lane: "sky", sprite: PLANE, x: 0, y: 12, dir: 1, wait: 0, age: 0 };
   assert.deepEqual([0, 3, 4, 7, 8].map((age) => moverY({ ...t, age })), [12, 12, 15, 15, 12]);
 });
 
@@ -111,7 +115,7 @@ test("TT6 the traffic is decorative, behind the menu and the trio, keeps every v
   assert.match(src, /^"use client";/);
   assert.match(src, /<div ref=\{layer\} aria-hidden="true" className="absolute inset-0">/);
   assert.match(src, /style=\{\{ transform: move \}\}/, "moved by transform, so the layout never shifts");
-  assert.match(src, /\(road \? ROAD_SPRITES : \[TICKET\]\)\.map\(\(name\) => \(/, "every vehicle rendered, one shown");
+  assert.match(src, /\(road \? ROAD_SPRITES : \[PLANE\]\)\.map\(\(name\) => \(/, "every vehicle rendered, one shown");
   assert.match(src, /hidden=\{name !== m\.sprite\}/);
   assert.match(src, /hidden=\{m\.wait > 0\}/, "off screen while it waits");
   assert.match(src, /alt=""/);
