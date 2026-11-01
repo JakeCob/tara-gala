@@ -29,9 +29,7 @@ type PXShape = {
   logo: string; // TG-49 site header and tabs
   placard: string; // TG-49 jeepney signboard logo
   placardName: string;
-  placardRoute: string;
   placardLg: string;
-  placardRouteLg: string;
   tab: string;
   h2: string;
   dataHeading: string;
@@ -406,15 +404,13 @@ const EXPECTED_PX: PXShape = {
   // TG-49: the signboard face is wide and has one weight (400), so titles step down and never synthesise bold
   h1: "font-pixel text-[1.75rem] leading-tight font-normal text-brand md:text-[2.25rem]",
   wordmark: "font-wordmark text-[1.75rem] leading-tight font-normal text-screen-ink md:text-[2.25rem]",
-  titleWordmark: "font-wordmark text-[2.75rem] leading-none font-normal placard-letters md:text-[4rem] lg:text-[5rem]",
+  titleWordmark: "font-pixel text-[4rem] leading-[0.85] font-normal placard-letters md:text-[5.5rem] lg:text-[6.5rem]",
   pressStart: "font-pixel text-sm font-normal uppercase tracking-widest text-screen-ink",
   menuItem: "focus-pixel flex min-h-11 items-center gap-2 px-4 font-pixel text-lg font-normal text-screen-ink",
   logo: "focus-pixel inline-flex min-h-11 items-center",
-  placard: "placard inline-flex flex-col items-center gap-1 px-2.5 pt-1.5 pb-1",
-  placardName: "font-wordmark text-base leading-none font-normal whitespace-nowrap placard-letters md:text-xl",
-  placardRoute: "font-pixel text-[0.625rem] leading-none font-normal uppercase tracking-widest text-screen-ink",
-  placardLg: "placard flex flex-col items-center gap-2 px-5 pt-4 pb-3 md:gap-3 md:px-8 md:pt-6 md:pb-4",
-  placardRouteLg: "font-pixel text-sm leading-none font-normal uppercase tracking-widest text-screen-ink md:text-base",
+  placard: "placard inline-flex px-1.5 pt-1 pb-0.5",
+  placardName: "font-pixel text-[1.375rem] leading-[0.85] font-normal placard-letters",
+  placardLg: "placard flex px-4 py-3 md:px-5 md:py-4",
   tab: "focus-pixel flex items-center justify-center bg-card px-3 font-pixel text-base font-normal text-foreground border-transparent aria-[current=page]:border-brand aria-[current=page]:text-brand",
   h2: "font-pixel text-xl font-normal",
   dataHeading: "text-base font-bold",
