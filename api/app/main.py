@@ -2,6 +2,7 @@
 
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 from datetime import date as Date
 from datetime import datetime
@@ -19,6 +20,8 @@ from .last_mile import router as last_mile_router
 from .planner import router as planner_router
 from .premade import router as premade_router
 from .sessions import router as sessions_router
+from .trip_files import router as trip_files_router
+from .trip_files import start_sweeper
 from .schedule import arrival as _arrival  # noqa: F401  re-exported: TG-12 tests use main._arrival
 from .trip_rows import CONFIRM_NOTE, trip_from_row  # noqa: F401  CONFIRM_NOTE re-exported
 from .wallets import router as wallets_router
@@ -40,7 +43,10 @@ METRO_MANILA_CITIES = [
 async def lifespan(app: FastAPI):
     db.open_pool()
     app.state.flags = get_flags()  # once per process, after logging is configured; routers read this
+    stop = threading.Event()
+    start_sweeper(stop)  # TG-52: tickets, QRs and hotel screenshots go 14 days after the trip
     yield
+    stop.set()
     db.close_pool()
 
 
@@ -137,3 +143,4 @@ app.include_router(planner_router)
 app.include_router(itineraries_router)
 app.include_router(wallets_router)
 app.include_router(sessions_router)
+app.include_router(trip_files_router)

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PX, PixelBox, PixelButton, PixelChoice, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import PayoutQr, { loadMyQr } from "@/components/PayoutQr";
 import { PhotoViewer } from "@/components/PhotoViewer";
+import { type TripFile, fetchFile, knownTrips, tripApi } from "@/lib/trip";
 import { runShare, shareDeps, type ShareOutcome } from "@/lib/itinerary";
 import {
   failureMessage,
@@ -195,6 +196,8 @@ export default function WalletView({ slug }: { slug: string }) {
   const [newName, setNewName] = useState("");
   const [shareNote, setShareNote] = useState("");
   const [qr, setQr] = useState<{ blob: Blob; label: string } | null>(null);
+  // TG-52 PR 2: the payout QRs shared on the trip that holds this wallet (if this phone knows that trip)
+  const [tripQrs, setTripQrs] = useState<{ trip: string; files: TripFile[] } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -221,6 +224,20 @@ export default function WalletView({ slug }: { slug: string }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
+  useEffect(() => {
+    const trip = knownTrips().find((t) => t.wallet_slug === slug);
+    if (!trip) return;
+    let live = true;
+    tripApi.get(trip.slug).then((r) => {
+      if (!live || !r.ok || r.trip.wallet?.share_slug !== slug) return;
+      setTripQrs({ trip: trip.slug, files: r.trip.files.filter((f) => f.kind === "payout_qr") });
+      console.info("[tg-wallet] trip qrs count=%d", r.trip.files.filter((f) => f.kind === "payout_qr").length);
+    });
+    return () => {
+      live = false;
+    };
+  }, [slug, reloads]);
+
   if (load.state === "loading") return <p className="text-sm text-muted">Opening the wallet...</p>;
   if (load.state === "error") {
     return (
@@ -234,6 +251,15 @@ export default function WalletView({ slug }: { slug: string }) {
   const remembered = meChoice !== undefined ? meChoice : whoAmI(slug);
   const me = wallet.members.some((m) => m.id === remembered) ? remembered : null;
   const nameOf = (id: string) => wallet.members.find((m) => m.id === id)?.name ?? "Someone";
+  const sharedQr = (memberId: string) => tripQrs?.files.find((f) => f.member_id === memberId);
+
+  async function showTheirQr(memberId: string) {
+    const file = sharedQr(memberId);
+    const blob = file && tripQrs ? await fetchFile(tripQrs.trip, file.id) : null;
+    console.info("[tg-wallet] show shared qr ok=%s", blob ? "yes" : "no");
+    if (blob) setQr({ blob, label: `${nameOf(memberId)}'s QR` });
+    else setNotice({ text: "Couldn't open that QR. Open the trip once with signal to keep it on this phone.", error: true });
+  }
 
   function chooseMe(id: string | null) {
     rememberWallet({ slug, name: wallet.name, me: id });
@@ -365,9 +391,18 @@ export default function WalletView({ slug }: { slug: string }) {
                       <span className="tabular-nums font-bold">{formatPeso(t.amount_centavos)}</span>
                     </p>
                     {t.from_member === me && (
-                      <p className={PX.meta}>Ask {nameOf(t.to_member)} to show their QR, then pay it in your GCash, Maya or bank app.</p>
+                      <p className={PX.meta}>
+                        {sharedQr(t.to_member)
+                          ? `Open ${nameOf(t.to_member)}'s QR, then scan it in your GCash, Maya or bank app.`
+                          : `Ask ${nameOf(t.to_member)} to show their QR, then pay it in your GCash, Maya or bank app.`}
+                      </p>
                     )}
                     <div className="flex flex-wrap gap-2">
+                      {t.from_member === me && sharedQr(t.to_member) && (
+                        <PixelButton variant="accent" onClick={() => showTheirQr(t.to_member)}>
+                          Show {nameOf(t.to_member)}&apos;s QR
+                        </PixelButton>
+                      )}
                       {t.to_member === me && (
                         <PixelButton variant="accent" onClick={showMyQr}>
                           Show my QR

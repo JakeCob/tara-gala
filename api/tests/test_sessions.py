@@ -31,6 +31,9 @@ HOTEL = {
 def fresh_limiters(monkeypatch):
     monkeypatch.setattr(s, "CREATE_LIMITER", RateLimiter(s.CREATE_PER_HOUR))
     monkeypatch.setattr(s, "WRITE_LIMITER", RateLimiter(s.WRITES_PER_HOUR))
+    from app import wallets
+
+    monkeypatch.setattr(wallets, "CREATE_LIMITER", RateLimiter(wallets.CREATE_PER_HOUR))  # trips here make wallets too
 
 
 def create(client, **change):
@@ -229,6 +232,6 @@ def test_the_migration_is_safe_to_rerun_on_a_current_database(dsn):
 
 def test_the_migration_builds_the_tables_on_a_database_from_before_tg52(dsn):
     with psycopg.connect(dsn, autocommit=True) as conn:
-        conn.execute("drop table session_hotels, trip_sessions")
+        conn.execute("drop table session_hotels, trip_sessions cascade")
         conn.execute(MIGRATION.read_text(encoding="utf-8"))
         assert conn.execute("select count(*) from pg_class where relname = any(%s) and relrowsecurity", (TABLES,)).fetchone()[0] == 2

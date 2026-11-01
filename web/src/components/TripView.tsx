@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, type PremadeSummary } from "@/lib/api";
 import {
-  type Hotel, type Trip, type TripFailure, type TripResult, datesLine, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
+  type Hotel, type Trip, type TripFailure, type TripResult, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
   slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
+import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
 
 type Load = { state: "loading" } | { state: "ready"; trip: Trip } | { state: "error"; why: TripFailure };
@@ -15,9 +16,18 @@ type Notice = { text: string; error: boolean };
 const subscribeNothing = () => () => {};
 const NO_HOTEL: Hotel = { name: "", address: "", check_in: null, check_out: null, booking_ref: "", notes: "" };
 
+/** This phone's note of the trip, with its wallet so the wallet page can find the payout QRs */
+const remember = (trip: Trip) =>
+  rememberTrip({ slug: trip.share_slug, name: trip.name, start_date: trip.start_date, wallet_slug: trip.wallet?.share_slug ?? null });
+
+/** Fetch every shared file once, so the service worker keeps them: tickets have to open at the terminal offline */
+function keepFilesOffline(trip: Trip) {
+  for (const f of trip.files) void fetchFile(trip.share_slug, f.id);
+}
+
 /**
- * TG-52: one trip, by its secret link. The plan, the shared wallet and the hotel live here; the plan and the wallet
- * keep their own links and pages. Everyone with the link can change it, as with a wallet. The service worker keeps the
+ * TG-52: one trip, by its secret link. The plan, the shared wallet, the hotel, and the shared tickets and payout QRs
+ * live here; the plan and the wallet keep their own links and pages. Everyone with the link can change it, as with a wallet. The service worker keeps the
  * last copy, so it opens offline once it has been opened with signal.
  */
 export default function TripView({ slug }: { slug: string }) {
@@ -33,7 +43,8 @@ export default function TripView({ slug }: { slug: string }) {
       if (!live) return;
       console.info("[tg-trip] load ok=%s", r.ok ? "yes" : r.why);
       if (r.ok) {
-        rememberTrip({ slug, name: r.trip.name, start_date: r.trip.start_date });
+        remember(r.trip);
+        keepFilesOffline(r.trip);
         setLoad({ state: "ready", trip: r.trip });
       } else {
         // Offline with a copy on screen: keep showing it; the offline banner says so
@@ -73,28 +84,24 @@ export default function TripView({ slug }: { slug: string }) {
       return false;
     }
     setLoad({ state: "ready", trip: r.trip });
-    rememberTrip({ slug, name: r.trip.name, start_date: r.trip.start_date });
+    remember(r.trip);
     setNotice({ text: done, error: false });
     void tripApi.get(slug); // the service worker saves GETs, not this write: refresh the offline copy
     return true;
   }
 
+  const onFail = (text: string) => setNotice({ text, error: true });
   return (
     <div className="flex flex-col gap-5 md:grid md:grid-cols-2 md:items-start md:gap-6">
       <div className="flex flex-col gap-5">
         <TripHeader trip={trip} busy={busy} write={write} />
         <PlanSection trip={trip} busy={busy} write={write} />
+        <SharedTickets trip={trip} busy={busy} write={write} onFail={onFail} />
         <WalletSection trip={trip} busy={busy} write={write} setNotice={setNotice} />
+        <PayoutQrs trip={trip} busy={busy} write={write} onFail={onFail} />
       </div>
       <div className="flex flex-col gap-5">
-        <HotelSection trip={trip} busy={busy} write={write} />
-        <section aria-labelledby="tickets-title" className="flex flex-col gap-3">
-          <SectionTitle id="tickets-title">Bus tickets</SectionTitle>
-          <PixelCardLink href="/tickets" className="flex flex-col gap-1 p-4">
-            <span className="font-bold">My tickets</span>
-            <span className={PX.meta}>Your bus e-tickets, saved on this phone for the terminal.</span>
-          </PixelCardLink>
-        </section>
+        <HotelSection trip={trip} busy={busy} write={write} onFail={onFail} />
         <div aria-live="polite">
           {notice &&
             (notice.error ? (
@@ -362,7 +369,7 @@ function WalletSection({ trip, busy, write, setNotice }: { trip: Trip; busy: boo
   );
 }
 
-function HotelSection({ trip, busy, write }: { trip: Trip; busy: boolean; write: Write }) {
+function HotelSection({ trip, busy, write, onFail }: { trip: Trip; busy: boolean; write: Write; onFail: (text: string) => void }) {
   const [editing, setEditing] = useState(false);
   const hotel = trip.hotel;
   return (
@@ -388,6 +395,7 @@ function HotelSection({ trip, busy, write }: { trip: Trip; busy: boolean; write:
               Edit
             </PixelButton>
           </div>
+          <HotelProof trip={trip} busy={busy} write={write} onFail={onFail} />
         </PixelBox>
       ) : (
         <HotelForm
@@ -490,7 +498,7 @@ function DeleteTrip({ trip, onDeleted }: { trip: Trip; onDeleted: () => void }) 
       <summary className="cursor-pointer font-semibold">Delete this trip</summary>
       <form onSubmit={onDelete} noValidate className="mt-3 flex flex-col gap-3">
         <p className="text-muted">
-          This deletes the trip and its hotel for everyone. The plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
+          This deletes the trip, its hotel, and its shared tickets and QRs for everyone. The plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
         </p>
         <input className={PX.input} value={typed} autoComplete="off" aria-label="Trip name, to confirm" onChange={(e) => setTyped(e.target.value)} />
         {problem && <Problem text={problem} />}

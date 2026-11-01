@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
 import { BlobImage, PhotoViewer } from "@/components/PhotoViewer";
 import { clearTickets, deleteTicket, listTickets, saveTicket } from "@/lib/ticketStore";
+import { fitForUpload } from "@/lib/shrink";
 import { addedLine, checkTicketFile, ticketLabel, type StoredTicket } from "@/lib/ticketWallet";
+import { knownTripsRaw, parseKnownTrips, tripApi, tripFailureMessage } from "@/lib/trip";
+
+const subscribeNothing = () => () => {};
 
 type Wallet = { state: "loading" } | { state: "ready"; tickets: StoredTicket[] } | { state: "unavailable" };
 type Notice = { text: string; error: boolean };
@@ -32,6 +36,11 @@ export default function TicketWallet() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<StoredTicket | null>(null);
+  // TG-52 PR 2: a ticket can be shared with a trip this phone has opened. Nothing uploads unless someone taps it.
+  const tripsRaw = useSyncExternalStore(subscribeNothing, knownTripsRaw, () => null);
+  const trips = useMemo(() => parseKnownTrips(tripsRaw), [tripsRaw]);
+  const [tripChoice, setTripChoice] = useState("");
+  const toTrip = trips.find((t) => t.slug === tripChoice) ?? trips[0];
   const picker = useRef<HTMLInputElement>(null);
   const tickets = wallet.state === "ready" ? wallet.tickets : NONE;
 
@@ -102,6 +111,18 @@ export default function TicketWallet() {
     }
   }
 
+  async function shareToTrip(t: StoredTicket) {
+    if (!toTrip) return;
+    setBusy(true);
+    const picture = await fitForUpload(t.blob);
+    const r = picture ? await tripApi.addFile(toTrip.slug, "ticket", picture, { label: t.label.slice(0, 40) }) : null;
+    setBusy(false);
+    console.info("[tg-tickets] share to trip ok=%s", r?.ok ? "yes" : r ? r.why : "too_big");
+    if (!r) return say("That ticket is too big to share. Take a screenshot of it instead.", true);
+    if (!r.ok) return say(tripFailureMessage(r), true);
+    say(`Shared with ${r.trip.name}. Everyone on the trip can open it now.`);
+  }
+
   async function removeAll() {
     if (!window.confirm(`Delete all ${tickets.length} tickets from this phone?`)) return;
     try {
@@ -148,6 +169,19 @@ export default function TicketWallet() {
         </PixelBox>
       )}
 
+      {tickets.length > 0 && trips.length > 1 && (
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-semibold">Share tickets with</span>
+          <select className={PX.input} value={toTrip?.slug ?? ""} onChange={(e) => setTripChoice(e.target.value)}>
+            {trips.map((t) => (
+              <option key={t.slug} value={t.slug}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       {tickets.length > 0 && (
         <>
           <ul className="flex flex-col gap-3 md:grid md:grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] md:gap-4">
@@ -161,6 +195,11 @@ export default function TicketWallet() {
                     <PixelButton variant="accent" aria-label={`Show ${t.label}`} onClick={() => setShown(t)}>
                       Show
                     </PixelButton>
+                    {toTrip && (
+                      <PixelButton variant="secondary" aria-label={`Add ${t.label} to ${toTrip.name}`} disabled={busy} onClick={() => shareToTrip(t)}>
+                        Add to trip
+                      </PixelButton>
+                    )}
                     <PixelButton variant="secondary" aria-label={`Delete ${t.label}`} onClick={() => remove(t)}>
                       Delete
                     </PixelButton>
