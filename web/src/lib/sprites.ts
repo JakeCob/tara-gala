@@ -34,6 +34,7 @@ export const SPRITES = {
   "ui-dialog-frame": { w: 24, h: 24 }, // 9-slice, 8px corners
   "ui-cursor": UI, "ui-star": UI, "ui-heart": UI,
   "ui-badge-verified": TILE,
+  "ui-ticket": { w: 16, h: 10 }, // TG-49 the title screen's drifting tickets
   "logo-wordmark": { w: 192, h: 48 },
   // TG-45 Philippine decor, home strip and map scenery only. chibi-barong and chibi-filipiniana are decor, not passenger types (TG-45)
   "deco-sun-stars": DECO_SQUARE, "deco-carabao": DECO_WIDE, "deco-bahay-kubo": DECO_SQUARE,

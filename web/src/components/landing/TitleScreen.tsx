@@ -5,11 +5,13 @@ import { formMode } from "@/lib/planForm";
 import { spriteSrc } from "@/lib/sprites";
 import TitleBlink from "./TitleBlink";
 import TitleCast from "./TitleCast";
+import TitleTraffic from "./TitleTraffic";
 
 /**
  * The game title screen at / (TG-49, owner: "like a title screen of a game"): the wordmark on a jeepney signboard, PRESS START and a start
  * menu over the mountain scene, on a fixed light screen. The menu goes straight to each tab, so it never costs a tap.
  * The cursor sits on the first item until another is hovered or focused (globals.css title-menu); it and PRESS START blink (TitleBlink).
+ * Traffic drives and drifts behind the menu (TitleTraffic), and the trio walks in front (TitleCast).
  */
 export default function TitleScreen() {
   const menu = [
@@ -34,6 +36,7 @@ export default function TitleScreen() {
         fetchPriority="high"
         className="pixelated absolute bottom-0 left-[min(0px,calc(100%_-_400px))] h-[246px] w-[640px] max-w-none md:left-0 lg:h-[369px] lg:w-[960px]"
       />
+      <TitleTraffic />
       <div className="relative flex flex-col items-center gap-3 px-4 pt-10 text-center lg:pt-14">
         <Placard size="lg">
           <PageTitle titleScreen id="landing-title">
