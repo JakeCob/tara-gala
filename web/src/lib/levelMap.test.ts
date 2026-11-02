@@ -148,7 +148,7 @@ test("LM10 scenery is seeded, fits the free column, and never touches a tile", (
   }
 });
 
-test("LM11 the world is a game screen: a pixel road, grass, framed in Ink in both themes, capped at a phone's width", () => {
+test("LM11 the world is a game screen: a pixel road, grass, framed in Ink in both themes", () => {
   const map = readFileSync("src/components/LevelMap.tsx", "utf8");
   assert.doesNotMatch(map, /preserveAspectRatio|non-scaling-stroke/, "no stretched vector road");
   assert.match(map, /shapeRendering="crispEdges"/);
@@ -172,6 +172,14 @@ test("LM11b at every width the map has the whole row, with the World toggle righ
   assert.equal(map.slice(at("</nav>"), at("<section ref={screen}")).match(/<(PixelBox|ul|h3|p)\b/), null, "nothing between the toggle and the map");
   assert.match(map, /min-w-0 max-w-88 flex-1 pixel-frame/, "a sign stops at 22rem");
   assert.equal(map.match(/style=\{\{ maxWidth: BAND_PX \}\}/g)?.length, 2, "the stops and the levels share the road's band");
+  assert.match(map, /const BAND = "absolute inset-0 mx-auto"/, "the band is centred");
+  assert.match(map, /return \(\n\s+<div className="flex flex-col gap-4">\n\s+<header/, "no cap or grid on the whole block");
+  assert.match(map, /<div className="w-full">\n\s+<section ref=\{screen\}/, "none on the world");
+  assert.match(readFileSync("src/components/TripView.tsx", "utf8"), /<section aria-labelledby="progress-title" className="flex flex-col gap-3">/, "none on the page's section");
+  assert.match(map, /const list = levels\(day, byKey\);/, "time order");
+  assert.match(map, /const p = points\[i\];/, "level 1 on the first spot, under START");
+  assert.match(map, /<PixelBox className="flex flex-col gap-2 p-4 md:max-w-2xl">\n\s+<p className="font-semibold">\{day\.pick\.title\}/, "a Pick button stays near its text");
+  assert.match(map, /<section className="flex flex-col gap-2 md:max-w-2xl">\n\s+<h3 className=\{PX\.dataHeading\}>Budget per person/, "a figure stays near its item");
 });
 
 test("LM12 one level is one button, with a name from its content; nothing fades", () => {

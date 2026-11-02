@@ -105,7 +105,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       </div>
 
       {day.pick && (
-        <PixelBox className="flex flex-col gap-2 p-4">
+        <PixelBox className="flex flex-col gap-2 p-4 md:max-w-2xl">
           <p className="font-semibold">{day.pick.title}</p>
           <ul className="flex flex-col gap-2">
             {day.pick.options.map((o) => (
@@ -384,7 +384,7 @@ function Buses({ table }: { table: BusTable }) {
 
 function Budget({ guide }: { guide: Guide }) {
   return (
-    <section className="flex flex-col gap-2">
+    <section className="flex flex-col gap-2 md:max-w-2xl">
       <h3 className={PX.dataHeading}>Budget per person</h3>
       {guide.budget.summary && <p className="text-sm">{guide.budget.summary}</p>}
       <PixelBox className="overflow-x-auto p-0">
