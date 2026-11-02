@@ -297,7 +297,7 @@ test("TG54-5 TripView: every GET it shows goes through afterGet, aged against wh
   const write = view.slice(view.indexOf("async function write("), view.indexOf("const onFail ="));
   assert.ok(write.indexOf("shownAt.current = Date.now();") > write.indexOf("if (!r.ok)"), "only a write that landed");
   assert.ok(write.indexOf("shownAt.current = Date.now();") < write.indexOf("setLoad("), "before its state, so no answer can slip between");
-  assert.equal(view.match(/setLoad\(/g)?.length, 2, "afterGet and the write: nothing else sets the trip");
+  assert.equal(view.match(/setLoad\(/g)?.length, 3, "afterGet, the write and TG-57's afterSaved: nothing else sets the trip");
   assert.match(view, /console\.info\("\[tg-trip\] load ok=%s", r\.ok \? \(overtaken \? "overtaken" : r\.savedAt \? "saved" : "yes"\) : r\.why\);/);
   // An overtaken answer leaves everything alone: this phone's note of the trip too
   assert.match(view, /if \(r\.ok && !overtaken\) \{\s+shownAt\.current = from;\s+remember\(r\.trip\);\s+keepFilesOffline\(r\.trip, keptFiles\.current\);\s+\}/);
@@ -466,7 +466,7 @@ test("TG57-7 TripView: saved copies go through the age rule, the guide retries w
   assert.match(guide, /savedItinerary\(planSlug\)/);
   assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: saved\.body\.guide \?\? null \}\)/);
   assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: null, failed: true \}\)/);
-  assert.match(guide, /\[planSlug, retry\]/, "a failed fetch tries again with the next poll, not only on a full reload");
+  assert.match(guide, /\[planSlug, retry, worker\]/, "a failed fetch tries again with the next poll, not only on a full reload");
   assert.match(src, /mapSlot\(trip\.itinerary_slug, guide\)/);
   assert.match(src, /data-map-loading/);
   assert.doesNotMatch(read("src/components/LevelMap.tsx"), /data-map-loading/);
@@ -481,4 +481,12 @@ test("TG57-8 TripHeader: opening the edit form starts from the trip on screen, n
   assert.match(open, /setName\(trip\.name\)/);
   assert.match(open, /setStart\(trip\.start_date\)/);
   assert.match(open, /setBack\(trip\.return_date\)/);
+});
+
+test("TG57-9 TripView: when the worker takes over mid-visit, fetch again so the first open leaves a saved copy", () => {
+  const src = read("src/components/TripView.tsx");
+  const poll = src.slice(src.indexOf("const onVisible"), src.indexOf("// The plan's guide"));
+  assert.match(poll, /serviceWorker\?\.addEventListener\("controllerchange", onWorker\)/);
+  assert.match(poll, /serviceWorker\?\.removeEventListener\("controllerchange", onWorker\)/);
+  assert.match(poll, /const onWorker = \(\) => \{\s+setReloads\(\(n\) => n \+ 1\);\s+setWorker\(\(n\) => n \+ 1\);/, "the trip and the guide alike");
 });

@@ -1292,3 +1292,43 @@ test("TG54-S3 the older of two GETs landing last leaves the newer copy in the ca
   await older.done;
   assert.deepEqual(await cache!.clone().json(), { marks: ["row:d1-02"] });
 });
+
+// --- TG-57 a saved shell has no data in it, so bad signal shouldn't hold the page back ----------------------------
+
+test("TG57-S1 timeoutFor: a saved /t, /w or /i shell falls back fast; other pages and API reads keep the long wait", () => {
+  const { SAVED_PAGE_TIMEOUT_MS, NETWORK_TIMEOUT_MS, strategyFor, timeoutFor } = tg();
+  const origins = { app: "https://app.test", api: "https://api.test" };
+  const nav = (path: string) => strategyFor({ method: "GET", url: origins.app + path, mode: "navigate" }, origins);
+  assert.equal(SAVED_PAGE_TIMEOUT_MS, 1500);
+  assert.equal(timeoutFor(nav("/t/fedcba9876543210fedcba9876543210")), 1500);
+  assert.equal(timeoutFor(nav("/w/0123456789abcdef0123456789abcdef")), 1500);
+  assert.equal(timeoutFor(nav("/i/baguio-barkada-nov6")), 1500);
+  assert.equal(timeoutFor(nav("/buses")), NETWORK_TIMEOUT_MS, "these pages carry data in their HTML");
+  assert.equal(timeoutFor(strategyFor({ method: "GET", url: "https://api.test/sessions/fedcba9876543210fedcba9876543210" }, origins)), NETWORK_TIMEOUT_MS);
+});
+
+test("TG57-S3 a saved shell answers at 1.5 s of bad signal, and the network's copy still lands", async () => {
+  const cache = new Map<string, Response>();
+  cache.set("page", new Response("old shell", { headers: { "X-TG-Saved-At": "2026-11-01T00:00:00.000Z" } }));
+  let land!: (r: Response) => void;
+  const run = tg().networkFirst({
+    network: () => new Promise<Response>((r) => (land = r)),
+    readCache: async () => cache.get("page")?.clone(),
+    writeCache: async (res: Response) => void cache.set("page", res),
+    timeoutMs: 5, // the real timer, shortened: networkFirst takes the wait as given
+    nowIso: () => "2026-11-02T00:00:00.000Z",
+  });
+  const first = await run.result;
+  assert.equal(first.source, "cache");
+  assert.equal(await first.response.text(), "old shell");
+  land(new Response("new shell"));
+  await run.done;
+  assert.equal(await cache.get("page")!.clone().text(), "new shell", "the next open gets the new shell");
+});
+
+test("TG57-S2 the fetch handler uses timeoutFor, and SW_VERSION moved", () => {
+  const src = readFileSync(SW_PATH, "utf8");
+  assert.match(src, /timeoutMs: timeoutFor\(plan\)/);
+  assert.doesNotMatch(src, /timeoutMs: NETWORK_TIMEOUT_MS/);
+  assert.notEqual(tg().SW_VERSION, "2026-11-02.2");
+});
