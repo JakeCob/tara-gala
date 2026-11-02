@@ -43,12 +43,17 @@ def _proofs(wallet: WalletOut) -> int:
     return sum(1 for s in wallet.settlements if s.has_proof)
 
 
+def _not_found(share_slug: str, detail: str, **kwargs) -> HTTPException:
+    logger.info("wallet proof not found share_slug=%s detail=%s", share_slug, detail)
+    return HTTPException(404, detail, **kwargs)
+
+
 def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes) -> WalletOut:
     """Stores the bytes first and locks the wallet after, unlike trip_files._save: see the module docstring."""
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug)
         if _payment(conn, wallet_id, settlement_id) is None:
-            raise HTTPException(404, NOT_FOUND)
+            raise _not_found(share_slug, NOT_FOUND)
     path = f"wallets/{wallet_id}/{uuid4()}"
     try:
         storage.store().put(path, data, content_type)
@@ -74,7 +79,7 @@ def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes) 
     if wallet is None:  # undone or filled up during the upload: these bytes have no row
         forget_proof(path, share_slug)
         if payment is None:
-            raise HTTPException(404, NOT_FOUND)
+            raise _not_found(share_slug, NOT_FOUND)
         logger.info("wallet proof refused share_slug=%s reason=too_many_proofs bytes=%d", share_slug, len(data))
         raise HTTPException(409, "too_many_proofs")
     forget_proof(old, share_slug)
@@ -110,10 +115,11 @@ def get_proof(share_slug: str, settlement_id: UUID) -> Response:
     with db.get_conn() as conn:
         payment = _payment(conn, _wallet_id(conn, share_slug), settlement_id)
     if payment is None or payment["proof_path"] is None:
-        raise HTTPException(404, NO_PROOF, headers=NOINDEX)
+        raise _not_found(share_slug, NO_PROOF, headers=NOINDEX)
     try:
         data = storage.store().get(payment["proof_path"])
     except storage.StorageError:
+        logger.warning("wallet proof read failed share_slug=%s", share_slug)
         raise HTTPException(503, "storage_unavailable") from None
     logger.info("wallet proof get share_slug=%s bytes=%d", share_slug, len(data))
     return Response(
@@ -131,9 +137,9 @@ def delete_proof(share_slug: str, settlement_id: UUID, request: Request, respons
         wallet_id = _wallet_id(conn, share_slug, lock=True)
         payment = _payment(conn, wallet_id, settlement_id)
         if payment is None:
-            raise HTTPException(404, NOT_FOUND)
+            raise _not_found(share_slug, NOT_FOUND)
         if payment["proof_path"] is None:  # a swept row keeps its proof_at, and still says Proof deleted.
-            raise HTTPException(404, NO_PROOF)
+            raise _not_found(share_slug, NO_PROOF)
         conn.execute(
             "update settlements set proof_path = null, proof_type = null, proof_bytes = null, proof_at = null where id = %s",
             (settlement_id,),
