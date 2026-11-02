@@ -313,9 +313,10 @@ test("T48-W1 the map party gets its looks through PartyStage, with no chibi name
   assert.doesNotMatch(map, /\bchibi\(/);
 });
 
-test("T48-W2 only PartyStage and PartyPicker call chibiLook, and no component spells out a chibi- sprite name", () => {
+// LevelMap joined deliberately (TG-52 ux M8): the group on the level map is one of the same cast, not a classic chibi
+test("T48-W2 only PartyStage, PartyPicker and LevelMap call chibiLook, and no component spells out a chibi- sprite name", () => {
   const callers = componentFiles.filter((u) => /\bchibiLook\(/.test(readFileSync(u, "utf8"))).map((u) => u.pathname.split("/src/")[1]);
-  assert.deepEqual(callers.filter((f) => !f.startsWith("lib/")).sort(), ["components/PartyPicker.tsx", "components/PartyStage.tsx"]);
+  assert.deepEqual(callers.filter((f) => !f.startsWith("lib/")).sort(), ["components/LevelMap.tsx", "components/PartyPicker.tsx", "components/PartyStage.tsx"]);
   for (const u of componentFiles.filter((x) => /\/(components|app)\//.test(x.pathname))) {
     assert.doesNotMatch(readFileSync(u, "utf8"), /["'`]chibi-/, u.pathname);
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, type PremadeSummary } from "@/lib/api";
@@ -8,9 +8,10 @@ import {
   type Hotel, type Trip, type TripFailure, type TripResult, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
   slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
-import GuideView from "./GuideView";
+import LevelMap from "./LevelMap";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
 import { fetchItinerary } from "@/lib/api";
+import { fitPhoto } from "@/lib/shrink";
 import type { Guide } from "@/lib/guide";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
 
@@ -23,9 +24,13 @@ const NO_HOTEL: Hotel = { name: "", address: "", check_in: null, check_out: null
 const remember = (trip: Trip) =>
   rememberTrip({ slug: trip.share_slug, name: trip.name, start_date: trip.start_date, wallet_slug: trip.wallet?.share_slug ?? null });
 
-/** Fetch every shared file once, so the service worker keeps them: tickets have to open at the terminal offline */
-function keepFilesOffline(trip: Trip) {
-  for (const f of trip.files) void fetchFile(trip.share_slug, f.id);
+/** Fetch every shared ticket, QR and booking once, so the service worker keeps them: tickets have to open at the
+ * terminal offline. Not again on each 30-second poll. Photos are kept as they're viewed instead: up to 300 of them is
+ * too much to fetch up front. */
+function keepFilesOffline(trip: Trip, kept: Set<string>) {
+  for (const f of trip.files) {
+    if (f.kind !== "photo" && !kept.has(f.id)) void fetchFile(trip.share_slug, f.id).then((blob) => blob && kept.add(f.id));
+  }
 }
 
 /**
@@ -39,6 +44,7 @@ export default function TripView({ slug }: { slug: string }) {
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const keptFiles = useRef(new Set<string>());
 
   useEffect(() => {
     let live = true;
@@ -47,7 +53,7 @@ export default function TripView({ slug }: { slug: string }) {
       console.info("[tg-trip] load ok=%s", r.ok ? "yes" : r.why);
       if (r.ok) {
         remember(r.trip);
-        keepFilesOffline(r.trip);
+        keepFilesOffline(r.trip, keptFiles.current);
         setLoad({ state: "ready", trip: r.trip });
       } else {
         // Offline with a copy on screen: keep showing it; the offline banner says so
@@ -122,13 +128,41 @@ export default function TripView({ slug }: { slug: string }) {
       <section aria-labelledby="progress-title" className="flex flex-col gap-3">
         <SectionTitle id="progress-title">Trip progress</SectionTitle>
         <p className="text-sm text-muted md:max-w-prose">
-          Tick each step as the group does it, from any phone. The group shows at the last place ticked.
+          Each stop is a level. Tap one to mark it done or add photos, from any phone. The group stands on the last level done.
         </p>
-        <GuideView
+        <LevelMap
+          wide
           guide={theGuide}
-          checklistFirst
           marks={trip.marks}
+          photos={{
+            slug,
+            files: trip.files,
+            onAdd: async (rowKey, picked) => {
+              let added = 0;
+              let skipped = 0;
+              for (const file of picked) {
+                const photo = await fitPhoto(file);
+                if (!photo) {
+                  skipped++;
+                  continue;
+                }
+                const ok = await write("photo-add", () => tripApi.addFile(slug, "photo", photo, rowKey ? { row_key: rowKey } : {}), "");
+                if (!ok) {
+                  if (added) setNotice((n) => n && { ...n, text: `${added} of ${picked.length} photos added. ${n.text}` });
+                  return;
+                }
+                added++;
+              }
+              console.info("[tg-trip] photo-add added=%d skipped=%d", added, skipped);
+              if (skipped) setNotice({ text: `${skipped === 1 ? "One picture" : `${skipped} pictures`} couldn't be shrunk to share. Try a screenshot instead.`, error: true });
+              else if (added) setNotice({ text: `${added} photo${added === 1 ? "" : "s"} added.`, error: false });
+            },
+            onDelete: (file) => void write("photo-delete", () => tripApi.deleteFile(slug, file.id), "Photo deleted."),
+          }}
           busy={busy}
+          problem={notice?.error ? notice.text : null}
+          said={notice && !notice.error ? notice.text : ""}
+          onOpenLevel={() => setNotice(null)}
           onTick={(key, done) =>
             write(done ? "tick" : "untick", () => (done ? tripApi.mark(slug, key, "done") : tripApi.unmark(slug, key)), done ? "Ticked." : "Unticked.")
           }

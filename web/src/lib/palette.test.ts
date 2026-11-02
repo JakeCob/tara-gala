@@ -283,6 +283,7 @@ function boxes(source: string) {
 }
 // ux §2 / plan §3: the error and changed boxes, found by their text. A one-sentence <PixelBox as="p"> is alertText.
 const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][] = [
+  ["src/components/LevelMap.tsx", "{problem}", "alertText"], // TG-52 ux M9: a failed write, in the level dialog
   ["src/components/PlanResults.tsx", "{view.message}", "alert"],
   ["src/components/PlanResults.tsx", "{LIST.failed}", "alert"],
   ["src/components/ItineraryView.tsx", "{NOT_FOUND}", "alert"],

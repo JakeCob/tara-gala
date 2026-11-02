@@ -4,10 +4,34 @@
 import { MAX_FILE_BYTES } from "./trip.ts";
 
 export const MAX_SIDE = 2400;
+export const PHOTO_SIDE = 1600; // trip photos: about 300 KB each, so 300 fit well inside Storage's free 1 GB
 
 /** The scale that fits w by h inside MAX_SIDE, never enlarging. */
 export function fitScale(w: number, h: number, maxSide = MAX_SIDE): number {
   return Math.min(1, maxSide / Math.max(w, h, 1));
+}
+
+/** A trip photo, always redrawn as a JPEG no bigger than 1600 px (PR 4); null if the browser can't redraw it. */
+export async function fitPhoto(picture: Blob): Promise<Blob | null> {
+  try {
+    const bitmap = await createImageBitmap(picture);
+    const scale = fitScale(bitmap.width, bitmap.height, PHOTO_SIDE);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      bitmap.close();
+      return null; // without a drawing, toBlob would give a blank picture
+    }
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const photo = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/jpeg", 0.82));
+    canvas.width = 0; // iOS caps total canvas memory: free it before the next photo in a batch
+    return photo && photo.size <= MAX_FILE_BYTES ? photo : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The picture as is when it's small enough, else a smaller JPEG; null if the browser can't redraw it. */
