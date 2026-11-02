@@ -133,7 +133,6 @@ export default function TripView({ slug }: { slug: string }) {
           Each stop is a level. Tap one to mark it done or add photos, from any phone. The group stands on the last level done.
         </p>
         <LevelMap
-          wide
           guide={theGuide}
           marks={trip.marks}
           photos={{
