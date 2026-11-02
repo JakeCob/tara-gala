@@ -55,7 +55,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
-  const [open, setOpen] = useState<Level | null>(null);
+  const [open, setOpen] = useState<{ key: string; tap: number } | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const here = marks ? whereNow(guide, marks) : null;
   const day = guide.days.find((d) => d.day === world) ?? guide.days[0];
@@ -65,7 +65,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const start = startPoint(list.length);
   const chosen = day.pick ? byKey.get(pickMark(day.pick.key))?.value : undefined;
   const photosAt = (key: string | null) => photos?.files.filter((f) => f.kind === "photo" && f.row_key === key) ?? [];
-  const current = open && list.find((l) => l.row.key === open.row.key); // stays fresh as ticks land
+  const current = open && list.find((l) => l.row.key === open.key); // stays fresh as ticks land
   const next = marks ? nextLevel(list) : null;
   const atStart = !!marks && !list.some((l) => l.done); // no ticks in this world yet: the group waits at START
   const screen = useRef<HTMLElement>(null);
@@ -178,7 +178,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
               const shots = photosAt(l.row.key).length;
               return (
                 <li key={l.row.key} data-level={l.row.key} className="contents">
-                  <button type="button" onClick={() => { onOpenLevel?.(); setOpen(l); }} data-next={l.row.key === next ? "" : undefined}
+                  <button type="button" onClick={() => { onOpenLevel?.(); setOpen((o) => ({ key: l.row.key, tap: (o?.tap ?? 0) + 1 })); }} data-next={l.row.key === next ? "" : undefined}
                     className={cx("focus-pixel absolute flex -translate-y-1/2 items-center gap-2 text-left", !left && "flex-row-reverse", isHere && "z-10")}
                     style={left ? { left: `calc(${p.x}% - ${TILE_PX / 2}px)`, right: 8, top: p.y } : { right: `calc(${100 - p.x}% - ${TILE_PX / 2}px)`, left: 8, top: p.y }}>
                     <span className="sr-only">Level {l.label}, </span>
@@ -227,9 +227,11 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       {menu === "sources" && <div className="lg:col-start-2"><Sources guide={guide} /></div>}
       {menu === "album" && photos && <div className="lg:col-start-2"><Album photos={photos} guide={guide} busy={busy} /></div>}
 
-      {current && (
-        <LevelDialog level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)}
-          onClose={() => setOpen(null)} onTick={onTick} />
+      {open && current && (
+        // Keyed by tap: each one gets its own dialog, because showModal runs once on mount. close() shuts a dialog at once
+        // but its close event waits for the next frame, so that event only clears its own tap (TG-54).
+        <LevelDialog key={open.tap} level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)}
+          onClose={() => setOpen((o) => (o?.tap === open.tap ? null : o))} onTick={onTick} />
       )}
     </div>
   );

@@ -1118,21 +1118,6 @@ test("T53-W23 a proof is never cached: /proof bypasses, and the wallet stays net
   }
 });
 
-test("T53-W23 TG-53 leaves sw.js alone: stored files never expire, so a saved receipt would outlive the sweep", (t) => {
-  let base: string;
-  try {
-    base = execFileSync("git", ["show", "origin/main:web/public/sw.js"], {
-      cwd: new URL(".", SW_PATH),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch {
-    t.skip("skipped: origin/main not fetched; run locally before merging");
-    return;
-  }
-  assert.equal(readFileSync(SW_PATH, "utf8"), base);
-});
-
 test("T43-O5 SW_VERSION changes whenever sw.js does", (t) => {
   let base: string;
   try {
@@ -1253,4 +1238,57 @@ test("T22-L18 a stored sprite survives a service worker update", async () => {
 test("T22-L18 SW_VERSION is bumped for this change", () => {
   // Main was at 2026-10-29.1 (TG-43) when TG-22 rebased onto it; T43-O5 checks every later change against main
   assert.notEqual(tg().SW_VERSION, "2026-10-29.1");
+});
+
+// ---------------------------------------------------------------- TG-54: a copy's age is when its GET left
+
+test("TG54-S1 a stored copy is stamped with the moment its GET left, not when the answer landed", async () => {
+  let now = "2026-11-06T01:00:00.000Z";
+  const writes: Response[] = [];
+  const run = tg().networkFirst({
+    network: async () => {
+      await Promise.resolve();
+      now = "2026-11-06T01:00:05.000Z"; // the answer takes 5 s
+      return json([]);
+    },
+    readCache: async () => undefined,
+    writeCache: async (res: Response) => void writes.push(res),
+    timeoutMs: 20,
+    nowIso: () => now,
+  });
+  await run.done;
+  assert.equal(writes[0].headers.get("X-TG-Saved-At"), "2026-11-06T01:00:00.000Z");
+});
+
+test("TG54-S2 an answer never overwrites a copy from a GET that left after it", async () => {
+  const newer = json([{ id: "new" }], 200, "2026-11-06T01:00:01.000Z");
+  const held = runNetworkFirst(async () => json([{ id: "old" }]), newer); // this GET left at 01:00:00
+  await held.run.done;
+  assert.equal(held.writes.length, 0, "the newer copy stays");
+  for (const stamp of ["2026-11-06T01:00:00.000Z", "2026-11-05T23:00:00.000Z"]) {
+    const ok = runNetworkFirst(async () => json([{ id: "fresh" }]), json([{ id: "was" }], 200, stamp));
+    await ok.run.done;
+    assert.equal(ok.writes.length, 1, `a copy stamped ${stamp} isn't newer: replace it`);
+  }
+  const unstamped = runNetworkFirst(async () => json([{ id: "fresh" }]), json([{ id: "was" }]));
+  await unstamped.run.done;
+  assert.equal(unstamped.writes.length, 1, "a copy with no stamp has no age: replace it");
+});
+
+test("TG54-S3 the older of two GETs landing last leaves the newer copy in the cache", async () => {
+  let cache: Response | undefined;
+  const get = (left: string, network: () => Promise<Response>) =>
+    tg().networkFirst({
+      network,
+      readCache: async () => cache?.clone(),
+      writeCache: async (res: Response) => void (cache = res),
+      timeoutMs: 1000,
+      nowIso: () => left,
+    });
+  let answerOlder: (res: Response) => void = () => {};
+  const older = get("2026-11-06T01:00:00.000Z", () => new Promise<Response>((r) => (answerOlder = r)));
+  await get("2026-11-06T01:00:02.000Z", async () => json({ marks: ["row:d1-02"] })).done;
+  answerOlder(json({ marks: [] }));
+  await older.done;
+  assert.deepEqual(await cache!.clone().json(), { marks: ["row:d1-02"] });
 });

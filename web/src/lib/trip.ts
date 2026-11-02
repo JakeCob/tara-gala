@@ -109,7 +109,26 @@ export function toInput(wall: string | null): string {
 // ---------------------------------------------------------------- API
 
 export type TripFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected";
-export type TripResult = { ok: true; trip: Trip } | { ok: false; why: TripFailure; detail?: string };
+/** `savedAt`: the service worker answered with its copy, not the API; this is when that copy's GET left (ms). */
+export type TripResult = { ok: true; trip: Trip; savedAt?: number } | { ok: false; why: TripFailure; detail?: string };
+export type TripLoad = { state: "loading" } | { state: "ready"; trip: Trip } | { state: "error"; why: TripFailure };
+
+/** How new an answer is: when its GET left, since it can't hold anything later. The worker and the page share a clock. */
+export function answerFrom(r: TripResult, left: number): number {
+  return (r.ok && r.savedAt) || left;
+}
+
+/**
+ * TG-54: what a GET's answer does to the screen. `overtaken`: it's older than the trip showing, so it would take a tick
+ * back off the map. The trip on screen stays, and a later answer brings anything newer. A saved copy is judged the same
+ * way: on slow signal it's how other phones' ticks arrive.
+ */
+export function afterGet(prev: TripLoad, r: TripResult, slug: string, overtaken: boolean): TripLoad {
+  const showing = prev.state === "ready" && prev.trip.share_slug === slug;
+  if (showing && overtaken) return prev;
+  if (r.ok) return { state: "ready", trip: r.trip };
+  return prev.state === "ready" && r.why === "offline" ? prev : { state: "error", why: r.why }; // offline with a copy on screen: keep showing it; the offline banner says so
+}
 
 const DETAIL: Record<string, string> = {
   itinerary_not_found: "That plan link doesn't work. Copy it again from the plan's Share button.",
@@ -157,7 +176,11 @@ async function call(path: string, init?: { method: Method; body?: unknown; raw?:
     return { ok: false, why: "offline" };
   }
   if (res.status === 204) return { ok: true, trip: null };
-  if (res.ok) return { ok: true, trip: (await res.json()) as Trip };
+  if (res.ok) {
+    const trip = (await res.json()) as Trip;
+    const savedAt = Date.parse(res.headers.get("x-tg-saved-at") ?? "");
+    return Number.isNaN(savedAt) ? { ok: true, trip } : { ok: true, trip, savedAt };
+  }
   if (res.status === 404) return { ok: false, why: "not_found" };
   if (res.status === 429) return { ok: false, why: "rate_limited" };
   if (res.status >= 500) return { ok: false, why: "server" };

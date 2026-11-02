@@ -230,3 +230,107 @@ test("TR-F4 a batch that stops early says how many landed", () => {
   const view = readFileSync("src/components/TripView.tsx", "utf8");
   assert.match(view, /`\$\{added\} of \$\{picked\.length\} photos added\. \$\{n\.text\}`/);
 });
+
+// ---------------------------------------------------------------- TG-54: an older answer never replaces newer state
+
+const onScreen = (marks: string[]) => ({
+  state: "ready" as const,
+  trip: { share_slug: TRIP, marks: marks.map((key) => ({ key, value: "done", updated_at: "2026-11-06T01:00:00.000000Z" })) } as unknown as import("./trip.ts").Trip,
+});
+
+test("TG54-1 afterGet: an answer a newer one overtook keeps the trip on screen, so the tick stays", async () => {
+  const { afterGet } = await import("./trip.ts");
+  const prev = onScreen(["row:d1-01"]);
+  const older = { ok: true as const, trip: onScreen([]).trip };
+  assert.equal(afterGet(prev, older, TRIP, true), prev);
+  assert.deepEqual(afterGet(prev, older, TRIP, false), { state: "ready", trip: older.trip }, "not overtaken: another phone's change comes through, an untick too");
+});
+
+test("TG54-2 afterGet: a saved copy is judged by its age alone, and still opens a trip offline", async () => {
+  const { afterGet } = await import("./trip.ts");
+  const prev = onScreen(["row:d1-01"]);
+  const saved = { ok: true as const, trip: onScreen([]).trip, savedAt: 2000 };
+  assert.equal(afterGet(prev, saved, TRIP, true), prev, "older than the screen: keep the screen");
+  assert.deepEqual(afterGet(prev, saved, TRIP, false), { state: "ready", trip: saved.trip }, "newer than the screen: it shows");
+  assert.deepEqual(afterGet({ state: "loading" }, saved, TRIP, true), { state: "ready", trip: saved.trip }, "nothing on screen: the copy is the trip");
+  assert.deepEqual(afterGet({ state: "error", why: "offline" }, saved, TRIP, true), { state: "ready", trip: saved.trip });
+  const other = { ...onScreen([]), trip: { ...onScreen([]).trip, share_slug: WALLET } };
+  assert.deepEqual(afterGet(other, saved, TRIP, true), { state: "ready", trip: saved.trip }, "another trip's screen isn't this trip's copy");
+});
+
+test("TG54-3 afterGet: a failure keeps the trip when offline or overtaken, and shows otherwise", async () => {
+  const { afterGet } = await import("./trip.ts");
+  const prev = onScreen(["row:d1-01"]);
+  assert.equal(afterGet(prev, { ok: false, why: "offline" }, TRIP, false), prev, "offline with a copy on screen: keep showing it");
+  assert.deepEqual(afterGet(prev, { ok: false, why: "not_found" }, TRIP, false), { state: "error", why: "not_found" });
+  assert.deepEqual(afterGet(prev, { ok: false, why: "server" }, TRIP, false), { state: "error", why: "server" });
+  assert.equal(afterGet(prev, { ok: false, why: "server" }, TRIP, true), prev, "a write landed after this GET left: it just worked, so no error box");
+  assert.deepEqual(afterGet({ state: "loading" }, { ok: false, why: "offline" }, TRIP, false), { state: "error", why: "offline" });
+  assert.deepEqual(afterGet({ state: "loading" }, { ok: false, why: "server" }, TRIP, true), { state: "error", why: "server" }, "nothing on screen to keep");
+});
+
+test("TG54-4 tripApi.get gives a saved copy's age, in ms; a live answer has none", async () => {
+  const { tripApi } = await import("./trip.ts");
+  const real = globalThis.fetch;
+  const body = JSON.stringify({ share_slug: TRIP, marks: [] });
+  const stamped = (value: string) => (async () => new Response(body, { status: 200, headers: { "X-TG-Saved-At": value } })) as typeof fetch;
+  try {
+    globalThis.fetch = stamped("2026-11-07T01:00:00.000Z");
+    const copy = await tripApi.get(TRIP);
+    assert.ok(copy.ok && copy.savedAt === Date.parse("2026-11-07T01:00:00.000Z"));
+    globalThis.fetch = stamped("not a time");
+    const bad = await tripApi.get(TRIP);
+    assert.ok(bad.ok && bad.savedAt === undefined, "an unreadable stamp is no age");
+    globalThis.fetch = (async () => new Response(body, { status: 200 })) as typeof fetch;
+    const live = await tripApi.get(TRIP);
+    assert.ok(live.ok && live.savedAt === undefined);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test("TG54-5 TripView: every GET it shows goes through afterGet, aged against what's on screen", () => {
+  const view = readFileSync("src/components/TripView.tsx", "utf8");
+  assert.match(view, /const left = Date\.now\(\);\s+tripApi\.get\(slug\)\.then\(\(r\) => \{\s+if \(!live\) return;/, "timed before the GET leaves; an answer a newer GET replaced is dropped");
+  assert.match(view, /const from = answerFrom\(r, left\);\s+const overtaken = from < shownAt\.current;/);
+  assert.match(view, /setLoad\(\(prev\) => afterGet\(prev, r, slug, overtaken\)\);/);
+  const write = view.slice(view.indexOf("async function write("), view.indexOf("const onFail ="));
+  assert.ok(write.indexOf("shownAt.current = Date.now();") > write.indexOf("if (!r.ok)"), "only a write that landed");
+  assert.ok(write.indexOf("shownAt.current = Date.now();") < write.indexOf("setLoad("), "before its state, so no answer can slip between");
+  assert.equal(view.match(/setLoad\(/g)?.length, 2, "afterGet and the write: nothing else sets the trip");
+  assert.match(view, /console\.info\("\[tg-trip\] load ok=%s", r\.ok \? \(overtaken \? "overtaken" : r\.savedAt \? "saved" : "yes"\) : r\.why\);/);
+  // An overtaken answer leaves everything alone: this phone's note of the trip too
+  assert.match(view, /if \(r\.ok && !overtaken\) \{\s+shownAt\.current = from;\s+remember\(r\.trip\);\s+keepFilesOffline\(r\.trip, keptFiles\.current\);\s+\}/);
+});
+
+test("TG54-7 answerFrom: a slow-signal phone still sees other phones' ticks, and never loses its own", async () => {
+  const { afterGet, answerFrom } = await import("./trip.ts");
+  const ok = (marks: string[], savedAt?: number) => ({ ok: true as const, trip: onScreen(marks).trip, ...(savedAt ? { savedAt } : {}) });
+  // TripView's load path, in order
+  let shownAt = 0;
+  let screen: import("./trip.ts").TripLoad = { state: "loading" };
+  const land = (r: import("./trip.ts").TripResult, left: number) => {
+    const from = answerFrom(r, left);
+    const overtaken = from < shownAt;
+    if (r.ok && !overtaken) shownAt = from;
+    screen = afterGet(screen, r, TRIP, overtaken);
+  };
+  const marks = () => (screen.state === "ready" ? screen.trip.marks.map((m) => m.key) : null);
+
+  land(ok([]), 1000); // opened with signal
+  assert.deepEqual(marks(), []);
+  // Signal slows: each GET gets the worker's copy at 4 s, and its real answer only reaches the cache
+  land(ok([], 1000), 31000);
+  assert.deepEqual(marks(), []);
+  land(ok(["row:d1-03"], 31000), 61000); // the copy now holds another phone's tick, from the GET that left at 31 s
+  assert.deepEqual(marks(), ["row:d1-03"], "a saved copy newer than the screen shows");
+  // This phone ticks at 70 s; the next GET gets a copy from before it
+  shownAt = 70000;
+  screen = { state: "ready", trip: onScreen(["row:d1-03", "row:d1-04"]).trip };
+  land(ok(["row:d1-03"], 61000), 91000);
+  assert.deepEqual(marks(), ["row:d1-03", "row:d1-04"], "a copy from before the write doesn't take the tick back");
+  land(ok(["row:d1-03"]), 69000); // a live GET that left before the tick
+  assert.deepEqual(marks(), ["row:d1-03", "row:d1-04"], "nor does a GET sent before it");
+  land(ok(["row:d1-03", "row:d1-04", "row:d1-05"], 75000), 121000); // the copy from the refresh after the tick
+  assert.equal(marks()?.length, 3, "a copy from after the write shows");
+});
