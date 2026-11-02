@@ -183,7 +183,7 @@ test("LM15 Mark done and Add photos keep focus while busy, and the dialog says w
   assert.match(dialog, /!busy && onTick\?\.\(/);
   assert.match(dialog, /!busy && picker\.current\?\.click\(\)/);
   assert.match(dialog, /<p role="status" className="text-sm empty:sr-only">\{said\}<\/p>/, "always mounted, or a screen reader misses it");
-  assert.match(map, /onClick=\{\(\) => \{ onOpenLevel\?\.\(\); setOpen\(l\); \}\}/, "the last write's notice doesn't follow you to another level");
+  assert.match(map, /onClick=\{\(\) => \{ onOpenLevel\?\.\(\); setOpen\(\(o\) => \(\{ key: l\.row\.key, tap: \(o\?\.tap \?\? 0\) \+ 1 \}\)\); \}\}/, "the last write's notice doesn't follow you to another level");
 });
 
 test("LM16 the Album loads a page of photos at a time, not all 300 at once", () => {
@@ -192,4 +192,15 @@ test("LM16 the Album loads a page of photos at a time, not all 300 at once", () 
   assert.match(map, /const ALBUM_PAGE = 24;/);
   assert.match(album, /all\.slice\(0, shownCount\)\.map\(/);
   assert.match(album, /Show \{Math\.min\(ALBUM_PAGE, all\.length - shownCount\)\} more/);
+});
+
+test("TG54-6 a tap on any level before the last dialog's close event still opens it, the same level too", () => {
+  // close() shuts the dialog at once, but the close event waits for the next frame. It must clear only its own tap, and
+  // every tap needs its own dialog, because showModal runs once on mount.
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /const \[open, setOpen\] = useState<\{ key: string; tap: number \} \| null>\(null\);/);
+  assert.match(map, /setOpen\(\(o\) => \(\{ key: l\.row\.key, tap: \(o\?\.tap \?\? 0\) \+ 1 \}\)\);/);
+  assert.match(map, /<LevelDialog key=\{open\.tap\} level=\{current\}/);
+  assert.match(map, /onClose=\{\(\) => setOpen\(\(o\) => \(o\?\.tap === open\.tap \? null : o\)\)\}/);
+  assert.doesNotMatch(map, /onClose=\{\(\) => setOpen\(null\)\}/);
 });

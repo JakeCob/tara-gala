@@ -230,3 +230,67 @@ test("TR-F4 a batch that stops early says how many landed", () => {
   const view = readFileSync("src/components/TripView.tsx", "utf8");
   assert.match(view, /`\$\{added\} of \$\{picked\.length\} photos added\. \$\{n\.text\}`/);
 });
+
+// ---------------------------------------------------------------- TG-54: an older answer never replaces newer state
+
+const onScreen = (marks: string[]) => ({
+  state: "ready" as const,
+  trip: { share_slug: TRIP, marks: marks.map((key) => ({ key, value: "done", updated_at: "2026-11-06T01:00:00.000000Z" })) } as unknown as import("./trip.ts").Trip,
+});
+
+test("TG54-1 afterGet: a GET a write overtook keeps the trip on screen, so the tick stays", async () => {
+  const { afterGet } = await import("./trip.ts");
+  const prev = onScreen(["row:d1-01"]);
+  const older = { ok: true as const, trip: onScreen([]).trip };
+  assert.equal(afterGet(prev, older, TRIP, true), prev);
+  assert.deepEqual(afterGet(prev, older, TRIP, false), { state: "ready", trip: older.trip }, "no write since: another phone's change comes through, an untick too");
+});
+
+test("TG54-2 afterGet: the service worker's saved copy keeps the trip on screen, and still opens one offline", async () => {
+  const { afterGet } = await import("./trip.ts");
+  const prev = onScreen(["row:d1-01"]);
+  const saved = { ok: true as const, trip: onScreen([]).trip, saved: true };
+  assert.equal(afterGet(prev, saved, TRIP, false), prev);
+  assert.deepEqual(afterGet({ state: "loading" }, saved, TRIP, false), { state: "ready", trip: saved.trip }, "nothing on screen: the copy is the trip");
+  assert.deepEqual(afterGet({ state: "error", why: "offline" }, saved, TRIP, false), { state: "ready", trip: saved.trip });
+  const other = { ...onScreen([]), trip: { ...onScreen([]).trip, share_slug: WALLET } };
+  assert.deepEqual(afterGet(other, saved, TRIP, false), { state: "ready", trip: saved.trip }, "another trip's screen isn't this trip's copy");
+  assert.deepEqual(afterGet(other, { ok: true, trip: saved.trip }, TRIP, true), { state: "ready", trip: saved.trip });
+});
+
+test("TG54-3 afterGet: failures behave as before, whatever the write order", async () => {
+  const { afterGet } = await import("./trip.ts");
+  const prev = onScreen(["row:d1-01"]);
+  assert.equal(afterGet(prev, { ok: false, why: "offline" }, TRIP, false), prev, "offline with a copy on screen: keep showing it");
+  assert.deepEqual(afterGet(prev, { ok: false, why: "not_found" }, TRIP, false), { state: "error", why: "not_found" });
+  assert.deepEqual(afterGet(prev, { ok: false, why: "server" }, TRIP, true), { state: "error", why: "server" });
+  assert.deepEqual(afterGet({ state: "loading" }, { ok: false, why: "offline" }, TRIP, false), { state: "error", why: "offline" });
+});
+
+test("TG54-4 tripApi.get says when the answer is the service worker's saved copy", async () => {
+  const { tripApi } = await import("./trip.ts");
+  const real = globalThis.fetch;
+  const body = JSON.stringify({ share_slug: TRIP, marks: [] });
+  try {
+    globalThis.fetch = (async () => new Response(body, { status: 200, headers: { "X-TG-Saved-At": "2026-11-07T01:00:00.000Z" } })) as typeof fetch;
+    const copy = await tripApi.get(TRIP);
+    assert.ok(copy.ok && copy.saved === true);
+    globalThis.fetch = (async () => new Response(body, { status: 200 })) as typeof fetch;
+    const live = await tripApi.get(TRIP);
+    assert.ok(live.ok && !live.saved);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test("TG54-5 TripView: every GET it shows goes through afterGet, against the writes that landed since it left", () => {
+  const view = readFileSync("src/components/TripView.tsx", "utf8");
+  assert.match(view, /const sent = writesLanded\.current;\s+tripApi\.get\(slug\)\.then\(\(r\) => \{/, "counted before the GET leaves");
+  assert.match(view, /const overtaken = writesLanded\.current !== sent;/);
+  assert.match(view, /setLoad\(\(prev\) => afterGet\(prev, r, slug, overtaken\)\);/);
+  const write = view.slice(view.indexOf("async function write("), view.indexOf("const onFail ="));
+  assert.ok(write.indexOf("writesLanded.current++") > write.indexOf("if (!r.ok)"), "only a write that landed");
+  assert.ok(write.indexOf("writesLanded.current++") < write.indexOf("setLoad("), "before its state, so no answer can slip between");
+  assert.equal(view.match(/setLoad\(/g)?.length, 2, "afterGet and the write: nothing else sets the trip");
+  assert.match(view, /console\.info\("\[tg-trip\] load ok=%s", r\.ok \? \(r\.saved \? "saved" : overtaken \? "overtaken" : "yes"\) : r\.why\);/);
+});
