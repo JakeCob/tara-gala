@@ -364,6 +364,16 @@ test("TG57-2 savedTrip: a trip's own copy from the exact URL the GET uses; anoth
   assert.deepEqual(await savedTrip(TRIP, store(trip)), { trip, savedAt: Date.parse("2026-11-02T05:00:00.000Z") });
   assert.equal(url, `${API_URL}/sessions/${TRIP}`);
   assert.equal(await savedTrip(TRIP, store({ ...trip, share_slug: "0".repeat(32) })), null);
+  const { savedItinerary } = await import("./api.ts");
+  const real = globalThis.caches;
+  const asked: string[] = [];
+  try {
+    Object.defineProperty(globalThis, "caches", { configurable: true, value: { match: async (u: string) => void asked.push(u) } });
+    await savedItinerary("baguio-barkada-nov6");
+  } finally {
+    Object.defineProperty(globalThis, "caches", { configurable: true, value: real });
+  }
+  assert.deepEqual(asked, [`${API_URL}/itineraries/baguio-barkada-nov6`], "the exact URL fetchItinerary uses, or the saved guide never shows");
 });
 
 test("TG57-3 afterSaved: a saved copy only fills an empty screen, never a trip or an error", async () => {
@@ -468,7 +478,7 @@ test("TG57-7 TripView: saved copies go through the age rule, the guide retries w
   assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: null, failed: true \}\)/);
   assert.match(guide, /\[planSlug, retry\]/, "a failed fetch tries again with the next poll, not only on a full reload");
   assert.match(src, /mapSlot\(trip\.itinerary_slug, guide\)/);
-  assert.match(src, /data-map-loading/);
+  assert.match(src, /\{slot === "frame" && \(\s+<section data-map-loading/, "the frame is drawn");
   assert.doesNotMatch(read("src/components/LevelMap.tsx"), /data-map-loading/);
   assert.doesNotMatch(src.slice(src.indexOf("data-map-loading") - 200, src.indexOf("data-map-loading") + 400), /progress-title/, "#progress-title still means the real map");
 });
@@ -476,7 +486,7 @@ test("TG57-7 TripView: saved copies go through the age rule, the guide retries w
 test("TG57-8 TripHeader: opening the edit form starts from the trip on screen, not the copy it first drew", () => {
   const src = read("src/components/TripView.tsx");
   const header = src.slice(src.indexOf("function TripHeader"), src.indexOf("function PlanSection"));
-  assert.match(header, /openEditor/);
+  assert.match(header, /onClick=\{openEditor\}/, "the button uses it");
   const open = header.slice(header.indexOf("function openEditor"), header.indexOf("async function onShare"));
   assert.match(open, /setName\(trip\.name\)/);
   assert.match(open, /setStart\(trip\.start_date\)/);

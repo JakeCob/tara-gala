@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Guide, GuideRow, Mark } from "./guide.ts";
-import { marksByKey } from "./guide.ts";
+import { marksByKey, whereNow } from "./guide.ts";
 import { BAND_PX, COLUMNS, GAP_PX, PAD_PX, SIGN_DROP, SIGN_GAP, SIGN_ROOM, SNAKE_MIN_PX, START_POINT, TILE_PX, TOP_PX, UNIT, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadBand, roadStops, runsPath, snakeMap, snakeRoad, snakeScenery, startWorld, worldHeight } from "./levelMap.ts";
 
 const row = (key: string, extra: Partial<GuideRow> = {}): GuideRow => ({
@@ -412,4 +412,16 @@ test("TG54-6 a tap on any level before the last dialog's close event still opens
   assert.match(map, /<LevelDialog key=\{open\.tap\} level=\{current\}/);
   assert.match(map, /onClose=\{\(\) => setOpen\(\(o\) => \(o\?\.tap === open\.tap \? null : o\)\)\}/);
   assert.doesNotMatch(map, /onClose=\{\(\) => setOpen\(null\)\}/);
+});
+
+test("TG57-10 a saved start, then fresh marks on a later day: the map follows the group until someone picks a World", () => {
+  const saved = [mark("row:d1-01", "done", "2026-11-06T01:00:00Z")];
+  const fresh = [...saved, mark("row:d2-02", "done", "2026-11-07T01:00:00Z")];
+  assert.equal(startWorld(guide, saved), 1, "the map mounts on the saved copy's World");
+  assert.equal(whereNow(guide, fresh)?.day, 2, "the fresh answer puts the group a day on");
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /const groupDay = here\?\.day;/);
+  assert.match(map, /if \(groupDay && !tabPicked\.current && !open\) setWorld\(groupDay\);\s+\}, \[groupDay, open\]\);/, "an open dialog keeps its World until it closes");
+  const goTo = map.slice(map.indexOf("const goTo ="), map.indexOf("return (", map.indexOf("const goTo =")));
+  assert.match(goTo, /tabPicked\.current = true;/, "a World picked by hand stays picked");
 });
