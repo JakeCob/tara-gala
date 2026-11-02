@@ -118,3 +118,7 @@ Notes:
 | The map misbehaves on a phone | `NEXT_PUBLIC_OVERWORLD_MAP` (web) | after a web redeploy on Vercel | `/i/<slug>` shows the list view, with the same facts. Phones pick it up on their next online load. |
 | A ready-made trip is wrong | `PREMADE_ITINERARIES` (api) and `NEXT_PUBLIC_PREMADE_ITINERARIES` (web) | api: Railway restarts it on the change; web: after a redeploy on Vercel | `/plan` stops listing them. Share links `/i/<slug>` still open. A phone that saved the list can still show it offline. Fixing the data is usually better. |
 | The service worker serves broken pages | `NEXT_PUBLIC_SERVICE_WORKER` (web) | after a web redeploy on Vercel | **Last resort.** On its next online load, each phone unregisters the worker and **deletes every saved page, trips and itineraries included**, so offline use ends. Warn the travellers first. Undoing it means every traveller redoes §4 steps 2 to 5 online. |
+
+## 8. After the trip
+- [ ] **Stranded proofs, by Nov 22.** Run the proof reconciliation in the ops notes, dry run first, then delete. The stranded count goes to 0.
+- [ ] **Wallets deleted by hand.** Run it again after any wallet delete by SQL.

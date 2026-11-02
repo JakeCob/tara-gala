@@ -1,22 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PX, PixelBox, PixelButton, PixelChoice, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import PayoutQr, { loadMyQr } from "@/components/PayoutQr";
 import { PhotoViewer } from "@/components/PhotoViewer";
+import ProofDialog, { type ProofTarget } from "@/components/ProofDialog";
 import { type TripFile, fetchFile, knownTrips, tripApi } from "@/lib/trip";
 import { runShare, shareDeps, type ShareOutcome } from "@/lib/itinerary";
 import {
   failureMessage,
+  fetchProof,
   formatPeso,
   leftToAssign,
   netLine,
   parsePeso,
+  proofControls,
+  proofState,
   rememberWallet,
   splitEqual,
   walletApi,
   whenLine,
   whoAmI,
+  type Settlement,
+  type Transfer,
   type Wallet,
   type WalletFailure,
   type WalletResult,
@@ -193,6 +199,10 @@ export default function WalletView({ slug }: { slug: string }) {
   const [meChoice, setMeChoice] = useState<string | null | undefined>(undefined); // undefined: what this phone remembers
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [settleNotice, setSettleNotice] = useState<Notice | null>(null); // TG-53: in view of the Settle up box
+  const [proof, setProof] = useState<ProofTarget | null>(null);
+  const proofOpen = useRef(false); // a failed reload mustn't take an open dialog and its picture with the page
+  const [opening, setOpening] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [shareNote, setShareNote] = useState("");
   const [qr, setQr] = useState<{ blob: Blob; label: string } | null>(null);
@@ -209,7 +219,7 @@ export default function WalletView({ slug }: { slug: string }) {
         setLoad({ state: "ready", wallet: r.wallet });
       } else {
         // Offline with a copy on screen: keep showing it; the offline banner says so
-        setLoad((prev) => (prev.state === "ready" && r.why === "offline" ? prev : { state: "error", why: r.why }));
+        setLoad((prev) => (prev.state === "ready" && (r.why === "offline" || proofOpen.current) ? prev : { state: "error", why: r.why }));
       }
     });
     return () => {
@@ -252,6 +262,7 @@ export default function WalletView({ slug }: { slug: string }) {
   const me = wallet.members.some((m) => m.id === remembered) ? remembered : null;
   const nameOf = (id: string) => wallet.members.find((m) => m.id === id)?.name ?? "Someone";
   const sharedQr = (memberId: string) => tripQrs?.files.find((f) => f.member_id === memberId);
+  const paymentLine = (s: Transfer) => `${nameOf(s.from_member)} paid ${nameOf(s.to_member)} ${formatPeso(s.amount_centavos)}`;
 
   async function showTheirQr(memberId: string) {
     const file = sharedQr(memberId);
@@ -267,20 +278,57 @@ export default function WalletView({ slug }: { slug: string }) {
     console.info("[tg-wallet] me chosen=%s", id !== null);
   }
 
-  async function write(action: string, op: () => Promise<WalletResult>, done: string): Promise<WalletResult> {
+  async function write(action: string, op: () => Promise<WalletResult>, done: string, say: (n: Notice) => void = setNotice): Promise<WalletResult> {
     setBusy(true);
     setNotice(null);
+    setSettleNotice(null);
     const r = await op();
     setBusy(false);
     console.info("[tg-wallet] %s ok=%s", action, r.ok ? "yes" : r.why);
     if (!r.ok) {
-      setNotice({ text: failureMessage(r), error: true });
+      say({ text: failureMessage(r), error: true });
       return r;
     }
     setLoad({ state: "ready", wallet: r.wallet });
-    setNotice({ text: done, error: false });
+    say({ text: done, error: false });
     void walletApi.get(slug); // the service worker saves GETs, not this write: refresh the offline copy
     return r;
+  }
+
+  function openProof(target: ProofTarget) {
+    proofOpen.current = true;
+    setNotice(null);
+    setSettleNotice(null);
+    setProof(target);
+  }
+
+  function proofSaved(next: Wallet, text?: string) {
+    setLoad({ state: "ready", wallet: next });
+    if (text) setSettleNotice({ text, error: false });
+    void walletApi.get(slug);
+  }
+
+  function proofClosed(saved: boolean) {
+    proofOpen.current = false;
+    setProof(null);
+    // After the frame: close() hands focus back to the opening button first, and that button may have gone
+    requestAnimationFrame(() => {
+      if (!saved && document.activeElement !== document.body) return;
+      const heading = document.getElementById("settle-title");
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView({ block: "center" }); // clear of the tab bar and the offline banner, with the notice under it
+    });
+  }
+
+  async function showProof(s: Settlement, label: string) {
+    if (opening) return;
+    setSettleNotice(null);
+    setOpening(s.id);
+    const blob = await fetchProof(slug, s.id);
+    setOpening(null);
+    console.info("[tg-wallet] proof show ok=%s", blob ? "yes" : "no");
+    if (blob) setQr({ blob, label });
+    else setSettleNotice({ text: "Couldn't open that proof. Try again with signal.", error: true });
   }
 
   async function addMe(e: React.FormEvent) {
@@ -377,7 +425,8 @@ export default function WalletView({ slug }: { slug: string }) {
           />
 
           <PixelBox as="section" aria-labelledby="settle-title" className="flex flex-col gap-3 p-4">
-            <SectionTitle id="settle-title">Settle up</SectionTitle>
+            <SectionTitle id="settle-title" tabIndex={-1}>Settle up</SectionTitle>
+            <NoticeArea notice={settleNotice} className="flex flex-col empty:-mt-3" />
             {wallet.transfers.length === 0 ? (
               <p className="text-sm text-muted">
                 {wallet.expenses.length === 0 ? "Add expenses, and this works out who pays whom." : "All square. Nobody owes anything."}
@@ -393,8 +442,8 @@ export default function WalletView({ slug }: { slug: string }) {
                     {t.from_member === me && (
                       <p className={PX.meta}>
                         {sharedQr(t.to_member)
-                          ? `Open ${nameOf(t.to_member)}'s QR, then scan it in your GCash, Maya or bank app.`
-                          : `Ask ${nameOf(t.to_member)} to show their QR, then pay it in your GCash, Maya or bank app.`}
+                          ? `Open ${nameOf(t.to_member)}'s QR, then scan it in your GCash, Maya or bank app. Screenshot the receipt for proof.`
+                          : `Ask ${nameOf(t.to_member)} to show their QR, then pay it in your GCash, Maya or bank app. Screenshot the receipt for proof.`}
                       </p>
                     )}
                     <div className="flex flex-wrap gap-2">
@@ -408,14 +457,7 @@ export default function WalletView({ slug }: { slug: string }) {
                           Show my QR
                         </PixelButton>
                       )}
-                      <PixelButton
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() => {
-                          if (!window.confirm(`Mark ${nameOf(t.from_member)} → ${nameOf(t.to_member)} ${formatPeso(t.amount_centavos)} as paid?`)) return;
-                          void write("settle", () => walletApi.settle(slug, t), "Marked as paid.");
-                        }}
-                      >
+                      <PixelButton variant="secondary" disabled={busy} onClick={() => openProof({ mode: "mark", transfer: t, settlementId: null })}>
                         Mark paid
                       </PixelButton>
                     </div>
@@ -425,6 +467,57 @@ export default function WalletView({ slug }: { slug: string }) {
             )}
             {owedToMe > 0 && <p className={PX.meta}>Your QR opens from this phone only; it isn&apos;t shared with the group.</p>}
           </PixelBox>
+
+          {wallet.settlements.length > 0 && (
+            <PixelBox as="section" aria-labelledby="paid-title" className="flex flex-col gap-3 p-4">
+              <SectionTitle id="paid-title">Payments made</SectionTitle>
+              <ul className="flex flex-col gap-3">
+                {wallet.settlements.map((s) => {
+                  const line = paymentLine(s);
+                  const can = proofControls(s, me);
+                  return (
+                    <li key={s.id} className="flex flex-col gap-2 border-b-2 border-border pb-3 last:border-b-0 last:pb-0">
+                      <p className="min-w-0 text-sm break-words">
+                        {nameOf(s.from_member)} paid {nameOf(s.to_member)} <span className="tabular-nums font-semibold">{formatPeso(s.amount_centavos)}</span>
+                      </p>
+                      {proofState(s) === "deleted" && <p className={PX.meta}>Proof deleted.</p>}
+                      <div className="flex flex-wrap gap-2">
+                        {can.show && (
+                          <PixelButton variant="secondary" aria-label={`Show proof for ${line}`} aria-disabled={opening === s.id || undefined} onClick={() => showProof(s, line)}>
+                            {opening === s.id ? "Opening..." : "Show proof"}
+                          </PixelButton>
+                        )}
+                        {can.add && (
+                          <PixelButton variant="secondary" aria-label={`Add proof for ${line}`} disabled={busy} onClick={() => openProof({ mode: "add", transfer: s, settlementId: s.id })}>
+                            Add proof
+                          </PixelButton>
+                        )}
+                        {can.change && (
+                          <PixelButton variant="secondary" aria-label={`Change proof for ${line}`} disabled={busy} onClick={() => openProof({ mode: "change", transfer: s, settlementId: s.id })}>
+                            Change proof
+                          </PixelButton>
+                        )}
+                        <PixelButton
+                          variant="secondary"
+                          aria-label={`Undo ${line}`}
+                          disabled={busy}
+                          onClick={() => {
+                            const ask = s.has_proof
+                              ? "Undo this payment? It goes back on the settle-up list, and its proof is deleted for everyone."
+                              : "Undo this payment? It goes back on the settle-up list.";
+                            if (!window.confirm(ask)) return;
+                            void write("settle undo", () => walletApi.undoSettlement(slug, s.id), "Payment undone.", setSettleNotice);
+                          }}
+                        >
+                          Undo
+                        </PixelButton>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </PixelBox>
+          )}
         </div>
 
         <div className="flex flex-col gap-5">
@@ -484,35 +577,11 @@ export default function WalletView({ slug }: { slug: string }) {
             )}
           </section>
 
-          {wallet.settlements.length > 0 && (
-            <section aria-labelledby="paid-title" className="flex flex-col gap-2">
-              <SectionTitle id="paid-title">Payments made</SectionTitle>
-              <ul className="flex flex-col gap-2">
-                {wallet.settlements.map((s) => (
-                  <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <span>
-                      {nameOf(s.from_member)} paid {nameOf(s.to_member)} <span className="tabular-nums font-semibold">{formatPeso(s.amount_centavos)}</span>
-                    </span>
-                    <PixelButton
-                      variant="secondary"
-                      disabled={busy}
-                      onClick={() => {
-                        if (!window.confirm("Undo this payment? It goes back on the settle-up list.")) return;
-                        void write("settle undo", () => walletApi.undoSettlement(slug, s.id), "Payment undone.");
-                      }}
-                    >
-                      Undo
-                    </PixelButton>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
           <PayoutQr />
         </div>
       </div>
 
+      {proof && <ProofDialog slug={slug} wallet={wallet} target={proof} nameOf={nameOf} onWallet={proofSaved} onClosed={proofClosed} />}
       <PhotoViewer photo={qr} onClose={() => setQr(null)} logTag="tg-wallet" />
     </div>
   );

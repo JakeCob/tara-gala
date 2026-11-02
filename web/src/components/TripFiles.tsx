@@ -10,7 +10,8 @@ import { type Member, walletApi } from "@/lib/wallet";
 
 type Write = (action: string, op: () => Promise<TripResult>, done: string) => Promise<boolean>;
 type Shown = { blob: Blob; label: string } | null;
-const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+export const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+export const THUMB_BOX = "h-24 w-[72px] shrink-0 border-2 border-frame bg-screen-paper object-cover object-top";
 
 /** One shared picture, fetched once (the service worker keeps a copy for offline). */
 function useFile(slug: string, file: TripFile | undefined) {
@@ -29,17 +30,16 @@ function useFile(slug: string, file: TripFile | undefined) {
 
 export function Thumb({ slug, file, alt }: { slug: string; file: TripFile; alt: string }) {
   const blob = useFile(slug, file);
-  const box = "h-24 w-[72px] shrink-0 border-2 border-frame bg-screen-paper object-cover object-top";
-  return blob ? <BlobImage blob={blob} alt={alt} width={72} height={96} className={box} /> : <span aria-hidden="true" className={box} />;
+  return blob ? <BlobImage blob={blob} alt={alt} width={72} height={96} className={THUMB_BOX} /> : <span aria-hidden="true" className={THUMB_BOX} />;
 }
 
 /** Shrinks a picked picture if needed; null and a reason when it can't be shared. */
-async function picked(input: HTMLInputElement): Promise<{ file: File; picture: Blob } | { problem: string } | null> {
+export async function picked(input: HTMLInputElement, fit: (picture: Blob) => Promise<Blob | null> = fitForUpload): Promise<{ file: File; picture: Blob } | { problem: string } | null> {
   const file = input.files?.[0];
   input.value = "";
   if (!file) return null;
   if (!ACCEPT.split(",").includes(file.type)) return { problem: "That file isn't a picture. Use a photo or screenshot." };
-  const picture = await fitForUpload(file);
+  const picture = await fit(file);
   return picture ? { file, picture } : { problem: "That picture is too big to share. Take a screenshot of it instead." };
 }
 

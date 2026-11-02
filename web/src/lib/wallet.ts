@@ -10,7 +10,7 @@ export const MAX_MEMBERS = 20;
 export type Member = { id: string; name: string };
 export type Share = { member_id: string; share_centavos: number };
 export type Expense = { id: string; paid_by: string; amount_centavos: number; note: string; created_at: string; shares: Share[] };
-export type Settlement = { id: string; from_member: string; to_member: string; amount_centavos: number; created_at: string };
+export type Settlement = { id: string; from_member: string; to_member: string; amount_centavos: number; created_at: string; has_proof?: boolean; proof_at?: string | null };
 export type Balance = { member_id: string; paid_centavos: number; share_centavos: number; net_centavos: number };
 export type Transfer = { from_member: string; to_member: string; amount_centavos: number };
 export type Wallet = {
@@ -84,6 +84,7 @@ const DETAIL: Record<string, string> = {
   name_taken: "Someone in this wallet already has that name.",
   party_full: "A wallet holds up to 20 people.",
   wallet_full: "This wallet is full: it holds up to 500 expenses.",
+  too_many_proofs: "This wallet is full: it holds up to 50 screenshots.",
 };
 
 /** One plain sentence for a failed call. */
@@ -102,20 +103,23 @@ export function failureMessage(r: { why: WalletFailure; detail?: string }): stri
   }
 }
 
-async function call(path: string, init?: { method: "POST" | "DELETE"; body?: unknown }): Promise<WalletResult> {
+async function call(path: string, init?: { method: "POST" | "DELETE"; body?: unknown; raw?: Blob }): Promise<WalletResult> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       cache: "no-store",
       method: init?.method ?? "GET",
-      headers: init?.body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+      headers: init?.raw ? { "content-type": init.raw.type } : init?.body !== undefined ? { "content-type": "application/json" } : undefined,
+      body: init?.raw ?? (init?.body !== undefined ? JSON.stringify(init.body) : undefined),
     });
   } catch {
     return { ok: false, why: "offline" };
   }
   if (res.ok) return { ok: true, wallet: (await res.json()) as Wallet };
-  if (res.status === 404) return { ok: false, why: "not_found" };
+  if (res.status === 404) {
+    const missing = await res.json().catch(() => null);
+    return { ok: false, why: "not_found", detail: typeof missing?.detail === "string" ? missing.detail : undefined };
+  }
   if (res.status === 429) return { ok: false, why: "rate_limited" };
   if (res.status >= 500) return { ok: false, why: "server" };
   const body = await res.json().catch(() => null);
@@ -135,7 +139,67 @@ export const walletApi = {
   deleteExpense: (slug: string, id: string) => call(`${at(slug)}/expenses/${encodeURIComponent(id)}`, { method: "DELETE" }),
   settle: (slug: string, t: Transfer) => call(`${at(slug)}/settlements`, { method: "POST", body: t }),
   undoSettlement: (slug: string, id: string) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  addProof: (slug: string, id: string, picture: Blob) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { method: "POST", raw: picture }),
+  removeProof: (slug: string, id: string) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { method: "DELETE" }),
 };
+
+/** A payment's proof. Rows never call this on load: files come at full size, and no copy stays on the phone. */
+export async function fetchProof(slug: string, id: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(`${API_URL}${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { cache: "no-store" });
+    return res.ok ? await res.blob() : null;
+  } catch {
+    return null;
+  }
+}
+
+const samePayment = (a: Transfer, b: Transfer) => a.from_member === b.from_member && a.to_member === b.to_member && a.amount_centavos === b.amount_centavos;
+
+/** Is this exact transfer still open? A transfer has no id, and any write can change who pays whom. */
+export function sameTransfer(w: Wallet, t: Transfer): boolean {
+  return w.transfers.some((x) => samePayment(x, t));
+}
+
+/** The newest payment matching this transfer: the API lists newest first. */
+export function newestSettlement(w: Wallet, t: Transfer): string | null {
+  return w.settlements.find((s) => samePayment(s, t))?.id ?? null;
+}
+
+/** "deleted" is only ever the sweep: removing a proof clears proof_at too. */
+export function proofState(s: Settlement): "none" | "kept" | "deleted" {
+  if (s.has_proof) return "kept";
+  return s.proof_at ? "deleted" : "none";
+}
+
+/** Who gets which button (TG-53 ux 4.6). A courtesy, not a lock: anyone with the link can use the API. */
+export function proofControls(s: Settlement, me: string | null): { show: boolean; add: boolean; change: boolean } {
+  const mine = s.from_member === me || s.to_member === me;
+  const kept = proofState(s) === "kept";
+  return { show: kept, add: mine && !kept, change: mine && kept };
+}
+
+type Failure = { why: WalletFailure; detail?: string };
+
+/** upload_failed's wallet is null on a retry: that call made no new wallet, so keep the one you have. */
+export type MarkPaid =
+  | { stage: "done"; wallet: Wallet }
+  | { stage: "not_saved"; failure: Failure }
+  | { stage: "upload_failed"; wallet: Wallet | null; settlementId: string; failure: Failure };
+
+/** Marks a transfer paid, then uploads its picture. With settlementId it only uploads, so a retry can't pay twice. */
+export async function markPaid(api: Pick<typeof walletApi, "settle" | "addProof">, slug: string, t: Transfer, picture: Blob | null, settlementId?: string): Promise<MarkPaid> {
+  let id = settlementId ?? null;
+  let wallet: Wallet | null = null;
+  if (!id) {
+    const r = await api.settle(slug, t);
+    if (!r.ok) return { stage: "not_saved", failure: r };
+    if (!picture) return { stage: "done", wallet: r.wallet };
+    wallet = r.wallet;
+    id = newestSettlement(r.wallet, t) as string; // settle's own response holds the row it just made
+  }
+  const up = await api.addProof(slug, id, picture as Blob);
+  return up.ok ? { stage: "done", wallet: up.wallet } : { stage: "upload_failed", wallet, settlementId: id, failure: up };
+}
 
 // ---------------------------------------------------------------- what this phone remembers
 
