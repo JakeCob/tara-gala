@@ -402,6 +402,30 @@ def test_t60_23_plans_re_point_and_sessions_stay_untouched(dsn, client, tmp_path
     assert query(dsn, "select * from trip_sessions") == sessions
 
 
+def test_t60_24_prods_shredded_rows_heal_on_the_first_run(dsn, client):
+    """What the first cron left: 10:15 weekly {3,4}, one-offs on other dates. Fri Nov 6 is sold out, so it isn't listed."""
+    only_out(dsn)
+    weekly_id = fc(dsn, "10:15", TO_LEG)[0][0]
+    with psycopg.connect(dsn) as conn:
+        conn.execute("update trips set days_of_week = '{3,4}' where id = %s", (weekly_id,))
+        for d in window()[1:]:
+            if (d.weekday() + 1) % 7 not in (3, 4):
+                conn.execute(
+                    """insert into trips (route_id, departure_time, days_of_week, valid_from, valid_to, source, source_url, last_verified_at)
+                       values (%s, '10:15', %s, %s, %s, 'scraped', %s, %s)""",
+                    (route_id(dsn, TO_LEG, FC), [(d.weekday() + 1) % 7], d, d, vl.SOURCE_URL, NOW),
+                )
+    friday_row = next(r[0] for r in fc(dsn, "10:15", TO_LEG) if r[2] == FRI)
+    only_out(dsn, 1, [FRI])
+    now_active = active(fc(dsn, "10:15", TO_LEG))
+    weekly = next(r for r in now_active if r[2] is None)
+    assert (weekly[0], sorted(weekly[1])) == (weekly_id, sorted(ALL_WEEK - {5}))
+    assert {r[2] for r in now_active if r[2] is not None} == {FRI, NEXT_FRI}
+    assert friday_row in {r[0] for r in now_active}, "the sold-out Friday keeps its row"
+    for d in window(later(1)):
+        assert shows(client, d, "10:15") == 1, d
+
+
 def test_t60_r1_the_rule_is_written_down():
     section = (ROOT / "README.md").read_text(encoding="utf-8").split("## 4.")[1].split("## 5.")[0]
     assert "**Stable rows.**" in section

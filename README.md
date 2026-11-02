@@ -52,7 +52,7 @@ python scraper/victory_liner.py                           # upsert
 python scraper/victory_liner.py --direction to-baguio     # one direction only: to-baguio or from-baguio (56 requests)
 ```
 
-- Rows are saved with `source = 'scraped'`. Trips that stop appearing are set inactive (`is_active = false`), but only in the direction(s) the run fetched. A `--direction to-baguio` run never deactivates Baguio to Manila trips, and vice versa. Trips with `source = 'manual'` are never touched, and a scraped time that clashes with a manual trip on the same route is skipped.
+- Rows are saved with `source = 'scraped'`. Trips that stop appearing are set inactive (`is_active = false`) under the **Stable rows** rule below, and only in the direction(s) the run fetched. A `--direction to-baguio` run never deactivates Baguio to Manila trips, and vice versa. Trips with `source = 'manual'` are never touched.
 - Any failed request, unknown bus type or unexpected response shape writes nothing and exits non-zero.
 - A missing operator or terminal seed fails the run with nothing written. Run the `supabase/schema.sql` seeds.
 - `--database-url` still works but warns: it shows the password in `ps`. Prefer `DATABASE_URL` (env or repo `.env`). The daily run below refuses the flag and reads a root-only env file instead.
@@ -63,7 +63,16 @@ python scraper/victory_liner.py --direction to-baguio     # one direction only: 
   - **Today:** today counts only for departures more than 3 hours after the scrape (`TODAY_MARGIN`), because earlier buses may already have left.
   - **Empty dates:** a date on which a route returned no trips at all is ignored, and printed as `WARNING: no trips at all for <leg> on <date>`.
 
-  Any other date a departure was seen on is saved for that date only (`valid_from = valid_to`), so a holiday extra on Sat Oct 31 never shows up on Sat Nov 7. Each one prints a `one-off:` line, a weekly trip whose weekdays change prints a `weekly:` line, and every trip set inactive prints a `deactivated:` line (after the commit, so a failed run lists nothing). Dated rows not seen again are set inactive like any other scraped trip. Known gaps: an early extra (within 3 hours of the scrape) seen only on the same weekday next week is still saved as weekly; and after a manual run at another hour, the next 4am run is the one that counts. Keep the cron at 4am for that reason.
+  Any other date a departure was seen on is saved for that date only (`valid_from = valid_to`), so a holiday extra on Sat Oct 31 never shows up on Sat Nov 7. Each one prints a `one-off:` line, a weekly trip whose weekdays change prints a `weekly:` line, and every trip set inactive prints a `deactivated:` line (after the commit, so a failed run lists nothing). This rule shapes a departure's first rows; after that, **Stable rows** applies. Known gaps: an early extra (within 3 hours of the scrape) seen only on the same weekday next week is still saved as weekly; and after a manual run at another hour, the next 4am run is the one that counts. Keep the cron at 4am for that reason.
+
+- **Stable rows.** Saved plans hold trip ids, and a sold-out trip simply vanishes from Victory Liner's API, so a date that's not listed isn't a cancellation (TG-60).
+  - A weekly row keeps its id and its days. It gains weekdays, and loses one only when at least 2 dates of that weekday came back in the window without the departure and none with it (`MIN_ABSENT_DATES`).
+  - A dated row that's not listed stays until its date passes, as long as the departure is listed on some other date.
+  - A departure not listed anywhere in the window is set inactive after 3 days without a sighting (`RETIRE_AFTER_DAYS`). `last_verified_at` is the last time it was listed, so "Checked" stays honest on a kept row. It comes back on the same row if it reappears.
+  - A dated row is replaced when the weekly row takes over its weekday, and goes once its date has passed. Rows kept this way print a `not listed:` line and count in the run's summary.
+  - The trade-off: a weekly trip truly cancelled on one date still shows on that date, with its "Checked" date and the "confirm with the operator" note, because a weekly row can't skip a single date.
+- **Manual rows win only their own dates.** No scraped row runs on a date a manual row covers, and a scraped one-off on such a date goes at once. A dated manual row takes its weekday off the scraped weekly row, because that row can't skip one date; the departure's other dates of that weekday stay as dated rows, and the weekday returns once the manual date has passed.
+- **Plans re-resolve after each scrape.** The daily run reloads every file in `data/itineraries/` with `data/load_itinerary.py`, then `data/load_premade.py`, so saved plans point at the current rows by natural key. When several rows match, the single manual row wins. A loader failure leaves that plan as it was and logs a `WARNING`; the scrape still counts as a success. The loaders write only `itineraries`, in place by `share_slug`, so `trip_sessions` never changes.
 
 ### Daily run (cron)
 The VPS runs the scrape every day at **04:00 Manila**. The VPS clock is UTC and Manila is UTC+8 with no daylight saving, so that is **20:00 UTC** the day before. TG-9's same-day rule assumes a 04:00 run, so don't move it.
@@ -73,6 +82,7 @@ Cron runs `scraper/cron.sh`, installed as `/usr/local/sbin/tara-gala-scrape`. Ea
 - reads `DATABASE_URL` from `/root/.config/tara-gala-scraper.env`, which must be mode 600 and owned by root. The file is **parsed, not sourced** (the one intended difference from the ticket): a password with `$`, `'`, `&` or spaces arrives intact, and nothing in the file is executed. The value is never printed, and the wrapper refuses a database URL passed on the command line;
 - fetches `main` over https into a private mirror under `/var/lib/tara-gala-scraper` and runs an export of it, never a working checkout, so merged scraper changes (TG-9) are picked up with no edit. If GitHub is down it warns and reruns the previous export;
 - keeps its own venv there, reinstalled only when `api/requirements.txt` changes;
+- after a successful real run (not `--dry-run`), reloads the saved plans (see **Plans re-resolve** above);
 - logs `START`, `END rc=…`, and any `FAILED`, `WARNING` or `SKIPPED` line, plus the scraper's own output, to `/var/log/tara-gala-scraper.log`. It warns when the last successful scrape is more than 36 hours old.
 
 **Owner steps** (as root on the VPS; nothing here is installed automatically):

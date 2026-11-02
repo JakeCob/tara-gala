@@ -6,7 +6,8 @@ Usage:
     python scraper/victory_liner.py --direction to-baguio       # one direction only (half the requests)
 
 Fetches the next 14 days for 4 Manila terminals in both directions (112 requests, one at a time,
-2 seconds apart, about 4 to 5 minutes). Only the direction(s) fetched are deactivated.
+2 seconds apart, about 4 to 5 minutes). Only the direction(s) fetched can lose rows, and rows stay stable: saved plans
+hold trip ids, and a date the API doesn't list may just be sold out (see apply()).
 If any request fails, returns an unexpected shape, or a fetched direction comes back with no trips at all,
 nothing is written and the exit code is non-zero.
 Reads DATABASE_URL from the environment or from the repo-root .env file (same as data/load_data.py).
@@ -34,6 +35,7 @@ sys.path.insert(0, str(HERE.parent / "data"))
 from load_data import (  # noqa: E402
     DATABASE_URL_FLAG_HELP, MANILA, database_url, db_failure, missing_seed_message, slug_map,
 )
+from app.schedule import runs_on  # noqa: E402  (load_data put api/ on the path; imports no FastAPI)
 
 API_URL = "https://tickets.victoryliner.com/api/v1/trips"
 SOURCE_URL = "https://tickets.victoryliner.com"
@@ -51,6 +53,11 @@ DELAY_SECONDS = 2.0
 # Today counts as a required date only for departures at least this long after the scrape: earlier buses may
 # already have left or closed online sales. A guess until a few real 04:00 runs are compared (TG-9).
 TODAY_MARGIN = timedelta(hours=3)
+# Sold-out trips vanish from the API, so one missing date proves nothing (TG-60). A weekly row loses a weekday only
+# when at least this many dates of it came back without the departure, and none with it...
+MIN_ABSENT_DATES = 2
+# ...and a departure listed nowhere in the window is retired once it's gone this many days without a sighting.
+RETIRE_AFTER_DAYS = 3
 CLASS_MAP = {
     "REGULAR AIRCON": "regular_aircon",
     "DELUXE": "deluxe",
@@ -98,13 +105,17 @@ class Observation:
 class RouteSpec:
     """One route's aggregate. trips holds only departures with at least one REGULAR weekday (the recurring row);
     a departure seen only on one-off dates is absent from trips and present only in one_off.
-    Use departures() for every departure on the route."""
+    Use departures() for every departure on the route. dates, not_listed and absent are this run's evidence, which
+    apply() weighs against the rows already saved."""
 
     fare: float
     minutes: int
     notes: str
     trips: dict[time, set[int]] = field(default_factory=dict)  # departure -> regular weekdays (0 = Sunday)
     one_off: dict[time, set[date]] = field(default_factory=dict)  # departure -> dated-only days
+    dates: dict[time, set[date]] = field(default_factory=dict)  # departure -> every date it was listed
+    not_listed: dict[time, set[date]] = field(default_factory=dict)  # departure -> required dates it wasn't listed
+    absent: dict[time, set[int]] = field(default_factory=dict)  # departure -> weekdays missing on all their dates
 
     def departures(self) -> set[time]:
         return self.trips.keys() | self.one_off.keys()
@@ -214,6 +225,7 @@ def aggregate(
       earlier ones may already be gone, so today can add evidence but never removes it.
     - A weekday needs at least one required date to be regular, so one exempt sighting today stays a one-off.
     Without a window (tests, ad hoc calls) the observed dates are the window and every one is required.
+    That rule only shapes a departure with no saved row yet: apply() never takes a day off an existing row for it.
     """
     if window is not None:
         if verified_at is None:
@@ -260,6 +272,11 @@ def aggregate(
                 spec.trips[dep] = regular
             if one_off := {d for d in dep_days if _dow(d) not in regular}:
                 spec.one_off[dep] = one_off
+            spec.dates[dep] = set(dep_days)
+            if not_listed := required - dep_days:
+                spec.not_listed[dep] = not_listed
+            if absent := {w for w, ds in required_by_dow.items() if len(ds) >= MIN_ABSENT_DATES and not ds & dep_days}:
+                spec.absent[dep] = absent
         routes[key] = spec
     return routes
 
@@ -287,6 +304,7 @@ class Result:
     trips_updated: int = 0
     trips_skipped_manual: int = 0
     trips_one_off: int = 0  # dated rows written this run (inserted plus updated); also counted in new/updated
+    trips_kept: int = 0  # active rows this run didn't fully list and left running: maybe sold out
     trips_deactivated: int = 0
     deactivated_by_direction: dict[str, int] = field(default_factory=dict)
     booking_url_set: bool = False
@@ -294,24 +312,74 @@ class Result:
 
 # Scraped Victory Liner trips we did not see this run, limited to one direction. Manual and other operators'
 # trips are never matched. The scope is a fixed string picked by direction name, never built from input.
-_DEACTIVATE = """
+_UNSEEN = """
+    t.route_id = r.id and r.operator_id = %(op)s and t.source = 'scraped' and t.is_active
+      and t.id <> all(%(seen)s::uuid[]) and {scope}
+"""
+_SCOPES = {"to-baguio": "r.destination_terminal_id = %(baguio)s", "from-baguio": "r.origin_terminal_id = %(baguio)s"}
+UNSEEN_SQL = {
+    name: f"""
+    select t.id, t.route_id, t.departure_time, t.valid_from, t.last_verified_at,
+           r.origin_terminal_id, r.destination_terminal_id, r.class::text
+    from trips t join routes r on t.route_id = r.id
+    where {_UNSEEN.format(scope=scope)}
+    """
+    for name, scope in _SCOPES.items()
+}
+DEACTIVATE_SQL = {
+    name: f"""
     update trips t set is_active = false, updated_at = now()
     from routes r
-    where t.route_id = r.id and r.operator_id = %(op)s and t.source = 'scraped' and t.is_active
-      and t.id <> all(%(seen)s::uuid[]) and {scope}
+    where {_UNSEEN.format(scope=scope)}
     returning r.origin_terminal_id, r.destination_terminal_id, r.class::text, t.departure_time, t.valid_from
-"""
-DEACTIVATE_SQL = {
-    "to-baguio": _DEACTIVATE.format(scope="r.destination_terminal_id = %(baguio)s"),
-    "from-baguio": _DEACTIVATE.format(scope="r.origin_terminal_id = %(baguio)s"),
+    """
+    for name, scope in _SCOPES.items()
 }
+
+
+def _manual_rows(cur) -> dict[tuple, list[tuple]]:
+    """(route, departure) -> its hand-entered rows as (days, valid_from, valid_to). Inactive ones count: a row
+    someone switched off by hand stays their decision."""
+    cur.execute("select route_id, departure_time, days_of_week, valid_from, valid_to from trips where source = 'manual'")
+    rows: dict[tuple, list[tuple]] = defaultdict(list)
+    for route_id, dep, days, valid_from, valid_to in cur.fetchall():
+        rows[(route_id, dep)].append((days, valid_from, valid_to))
+    return rows
+
+
+def _manual_covers(manual: list[tuple], d: date) -> bool:
+    return any(runs_on(days, valid_from, valid_to, d) for days, valid_from, valid_to in manual)
+
+
+def _manual_weekdays(manual: list[tuple], today: date) -> set[int]:
+    """Weekdays a scraped weekly row can't hold: it has no way to skip one date, so it would run alongside the manual
+    row on it. They come back once the manual dates have passed."""
+    out: set[int] = set()
+    for days, valid_from, valid_to in manual:
+        if valid_to is None:
+            out |= set(days)
+            continue
+        start = max(valid_from or today, today)
+        span = min((valid_to - start).days, 6)  # a week covers every weekday; a long range needn't be walked
+        out |= {_dow(start + timedelta(days=i)) for i in range(span + 1)} & set(days)
+    return out
 
 
 def apply(
     cur, routes: dict[tuple[str, str, str], RouteSpec], verified_at: datetime, directions: list[str], log=print
 ) -> Result:
-    """Upsert into the open transaction. Matching keys follow data/load_data.py."""
+    """Upsert into the open transaction. Matching keys follow data/load_data.py.
+
+    Saved plans hold trip ids, so rows stay put (TG-60; README section 4). For a departure the API listed this run:
+    - its weekly row keeps its id and its days, and gains regular ones. A weekday goes only if it's in spec.absent.
+    - a listed date outside those days gets a dated row, as aggregate() decided; a dated row that wasn't listed stays
+      until its date passes, or until the weekly row takes that weekday over.
+    A departure listed nowhere in the window goes after RETIRE_AFTER_DAYS without a sighting. Only a listing updates
+    last_verified_at, so that's the last-listed date, and "Checked" stays honest on a row kept unlisted.
+    Manual rows win only their own dates: no scraped row runs on a date a manual row covers.
+    """
     res = Result()
+    today = verified_at.astimezone(MANILA).date()
     operators = slug_map(cur, "operators")
     terminals = slug_map(cur, "terminals")
     # Seeds first, before any write: a missing seed is a setup error, even for a terminal with no trips this run
@@ -328,6 +396,8 @@ def apply(
     )
     res.booking_url_set = cur.fetchone() is not None
 
+    manual_rows = _manual_rows(cur)
+    listed: set = set()  # (route, departure) the API listed this run; their unseen rows were decided below
     seen: set = set()
     for (origin_slug, dest_slug, cls), spec in sorted(routes.items()):
         origin, dest = terminals[origin_slug], terminals[dest_slug]
@@ -364,6 +434,7 @@ def apply(
         for dep in sorted(spec.departures()):
             # No is_active filter: an old deactivated row for the same (departure, valid_from) is reused, never
             # re-inserted, because unique (route_id, departure_time, valid_from) bites for dated rows
+            listed.add((route_id, dep))
             cur.execute(
                 "select id, source, valid_from, days_of_week, is_active from trips where route_id = %s and departure_time = %s",
                 (route_id, dep),
@@ -371,10 +442,15 @@ def apply(
             found_rows = cur.fetchall()
             existing = [row[:3] for row in found_rows]
             old_weekly = {row[0]: (sorted(row[3]), row[4]) for row in found_rows}
-            if any(src == "manual" for _, src, _ in existing):
-                res.trips_skipped_manual += 1  # hand-entered rows win, dated or not; never touched
-                continue
-            for d in sorted(spec.one_off.get(dep, ())):
+            manual = manual_rows.get((route_id, dep), [])
+            if manual:
+                res.trips_skipped_manual += 1  # hand-entered rows win their own dates; never touched
+            ours = next((id_ for id_, src, vf in existing if src == "scraped" and vf is None), None)
+            saved_days = set(old_weekly[ours][0]) if ours and old_weekly[ours][1] else set()
+            days = sorted(((saved_days - spec.absent.get(dep, set())) | spec.trips.get(dep, set())) - _manual_weekdays(manual, today))
+            for d in sorted(spec.dates[dep]):
+                if _dow(d) in days or _manual_covers(manual, d):
+                    continue
                 dated = next((id_ for id_, src, vf in existing if src == "scraped" and vf == d), None)
                 if dated:
                     cur.execute(
@@ -400,10 +476,14 @@ def apply(
                 res.trips_one_off += 1
                 seen.add(dated)
                 log(f"  one-off: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} on {d} ({d:%a})")
-            if dep not in spec.trips:
+            for id_, src, vf, _, is_active in found_rows:  # not listed today, still running: maybe sold out
+                if (src == "scraped" and is_active and vf is not None and id_ not in seen and vf >= today
+                        and _dow(vf) not in days and not _manual_covers(manual, vf)):
+                    seen.add(id_)
+                    res.trips_kept += 1
+                    log(f"  not listed: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} on {vf} (kept)")
+            if not days:
                 continue
-            days = sorted(spec.trips[dep])
-            ours = next((id_ for id_, src, vf in existing if src == "scraped" and vf is None), None)
             if ours:
                 cur.execute(
                     """
@@ -419,6 +499,9 @@ def apply(
                     old_days, was_active = old_weekly[ours]
                     log(f"  weekly: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} days {old_days}"
                         f"{'' if was_active else ' (inactive)'} -> {days}")
+                if missing := sorted(d for d in spec.not_listed.get(dep, ()) if _dow(d) in days and not _manual_covers(manual, d)):
+                    res.trips_kept += 1
+                    log(f"  not listed: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} on {', '.join(map(str, missing))} (kept)")
             else:
                 cur.execute(
                     """
@@ -435,6 +518,19 @@ def apply(
     # row would then pass an empty set and deactivate all of its scraped trips.
     slugs = {id_: slug for slug, id_ in terminals.items()}  # slug_map ids are strings
     for name in directions:
+        cur.execute(UNSEEN_SQL[name], {"op": op, "seen": list(seen), "baguio": terminals[BAGUIO[1]]})
+        for id_, route_id, dep, valid_from, last_seen, origin, dest, cls in cur.fetchall():
+            # Left unseen, these are deactivated below: decided above, or a date that's over or a manual row's
+            if (route_id, dep) in listed or (valid_from is not None and valid_from < today) or last_seen is None:
+                continue
+            if valid_from is not None and _manual_covers(manual_rows.get((route_id, dep), []), valid_from):
+                continue
+            seen_on = last_seen.astimezone(MANILA).date()
+            if (today - seen_on).days < RETIRE_AFTER_DAYS:
+                seen.add(id_)
+                res.trips_kept += 1
+                log(f"  not listed: {slugs[str(origin)]}->{slugs[str(dest)]} {cls} {dep:%H:%M} "
+                    f"{f'on {valid_from}' if valid_from else 'anywhere in the window'}, last seen {seen_on} (kept)")
         cur.execute(DEACTIVATE_SQL[name], {"op": op, "seen": list(seen), "baguio": terminals[BAGUIO[1]]})
         gone = [(str(o), str(d), cls, dep, vf) for o, d, cls, dep, vf in cur.fetchall()]
         res.deactivated_by_direction[name] = len(gone)
@@ -540,7 +636,7 @@ def main() -> int:
     by_direction = ", ".join(f"{name} {count}" for name, count in res.deactivated_by_direction.items())
     print(f"\n{verb}: routes +{res.routes_new} new / {res.routes_existing} existing; "
           f"trips +{res.trips_new} new, {res.trips_updated} updated, {res.trips_one_off} one-off, "
-          f"{res.trips_deactivated} deactivated ({by_direction}), "
+          f"{res.trips_deactivated} deactivated ({by_direction}), {res.trips_kept} not listed but kept, "
           f"{res.trips_skipped_manual} skipped (manual rows win)"
           + ("; operator booking_url set" if res.booking_url_set else ""))
     if args.dry_run:

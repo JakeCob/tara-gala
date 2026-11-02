@@ -6,7 +6,7 @@ The fixtures are real responses (CUBAO to BAGUIO on 2026-11-06, BAGUIO to CUBAO 
 import functools
 import json
 import sys
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import httpx
@@ -23,6 +23,7 @@ FRIDAY = date(2026, 11, 6)
 SUNDAY = date(2026, 11, 8)
 NOW = datetime(2026, 11, 1, 4, 0, tzinfo=vl.MANILA)
 LATER = datetime(2026, 11, 2, 4, 0, tzinfo=vl.MANILA)
+GONE_FOR_DAYS = NOW + timedelta(days=vl.RETIRE_AFTER_DAYS)  # a departure missing this long is retired (TG-60)
 TO = ["to-baguio"]
 FROM = ["from-baguio"]
 BOTH = ["to-baguio", "from-baguio"]
@@ -160,7 +161,7 @@ def test_days_of_week_updates_on_rerun(dsn):
 def test_trips_that_disappear_are_deactivated_and_come_back(dsn):
     vl.run(dsn, observations(), dry_run=False, directions=TO, verified_at=NOW)
     gone = [t for t in FIXTURE if t["departureTime"] != "00:15:00"]
-    res = vl.run(dsn, observations(gone), dry_run=False, directions=TO, verified_at=NOW)
+    res = vl.run(dsn, observations(gone), dry_run=False, directions=TO, verified_at=GONE_FOR_DAYS)
     assert res.trips_deactivated == 1
     assert query(dsn, "select is_active from trips where departure_time = '00:15' and source = 'scraped'") == [(False,)]
     assert query(dsn, "select count(*) from trips where is_active") == [(len(vl_trips(dsn)) - 1,)]
@@ -187,13 +188,14 @@ def test_manual_trips_are_never_touched(dsn):
     snapshot = query(dsn, "select id, departure_time, days_of_week, is_active, source_url, last_verified_at, notes from trips where source = 'manual' order by 2")
 
     # The scraper no longer sees anything for royal class: scraped rows go, manual rows stay as they were
-    res = vl.run(dsn, observations([t for t in FIXTURE if t["busType"] != "ROYAL CLASS"]), dry_run=False, directions=TO, verified_at=NOW)
+    res = vl.run(dsn, observations([t for t in FIXTURE if t["busType"] != "ROYAL CLASS"]), dry_run=False, directions=TO, verified_at=GONE_FOR_DAYS)
     assert query(dsn, "select id, departure_time, days_of_week, is_active, source_url, last_verified_at, notes from trips where source = 'manual' order by 2") == snapshot
 
-    # And with royal class back, the clashing time is skipped rather than duplicated
-    res = vl.run(dsn, observations(), dry_run=False, directions=TO, verified_at=NOW)
+    # And with royal class back, the manual row keeps Tuesdays and the scraped row takes only the Friday it was seen on
+    res = vl.run(dsn, observations(), dry_run=False, directions=TO, verified_at=GONE_FOR_DAYS)
     assert res.trips_skipped_manual == 1
-    assert query(dsn, "select count(*) from trips where departure_time = '00:15' and route_id = %s", route_id) == [(1,)]
+    clash = "select source::text, days_of_week from trips where departure_time = '00:15' and route_id = %s order by 1"
+    assert query(dsn, clash, route_id) == [("manual", [2]), ("scraped", [5])]
     assert query(dsn, "select count(*) from trips where source = 'manual'") == [(2,)]
 
 
@@ -444,7 +446,7 @@ def test_from_baguio_only_run_deactivates_only_reverse(dsn):
     load_both(dsn)
     outbound = trips_on(dsn, "vl-cubao")
     gone = [t for t in REVERSE if t["departureTime"] != "00:40:00"]
-    res = vl.run(dsn, reverse_obs(gone), dry_run=False, directions=FROM, verified_at=LATER)
+    res = vl.run(dsn, reverse_obs(gone), dry_run=False, directions=FROM, verified_at=GONE_FOR_DAYS)
     assert res.trips_deactivated == 1
     assert res.deactivated_by_direction == {"from-baguio": 1}
     assert inactive(dsn) == [("vl-baguio", "vl-cubao", "deluxe", time(0, 40))]
@@ -465,7 +467,7 @@ def test_both_direction_run_deactivates_missing_departure_per_direction(dsn):
     load_both(dsn)
     out_gone = [t for t in FIXTURE if t["departureTime"] != "00:15:00"]
     rev_gone = [t for t in REVERSE if t["departureTime"] != "00:40:00"]
-    res = vl.run(dsn, observations(out_gone) + reverse_obs(rev_gone), dry_run=False, directions=BOTH, verified_at=LATER)
+    res = vl.run(dsn, observations(out_gone) + reverse_obs(rev_gone), dry_run=False, directions=BOTH, verified_at=GONE_FOR_DAYS)
     assert res.deactivated_by_direction == {"to-baguio": 1, "from-baguio": 1}
     assert res.trips_deactivated == 2
     assert inactive(dsn) == [
@@ -540,7 +542,8 @@ def test_manual_reverse_trips_are_never_touched(dsn):
 
     res = load_both(dsn)
     assert res.trips_skipped_manual == 1
-    assert query(dsn, "select count(*) from trips where departure_time = %s and route_id = %s", clash_time, route_id) == [(1,)]
+    clash = "select source::text, days_of_week from trips where departure_time = %s and route_id = %s order by 1"
+    assert query(dsn, clash, clash_time, route_id) == [("manual", [2]), ("scraped", [0])], "each keeps its own days"
     assert query(dsn, manual) == snapshot
 
     # The scraper no longer sees royal class from Baguio: scraped rows go, manual rows stay as they were
