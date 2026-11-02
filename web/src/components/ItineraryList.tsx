@@ -1,6 +1,7 @@
 // The share page's list view (TG-23, ux.md 1 to 3): summary, issues, the two buses and the days.
 // With map (TG-22, NEXT_PUBLIC_OVERWORLD_MAP), the overworld map replaces the bus and day sections; the summary,
 // Share and the changes notice stay above it. Without it, this is TG-23's list, which carries the same facts.
+// A plan with a guide shows the level map instead of either (TG-52, TG-56).
 import { formatTime } from "@/lib/api";
 import { formatTravelDate } from "@/lib/direction";
 import {
@@ -46,7 +47,10 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
           </div>
         )}
         {budget && <p className={`${PX.meta} tabular-nums`}>Budget {budget}</p>}
-        <ShareButton slug={it.share_slug} tripDate={it.trip_date} returnDate={it.return_date} />
+        {/* A guide's page is a whole row wide from lg: Copy link keeps its own width there */}
+        <div className={it.guide ? "lg:[&_button]:w-auto lg:[&_button]:self-start" : undefined}>
+          <ShareButton slug={it.share_slug} tripDate={it.trip_date} returnDate={it.return_date} />
+        </div>
       </PixelBox>
 
       {it.issues.length > 0 && (
@@ -57,16 +61,20 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
       )}
 
       {/* TG-52: a plan with a guide (the owner's real trip) shows as a level map, one world per day, in place of the bus
-          and day sections; on a trip the same map is the shared checklist (TripView) */}
-      {it.guide && <LevelMap guide={it.guide} />}
-
-      {map ? (
+          and day sections and the overworld map (TG-56); on a trip the same map is the shared checklist (TripView).
+          data-wide opens the page's column from lg */}
+      {it.guide ? (
+        <div data-wide="" className="contents">
+          <LevelMap guide={it.guide} />
+          {confirmNote && <p className={PX.meta}>{confirmNote}</p>}
+        </div>
+      ) : map ? (
         <>
           <p className="text-sm">Tap a stop or a ride for details.</p>
           {confirmNote && <p className={PX.meta}>{confirmNote}</p>}
           <OverworldMap itinerary={it} />
         </>
-      ) : it.guide ? null : (
+      ) : (
         <>
           <BusSection title="Bus to Baguio" leg={it.outbound} issues={issuesFor("outbound", it.issues)} />
 

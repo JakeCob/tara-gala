@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { Thumb } from "@/components/TripFiles";
@@ -8,7 +8,8 @@ import { Sprite } from "@/components/WorldSheet";
 import { formatClass, formatTime, formatVerified } from "@/lib/api";
 import { type BusTable, type Guide, type Mark, marksByKey, pickMark, placeIcon, rowMark, todoMark, whereNow } from "@/lib/guide";
 import {
-  BAND_PX, START_POINT, TILE_PX, type Level, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, startWorld, worldHeight,
+  BAND_PX, SIGN_DROP, SIGN_GAP, SNAKE_MIN_PX, START_POINT, TILE_PX, type Level, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, snakeMap, snakeRoad, snakeScenery,
+  startWorld, worldHeight,
 } from "@/lib/levelMap";
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
@@ -59,21 +60,27 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const here = marks ? whereNow(guide, marks) : null;
   const day = guide.days.find((d) => d.day === world) ?? guide.days[0];
   const list = levels(day, byKey);
-  const points = levelPoints(list.length);
-  const height = worldHeight(list.length);
-  const goal = goalPoint(list.length);
+  const screen = useRef<HTMLElement>(null);
+  const [W, setW] = useState(0);
+  const snake = W >= SNAKE_MIN_PX ? snakeMap(list.length, W) : null;
+  const points = snake?.points ?? levelPoints(list.length);
+  const height = snake?.height ?? worldHeight(list.length);
+  const goal = snake?.goal ?? goalPoint(list.length);
+  const start = snake?.start ?? START_POINT;
+  const u = snake ? "px" : "%"; // a point's x: the zig-zag's are % of its band, the snake's are px of the row
+  const band = snake ? undefined : BAND_PX;
   const chosen = day.pick ? byKey.get(pickMark(day.pick.key))?.value : undefined;
   const photosAt = (key: string | null) => photos?.files.filter((f) => f.kind === "photo" && f.row_key === key) ?? [];
   const current = open && list.find((l) => l.row.key === open.key); // stays fresh as ticks land
   const next = marks ? nextLevel(list) : null;
   const atStart = !!marks && !list.some((l) => l.done); // no ticks in this world yet: the group waits at START
-  const screen = useRef<HTMLElement>(null);
-  const [W, setW] = useState(0);
 
-  // The road draws on the screen's real width, so it stays chunky pixels at any size; first paint has no road
-  useEffect(() => {
+  // The road draws on the screen's real width, so it stays chunky pixels at any size. Measured before paint, or a
+  // desktop would flash the phone's map first (TG-56)
+  useLayoutEffect(() => {
     const el = screen.current;
     if (!el) return;
+    setW((w) => usableWidth(el.clientWidth, w));
     const ro = new ResizeObserver(([entry]) => setW((w) => usableWidth(Math.round(entry.contentRect.width), w)));
     ro.observe(el);
     return () => ro.disconnect();
@@ -149,7 +156,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       </nav>
 
       {/* The world: a fixed light screen in both themes, so it frames and focuses in Ink as the overworld map does */}
-      {/* The stops and levels sit in a centred band, so on a wide row they stay together and scenery fills the sides (TG-55) */}
+      {/* The zig-zag's stops and levels sit in a centred band, so they stay together on a tablet (TG-55); from lg the snake has the whole row (TG-56) */}
       <div className="w-full">
         <section ref={screen} aria-label={`World ${day.day} map`} className="pixel-frame bg-screen pixelated relative w-full overflow-hidden"
           style={{
@@ -163,21 +170,21 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
           <div aria-hidden="true" className="absolute inset-x-2 top-2 pixel-frame bg-flag-blue px-3 py-1 text-center">
             <span className={cx(PX.h2, "text-screen-paper")}>World {day.day}</span>
           </div>
-          <div className={BAND} style={{ maxWidth: BAND_PX }}>
-            <span aria-hidden="true" className="absolute" style={{ left: `calc(${START_POINT.x}% - 100px)`, top: START_POINT.y - 12 }}><Sprite name="vehicle-bus" scale={1} /></span>
-            <span className={cx("absolute -translate-x-1/2 -translate-y-1/2 pixel-frame bg-screen-paper px-2 py-0.5", PX.pressStart)} style={{ left: `${START_POINT.x}%`, top: START_POINT.y }}>
+          <div className={BAND} style={{ maxWidth: band }}>
+            <span aria-hidden="true" className="absolute" style={{ left: `calc(${start.x}${u} + ${snake ? 116 : -100}px)`, top: start.y - 12 }}><Sprite name="vehicle-bus" scale={1} /></span>
+            <span className={cx("absolute -translate-x-1/2 -translate-y-1/2 pixel-frame bg-screen-paper px-2 py-0.5", PX.pressStart)} style={{ left: `${start.x}${u}`, top: start.y }}>
               Start
             </span>
             {atStart && (
-              <span aria-hidden="true" data-party="" className="absolute z-10" style={{ left: `calc(${START_POINT.x}% + 40px)`, top: START_POINT.y - 16 }}>
+              <span aria-hidden="true" data-party="" className="absolute z-10" style={{ left: `calc(${start.x}${u} + ${snake ? 48 : 40}px)`, top: start.y - 16 }}>
                 <Sprite name={chibiLook(GROUP, "idle-1")} scale={2} />
               </span>
             )}
-            <span className={cx("absolute inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 pixel-frame bg-flag-yellow px-2 py-0.5", PX.pressStart)} style={{ left: `${goal.x}%`, top: goal.y }}>
+            <span className={cx("absolute inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 pixel-frame bg-flag-yellow px-2 py-0.5", PX.pressStart)} style={{ left: `${goal.x}${u}`, top: goal.y }}>
               <Sprite name="ui-star" scale={1} />Goal<Sprite name="ui-star" scale={1} />
             </span>
           </div>
-          <ol className={BAND} style={{ maxWidth: BAND_PX }}>
+          <ol className={BAND} style={{ maxWidth: band }}>
             {list.map((l, i) => {
               const p = points[i];
               const left = p.x < 50;
@@ -186,8 +193,9 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
               return (
                 <li key={l.row.key} data-level={l.row.key} className="contents">
                   <button type="button" onClick={() => { onOpenLevel?.(); setOpen((o) => ({ key: l.row.key, tap: (o?.tap ?? 0) + 1 })); }} data-next={l.row.key === next ? "" : undefined}
-                    className={cx("focus-pixel absolute flex -translate-y-1/2 items-center gap-2 text-left", !left && "flex-row-reverse", isHere && "z-10")}
-                    style={left ? { left: `calc(${p.x}% - ${TILE_PX / 2}px)`, right: 8, top: p.y } : { right: `calc(${100 - p.x}% - ${TILE_PX / 2}px)`, left: 8, top: p.y }}>
+                    className={cx("focus-pixel absolute flex gap-2 text-left", snake ? "items-start" : "-translate-y-1/2 items-center", !snake && !left && "flex-row-reverse", isHere && "z-10")}
+                    style={snake ? { left: p.x - TILE_PX / 2, top: p.y - TILE_PX / 2, width: TILE_PX + SIGN_GAP + snake.sign }
+                      : left ? { left: `calc(${p.x}% - ${TILE_PX / 2}px)`, right: 8, top: p.y } : { right: `calc(${100 - p.x}% - ${TILE_PX / 2}px)`, left: 8, top: p.y }}>
                     <span className="sr-only">Level {l.label}, </span>
                     <span className={cx("relative flex shrink-0 items-center justify-center pixel-frame", l.row.key === next ? "bg-flag-yellow" : "bg-screen-paper")} style={{ width: TILE_PX, height: TILE_PX }}>
                       <Sprite name={placeIcon(l.row.place) ?? "place-other"} scale={2} />
@@ -195,7 +203,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
                       {l.done && <span aria-hidden="true" className="absolute -top-3 -right-3"><Sprite name="ui-badge-verified" scale={2} /></span>}
                       {isHere && <span aria-hidden="true" data-party="" className="absolute -top-12 left-1/2 -translate-x-1/2"><Sprite name={chibiLook(GROUP, "idle-1")} scale={2} className="max-w-none" /></span>}
                     </span>
-                    <span className="min-w-0 max-w-88 flex-1 pixel-frame bg-screen-paper px-2 py-1 leading-snug text-screen-ink">
+                    <span className="min-w-0 max-w-88 flex-1 pixel-frame bg-screen-paper px-2 py-1 leading-snug text-screen-ink" style={snake ? { marginTop: TILE_PX / 2 + SIGN_DROP } : undefined}>
                       <span className="block text-sm font-bold tabular-nums">{formatTime(l.row.time)}</span>
                       <span className="block text-xs">{l.row.plan}</span>
                       {shots > 0 && <span className="block text-xs">{shots} photo{shots === 1 ? "" : "s"}</span>}
@@ -241,12 +249,16 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
 
 /** The pixel road and the scenery, which only change with the world, its levels or the screen's width. */
 function WorldGround({ W, count, world }: { W: number; count: number; world: number }) {
-  const H = worldHeight(count);
+  const map = useMemo(() => (W >= SNAKE_MIN_PX ? snakeMap(count, W) : null), [W, count]);
+  const H = map?.height ?? worldHeight(count);
   const road = useMemo(() => {
-    const r = pixelRoad(roadStops(levelPoints(count), START_POINT, goalPoint(count), W), W, H);
+    const r = map ? snakeRoad(map, W) : pixelRoad(roadStops(levelPoints(count), START_POINT, goalPoint(count), W), W, H);
     return { curb: runsPath(r.curb), asphalt: runsPath(r.asphalt), dash: runsPath(r.dash) };
-  }, [W, H, count]);
-  const scenery = useMemo(() => levelScenery(levelPoints(count), W, fnv1a(`world-${world}`)), [W, count, world]);
+  }, [map, W, H, count]);
+  const scenery = useMemo(() => {
+    const seed = fnv1a(`world-${world}`);
+    return map ? snakeScenery(map, W, seed) : levelScenery(levelPoints(count), W, seed);
+  }, [map, W, count, world]);
   return (
     <>
       <svg aria-hidden="true" className="absolute top-0 left-0" width={W} height={H} viewBox={`0 0 ${W} ${H}`} shapeRendering="crispEdges">

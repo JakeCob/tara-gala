@@ -813,7 +813,7 @@ test("the kill switch reaches the map: flag -> prop -> conditional", () => {
   const prop = view.match(/<ItineraryList\b[^>]*\b(\w+)=\{flags\.overworldMap\}/)?.[1];
   assert.ok(prop, "ItineraryView passes flags.overworldMap as a prop");
   assert.match(list, new RegExp(`export default function ItineraryList\\(\\{[^)]*\\b${prop}\\b`), "the list takes it");
-  assert.match(list, new RegExp(`\\{\\s*${prop}\\s*\\?[\\s\\S]{0,200}?<OverworldMap itinerary=\\{it\\} \\/>`), "and renders the map only when it's true");
+  assert.match(list, new RegExp(`[{:]\\s*${prop}\\s*\\?[\\s\\S]{0,200}?<OverworldMap itinerary=\\{it\\} \\/>`), "and renders the map only when it's true");
 });
 
 // UX review finding 1 (ux 3.2, the CLAUDE.md trust pair): TripCard has no confirm_note (search shows it once per
