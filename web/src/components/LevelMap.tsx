@@ -8,7 +8,7 @@ import { Sprite } from "@/components/WorldSheet";
 import { formatClass, formatTime, formatVerified } from "@/lib/api";
 import { type BusTable, type Guide, type Mark, marksByKey, pickMark, placeIcon, rowMark, todoMark, whereNow } from "@/lib/guide";
 import {
-  GOAL_POINT, TILE_PX, type Level, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, startPoint, startWorld, worldHeight,
+  BAND_PX, START_POINT, TILE_PX, type Level, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, startWorld, worldHeight,
 } from "@/lib/levelMap";
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
@@ -35,23 +35,22 @@ type Props = {
   onTick?: (key: string, done: boolean) => void;
   onPick?: (pickKey: string, option: string) => void;
   photos?: Photos;
-  /** The page has the full width: from lg the map sits left and everything else right. /i/ is a phone-wide column. */
-  wide?: boolean;
 };
 
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 const ALBUM_PAGE = 24; // the album downloads what it shows: about 7 MB a page, against 90 MB for a full trip
+const BAND = "absolute inset-0 mx-auto"; // over the whole world on a phone; centred at BAND_PX on a wide row
 const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of the one cast (TG-48)
 
 /**
  * TG-52: the trip as a game level map (owner, 2026-11-02). One world per day; each row is a level on a road that winds
- * up the green screen from START to GOAL. A done level wears a badge, the group's chibi stands on the latest-ticked
+ * down the green screen from START to GOAL. A done level wears a badge, the group's chibi stands on the latest-ticked
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, wide }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -62,7 +61,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const list = levels(day, byKey);
   const points = levelPoints(list.length);
   const height = worldHeight(list.length);
-  const start = startPoint(list.length);
+  const goal = goalPoint(list.length);
   const chosen = day.pick ? byKey.get(pickMark(day.pick.key))?.value : undefined;
   const photosAt = (key: string | null) => photos?.files.filter((f) => f.kind === "photo" && f.row_key === key) ?? [];
   const current = open && list.find((l) => l.row.key === open.key); // stays fresh as ticks land
@@ -80,7 +79,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
     return () => ro.disconnect();
   }, []);
 
-  // A world is about 1,000px tall with level 1 at the bottom: after a tab tap (not on first load) show the next level
+  // A world is about 1,000px tall and the next level can be anywhere on it: after a tab tap (not on first load) show it
   const tabTapped = useRef(false);
   useEffect(() => {
     if (!tabTapped.current) return;
@@ -94,34 +93,19 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   };
 
   return (
-    <div className={cx("flex flex-col gap-4", wide && "lg:grid lg:grid-cols-[28rem_minmax(0,1fr)] lg:grid-rows-[repeat(7,auto)_1fr] lg:gap-x-8 lg:gap-y-4 lg:items-start")}>
-      <header className="flex flex-col gap-1 lg:col-start-2">
+    <div className="flex flex-col gap-4">
+      <header className="flex flex-col gap-1">
         <h2 className="text-xl font-bold text-balance">{guide.title}</h2>
         {guide.summary && <p className="text-sm text-muted md:max-w-prose">{guide.summary}</p>}
       </header>
 
-      <nav aria-label="Days" className="flex flex-wrap gap-2 lg:col-start-2">
-        {guide.days.map((d) => {
-          const ls = levels(d, byKey);
-          const done = ls.filter((l) => l.done).length;
-          return (
-            <PixelButton key={d.day} variant={d.day === world ? "primary" : "secondary"} aria-pressed={d.day === world}
-              aria-label={marks ? `World ${d.day}, ${done} of ${ls.length} done` : `World ${d.day}`}
-              className="min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm" onClick={() => goTo(d.day)}>
-              <span className="font-bold">World {d.day}</span>
-              {marks && <span className="ml-1 tabular-nums">{done}/{ls.length}</span>}
-            </PixelButton>
-          );
-        })}
-      </nav>
-
-      <div className="flex flex-col gap-1 lg:col-start-2">
+      <div className="flex flex-col gap-1">
         <h3 className={cx(PX.dataHeading, "text-balance")}>{day.title}</h3>
         {day.intro && <p className="text-sm md:max-w-prose">{day.intro}</p>}
       </div>
 
       {day.pick && (
-        <PixelBox className="flex flex-col gap-2 p-4 lg:col-start-2">
+        <PixelBox className="flex flex-col gap-2 p-4">
           <p className="font-semibold">{day.pick.title}</p>
           <ul className="flex flex-col gap-2">
             {day.pick.options.map((o) => (
@@ -143,9 +127,30 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         </PixelBox>
       )}
 
+      {day.tips.length > 0 && (
+        <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
+          {day.tips.map((t) => <li key={t}>{t}</li>)}
+        </ul>
+      )}
+
+      <nav aria-label="Days" className="flex flex-wrap gap-2">
+        {guide.days.map((d) => {
+          const ls = levels(d, byKey);
+          const done = ls.filter((l) => l.done).length;
+          return (
+            <PixelButton key={d.day} variant={d.day === world ? "primary" : "secondary"} aria-pressed={d.day === world}
+              aria-label={marks ? `World ${d.day}, ${done} of ${ls.length} done` : `World ${d.day}`}
+              className="min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm" onClick={() => goTo(d.day)}>
+              <span className="font-bold">World {d.day}</span>
+              {marks && <span className="ml-1 tabular-nums">{done}/{ls.length}</span>}
+            </PixelButton>
+          );
+        })}
+      </nav>
+
       {/* The world: a fixed light screen in both themes, so it frames and focuses in Ink as the overworld map does */}
-      {/* It spans the rows down to the last, 1fr one, which takes its height: auto rows alone would stretch the right column */}
-      <div className="w-full md:mx-auto md:max-w-md lg:col-start-1 lg:row-span-full">
+      {/* The stops and levels sit in a centred band, so on a wide row they stay together and scenery fills the sides (TG-55) */}
+      <div className="w-full">
         <section ref={screen} aria-label={`World ${day.day} map`} className="pixel-frame bg-screen pixelated relative w-full overflow-hidden"
           style={{
             height,
@@ -158,19 +163,21 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
           <div aria-hidden="true" className="absolute inset-x-2 top-2 pixel-frame bg-flag-blue px-3 py-1 text-center">
             <span className={cx(PX.h2, "text-screen-paper")}>World {day.day}</span>
           </div>
-          <span className={cx("absolute inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 pixel-frame bg-flag-yellow px-2 py-0.5", PX.pressStart)} style={{ left: `${GOAL_POINT.x}%`, top: GOAL_POINT.y }}>
-            <Sprite name="ui-star" scale={1} />Goal<Sprite name="ui-star" scale={1} />
-          </span>
-          <span aria-hidden="true" className="absolute" style={{ left: `calc(${start.x}% - 100px)`, top: start.y - 44 }}><Sprite name="vehicle-bus" scale={1} /></span>
-          <span className={cx("absolute -translate-x-1/2 -translate-y-1/2 pixel-frame bg-screen-paper px-2 py-0.5", PX.pressStart)} style={{ left: `${start.x}%`, top: start.y }}>
-            Start
-          </span>
-          {atStart && (
-            <span aria-hidden="true" data-party="" className="absolute z-10" style={{ left: `calc(${start.x}% + 16px)`, top: start.y - 72 }}>
-              <Sprite name={chibiLook(GROUP, "idle-1")} scale={2} />
+          <div className={BAND} style={{ maxWidth: BAND_PX }}>
+            <span aria-hidden="true" className="absolute" style={{ left: `calc(${START_POINT.x}% - 100px)`, top: START_POINT.y - 12 }}><Sprite name="vehicle-bus" scale={1} /></span>
+            <span className={cx("absolute -translate-x-1/2 -translate-y-1/2 pixel-frame bg-screen-paper px-2 py-0.5", PX.pressStart)} style={{ left: `${START_POINT.x}%`, top: START_POINT.y }}>
+              Start
             </span>
-          )}
-          <ol className="contents">
+            {atStart && (
+              <span aria-hidden="true" data-party="" className="absolute z-10" style={{ left: `calc(${START_POINT.x}% + 40px)`, top: START_POINT.y - 16 }}>
+                <Sprite name={chibiLook(GROUP, "idle-1")} scale={2} />
+              </span>
+            )}
+            <span className={cx("absolute inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 pixel-frame bg-flag-yellow px-2 py-0.5", PX.pressStart)} style={{ left: `${goal.x}%`, top: goal.y }}>
+              <Sprite name="ui-star" scale={1} />Goal<Sprite name="ui-star" scale={1} />
+            </span>
+          </div>
+          <ol className={BAND} style={{ maxWidth: BAND_PX }}>
             {list.map((l, i) => {
               const p = points[i];
               const left = p.x < 50;
@@ -188,7 +195,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
                       {l.done && <span aria-hidden="true" className="absolute -top-3 -right-3"><Sprite name="ui-badge-verified" scale={2} /></span>}
                       {isHere && <span aria-hidden="true" data-party="" className="absolute -top-12 left-1/2 -translate-x-1/2"><Sprite name={chibiLook(GROUP, "idle-1")} scale={2} className="max-w-none" /></span>}
                     </span>
-                    <span className="min-w-0 flex-1 pixel-frame bg-screen-paper px-2 py-1 leading-snug text-screen-ink">
+                    <span className="min-w-0 max-w-88 flex-1 pixel-frame bg-screen-paper px-2 py-1 leading-snug text-screen-ink">
                       <span className="block text-sm font-bold tabular-nums">{formatTime(l.row.time)}</span>
                       <span className="block text-xs">{l.row.plan}</span>
                       {shots > 0 && <span className="block text-xs">{shots} photo{shots === 1 ? "" : "s"}</span>}
@@ -202,13 +209,8 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
           </ol>
         </section>
       </div>
-      {day.tips.length > 0 && (
-        <ul className="flex list-disc flex-col gap-1 pl-5 text-sm lg:col-start-2">
-          {day.tips.map((t) => <li key={t}>{t}</li>)}
-        </ul>
-      )}
 
-      <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:col-start-2 lg:flex lg:flex-wrap">
+      <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
         {([["buses", "Buses"], ["budget", "Budget"], ["todo", "To-do"], ["sources", "Sources"], ...(photos ? [["album", "Album"]] : [])] as [Menu, string][]).map(([key, name]) => (
           <PixelButton key={key} variant={menu === key ? "primary" : "secondary"} aria-pressed={menu === key} className="px-3 text-sm"
             onClick={() => setMenu(menu === key ? null : key)}>
@@ -217,15 +219,15 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         ))}
       </nav>
       {menu === "buses" && (
-        <div className="flex flex-col gap-5 lg:col-start-2">
+        <div className="flex flex-col gap-5">
           <Buses table={guide.getting_there} />
           <Buses table={guide.getting_home} />
         </div>
       )}
-      {menu === "budget" && <div className="lg:col-start-2"><Budget guide={guide} /></div>}
-      {menu === "todo" && <div className="lg:col-start-2"><Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} /></div>}
-      {menu === "sources" && <div className="lg:col-start-2"><Sources guide={guide} /></div>}
-      {menu === "album" && photos && <div className="lg:col-start-2"><Album photos={photos} guide={guide} busy={busy} /></div>}
+      {menu === "budget" && <Budget guide={guide} />}
+      {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} />}
+      {menu === "sources" && <Sources guide={guide} />}
+      {menu === "album" && photos && <Album photos={photos} guide={guide} busy={busy} />}
 
       {open && current && (
         // Keyed by tap: each one gets its own dialog, because showModal runs once on mount. close() shuts a dialog at once
@@ -241,7 +243,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
 function WorldGround({ W, count, world }: { W: number; count: number; world: number }) {
   const H = worldHeight(count);
   const road = useMemo(() => {
-    const r = pixelRoad(roadStops(levelPoints(count), startPoint(count), GOAL_POINT, W), W, H);
+    const r = pixelRoad(roadStops(levelPoints(count), START_POINT, goalPoint(count), W), W, H);
     return { curb: runsPath(r.curb), asphalt: runsPath(r.asphalt), dash: runsPath(r.dash) };
   }, [W, H, count]);
   const scenery = useMemo(() => levelScenery(levelPoints(count), W, fnv1a(`world-${world}`)), [W, count, world]);
