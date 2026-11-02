@@ -3,9 +3,10 @@
 // self.TG_SW and the event handlers. Bump SW_VERSION on every change so old static and page caches rotate.
 // Nothing at the top level may touch caches or fetch.
 
-const SW_VERSION = "2026-11-02.2"; // bump on every edit of this file
+const SW_VERSION = "2026-11-02.3"; // bump on every edit of this file
 const DATA_VERSION = "1"; // bump only if the stored data format changes
 const NETWORK_TIMEOUT_MS = 4000;
+const SAVED_PAGE_TIMEOUT_MS = 1500; // a saved /i, /w or /t page is a shell: its data loads in the browser (TG-57)
 const SAVED_AT_HEADER = "X-TG-Saved-At";
 const MSG_DATA = "tg-sw:data"; // SW -> page, after every API GET handled
 const MSG_SKIP_WAITING = "SKIP_WAITING"; // page -> waiting SW
@@ -81,6 +82,11 @@ function strategyFor(req, origins) {
     return { strategy: "network-first", cache: "data", kind: "api" };
   }
   return bypass();
+}
+
+/** How long a slow network gets before the saved copy answers. */
+function timeoutFor(plan) {
+  return plan.kind === "page" && plan.cache === "data" ? SAVED_PAGE_TIMEOUT_MS : NETWORK_TIMEOUT_MS;
 }
 
 /** Only full 200s are stored. Cache-Control is ignored on purpose: this is an offline store, not an HTTP cache. */
@@ -183,6 +189,7 @@ self.TG_SW = {
   SW_VERSION,
   DATA_VERSION,
   NETWORK_TIMEOUT_MS,
+  SAVED_PAGE_TIMEOUT_MS,
   MSG_DATA,
   MSG_SKIP_WAITING,
   PRECACHE_PAGES,
@@ -191,6 +198,7 @@ self.TG_SW = {
   cachesToDelete,
   apiOriginFrom,
   strategyFor,
+  timeoutFor,
   shouldStore,
   isServerFailure,
   stampSavedAt,
@@ -285,7 +293,8 @@ async function postToClient(clientId, message) {
 // Every waitUntil below is called synchronously in the handler (review fix 1): once respondWith's promise
 // settles with nothing else pending, a later waitUntil throws InvalidStateError.
 
-function handleNetworkFirst(event, cacheName, kind) {
+function handleNetworkFirst(event, cacheName, plan) {
+  const { kind } = plan;
   const req = event.request;
   const matchOptions = kind === "page" ? { ignoreVary: true } : undefined; // Next's HTML varies on RSC headers
   const run = networkFirst({
@@ -296,7 +305,7 @@ function handleNetworkFirst(event, cacheName, kind) {
       }),
     readCache: () => caches.open(cacheName).then((c) => c.match(req, matchOptions)),
     writeCache: (res) => caches.open(cacheName).then((c) => c.put(req, res)),
-    timeoutMs: NETWORK_TIMEOUT_MS,
+    timeoutMs: timeoutFor(plan),
     nowIso,
   });
   const response = run.result.then(async (r) => {
@@ -380,5 +389,5 @@ self.addEventListener("fetch", (event) => {
   const names = cacheNames(SW_VERSION);
   if (plan.strategy === "cache-first") return handleCacheFirst(event, names.static);
   if (plan.strategy === "stale-while-revalidate") return handleStaleWhileRevalidate(event, names[plan.cache]);
-  handleNetworkFirst(event, names[plan.cache], plan.kind);
+  handleNetworkFirst(event, names[plan.cache], plan);
 });

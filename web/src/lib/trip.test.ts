@@ -297,7 +297,7 @@ test("TG54-5 TripView: every GET it shows goes through afterGet, aged against wh
   const write = view.slice(view.indexOf("async function write("), view.indexOf("const onFail ="));
   assert.ok(write.indexOf("shownAt.current = Date.now();") > write.indexOf("if (!r.ok)"), "only a write that landed");
   assert.ok(write.indexOf("shownAt.current = Date.now();") < write.indexOf("setLoad("), "before its state, so no answer can slip between");
-  assert.equal(view.match(/setLoad\(/g)?.length, 2, "afterGet and the write: nothing else sets the trip");
+  assert.equal(view.match(/setLoad\(/g)?.length, 3, "afterGet, the write and TG-57's afterSaved: nothing else sets the trip");
   assert.match(view, /console\.info\("\[tg-trip\] load ok=%s", r\.ok \? \(overtaken \? "overtaken" : r\.savedAt \? "saved" : "yes"\) : r\.why\);/);
   // An overtaken answer leaves everything alone: this phone's note of the trip too
   assert.match(view, /if \(r\.ok && !overtaken\) \{\s+shownAt\.current = from;\s+remember\(r\.trip\);\s+keepFilesOffline\(r\.trip, keptFiles\.current\);\s+\}/);
@@ -333,4 +333,172 @@ test("TG54-7 answerFrom: a slow-signal phone still sees other phones' ticks, and
   assert.deepEqual(marks(), ["row:d1-03", "row:d1-04"], "nor does a GET sent before it");
   land(ok(["row:d1-03", "row:d1-04", "row:d1-05"], 75000), 121000); // the copy from the refresh after the tick
   assert.equal(marks()?.length, 3, "a copy from after the write shows");
+});
+
+// --- TG-57 the map shows from the worker's saved copy while the fresh answer is on its way ------------------------
+
+const savedHit = (body: unknown, stamp: string | null) =>
+  new Response(JSON.stringify(body), { headers: stamp ? { "X-TG-Saved-At": stamp } : {} });
+
+test("TG57-1 savedAnswer: the worker's copy and its age, ignoring Vary, and null when there's none to read", async () => {
+  const { savedAnswer } = await import("./api.ts");
+  const asked: unknown[][] = [];
+  const store = (hit?: Response) => ({ match: async (...args: unknown[]) => (asked.push(args), hit) });
+  const stamp = "2026-11-02T05:00:00.000Z";
+  assert.deepEqual(await savedAnswer("http://api/x", store(savedHit({ a: 1 }, stamp))), { body: { a: 1 }, savedAt: Date.parse(stamp) });
+  assert.deepEqual(asked[0], ["http://api/x", { ignoreVary: true }], "the API's Vary: Origin mustn't hide the copy from the page");
+  assert.deepEqual(await savedAnswer("http://api/x", store(savedHit({ a: 1 }, null))), { body: { a: 1 }, savedAt: 0 }, "no stamp: older than anything");
+  assert.deepEqual(await savedAnswer("http://api/x", store(savedHit({ a: 1 }, "soon"))), { body: { a: 1 }, savedAt: 0 });
+  assert.equal(await savedAnswer("http://api/x", store()), null, "nothing saved");
+  assert.equal(await savedAnswer("http://api/x", undefined), null, "no Cache API on this page");
+  assert.equal(await savedAnswer("http://api/x", { match: async () => { throw new Error("blocked"); } }), null);
+  assert.equal(await savedAnswer("http://api/x", store(new Response("not json"))), null);
+});
+
+test("TG57-2 savedTrip: a trip's own copy from the exact URL the GET uses; another trip's body is no copy", async () => {
+  const { savedTrip } = await import("./trip.ts");
+  const { API_URL } = await import("./api.ts");
+  const trip = { ...onScreen([]).trip };
+  let url = "";
+  const store = (body: unknown) => ({ match: async (u: string) => ((url = u), savedHit(body, "2026-11-02T05:00:00.000Z")) });
+  assert.deepEqual(await savedTrip(TRIP, store(trip)), { trip, savedAt: Date.parse("2026-11-02T05:00:00.000Z") });
+  assert.equal(url, `${API_URL}/sessions/${TRIP}`);
+  assert.equal(await savedTrip(TRIP, store({ ...trip, share_slug: "0".repeat(32) })), null);
+  const { savedItinerary } = await import("./api.ts");
+  const real = globalThis.caches;
+  const asked: string[] = [];
+  try {
+    Object.defineProperty(globalThis, "caches", { configurable: true, value: { match: async (u: string) => void asked.push(u) } });
+    await savedItinerary("baguio-barkada-nov6");
+  } finally {
+    Object.defineProperty(globalThis, "caches", { configurable: true, value: real });
+  }
+  assert.deepEqual(asked, [`${API_URL}/itineraries/baguio-barkada-nov6`], "the exact URL fetchItinerary uses, or the saved guide never shows");
+});
+
+test("TG57-3 afterSaved: a saved copy only fills an empty screen, never a trip or an error", async () => {
+  const { afterSaved } = await import("./trip.ts");
+  const copy = onScreen(["row:d1-01"]).trip;
+  assert.deepEqual(afterSaved({ state: "loading" }, copy), { state: "ready", trip: copy });
+  const newer = onScreen(["row:d1-01", "row:d1-02"]);
+  assert.equal(afterSaved(newer, copy), newer, "a GET or a write beat the saved copy to the screen");
+  const gone = { state: "error" as const, why: "not_found" as const };
+  assert.equal(afterSaved(gone, copy), gone, "a deleted trip stays deleted");
+});
+
+test("TG57-4 the age rule holds with a saved copy first: fresh answers replace it, older ones and writes aren't undone", async () => {
+  const { afterGet, afterSaved, answerFrom } = await import("./trip.ts");
+  // TripView's paths, in order
+  let shownAt = 0;
+  let screen: import("./trip.ts").TripLoad = { state: "loading" };
+  const saved = (marks: string[], savedAt: number) => {
+    shownAt ||= savedAt;
+    screen = afterSaved(screen, onScreen(marks).trip);
+  };
+  const land = (r: import("./trip.ts").TripResult, left: number) => {
+    const from = answerFrom(r, left);
+    const overtaken = from < shownAt;
+    if (r.ok && !overtaken) shownAt = from;
+    screen = afterGet(screen, r, TRIP, overtaken);
+  };
+  const ok = (marks: string[], savedAt?: number) => ({ ok: true as const, trip: onScreen(marks).trip, ...(savedAt ? { savedAt } : {}) });
+  const marks = () => (screen.state === "ready" ? screen.trip.marks.map((m) => m.key) : null);
+
+  saved(["row:d1-01"], 1000);
+  assert.deepEqual(marks(), ["row:d1-01"], "the copy shows at once");
+  land(ok(["row:d1-01", "row:d1-02"]), 5000);
+  assert.deepEqual(marks(), ["row:d1-01", "row:d1-02"], "the fresh answer replaces it");
+
+  // Slow signal: the same GET gets the very same copy back from the worker at 4 s
+  shownAt = 0;
+  screen = { state: "loading" };
+  saved(["row:d1-01"], 1000);
+  land(ok(["row:d1-01"], 1000), 5000);
+  assert.deepEqual(marks(), ["row:d1-01"]);
+  assert.equal(shownAt, 1000, "its age stays the copy's, so the next real answer still counts as newer");
+
+  // A tick lands on the saved map while the first GET is still out
+  shownAt = 0;
+  screen = { state: "loading" };
+  saved([], 1000);
+  shownAt = 7000;
+  screen = onScreen(["row:d1-01"]);
+  land(ok([]), 5000);
+  assert.deepEqual(marks(), ["row:d1-01"], "the GET that left before the tick doesn't take it back");
+
+  // A newer tab's copy on disk is newer than this page's first GET
+  shownAt = 0;
+  screen = { state: "loading" };
+  saved(["row:d1-02"], 9000);
+  land(ok([]), 5000);
+  assert.deepEqual(marks(), ["row:d1-02"], "a GET older than the copy doesn't replace it");
+
+  // The write got there before the disk answered
+  shownAt = 7000;
+  screen = onScreen(["row:d1-03"]);
+  saved([], 1000);
+  assert.equal(shownAt, 7000, "the copy doesn't age the screen backwards");
+  assert.deepEqual(marks(), ["row:d1-03"]);
+});
+
+test("TG57-5 fillGuide: a saved guide or a failure only fills a gap, so neither replaces an answer already held", async () => {
+  const { fillGuide } = await import("./trip.ts");
+  const guide = (n: string) => ({ n }) as unknown as import("./guide.ts").Guide;
+  const fresh = { plan: "p", guide: guide("fresh") };
+  const failed = { plan: "p", guide: null, failed: true };
+  assert.deepEqual(fillGuide(null, { plan: "p", guide: guide("saved") }), { plan: "p", guide: guide("saved") });
+  assert.equal(fillGuide(fresh, { plan: "p", guide: guide("saved") }), fresh, "the fresh answer landed first");
+  assert.equal(fillGuide(fresh, failed), fresh, "a failed GET keeps the saved guide on screen");
+  assert.deepEqual(fillGuide(failed, { plan: "p", guide: guide("saved") }), { plan: "p", guide: guide("saved") }, "a copy after a failure shows");
+  assert.deepEqual(fillGuide(fresh, { plan: "q", guide: null, failed: true }), { plan: "q", guide: null, failed: true }, "another plan's guide isn't this plan's");
+});
+
+test("TG57-6 mapSlot: a frame while the plan's guide is on its way, the map once it's here, nothing without one", async () => {
+  const { mapSlot } = await import("./trip.ts");
+  const guide = { days: [] } as unknown as import("./guide.ts").Guide;
+  assert.equal(mapSlot(null, null), null, "no plan, no map");
+  assert.equal(mapSlot("p", null), "frame");
+  assert.equal(mapSlot("p", { plan: "old", guide }), "frame", "the last plan's guide isn't shown for this one");
+  assert.equal(mapSlot("p", { plan: "p", guide }), guide);
+  assert.equal(mapSlot("p", { plan: "p", guide: null }), null, "a plan without a guide, or a deleted one");
+  assert.equal(mapSlot("p", { plan: "p", guide: null, failed: true }), null, "no signal and no copy: the frame doesn't spin for ever");
+});
+
+test("TG57-7 TripView: saved copies go through the age rule, the guide retries with the polls, and the frame stays out of LevelMap", () => {
+  const src = read("src/components/TripView.tsx");
+  const peek = src.slice(src.indexOf("savedTrip(slug)"), src.indexOf("tripApi.get(slug).then"));
+  assert.match(peek, /if \(!live \|\| !saved\) return;/, "an unmounted view or a slug change drops the copy");
+  assert.match(peek, /shownAt\.current \|\|= saved\.savedAt/, "the copy never ages the screen backwards");
+  assert.match(peek, /afterSaved\(prev, saved\.trip\)/);
+  assert.ok(src.indexOf("savedTrip(slug)") < src.indexOf("tripApi.get(slug).then"), "the copy is asked for first");
+  assert.doesNotMatch(peek, /remember\(|keepFilesOffline/, "only a fresh answer updates this phone's note and its kept files");
+  const guide = src.slice(src.indexOf("const planSlug"), src.indexOf('if (load.state === "loading")'));
+  assert.match(guide, /savedItinerary\(planSlug\)/);
+  assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: saved\.body\.guide \?\? null \}\)/);
+  assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: null, failed: true \}\)/);
+  assert.match(guide, /\[planSlug, retry\]/, "a failed fetch tries again with the next poll, not only on a full reload");
+  assert.match(src, /mapSlot\(trip\.itinerary_slug, guide\)/);
+  assert.match(src, /\{slot === "frame" && \(\s+<section data-map-loading/, "the frame is drawn");
+  assert.doesNotMatch(read("src/components/LevelMap.tsx"), /data-map-loading/);
+  assert.doesNotMatch(src.slice(src.indexOf("data-map-loading") - 200, src.indexOf("data-map-loading") + 400), /progress-title/, "#progress-title still means the real map");
+});
+
+test("TG57-8 TripHeader: opening the edit form starts from the trip on screen, not the copy it first drew", () => {
+  const src = read("src/components/TripView.tsx");
+  const header = src.slice(src.indexOf("function TripHeader"), src.indexOf("function PlanSection"));
+  assert.match(header, /onClick=\{openEditor\}/, "the button uses it");
+  const open = header.slice(header.indexOf("function openEditor"), header.indexOf("async function onShare"));
+  assert.match(open, /setName\(trip\.name\)/);
+  assert.match(open, /setStart\(trip\.start_date\)/);
+  assert.match(open, /setBack\(trip\.return_date\)/);
+});
+
+test("TG57-9 TripView: when the worker takes over mid-visit, ask again for its copies, without touching the GET on screen", () => {
+  const src = read("src/components/TripView.tsx");
+  const keep = src.slice(src.indexOf("const keepCopies"), src.indexOf('if (load.state === "loading")'));
+  assert.match(keep, /void tripApi\.get\(slug\);/);
+  assert.match(keep, /fetchItinerary\(planSlug\)\.catch\(\(\) => undefined\)/);
+  assert.match(keep, /serviceWorker\?\.addEventListener\("controllerchange", keepCopies\)/);
+  assert.match(keep, /serviceWorker\?\.removeEventListener\("controllerchange", keepCopies\)/);
+  assert.doesNotMatch(keep, /setReloads|setLoad|setGuide/, "the screen's own GET isn't cancelled, and these answers don't go to the screen");
 });

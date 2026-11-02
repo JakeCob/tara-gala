@@ -90,6 +90,26 @@ export async function fetchItinerary(slug: string): Promise<Itinerary | null> {
   return res.json();
 }
 
+type SavedAnswers = { match: (url: string, options: { ignoreVary: boolean }) => Promise<Response | undefined> };
+
+/**
+ * TG-57: the service worker's saved answer to a GET, read straight from its cache so the screen doesn't wait for the
+ * network. `savedAt` is when that copy's GET left (TG-54), 0 if unknown. Null when nothing's saved or caches are blocked.
+ * ignoreVary: the API answers with Vary: Origin, and this lookup has no Origin to match.
+ */
+export async function savedAnswer<T>(url: string, store: SavedAnswers | undefined = globalThis.caches): Promise<{ body: T; savedAt: number } | null> {
+  try {
+    const hit = await store?.match(url, { ignoreVary: true });
+    if (!hit) return null;
+    const savedAt = Date.parse(hit.headers.get("x-tg-saved-at") ?? "");
+    return { body: (await hit.json()) as T, savedAt: Number.isNaN(savedAt) ? 0 : savedAt };
+  } catch {
+    return null;
+  }
+}
+
+export const savedItinerary = (slug: string) => savedAnswer<Itinerary>(`${API_URL}/itineraries/${encodeURIComponent(slug)}`);
+
 /** POST /plan body (TG-20 PlanRequest, extra="forbid"): only these keys. TG-15's party never carries names. */
 export type PlanRequestBody = {
   date: string; // YYYY-MM-DD

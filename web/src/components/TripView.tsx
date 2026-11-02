@@ -5,14 +5,13 @@ import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, type PremadeSummary } from "@/lib/api";
 import {
-  type Hotel, type Trip, type TripLoad, type TripResult, afterGet, answerFrom, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
-  slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
+  type Hotel, type PlanGuide, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, fillGuide, forgetTrip, hotelMapsUrl,
+  hotelTime, mapSlot, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
-import { fetchItinerary } from "@/lib/api";
+import { fetchItinerary, savedItinerary } from "@/lib/api";
 import { fitPhoto } from "@/lib/shrink";
-import type { Guide } from "@/lib/guide";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
 
 type Notice = { text: string; error: boolean };
@@ -45,6 +44,20 @@ export default function TripView({ slug }: { slug: string }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const keptFiles = useRef(new Set<string>());
   const shownAt = useRef(0); // TG-54: how new the trip on screen is: when its GET left, or when a write landed
+
+  // TG-57: the worker's copy shows at once, so the map doesn't wait on two API calls in a row. The GET below replaces it
+  useEffect(() => {
+    let live = true;
+    void savedTrip(slug).then((saved) => {
+      if (!live || !saved) return;
+      console.info("[tg-trip] load saved copy");
+      shownAt.current ||= saved.savedAt;
+      setLoad((prev) => afterSaved(prev, saved.trip));
+    });
+    return () => {
+      live = false;
+    };
+  }, [slug]);
 
   useEffect(() => {
     let live = true;
@@ -80,18 +93,39 @@ export default function TripView({ slug }: { slug: string }) {
 
   // The plan's guide (day tables, buses, pick, budget, to-dos): the trip's checklist and progress map
   const planSlug = load.state === "ready" ? load.trip.itinerary_slug : null;
-  const [guide, setGuide] = useState<{ plan: string; guide: Guide | null } | null>(null);
+  const [guide, setGuide] = useState<PlanGuide | null>(null);
+  const retry = guide?.plan === planSlug && guide?.failed ? reloads : 0; // a failed fetch tries again with the polls
   useEffect(() => {
     if (!planSlug) return;
     let live = true;
+    void savedItinerary(planSlug).then((saved) => {
+      if (!live || !saved) return;
+      console.info("[tg-trip] guide saved copy");
+      setGuide((prev) => fillGuide(prev, { plan: planSlug, guide: saved.body.guide ?? null }));
+    });
     fetchItinerary(planSlug).then(
       (it) => live && setGuide({ plan: planSlug, guide: it?.guide ?? null }),
-      () => undefined, // offline with no copy: the rest of the trip still shows
+      () => {
+        console.info("[tg-trip] guide failed live=%s", live);
+        if (live) setGuide((prev) => fillGuide(prev, { plan: planSlug, guide: null, failed: true })); // offline with no copy: the rest of the trip still shows
+      },
     );
     return () => {
       live = false;
     };
-  }, [planSlug]);
+  }, [planSlug, retry]);
+
+  // TG-57: a first open's GETs go past the service worker: ask again once it's here, so the next open has its copies.
+  // Only the worker needs these answers, so the GET the screen is waiting on carries on
+  useEffect(() => {
+    const keepCopies = () => {
+      console.info("[tg-trip] worker took over, saving copies");
+      void tripApi.get(slug);
+      if (planSlug) fetchItinerary(planSlug).catch(() => undefined);
+    };
+    navigator.serviceWorker?.addEventListener("controllerchange", keepCopies);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", keepCopies);
+  }, [slug, planSlug]);
 
   if (load.state === "loading") return <p className="text-sm text-muted">Opening the trip...</p>;
   if (load.state === "error") {
@@ -122,10 +156,21 @@ export default function TripView({ slug }: { slug: string }) {
   }
 
   const onFail = (text: string) => setNotice({ text, error: true });
-  const theGuide = guide?.plan === trip.itinerary_slug ? guide.guide : null;
+  const slot = mapSlot(trip.itinerary_slug, guide);
+  const theGuide = slot === "frame" ? null : slot;
   return (
     <div className="flex flex-col gap-6">
     <TripHeader trip={trip} busy={busy} write={write} />
+    {slot === "frame" && (
+      <section data-map-loading aria-label="Trip progress" aria-busy="true" className="flex flex-col gap-3">
+        <SectionTitle>Trip progress</SectionTitle>
+        <div className="grid min-h-[70vh]">
+          <PixelBox className="flex justify-center p-4">
+            <p className="text-sm text-muted">Opening the map...</p>
+          </PixelBox>
+        </div>
+      </section>
+    )}
     {theGuide && (
       <section aria-labelledby="progress-title" className="flex flex-col gap-3">
         <SectionTitle id="progress-title">Trip progress</SectionTitle>
@@ -222,6 +267,16 @@ function TripHeader({ trip, busy, write }: { trip: Trip; busy: boolean; write: W
   const [problem, setProblem] = useState("");
   const [shared, setShared] = useState("");
 
+  // The trip may have moved on from the copy this first drew, by a saved copy (TG-57) or another phone
+  function openEditor() {
+    if (!editing) {
+      setName(trip.name);
+      setStart(trip.start_date);
+      setBack(trip.return_date);
+    }
+    setEditing((v) => !v);
+  }
+
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
     const p = tripProblem(name, start, back);
@@ -254,7 +309,7 @@ function TripHeader({ trip, busy, write }: { trip: Trip; busy: boolean; write: W
         <PixelButton variant="primary" className="px-4 text-sm" onClick={onShare}>
           Share the trip
         </PixelButton>
-        <PixelButton variant="secondary" className="px-4 text-sm" onClick={() => setEditing((v) => !v)} aria-expanded={editing}>
+        <PixelButton variant="secondary" className="px-4 text-sm" onClick={openEditor} aria-expanded={editing}>
           {editing ? "Close" : "Edit name and dates"}
         </PixelButton>
       </div>

@@ -1,8 +1,8 @@
 // TG-52 trip sessions: one secret link for the whole trip, holding its itinerary, wallet and hotel. Like a wallet, the
 // link is the key (no accounts), and this phone remembers the trips it has opened.
 
-import { API_URL } from "./api.ts";
-import type { Mark } from "./guide.ts";
+import { API_URL, savedAnswer } from "./api.ts";
+import type { Guide, Mark } from "./guide.ts";
 import { SLUG_PATTERN } from "./itinerary.ts";
 import { WALLET_SLUG } from "./wallet.ts";
 
@@ -130,6 +130,25 @@ export function afterGet(prev: TripLoad, r: TripResult, slug: string, overtaken:
   return prev.state === "ready" && r.why === "offline" ? prev : { state: "error", why: r.why }; // offline with a copy on screen: keep showing it; the offline banner says so
 }
 
+/** TG-57: a saved copy only fills an empty screen. Anything already there, even an error, came from a later answer. */
+export function afterSaved(prev: TripLoad, trip: Trip): TripLoad {
+  return prev.state === "loading" ? { state: "ready", trip } : prev;
+}
+
+/** A plan's guide as this page holds it. `failed`: no signal and no copy, so the next poll tries again. */
+export type PlanGuide = { plan: string; guide: Guide | null; failed?: boolean };
+
+/** TG-57: a saved guide or a failed fetch fills a gap, so neither replaces an answer already held for this plan. */
+export function fillGuide(prev: PlanGuide | null, next: PlanGuide): PlanGuide {
+  return prev?.plan === next.plan && !prev.failed ? prev : next;
+}
+
+/** What the map's place on the page holds: its guide, a frame while the guide is on its way, or nothing. */
+export function mapSlot(plan: string | null, held: PlanGuide | null): Guide | "frame" | null {
+  if (!plan) return null;
+  return held?.plan === plan ? held.guide : "frame";
+}
+
 const DETAIL: Record<string, string> = {
   itinerary_not_found: "That plan link doesn't work. Copy it again from the plan's Share button.",
   wallet_not_found: "That wallet link doesn't work. Copy it again from the wallet.",
@@ -190,6 +209,12 @@ async function call(path: string, init?: { method: Method; body?: unknown; raw?:
 
 const at = (slug: string) => `/sessions/${encodeURIComponent(slug)}`;
 const one = (p: Promise<TripResult | { ok: true; trip: null }>) => p as Promise<TripResult>;
+
+/** The worker's saved copy of this trip, for the screen to show while the GET is out (TG-57). */
+export async function savedTrip(slug: string, store?: Parameters<typeof savedAnswer>[1]): Promise<{ trip: Trip; savedAt: number } | null> {
+  const saved = await savedAnswer<Trip>(`${API_URL}${at(slug)}`, store);
+  return saved?.body.share_slug === slug ? { trip: saved.body, savedAt: saved.savedAt } : null;
+}
 
 export const tripApi = {
   create: (name: string, start_date: string, return_date: string) =>
