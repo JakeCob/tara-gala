@@ -175,7 +175,7 @@ test("TS14 tickets on this phone are shared only when someone taps Add to trip",
 });
 
 test("TS15 the file logs carry the kind and outcome, never a label, name or link", () => {
-  for (const file of ["src/components/TripFiles.tsx", "src/components/TicketWallet.tsx", "src/components/WalletView.tsx"]) {
+  for (const file of ["src/components/TripFiles.tsx", "src/components/TicketWallet.tsx", "src/components/WalletView.tsx", "src/components/ProofDialog.tsx"]) {
     const logs = [...read(file).matchAll(/console\.(?:info|warn|error)\(([^;]*)\);/g)].map((m) => m[1]);
     for (const args of logs) assert.doesNotMatch(args, /label|(?<!err)\.name\b|slug|fileUrl/i, `${file}: ${args}`);
   }

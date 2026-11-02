@@ -300,6 +300,7 @@ GET_ROUTES = {
     "/premade-itineraries",  # TG-24: model = 'premade' rows only
     "/itineraries/{share_slug}",  # TG-23: one row by exact slug
     "/wallets/{share_slug}",  # TG-50: one wallet by exact slug; never touches itineraries
+    "/wallets/{share_slug}/settlements/{settlement_id}/proof",  # TG-53: one payment's proof, inside its own wallet only
     "/sessions/{share_slug}",  # TG-52: one trip session by exact slug, with its own linked itinerary's slug
     "/sessions/{share_slug}/files/{file_id}",  # TG-52 PR 2: one shared file, inside its own trip only
 }
@@ -312,6 +313,9 @@ OTHER_ROUTES = {
     ("DELETE", "/wallets/{share_slug}/expenses/{expense_id}"),
     ("POST", "/wallets/{share_slug}/settlements"),
     ("DELETE", "/wallets/{share_slug}/settlements/{settlement_id}"),
+    # TG-53: a payment's proof screenshot, added or replaced, and removed
+    ("POST", "/wallets/{share_slug}/settlements/{settlement_id}/proof"),
+    ("DELETE", "/wallets/{share_slug}/settlements/{settlement_id}/proof"),
     # TG-52 trip sessions: every route is under one exact session slug; there is no session listing. Linking an
     # itinerary needs its exact slug, as reading it does
     ("POST", "/sessions"),

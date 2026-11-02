@@ -237,6 +237,12 @@ create table settlements (
   to_member       uuid not null references wallet_members(id) on delete cascade,
   amount_centavos integer not null check (amount_centavos between 1 and 10000000),
   created_at      timestamptz not null default now(),
+  proof_path      text unique,
+  proof_type      text check (proof_type in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')),
+  proof_bytes     integer check (proof_bytes between 1 and 5242880),
+  proof_at        timestamptz,
+  constraint settlements_proof_whole check (
+    ((proof_path is null) = (proof_type is null)) and ((proof_path is null) = (proof_bytes is null)) and (proof_path is null or proof_at is not null)),
   check (from_member <> to_member)
 );
 create index settlements_wallet on settlements (wallet_id);

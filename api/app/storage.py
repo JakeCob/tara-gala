@@ -1,7 +1,8 @@
 """Supabase Storage for trip files (TG-52): one private bucket that only the API reads and writes, with the service
 role key. Files are served to people with a trip's link through the API, never from Storage directly.
 
-Object paths are "<session id>/<file id>": no names, labels or slugs. Logs carry the path's file id and sizes only.
+Object paths are "<session id>/<file id>" for trip files and "wallets/<wallet id>/<uuid>" for payment proofs
+(wallet_proofs.py): no names, labels or slugs. Logs carry the path's file id and sizes only.
 """
 
 import logging
@@ -12,7 +13,21 @@ import httpx
 logger = logging.getLogger("tara_gala.api")
 
 BUCKET = "trip-files"
+MAX_BYTES = 5 * 1024 * 1024  # the table's cap
 TIMEOUT = httpx.Timeout(20.0, connect=5.0)
+
+
+def sniff(data: bytes) -> str | None:
+    """The image type the bytes really are, from their signature, or None. The Content-Type must agree."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 
 class StorageError(Exception):

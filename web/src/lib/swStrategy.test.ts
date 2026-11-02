@@ -1109,6 +1109,30 @@ test("T43-O4b install survives a /plan miss and logs it", async () => {
   assert.equal(warns.filter((w) => /precache miss url=\/plan\b/.test(w)).length, 1, warns.join("\n"));
 });
 
+test("T53-W23 a proof is never cached: /proof bypasses, and the wallet stays network-first", () => {
+  const slug = "a".repeat(32);
+  const id = "11111111-1111-4111-8111-111111111111";
+  for (const origins of [LOCAL, PROD]) {
+    assert.deepEqual(strategy(req(`${origins.api}/wallets/${slug}/settlements/${id}/proof`), origins), BYPASS);
+    assert.deepEqual(strategy(req(`${origins.api}/wallets/${slug}`), origins), API_FIRST);
+  }
+});
+
+test("T53-W23 TG-53 leaves sw.js alone: stored files never expire, so a saved receipt would outlive the sweep", (t) => {
+  let base: string;
+  try {
+    base = execFileSync("git", ["show", "origin/main:web/public/sw.js"], {
+      cwd: new URL(".", SW_PATH),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    t.skip("skipped: origin/main not fetched; run locally before merging");
+    return;
+  }
+  assert.equal(readFileSync(SW_PATH, "utf8"), base);
+});
+
 test("T43-O5 SW_VERSION changes whenever sw.js does", (t) => {
   let base: string;
   try {

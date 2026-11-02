@@ -23,6 +23,7 @@ from .sessions import router as sessions_router
 from .trip_files import router as trip_files_router
 from .trip_files import start_sweeper
 from .trip_marks import router as trip_marks_router
+from .wallet_proofs import router as wallet_proofs_router
 from .schedule import arrival as _arrival  # noqa: F401  re-exported: TG-12 tests use main._arrival
 from .trip_rows import CONFIRM_NOTE, trip_from_row  # noqa: F401  CONFIRM_NOTE re-exported
 from .wallets import router as wallets_router
@@ -143,6 +144,7 @@ app.include_router(premade_router)
 app.include_router(planner_router)
 app.include_router(itineraries_router)
 app.include_router(wallets_router)
+app.include_router(wallet_proofs_router)
 app.include_router(sessions_router)
 app.include_router(trip_files_router)
 app.include_router(trip_marks_router)

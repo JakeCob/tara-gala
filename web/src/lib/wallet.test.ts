@@ -78,8 +78,8 @@ test("V5 every failure gets one plain sentence; API codes map to their own", () 
   assert.match(failureMessage({ why: "rejected", detail: "shares_mismatch" }), /don't add up/);
   assert.match(failureMessage({ why: "rejected", detail: "name_taken" }), /already has that name/);
   assert.match(failureMessage({ why: "rejected", detail: "whatever" }), /didn't save/);
-  const api = read("../api/app/wallets.py");
-  for (const code of ["shares_mismatch", "unknown_member", "name_taken", "party_full", "wallet_full"]) {
+  const api = read("../api/app/wallets.py") + read("../api/app/wallet_proofs.py");
+  for (const code of ["shares_mismatch", "unknown_member", "name_taken", "party_full", "wallet_full", "too_many_proofs"]) {
     assert.ok(api.includes(`"${code}"`), `the API sends ${code}`);
     assert.ok(read("src/lib/wallet.ts").includes(`${code}:`), `the web explains ${code}`);
   }
@@ -118,7 +118,7 @@ test("V8 payout QRs never leave the phone, and wallet logs carry no names, notes
   for (const path of ["src/lib/payoutStore.ts", "src/components/PayoutQr.tsx"]) {
     assert.doesNotMatch(read(path), /\bfetch\(|XMLHttpRequest|sendBeacon|API_URL|walletApi/, `${path}: no network`);
   }
-  for (const path of ["src/lib/wallet.ts", "src/components/WalletView.tsx", "src/components/WalletHome.tsx", "src/components/PayoutQr.tsx"]) {
+  for (const path of ["src/lib/wallet.ts", "src/components/WalletView.tsx", "src/components/WalletHome.tsx", "src/components/PayoutQr.tsx", "src/components/ProofDialog.tsx"]) {
     for (const [, args] of read(path).matchAll(/console\.\w+\(([^;]*)\);/g)) {
       assert.doesNotMatch(args, /(?<!err\.)\bname\b|\bnote\b|\bslug\b|\blabel\b/, `${path}: a log carries personal data: ${args}`);
     }
@@ -147,7 +147,7 @@ test("V10 the wallet screen: one primary (Add expense), Show my QR on the paymen
   assert.match(src, /Add expense/);
   assert.match(src, /t\.to_member === me/, "Show my QR only on payments to me");
   assert.match(src, /<PayoutQr\b/);
-  assert.equal(src.match(/window\.confirm\(/g)?.length, 3, "delete expense, mark paid and undo each confirm");
+  assert.equal(src.match(/window\.confirm\(/g)?.length, 2, "delete expense and undo confirm; Mark paid opens ProofDialog (TG-53)");
   assert.match(src, /visibilitychange/, "refreshes when the phone comes back to the app");
 });
 

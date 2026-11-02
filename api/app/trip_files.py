@@ -21,9 +21,10 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 
-from . import db, storage
+from . import db, storage, wallet_proofs
 from .limits import RateLimiter
 from .sessions import EXPIRING, NOINDEX, RETAIN_DAYS, SessionOut, _limit, _load, _private, _session_id
+from .storage import MAX_BYTES, sniff
 
 router = APIRouter(tags=["trip-files"])
 logger = logging.getLogger("tara_gala.api")
@@ -31,7 +32,6 @@ logger = logging.getLogger("tara_gala.api")
 MANILA = ZoneInfo("Asia/Manila")
 KINDS = ("ticket", "payout_qr", "hotel_proof", "photo")
 ROW_KEY = re.compile(r"^d[1-9]-[0-9]{2}$")
-MAX_BYTES = 5 * 1024 * 1024  # the table's cap
 MAX_TICKETS = 30
 MAX_PHOTOS = 300  # about 90 MB at the phone's ~300 KB each: inside the free 1 GB
 NOT_FOUND = "File not found"
@@ -40,19 +40,6 @@ UPLOAD_LIMITER = RateLimiter(UPLOADS_PER_HOUR)
 PHOTOS_PER_HOUR = 400  # above MAX_PHOTOS: a group on one wifi can add the whole album in one go
 PHOTO_LIMITER = RateLimiter(PHOTOS_PER_HOUR)
 SWEEP_EVERY_SECONDS = 3600
-
-
-def _sniff(data: bytes) -> str | None:
-    """The image type the bytes really are, from their signature, or None. The Content-Type must agree."""
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if data.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if data.startswith((b"GIF87a", b"GIF89a")):
-        return "image/gif"
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp"
-    return None
 
 
 def _save(share_slug: str, kind: str, label: str, member_id: UUID | None, content_type: str, data: bytes, row_key: str | None = None) -> SessionOut:
@@ -144,7 +131,7 @@ async def add_file(
     data = await request.body()
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "too_big")
-    sniffed = _sniff(data)
+    sniffed = sniff(data)
     if sniffed is None or sniffed != declared:
         logger.info("trip file refused share_slug=%s kind=%s reason=not_an_image bytes=%d", share_slug, kind, len(data))
         raise HTTPException(422, "not_an_image")
@@ -228,6 +215,10 @@ def start_sweeper(stop: threading.Event) -> threading.Thread | None:
                 sweep()
             except Exception as e:  # keep sweeping next hour whatever went wrong
                 logger.warning("trip file sweep failed error=%s", type(e).__name__)
+            try:
+                wallet_proofs.sweep_proofs(manila_today())
+            except Exception as e:  # its own try: one sweep failing doesn't stop the other
+                logger.warning("wallet proof sweep failed error=%s", type(e).__name__)
             stop.wait(SWEEP_EVERY_SECONDS)
 
     t = threading.Thread(target=run, name="trip-file-sweep", daemon=True)
