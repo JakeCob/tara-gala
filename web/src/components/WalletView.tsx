@@ -213,10 +213,11 @@ export default function WalletView({ slug }: { slug: string }) {
     let live = true;
     walletApi.get(slug).then((r) => {
       if (!live) return;
-      console.info("[tg-wallet] load ok=%s", r.ok ? "yes" : r.why);
+      console.info("[tg-wallet] load ok=%s", r.ok ? (r.saved ? "saved" : "yes") : r.why);
       if (r.ok) {
         rememberWallet({ slug, name: r.wallet.name });
-        setLoad({ state: "ready", wallet: r.wallet });
+        // A saved copy can predate what's on screen: it would bring a paid debt back, and tell an open dialog it was undone
+        setLoad((prev) => (prev.state === "ready" && prev.wallet.share_slug === slug && r.saved ? prev : { state: "ready", wallet: r.wallet }));
       } else {
         // Offline with a copy on screen: keep showing it; the offline banner says so
         setLoad((prev) => (prev.state === "ready" && (r.why === "offline" || proofOpen.current) ? prev : { state: "error", why: r.why }));
@@ -308,15 +309,19 @@ export default function WalletView({ slug }: { slug: string }) {
     void walletApi.get(slug);
   }
 
+  /** Settle up's results sit under its heading, which may be far from the button that asked. Call it after the frame. */
+  function toSettleUp() {
+    const heading = document.getElementById("settle-title");
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView({ block: "center" }); // clear of the tab bar and the offline banner, with the notice under it
+  }
+
   function proofClosed(saved: boolean) {
     proofOpen.current = false;
     setProof(null);
     // After the frame: close() hands focus back to the opening button first, and that button may have gone
     requestAnimationFrame(() => {
-      if (!saved && document.activeElement !== document.body) return;
-      const heading = document.getElementById("settle-title");
-      heading?.focus({ preventScroll: true });
-      heading?.scrollIntoView({ block: "center" }); // clear of the tab bar and the offline banner, with the notice under it
+      if (saved || document.activeElement === document.body) toSettleUp();
     });
   }
 
@@ -327,8 +332,9 @@ export default function WalletView({ slug }: { slug: string }) {
     const blob = await fetchProof(slug, s.id);
     setOpening(null);
     console.info("[tg-wallet] proof show ok=%s", blob ? "yes" : "no");
-    if (blob) setQr({ blob, label });
-    else setSettleNotice({ text: "Couldn't open that proof. Try again with signal.", error: true });
+    if (blob) return setQr({ blob, label });
+    setSettleNotice({ text: "Couldn't open that proof. Try again with signal.", error: true });
+    requestAnimationFrame(toSettleUp);
   }
 
   async function addMe(e: React.FormEvent) {
@@ -425,7 +431,7 @@ export default function WalletView({ slug }: { slug: string }) {
           />
 
           <PixelBox as="section" aria-labelledby="settle-title" className="flex flex-col gap-3 p-4">
-            <SectionTitle id="settle-title" tabIndex={-1}>Settle up</SectionTitle>
+            <SectionTitle id="settle-title" tabIndex={-1} className="focus-pixel">Settle up</SectionTitle>
             <NoticeArea notice={settleNotice} className="flex flex-col empty:-mt-3" />
             {wallet.transfers.length === 0 ? (
               <p className="text-sm text-muted">
@@ -506,7 +512,7 @@ export default function WalletView({ slug }: { slug: string }) {
                               ? "Undo this payment? It goes back on the settle-up list, and its proof is deleted for everyone."
                               : "Undo this payment? It goes back on the settle-up list.";
                             if (!window.confirm(ask)) return;
-                            void write("settle undo", () => walletApi.undoSettlement(slug, s.id), "Payment undone.", setSettleNotice);
+                            void write("settle undo", () => walletApi.undoSettlement(slug, s.id), "Payment undone.", setSettleNotice).then(() => requestAnimationFrame(toSettleUp));
                           }}
                         >
                           Undo

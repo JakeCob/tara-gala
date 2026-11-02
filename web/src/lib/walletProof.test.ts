@@ -265,6 +265,16 @@ test("T53-W14 fetchProof: a CORS fetch with no HTTP cache; null on anything but 
   assert.equal(await wallet.fetchProof(SLUG, ID), null);
 });
 
+test("T53-W28 get says when the answer is the service worker's saved copy", async () => {
+  stubFetch(async () => new Response(JSON.stringify(AFTER_SETTLE), { status: 200, headers: { "X-TG-Saved-At": "2026-11-07T01:00:00.000Z" } }));
+  const saved = await wallet.walletApi.get(SLUG);
+  assert.equal(saved.ok && saved.saved, true);
+  stubFetch(async () => json(200, AFTER_SETTLE));
+  const live = await wallet.walletApi.get(SLUG);
+  assert.ok(live.ok);
+  assert.ok(!live.saved, "a live answer isn't marked");
+});
+
 test("T53-W15 a full wallet gets its own sentence", () => {
   assert.equal(wallet.failureMessage({ why: "rejected", detail: "too_many_proofs" }), "This wallet is full: it holds up to 50 screenshots.");
 });
@@ -305,6 +315,17 @@ test("T53-W19 P19: one always-rendered notice area directly under the heading, a
   assert.match(src, /write\("settle undo"[\s\S]{0,160}"Payment undone\."[\s\S]{0,40}[sS]ettle/, "Payment undone. goes to the settle area");
   const title = read("src/components/pixel/SectionTitle.tsx");
   assert.match(title, /tabIndex=\{tabIndex\}/, "SectionTitle passes tabIndex on");
+});
+
+test("T53-W29 review M1: a saved copy never replaces the wallet on screen, whether or not a dialog is open", () => {
+  assert.match(view(), /setLoad\(\(prev\) => \(prev\.state === "ready" && prev\.wallet\.share_slug === slug && r\.saved \? prev : \{ state: "ready", wallet: r\.wallet \}\)\)/);
+});
+
+test("T53-W30 ux review: a result from a Payments made row comes to the heading, like a saved one", () => {
+  const src = view();
+  assert.match(src, /Try again with signal\."[\s\S]{0,120}requestAnimationFrame\(toSettleUp\)/, "after Show proof fails");
+  assert.match(src, /"Payment undone\.", setSettleNotice\)\.then\(\(\) => requestAnimationFrame\(toSettleUp\)\)/, "after Undo, worked or not");
+  assert.match(src, /<SectionTitle id="settle-title" tabIndex=\{-1\} className="focus-pixel">/, "the square ring, not the browser's thin one");
 });
 
 const DIALOG_COPY = [

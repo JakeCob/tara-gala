@@ -76,7 +76,8 @@ export function whenLine(iso: string): string {
 // ---------------------------------------------------------------- API
 
 export type WalletFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected";
-export type WalletResult = { ok: true; wallet: Wallet } | { ok: false; why: WalletFailure; detail?: string };
+/** `saved`: the service worker answered with its copy, not the API, so it may be older than what's on screen. */
+export type WalletResult = { ok: true; wallet: Wallet; saved?: boolean } | { ok: false; why: WalletFailure; detail?: string };
 
 const DETAIL: Record<string, string> = {
   shares_mismatch: "The amounts don't add up to the total.",
@@ -115,7 +116,10 @@ async function call(path: string, init?: { method: "POST" | "DELETE"; body?: unk
   } catch {
     return { ok: false, why: "offline" };
   }
-  if (res.ok) return { ok: true, wallet: (await res.json()) as Wallet };
+  if (res.ok) {
+    const wallet = (await res.json()) as Wallet;
+    return res.headers.has("x-tg-saved-at") ? { ok: true, wallet, saved: true } : { ok: true, wallet };
+  }
   if (res.status === 404) {
     const missing = await res.json().catch(() => null);
     return { ok: false, why: "not_found", detail: typeof missing?.detail === "string" ? missing.detail : undefined };
