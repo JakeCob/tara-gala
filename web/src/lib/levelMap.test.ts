@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Guide, GuideRow, Mark } from "./guide.ts";
 import { marksByKey } from "./guide.ts";
-import { BAND_PX, COLUMNS, GAP_PX, PAD_PX, START_POINT, TILE_PX, TOP_PX, UNIT, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadBand, roadStops, runsPath, startWorld, worldHeight } from "./levelMap.ts";
+import { BAND_PX, COLUMNS, GAP_PX, PAD_PX, SIGN_DROP, SIGN_GAP, SIGN_ROOM, SNAKE_MIN_PX, START_POINT, TILE_PX, TOP_PX, UNIT, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadBand, roadStops, runsPath, snakeMap, snakeRoad, snakeScenery, startWorld, worldHeight } from "./levelMap.ts";
 
 const row = (key: string, extra: Partial<GuideRow> = {}): GuideRow => ({
   key, time: "09:00", plan: key, note: "", place: { kind: "spot", id: key, name: key, category: "park", lodging: false },
@@ -68,6 +68,155 @@ test("LM3b on a wide row the road stays in a centred band; on a phone the band i
   assert.ok(stops.every((s) => s.x >= 180 && s.x <= 820), "no stop outside the band");
   assert.equal(stops[0].x, 500, "START in the middle of the row");
   assert.equal(BAND_PX, 640);
+});
+
+// TG-56: 954 is the lg row, 1082 the xl one; the rest prove the sums hold at any width
+const SNAKE_W = [SNAKE_MIN_PX, 954, 1082, 1228, 1441];
+const COUNTS = [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 16];
+type Box = { l: number; t: number; r: number; b: number };
+const touching = (a: Box, b: Box) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+const tileBox = (p: { x: number; y: number }): Box => ({ l: p.x - TILE_PX / 2, t: p.y - TILE_PX / 2, r: p.x + TILE_PX / 2, b: p.y + TILE_PX / 2 });
+const signBox = (p: { x: number; y: number }, sign: number): Box => ({ l: p.x + TILE_PX / 2 + SIGN_GAP, t: p.y + SIGN_DROP, r: p.x + TILE_PX / 2 + SIGN_GAP + sign, b: p.y + SIGN_DROP + SIGN_ROOM });
+const runBoxes = (runs: readonly { x: number; y: number; w: number }[]): Box[] => runs.map((r) => ({ l: r.x, t: r.y, r: r.x + r.w, b: r.y + UNIT }));
+
+test("TG56-1 only lg and up get the snake: below it the row is 714 at most", () => {
+  assert.equal(SNAKE_MIN_PX, 900);
+  assert.ok(714 < SNAKE_MIN_PX && SNAKE_MIN_PX <= 954, "md's row stays the zig-zag, lg's is the snake");
+  assert.equal(snakeMap(7, 954).columns, 3);
+  assert.equal(snakeMap(7, 1082).columns, 3);
+  assert.equal(snakeMap(7, 1228).columns, 4, "4 once a sign can still hold its text");
+  assert.equal(snakeMap(7, 3000).columns, 4, "never more");
+});
+
+test("TG56-2 tiles run in order along rows that alternate, with GOAL after the last", () => {
+  for (const W of SNAKE_W) {
+    for (const count of COUNTS) {
+      const m = snakeMap(count, W);
+      const stops = [...m.points, m.goal];
+      assert.equal(m.points.length, count);
+      assert.equal(m.rows, Math.ceil((count + 1) / m.columns), "GOAL takes a slot");
+      const rows = [...new Set(stops.map((p) => p.y))];
+      assert.equal(rows.length, m.rows);
+      rows.forEach((y, r) => {
+        const xs = stops.filter((p) => p.y === y).map((p) => p.x);
+        assert.ok(xs.length <= m.columns);
+        if (r < m.rows - 1) assert.equal(xs.length, m.columns, "only the last row is short");
+        xs.slice(1).forEach((x, i) => assert.ok(r % 2 === 0 ? x > xs[i] : x < xs[i], `row ${r} runs ${r % 2 ? "right to left" : "left to right"} at ${W}: ${xs}`));
+      });
+      stops.forEach((p, i) => { if (i) assert.ok(p.y >= stops[i - 1].y, "never back up the screen"); });
+      assert.ok(m.start.x < stops[0].x + TILE_PX && m.start.y < stops[0].y, "START top-left, before level 1");
+    }
+  }
+  const first = snakeMap(7, 1082).points[0];
+  assert.ok(first.y - TILE_PX / 2 - 48 >= snakeMap(7, 1082).start.y + 13, "the group on level 1 clears START's sign");
+  assert.deepEqual(snakeMap(5, 1082).points.map((p) => p.y), [162, 162, 162, 304, 304], "3, then 2 and GOAL");
+});
+
+test("TG56-3 no tile, sign or GOAL touches another, a sign never touches the road, and it all stays within W", () => {
+  for (const W of SNAKE_W) {
+    for (const count of COUNTS) {
+      const m = snakeMap(count, W);
+      const road = snakeRoad(m, W);
+      const paved = [...runBoxes(road.curb), ...runBoxes(road.asphalt)];
+      const boxes = [...m.points.flatMap((p) => [tileBox(p), signBox(p, m.sign)]), tileBox(m.goal)];
+      boxes.forEach((a, i) => {
+        assert.ok(a.l >= 0 && a.r <= W && a.t >= 0 && a.b <= m.height, `in the world at ${W}: ${JSON.stringify(a)}`);
+        boxes.slice(i + 1).forEach((b) => assert.ok(!touching(a, b), `apart at ${W}, ${count}: ${JSON.stringify([a, b])}`));
+      });
+      for (const p of m.points) {
+        const sign = signBox(p, m.sign);
+        assert.ok(!paved.some((r) => touching(r, sign)), `the road clears the sign at ${W}, ${count}: ${JSON.stringify(sign)}`);
+      }
+    }
+  }
+});
+
+test("TG56-4 the snake is the same pixel road: on the grid, crisp, three layers, through every stop", () => {
+  for (const W of SNAKE_W) {
+    for (const count of [2, 7, 10, 13]) {
+      const m = snakeMap(count, W);
+      const road = snakeRoad(m, W);
+      assert.deepEqual(road, snakeRoad(m, W), "deterministic");
+      for (const run of [...road.curb, ...road.asphalt, ...road.dash]) {
+        assert.ok(run.x % UNIT === 0 && run.y % UNIT === 0 && run.w % UNIT === 0, `on the grid: ${JSON.stringify(run)}`);
+        assert.ok(run.x >= 0 && run.y >= 0 && run.x + run.w <= W && run.y + UNIT <= m.height, `in bounds: ${JSON.stringify(run)}`);
+      }
+      for (const stop of [m.start, ...m.points, m.goal]) {
+        assert.ok(road.asphalt.some((r) => stop.x >= r.x - UNIT && stop.x <= r.x + r.w + UNIT && Math.abs(stop.y - r.y) <= UNIT), `the road reaches ${JSON.stringify(stop)}`);
+      }
+      assert.ok(road.dash.length > 0 && road.curb.length >= road.asphalt.length / 2, "three layers");
+      assert.ok(runsPath(road.asphalt).length < 40_000, "a small path");
+    }
+  }
+});
+
+test("TG56-5 a row's end turns on rounded corners, in the side margin, on alternating sides", () => {
+  const W = 1082;
+  const m = snakeMap(10, W);
+  const asphalt = snakeRoad(m, W).asphalt;
+  const widest = (y: number) => asphalt.filter((r) => r.y === y - (y % UNIT)).reduce((a, r) => ({ l: Math.min(a.l, r.x), r: Math.max(a.r, r.x + r.w) }), { l: W, r: 0 });
+  const [y0, y1, y2] = [162, 304, 446];
+  assert.ok(widest((y0 + y1) / 2).l > W / 2 && widest((y0 + y1) / 2).r > W - 54, "row 1 turns on the right");
+  assert.ok(widest((y1 + y2) / 2).r < W / 2 && widest((y1 + y2) / 2).l < 54, "row 2 turns on the left");
+  const steps = [y0 + 3, y0 + 9, y0 + 15, y0 + 21].map((y) => widest(y).r);
+  assert.ok(steps.every((x, i) => i === 0 || x >= steps[i - 1]) && steps[0] < steps[3], `the corner curves, it isn't square: ${steps}`);
+});
+
+test("TG56-6 a day fits about one desktop screen", () => {
+  for (const W of [954, 1082]) {
+    assert.ok(snakeMap(10, W).height <= 720, "World 3's 10 levels");
+    assert.ok(snakeMap(7, W).height < snakeMap(10, W).height);
+    assert.ok(snakeMap(10, W).height < worldHeight(10) * 0.6, "far shorter than the zig-zag");
+  }
+});
+
+test("TG56-7 snake scenery is seeded, in the world, and clear of the road, tiles, signs, START and GOAL", () => {
+  const FIXED = new Set(["tile-pine", "tile-mountain", "deco-sampaguita", "deco-rice-terraces", "deco-bahay-kubo", "deco-carabao"]);
+  for (const W of SNAKE_W) {
+    for (const count of [2, 7, 9, 10, 11, 13]) {
+      const m = snakeMap(count, W);
+      const road = snakeRoad(m, W);
+      const paved = [...runBoxes(road.curb), ...runBoxes(road.asphalt)];
+      const taken = [...m.points.flatMap((p) => [tileBox(p), signBox(p, m.sign)]), tileBox(m.goal), { l: 0, t: 0, r: W, b: 52 }, { l: 0, t: 52, r: 216, b: 116 }];
+      assert.deepEqual(snakeScenery(m, W, 7), snakeScenery(m, W, 7), "deterministic");
+      assert.notDeepEqual(snakeScenery(m, W, 7), snakeScenery(m, W, 8), "the seed changes it");
+      for (let seed = 0; seed < 24; seed++) {
+        const items = snakeScenery(m, W, seed);
+        assert.ok(items.length >= Math.min(count, 4), `some scenery at ${W}, ${count}`);
+        assert.ok(items.filter((d) => d.name === "deco-carabao").length === 2, "a carabao at each end");
+        for (const d of items) {
+          const box = { l: d.x, t: d.y, r: d.x + d.w, b: d.y + d.h };
+          assert.ok(FIXED.has(d.name), d.name);
+          assert.ok(d.x >= 3 && box.r <= W - 3 && d.y >= 0 && box.b <= m.height, `in the world at ${W}: ${JSON.stringify(d)}`);
+          assert.ok(!taken.some((t) => touching(t, box)), `clear at ${W}, ${count}, seed ${seed}: ${JSON.stringify(d)}`);
+          assert.ok(!paved.some((r) => touching(r, box)), `off the road at ${W}, ${count}, seed ${seed}: ${JSON.stringify(d)}`);
+        }
+      }
+    }
+  }
+});
+
+test("TG56-8 the map picks the snake by its measured width, and phones keep the zig-zag", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /const snake = W >= SNAKE_MIN_PX \? snakeMap\(list\.length, W\) : null;/);
+  assert.match(map, /const points = snake\?\.points \?\? levelPoints\(list\.length\);/, "levelPoints still drives a phone");
+  assert.match(map, /const height = snake\?\.height \?\? worldHeight\(list\.length\);/);
+  assert.match(map, /useLayoutEffect\(/, "measured before paint, so a desktop never flashes the phone map");
+  assert.match(map, /map \? snakeRoad\(map, W\) : pixelRoad\(roadStops\(levelPoints\(count\), START_POINT, goalPoint\(count\), W\), W, H\)/);
+  assert.match(map, /map \? snakeScenery\(map, W, seed\) : levelScenery\(levelPoints\(count\), W, seed\)/);
+  assert.match(map, /min-w-0 max-w-88 flex-1 pixel-frame/, "the sign's cap holds on both");
+});
+
+test("TG56-9 a plan with a guide: the level map only, as wide as a trip; a premade plan is unchanged", () => {
+  const list = readFileSync("src/components/ItineraryList.tsx", "utf8");
+  const guided = list.indexOf("it.guide ? (");
+  const old = list.indexOf("<OverworldMap");
+  assert.ok(guided > 0 && guided < list.indexOf("<LevelMap guide={it.guide} />") && list.indexOf("<LevelMap guide={it.guide} />") < old, "the guide's branch comes first");
+  assert.equal(list.match(/<LevelMap /g)?.length, 1);
+  assert.match(list, /it\.guide \? "lg:\[&_button\]:w-auto lg:\[&_button\]:self-start" : undefined/, "Copy link doesn't stretch across the row");
+  assert.match(list, /\) : map \? \(\n\s+<>\n\s+<p className="text-sm">Tap a stop or a ride for details\.<\/p>/, "the old map stays for plans without a guide");
+  assert.match(list, /<div data-wide="" className="contents">\n\s+<LevelMap guide=\{it\.guide\} \/>\n\s+\{confirmNote && <p className=\{PX\.meta\}>\{confirmNote\}<\/p>\}/, "confirm with the operator stays");
+  assert.match(readFileSync("src/app/i/[slug]/page.tsx", "utf8"), /md:max-w-md lg:has-\[\[data-wide\]\]:max-w-none/, "from lg only, and only with a guide");
 });
 
 test("LM4 the map opens on the group's world, else the first world not finished", () => {
@@ -158,7 +307,7 @@ test("LM11 the world is a game screen: a pixel road, grass, framed in Ink in bot
   for (const v of ["--frame", "--focus", "--foreground"]) assert.ok(map.includes(`"${v}": "var(--color-screen-ink)"`), v);
   assert.match(map, /grid grid-cols-3 gap-2 lg:flex lg:flex-wrap/, "the trip menu");
   assert.match(map, /<Sprite name="ui-star" scale=\{1\} \/>Goal<Sprite name="ui-star" scale=\{1\} \/>/, "GOAL");
-  assert.match(map, /PX\.pressStart\)\} style=\{\{ left: `\$\{START_POINT\.x\}%`, top: START_POINT\.y \}\}>\s+Start\s+<\/span>/, "START");
+  assert.match(map, /PX\.pressStart\)\} style=\{\{ left: `\$\{start\.x\}\$\{u\}`, top: start\.y \}\}>\s+Start\s+<\/span>/, "START");
 });
 
 test("LM11b at every width the map has the whole row, with the World toggle right on top of it and the menu under it", () => {
@@ -171,7 +320,8 @@ test("LM11b at every width the map has the whole row, with the World toggle righ
   assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), `the order: ${order}`);
   assert.equal(map.slice(at("</nav>"), at("<section ref={screen}")).match(/<(PixelBox|ul|h3|p)\b/), null, "nothing between the toggle and the map");
   assert.match(map, /min-w-0 max-w-88 flex-1 pixel-frame/, "a sign stops at 22rem");
-  assert.equal(map.match(/style=\{\{ maxWidth: BAND_PX \}\}/g)?.length, 2, "the stops and the levels share the road's band");
+  assert.equal(map.match(/style=\{\{ maxWidth: band \}\}/g)?.length, 2, "the stops and the levels share the road's band");
+  assert.match(map, /const band = snake \? undefined : BAND_PX;/, "the band is for the zig-zag: the snake has the whole row");
   assert.match(map, /const BAND = "absolute inset-0 mx-auto"/, "the band is centred");
   assert.match(map, /return \(\n\s+<div className="flex flex-col gap-4">\n\s+<header/, "no cap or grid on the whole block");
   assert.match(map, /<div className="w-full">\n\s+<section ref=\{screen\}/, "none on the world");

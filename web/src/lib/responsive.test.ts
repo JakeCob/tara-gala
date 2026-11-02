@@ -201,7 +201,7 @@ test("TG44-L1 /baguio: the picker is capped, the destination groups are a grid f
   assert.match(read("src/app/baguio/page.tsx"), /<p className="text-sm text-muted md:max-w-prose">Jeeps, taxis and walks/);
 });
 
-const I_WRAP = '<div className="contents md:flex md:flex-col md:gap-5 md:mx-auto md:w-full md:max-w-md">';
+const I_WRAP = '<div className="contents md:flex md:flex-col md:gap-5 md:mx-auto md:w-full md:max-w-md lg:has-[[data-wide]]:max-w-none">';
 test("TG44-I1 /i: the whole page is one centred max-w-md column from md (the map world stays W = 416)", () => {
   const src = read("src/app/i/[slug]/page.tsx");
   const at = src.indexOf(I_WRAP);

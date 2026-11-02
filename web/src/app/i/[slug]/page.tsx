@@ -24,8 +24,9 @@ async function SlugView({ params }: { params: Promise<{ slug: string }> }) {
 export default function TripPlanPage({ params }: PageProps<"/i/[slug]">) {
   return (
     <PageShell>
-      {/* From md the share page is one centred phone-width column, so the map world stays W = 416 (TG-44) */}
-      <div className="contents md:flex md:flex-col md:gap-5 md:mx-auto md:w-full md:max-w-md">
+      {/* From md the share page is one centred phone-width column, so the map world stays W = 416 (TG-44). A plan with
+          a guide marks itself data-wide and gets the whole row from lg, as a trip does (TG-56) */}
+      <div className="contents md:flex md:flex-col md:gap-5 md:mx-auto md:w-full md:max-w-md lg:has-[[data-wide]]:max-w-none">
         <PageTitle>Your trip</PageTitle>
         <Suspense fallback={<p className="text-sm text-muted">Loading your trip...</p>}>
           <SlugView params={params} />

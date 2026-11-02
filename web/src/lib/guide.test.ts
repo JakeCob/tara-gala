@@ -93,5 +93,5 @@ test("GD6 the trip page shows the level map above the rest, live, with photos, a
 
 test("GD7 the plan's own page shows its level map read-only", () => {
   const list = read("src/components/ItineraryList.tsx");
-  assert.match(list, /\{it\.guide && <LevelMap guide=\{it\.guide\} \/>\}/);
+  assert.match(list, /<LevelMap guide=\{it\.guide\} \/>/, "no marks and no onTick: read-only");
 });
