@@ -212,7 +212,7 @@ Offline end-to-end check (TG-27 Part B): `web/scripts/offline-e2e.mjs` runs the 
 ```bash
 cd web
 npm run build && npx next start -p 3040     # a production build (the worker never registers under next dev), with the API running
-node scripts/offline-e2e.mjs --origin http://localhost:3040 [--slug premade-chill] [--port 9040] [--out <screenshot dir>]
+node scripts/offline-e2e.mjs --origin http://localhost:3040 [--slug premade-food-trip] [--port 9040] [--out <screenshot dir>]
 node scripts/offline-e2e.mjs --origin https://<web domain>   # or the deployed site
 ```
 It exits 1 on any `FAIL` line. Chrome's offline emulation leaves `navigator.onLine` true in a page loaded after going offline (a phone in airplane mode reports false), so that first banner reads "Can't reach the server · saved …"; the script then fires the browser's offline event and expects "Offline · saved".
