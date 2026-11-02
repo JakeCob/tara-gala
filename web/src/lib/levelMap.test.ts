@@ -421,7 +421,8 @@ test("TG57-10 a saved start, then fresh marks on a later day: the map follows th
   assert.equal(whereNow(guide, fresh)?.day, 2, "the fresh answer puts the group a day on");
   const map = readFileSync("src/components/LevelMap.tsx", "utf8");
   assert.match(map, /const groupDay = here\?\.day;/);
-  assert.match(map, /if \(groupDay && !tabPicked\.current && !open\) setWorld\(groupDay\);\s+\}, \[groupDay, open\]\);/, "an open dialog keeps its World until it closes");
+  assert.match(map, /const inDialog = !!current;/, "open stays set when the dialog's row goes away, so it can't hold the map");
+  assert.match(map, /if \(groupDay && !tabPicked\.current && !inDialog\) setWorld\(groupDay\);\s+\}, \[groupDay, inDialog\]\);/, "an open dialog keeps its World until it closes");
   const goTo = map.slice(map.indexOf("const goTo ="), map.indexOf("return (", map.indexOf("const goTo =")));
   assert.match(goTo, /tabPicked\.current = true;/, "a World picked by hand stays picked");
 });

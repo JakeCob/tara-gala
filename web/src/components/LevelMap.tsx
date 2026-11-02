@@ -97,9 +97,10 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   // The first marks can be a saved copy (TG-57): follow the group until someone picks a World, and leave an open dialog's World alone
   const tabPicked = useRef(false);
   const groupDay = here?.day;
+  const inDialog = !!current; // not open: that stays set when another phone's pick takes the dialog's row away
   useEffect(() => {
-    if (groupDay && !tabPicked.current && !open) setWorld(groupDay);
-  }, [groupDay, open]);
+    if (groupDay && !tabPicked.current && !inDialog) setWorld(groupDay);
+  }, [groupDay, inDialog]);
   const goTo = (n: number) => {
     if (n !== world) tabTapped.current = true;
     tabPicked.current = true;
