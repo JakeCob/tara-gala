@@ -447,7 +447,8 @@ def apply(
                 res.trips_skipped_manual += 1  # hand-entered rows win their own dates; never touched
             ours = next((id_ for id_, src, vf in existing if src == "scraped" and vf is None), None)
             saved_days = set(old_weekly[ours][0]) if ours and old_weekly[ours][1] else set()
-            days = sorted(((saved_days - spec.absent.get(dep, set())) | spec.trips.get(dep, set())) - _manual_weekdays(manual, today))
+            manual_days = _manual_weekdays(manual, today)
+            days = sorted(((saved_days - spec.absent.get(dep, set())) | spec.trips.get(dep, set())) - manual_days)
             for d in sorted(spec.dates[dep]):
                 if _dow(d) in days or _manual_covers(manual, d):
                     continue
@@ -462,7 +463,9 @@ def apply(
                         ([_dow(d)], d, SOURCE_URL, verified_at, dated),
                     )
                     res.trips_updated += 1
+                    changed = not next(row[4] for row in found_rows if row[0] == dated)
                 else:
+                    changed = True
                     cur.execute(
                         """
                         insert into trips (route_id, departure_time, days_of_week, valid_from, valid_to, source,
@@ -475,7 +478,8 @@ def apply(
                     res.trips_new += 1
                 res.trips_one_off += 1
                 seen.add(dated)
-                log(f"  one-off: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} on {d} ({d:%a})")
+                if changed:  # quiet on a stable schedule, like the weekly line
+                    log(f"  one-off: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} on {d} ({d:%a})")
             for id_, src, vf, _, is_active in found_rows:  # not listed today, still running: maybe sold out
                 if (src == "scraped" and is_active and vf is not None and id_ not in seen and vf >= today
                         and _dow(vf) not in days and not _manual_covers(manual, vf)):
@@ -498,7 +502,8 @@ def apply(
                 if old_weekly[ours] != (days, True):  # quiet on a stable schedule; one line when a weekday changes
                     old_days, was_active = old_weekly[ours]
                     log(f"  weekly: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} days {old_days}"
-                        f"{'' if was_active else ' (inactive)'} -> {days}")
+                        f"{'' if was_active else ' (inactive)'} -> {days}"
+                        + (" (manual rows)" if manual_days & set(old_days) else ""))
                 if missing := sorted(d for d in spec.not_listed.get(dep, ()) if _dow(d) in days and not _manual_covers(manual, d)):
                     res.trips_kept += 1
                     log(f"  not listed: {origin_slug}->{dest_slug} {cls} {dep:%H:%M} on {', '.join(map(str, missing))} (kept)")

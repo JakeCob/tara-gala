@@ -243,6 +243,26 @@ def test_t60_12_kept_rows_are_logged_and_counted(dsn):
     assert res.trips_kept == 1
 
 
+def test_t60_12b_the_log_says_when_a_manual_row_took_the_weekday(dsn):
+    only_out(dsn)
+    booked(dsn)
+    lines = []
+    only_out(dsn, 1, log=lines.append)
+    assert "  weekly: vl-cubao->vl-baguio first_class 10:15 days [0, 1, 2, 3, 4, 5, 6] -> [0, 1, 2, 3, 4, 6] (manual rows)" in lines
+
+
+def test_t60_12c_an_unchanged_one_off_prints_once(dsn):
+    only_out(dsn)
+    booked(dsn)
+    first = []
+    only_out(dsn, 1, log=first.append)
+    assert "  one-off: vl-cubao->vl-baguio first_class 10:15 on 2026-11-13 (Fri)" in first
+    again = []
+    res = only_out(dsn, 2, log=again.append)
+    assert res.trips_one_off == 1, "still counted"
+    assert not [line for line in again if "one-off:" in line], "a stable rerun is quiet"
+
+
 def test_t60_13_a_dry_run_writes_nothing(dsn):
     only_out(dsn)
     before = query(dsn, "select * from trips order by id")
