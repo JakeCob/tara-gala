@@ -622,6 +622,37 @@ def test_the_404_still_comes_back_when_that_cleanup_fails(client, dsn, store, ca
     assert f"wallet proof cleanup failed share_slug={slug} file={paths[0].rsplit('/', 1)[1]}" in api_messages(caplog, logging.WARNING)
 
 
+def test_the_wallet_deleted_during_the_upload_leaves_no_bytes(client, dsn, store):
+    """review S1: only hand-run SQL deletes a wallet, but a receipt mustn't stay behind if it happens"""
+    slug, people = new_wallet(client)
+    sid = pay(client, slug, people)
+    store.on_put = lambda _path: sql(dsn, "delete from wallets where share_slug = %s", (slug,))
+    assert upload(client, slug, sid).status_code == 404
+    assert store.objects == {}
+
+
+def test_a_database_error_after_the_upload_leaves_no_bytes(dsn, store, monkeypatch):
+    """review S1: a dropped pooler connection after put would strand a bank screenshot nothing points to"""
+    from fastapi.testclient import TestClient
+
+    from app import wallet_proofs
+    from app.main import app
+
+    monkeypatch.setenv("DATABASE_URL", dsn)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        slug, people = new_wallet(client)
+        sid = pay(client, slug, people)
+
+        def broken(conn, wallet_id):
+            raise RuntimeError("connection dropped")
+
+        monkeypatch.setattr(wallet_proofs, "_load", broken)
+        assert upload(client, slug, sid).status_code == 500
+    assert store.puts == 1, "it got as far as Storage"
+    assert store.objects == {}
+    assert proof_row(dsn, sid)["proof_path"] is None
+
+
 def test_two_uploads_racing_leave_one_proof_and_one_object(client, dsn, store):
     """A30: a later upload wins, and the one it replaced loses its object too"""
     slug, people = new_wallet(client)

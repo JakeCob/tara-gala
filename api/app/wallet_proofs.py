@@ -62,20 +62,24 @@ def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes) 
         raise HTTPException(503, "storage_unavailable") from None
 
     wallet = old = None
-    with db.get_conn() as conn:
-        wallet_id = _wallet_id(conn, share_slug, lock=True)
-        payment = _payment(conn, wallet_id, settlement_id)
-        full = payment is not None and conn.execute(
-            "select count(*) as n from settlements where wallet_id = %s and proof_path is not null and id <> %s",
-            (wallet_id, settlement_id),
-        ).fetchone()["n"] >= MAX_PROOFS
-        if payment is not None and not full:
-            old = payment["proof_path"]
-            conn.execute(
-                "update settlements set proof_path = %s, proof_type = %s, proof_bytes = %s, proof_at = now() where id = %s",
-                (path, content_type, len(data), settlement_id),
-            )
-            wallet = _load(conn, wallet_id)
+    try:
+        with db.get_conn() as conn:
+            wallet_id = _wallet_id(conn, share_slug, lock=True)
+            payment = _payment(conn, wallet_id, settlement_id)
+            full = payment is not None and conn.execute(
+                "select count(*) as n from settlements where wallet_id = %s and proof_path is not null and id <> %s",
+                (wallet_id, settlement_id),
+            ).fetchone()["n"] >= MAX_PROOFS
+            if payment is not None and not full:
+                old = payment["proof_path"]
+                conn.execute(
+                    "update settlements set proof_path = %s, proof_type = %s, proof_bytes = %s, proof_at = now() where id = %s",
+                    (path, content_type, len(data), settlement_id),
+                )
+                wallet = _load(conn, wallet_id)
+    except Exception:  # no row took these bytes, so nothing would ever find them
+        forget_proof(path, share_slug)
+        raise
     if wallet is None:  # undone or filled up during the upload: these bytes have no row
         forget_proof(path, share_slug)
         if payment is None:

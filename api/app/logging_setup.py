@@ -60,6 +60,7 @@ def configure_logging(env: Mapping[str, str] = os.environ) -> None:
     access.handlers.clear()
     access.propagate = False  # with no handlers, uvicorn 0.32 skips its access line entirely
     access.disabled = True
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # at INFO it logs every URL, and a Storage URL holds a file's path
 
     if bad:
         logging.getLogger("tara_gala.api").warning("LOG_LEVEL=%r is not a log level; using INFO", raw)

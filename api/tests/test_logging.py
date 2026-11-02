@@ -157,6 +157,13 @@ def test_unknown_log_level_warns_and_uses_info(restore_logging, caplog, capsys):
     assert "WARNING tara_gala.api LOG_LEVEL='loud' is not a log level; using INFO" in capsys.readouterr().out
 
 
+def test_httpx_lines_stay_out_of_the_logs(restore_logging):
+    """TG-53 review S2: at INFO, httpx logs each URL it calls, and a Storage URL holds a proof's path"""
+    logging.getLogger("httpx").setLevel(logging.NOTSET)
+    setup_mod().configure_logging({"LOG_LEVEL": "DEBUG"})
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
+
+
 def test_app_loggers_reach_root_at_info(restore_logging, capsys):
     """T13-T1: TG-35's flag INFO line and bad-value WARNING still come out through our handler."""
     setup_mod().configure_logging({"LOG_LEVEL": "INFO"})
