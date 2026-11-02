@@ -109,7 +109,20 @@ export function toInput(wall: string | null): string {
 // ---------------------------------------------------------------- API
 
 export type TripFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected";
-export type TripResult = { ok: true; trip: Trip } | { ok: false; why: TripFailure; detail?: string };
+/** `saved`: the service worker answered with its copy, not the API, so it may be older than what's on screen. */
+export type TripResult = { ok: true; trip: Trip; saved?: boolean } | { ok: false; why: TripFailure; detail?: string };
+export type TripLoad = { state: "loading" } | { state: "ready"; trip: Trip } | { state: "error"; why: TripFailure };
+
+/**
+ * TG-54: what a GET's answer does to the screen. The answer can be older than the trip showing: a write landed after it
+ * left (`overtaken`), or the service worker gave up on a slow network and sent its saved copy. Either would take a tick
+ * back off the map, so the trip on screen stays and the next poll brings anything newer.
+ */
+export function afterGet(prev: TripLoad, r: TripResult, slug: string, overtaken: boolean): TripLoad {
+  if (!r.ok) return prev.state === "ready" && r.why === "offline" ? prev : { state: "error", why: r.why }; // offline with a copy on screen: keep showing it; the offline banner says so
+  const showing = prev.state === "ready" && prev.trip.share_slug === slug;
+  return showing && (overtaken || r.saved) ? prev : { state: "ready", trip: r.trip };
+}
 
 const DETAIL: Record<string, string> = {
   itinerary_not_found: "That plan link doesn't work. Copy it again from the plan's Share button.",
@@ -157,7 +170,10 @@ async function call(path: string, init?: { method: Method; body?: unknown; raw?:
     return { ok: false, why: "offline" };
   }
   if (res.status === 204) return { ok: true, trip: null };
-  if (res.ok) return { ok: true, trip: (await res.json()) as Trip };
+  if (res.ok) {
+    const trip = (await res.json()) as Trip;
+    return res.headers.has("x-tg-saved-at") ? { ok: true, trip, saved: true } : { ok: true, trip };
+  }
   if (res.status === 404) return { ok: false, why: "not_found" };
   if (res.status === 429) return { ok: false, why: "rate_limited" };
   if (res.status >= 500) return { ok: false, why: "server" };

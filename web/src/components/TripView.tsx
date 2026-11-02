@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, type PremadeSummary } from "@/lib/api";
 import {
-  type Hotel, type Trip, type TripFailure, type TripResult, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
+  type Hotel, type Trip, type TripLoad, type TripResult, afterGet, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
   slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
@@ -15,7 +15,6 @@ import { fitPhoto } from "@/lib/shrink";
 import type { Guide } from "@/lib/guide";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
 
-type Load = { state: "loading" } | { state: "ready"; trip: Trip } | { state: "error"; why: TripFailure };
 type Notice = { text: string; error: boolean };
 const subscribeNothing = () => () => {};
 const NO_HOTEL: Hotel = { name: "", address: "", check_in: null, check_out: null, booking_ref: "", notes: "" };
@@ -40,25 +39,25 @@ function keepFilesOffline(trip: Trip, kept: Set<string>) {
  */
 export default function TripView({ slug }: { slug: string }) {
   const router = useRouter();
-  const [load, setLoad] = useState<Load>({ state: "loading" });
+  const [load, setLoad] = useState<TripLoad>({ state: "loading" });
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const keptFiles = useRef(new Set<string>());
+  const writesLanded = useRef(0); // TG-54: a GET sent before a write landed may not hold it
 
   useEffect(() => {
     let live = true;
+    const sent = writesLanded.current;
     tripApi.get(slug).then((r) => {
       if (!live) return;
-      console.info("[tg-trip] load ok=%s", r.ok ? "yes" : r.why);
+      const overtaken = writesLanded.current !== sent;
+      console.info("[tg-trip] load ok=%s", r.ok ? (r.saved ? "saved" : overtaken ? "overtaken" : "yes") : r.why);
       if (r.ok) {
         remember(r.trip);
         keepFilesOffline(r.trip, keptFiles.current);
-        setLoad({ state: "ready", trip: r.trip });
-      } else {
-        // Offline with a copy on screen: keep showing it; the offline banner says so
-        setLoad((prev) => (prev.state === "ready" && r.why === "offline" ? prev : { state: "error", why: r.why }));
       }
+      setLoad((prev) => afterGet(prev, r, slug, overtaken));
     });
     return () => {
       live = false;
@@ -112,6 +111,7 @@ export default function TripView({ slug }: { slug: string }) {
       setNotice({ text: tripFailureMessage(r), error: true });
       return false;
     }
+    writesLanded.current++;
     setLoad({ state: "ready", trip: r.trip });
     remember(r.trip);
     setNotice({ text: done, error: false });
