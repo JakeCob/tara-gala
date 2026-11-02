@@ -466,7 +466,7 @@ test("TG57-7 TripView: saved copies go through the age rule, the guide retries w
   assert.match(guide, /savedItinerary\(planSlug\)/);
   assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: saved\.body\.guide \?\? null \}\)/);
   assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: null, failed: true \}\)/);
-  assert.match(guide, /\[planSlug, retry, worker\]/, "a failed fetch tries again with the next poll, not only on a full reload");
+  assert.match(guide, /\[planSlug, retry\]/, "a failed fetch tries again with the next poll, not only on a full reload");
   assert.match(src, /mapSlot\(trip\.itinerary_slug, guide\)/);
   assert.match(src, /data-map-loading/);
   assert.doesNotMatch(read("src/components/LevelMap.tsx"), /data-map-loading/);
@@ -483,10 +483,12 @@ test("TG57-8 TripHeader: opening the edit form starts from the trip on screen, n
   assert.match(open, /setBack\(trip\.return_date\)/);
 });
 
-test("TG57-9 TripView: when the worker takes over mid-visit, fetch again so the first open leaves a saved copy", () => {
+test("TG57-9 TripView: when the worker takes over mid-visit, ask again for its copies, without touching the GET on screen", () => {
   const src = read("src/components/TripView.tsx");
-  const poll = src.slice(src.indexOf("const onVisible"), src.indexOf("// The plan's guide"));
-  assert.match(poll, /serviceWorker\?\.addEventListener\("controllerchange", onWorker\)/);
-  assert.match(poll, /serviceWorker\?\.removeEventListener\("controllerchange", onWorker\)/);
-  assert.match(poll, /const onWorker = \(\) => \{\s+setReloads\(\(n\) => n \+ 1\);\s+setWorker\(\(n\) => n \+ 1\);/, "the trip and the guide alike");
+  const keep = src.slice(src.indexOf("const keepCopies"), src.indexOf('if (load.state === "loading")'));
+  assert.match(keep, /void tripApi\.get\(slug\);/);
+  assert.match(keep, /fetchItinerary\(planSlug\)\.catch\(\(\) => undefined\)/);
+  assert.match(keep, /serviceWorker\?\.addEventListener\("controllerchange", keepCopies\)/);
+  assert.match(keep, /serviceWorker\?\.removeEventListener\("controllerchange", keepCopies\)/);
+  assert.doesNotMatch(keep, /setReloads|setLoad|setGuide/, "the screen's own GET isn't cancelled, and these answers don't go to the screen");
 });

@@ -40,7 +40,6 @@ export default function TripView({ slug }: { slug: string }) {
   const router = useRouter();
   const [load, setLoad] = useState<TripLoad>({ state: "loading" });
   const [reloads, setReloads] = useState(0);
-  const [worker, setWorker] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const keptFiles = useRef(new Set<string>());
@@ -84,17 +83,10 @@ export default function TripView({ slug }: { slug: string }) {
   // 30 seconds while it's open, so the progress map moves on every phone
   useEffect(() => {
     const onVisible = () => document.visibilityState === "visible" && setReloads((n) => n + 1);
-    // TG-57: a first open's GETs go past the service worker: fetch them again once it's here, so the next open has its copies
-    const onWorker = () => {
-      setReloads((n) => n + 1);
-      setWorker((n) => n + 1);
-    };
     document.addEventListener("visibilitychange", onVisible);
-    navigator.serviceWorker?.addEventListener("controllerchange", onWorker);
     const timer = window.setInterval(() => document.visibilityState === "visible" && setReloads((n) => n + 1), 30_000);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      navigator.serviceWorker?.removeEventListener("controllerchange", onWorker);
       window.clearInterval(timer);
     };
   }, []);
@@ -121,7 +113,19 @@ export default function TripView({ slug }: { slug: string }) {
     return () => {
       live = false;
     };
-  }, [planSlug, retry, worker]);
+  }, [planSlug, retry]);
+
+  // TG-57: a first open's GETs go past the service worker: ask again once it's here, so the next open has its copies.
+  // Only the worker needs these answers, so the GET the screen is waiting on carries on
+  useEffect(() => {
+    const keepCopies = () => {
+      console.info("[tg-trip] worker took over, saving copies");
+      void tripApi.get(slug);
+      if (planSlug) fetchItinerary(planSlug).catch(() => undefined);
+    };
+    navigator.serviceWorker?.addEventListener("controllerchange", keepCopies);
+    return () => navigator.serviceWorker?.removeEventListener("controllerchange", keepCopies);
+  }, [slug, planSlug]);
 
   if (load.state === "loading") return <p className="text-sm text-muted">Opening the trip...</p>;
   if (load.state === "error") {
@@ -161,7 +165,7 @@ export default function TripView({ slug }: { slug: string }) {
       <section data-map-loading aria-label="Trip progress" aria-busy="true" className="flex flex-col gap-3">
         <SectionTitle>Trip progress</SectionTitle>
         <div className="grid min-h-[70vh]">
-          <PixelBox className="flex items-center justify-center p-4">
+          <PixelBox className="flex justify-center p-4">
             <p className="text-sm text-muted">Opening the map...</p>
           </PixelBox>
         </div>
