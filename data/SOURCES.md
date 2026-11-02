@@ -94,3 +94,7 @@ Not sourced (the owner should adjust): the stop times are planning choices, not 
 ## Owner's booked buses (`data/routes_trips.csv`), added 2026-11-03
 
 Two manual one-off Victory Liner first class trips, approved by the owner (TG-59): `vl-cubao` to `vl-baguio` on Fri 2026-11-06 at 10:15, and `vl-baguio` to `vl-cubao` on Sun 2026-11-08 at 16:15. They are backed by the owner's own e-tickets, which stay private and are not in this repo. `source_url` is the operator's site, https://tickets.victoryliner.com/. Fare (1,151) and travel time (240 minutes) are the route's values. These are the only rows here not taken from a public schedule. The return had no row in the Nov 2 scrape, most likely because it is sold out.
+
+## Trips Victory Liner stopped listing (TG-59b), 2026-11-03
+
+Victory Liner no longer lists first class 13:15 and 14:15 from Baguio to Cubao on Sun 2026-11-08, most likely because they sold out. So those two reference rows are gone from `getting_home` in `data/itineraries/baguio-barkada-2026-11-06.json`, and the `chill` plan is gone from `data/premade_itineraries.json` for now, because it used the 14:15 return and first class 08:15 on Nov 6, which no longer resolves either. `food-trip` and `nature` stay. The owner's booked rows are unchanged. The other reference rows can drop out the same way before the trip, so re-run both dry runs after each scrape.

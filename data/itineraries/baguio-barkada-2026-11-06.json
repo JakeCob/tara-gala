@@ -675,18 +675,6 @@
       "operator": "victory-liner",
       "origin": "vl-baguio",
       "destination": "vl-cubao",
-      "departure": "13:15",
-      "date": "2026-11-08",
-      "class": "first_class",
-      "via": null
-     },
-     "note": ""
-    },
-    {
-     "trip": {
-      "operator": "victory-liner",
-      "origin": "vl-baguio",
-      "destination": "vl-cubao",
       "departure": "13:30",
       "date": "2026-11-08",
       "class": "regular_aircon",
@@ -702,18 +690,6 @@
       "departure": "14:10",
       "date": "2026-11-08",
       "class": "regular_aircon",
-      "via": null
-     },
-     "note": ""
-    },
-    {
-     "trip": {
-      "operator": "victory-liner",
-      "origin": "vl-baguio",
-      "destination": "vl-cubao",
-      "departure": "14:15",
-      "date": "2026-11-08",
-      "class": "first_class",
       "via": null
      },
      "note": ""
