@@ -291,7 +291,7 @@ test("TG54-4 tripApi.get gives a saved copy's age, in ms; a live answer has none
 
 test("TG54-5 TripView: every GET it shows goes through afterGet, aged against what's on screen", () => {
   const view = readFileSync("src/components/TripView.tsx", "utf8");
-  assert.match(view, /const left = Date\.now\(\);\s+tripApi\.get\(slug\)\.then\(\(r\) => \{/, "timed before the GET leaves");
+  assert.match(view, /const left = Date\.now\(\);\s+tripApi\.get\(slug\)\.then\(\(r\) => \{\s+if \(!live\) return;/, "timed before the GET leaves; an answer a newer GET replaced is dropped");
   assert.match(view, /const from = answerFrom\(r, left\);\s+const overtaken = from < shownAt\.current;/);
   assert.match(view, /setLoad\(\(prev\) => afterGet\(prev, r, slug, overtaken\)\);/);
   const write = view.slice(view.indexOf("async function write("), view.indexOf("const onFail ="));
