@@ -90,3 +90,7 @@ Three plans for the owner's trip (Victory Liner from Cubao on Fri 2026-11-06, ba
 - Day 1 starts with the taxi from `vl-baguio` to the lodging, and days 1 and 2 end at the lodging, so days 2 and 3 start there.
 
 Not sourced (the owner should adjust): the stop times are planning choices, not travel times, because no leg has minutes. The party (one adult) and the empty budget are placeholders. BenCab visits are within its official Tuesday to Sunday 9:00 to 18:00 hours. Re-run `python data/load_premade.py --dry-run` after each scraper run, because a deactivated trip breaks a plan.
+
+## Owner's booked buses (`data/routes_trips.csv`), added 2026-11-03
+
+Two manual one-off Victory Liner first class trips, approved by the owner (TG-59): `vl-cubao` to `vl-baguio` on Fri 2026-11-06 at 10:15, and `vl-baguio` to `vl-cubao` on Sun 2026-11-08 at 16:15. They are backed by the owner's own e-tickets, which stay private and are not in this repo. `source_url` is the operator's site, https://tickets.victoryliner.com/. Fare (1,151) and travel time (240 minutes) are the route's values. These are the only rows here not taken from a public schedule. The return had no row in the Nov 2 scrape, most likely because it is sold out.
