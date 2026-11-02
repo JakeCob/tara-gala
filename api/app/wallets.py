@@ -2,7 +2,8 @@
 
 A wallet has no owner and no accounts: anyone with its share link can read it and write to it, like an itinerary
 link (TG-23) but writable. The slug is 128 random bits and is the only key. Money is whole centavos, so every split
-adds up exactly. Payout QRs never come here: they stay on each person's phone.
+adds up exactly. Payout QRs never come here: they stay on each person's phone. Payment proofs (wallet_proofs.py, TG-53)
+are the one file a wallet holds.
 
 Logs carry the slug and counts, never a person's name or an expense note.
 """
@@ -17,7 +18,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
-from . import db
+from . import db, storage
 from .limits import RateLimiter, client_ip, ip_hash
 
 router = APIRouter(tags=["wallets"])
@@ -158,6 +159,8 @@ class SettlementOut(BaseModel):
     to_member: UUID
     amount_centavos: int
     created_at: datetime
+    has_proof: bool
+    proof_at: datetime | None
 
 
 class BalanceOut(BaseModel):
@@ -237,7 +240,7 @@ def _load(conn, wallet_id: UUID) -> WalletOut:
     settlements = [
         SettlementOut(**r)
         for r in conn.execute(
-            """select id, from_member, to_member, amount_centavos, created_at from settlements
+            """select id, from_member, to_member, amount_centavos, created_at, proof_path is not null as has_proof, proof_at from settlements
                where wallet_id = %s order by created_at desc, id desc""",
             (wallet_id,),
         )
@@ -270,8 +273,20 @@ def _private(response: Response) -> None:
     response.headers.update(NOINDEX)
 
 
+def forget_proof(path: str | None, share_slug: str) -> None:
+    """Deletes a proof whose row no longer points to it. A failure only strands bytes, so it's logged, with the path's
+    file id so they can be found by hand, not raised."""
+    if not path:
+        return
+    try:
+        storage.store().delete([path])
+    except storage.StorageError:
+        logger.warning("wallet proof cleanup failed share_slug=%s file=%s", share_slug, path.rsplit("/", 1)[-1])
+
+
 def _counts(w: WalletOut) -> str:
-    return f"members={len(w.members)} expenses={len(w.expenses)} settlements={len(w.settlements)} open={len(w.transfers)}"
+    proofs = sum(1 for s in w.settlements if s.has_proof)
+    return f"members={len(w.members)} expenses={len(w.expenses)} settlements={len(w.settlements)} open={len(w.transfers)} proofs={proofs}"
 
 
 # ---------------------------------------------------------------- routes
@@ -392,12 +407,13 @@ def delete_settlement(share_slug: str, settlement_id: UUID, request: Request, re
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
         gone = conn.execute(
-            "delete from settlements where id = %s and wallet_id = %s returning id", (settlement_id, wallet_id)
+            "delete from settlements where id = %s and wallet_id = %s returning id, proof_path", (settlement_id, wallet_id)
         ).fetchone()
         if gone is None:
             logger.info("wallet settlement delete not found share_slug=%s", share_slug)
             raise HTTPException(404, "Payment not found")
         wallet = _load(conn, wallet_id)
+    forget_proof(gone["proof_path"], share_slug)
     _private(response)
-    logger.info("wallet settlement delete share_slug=%s %s", share_slug, _counts(wallet))
+    logger.info("wallet settlement delete share_slug=%s proof=%d %s", share_slug, 1 if gone["proof_path"] else 0, _counts(wallet))
     return wallet

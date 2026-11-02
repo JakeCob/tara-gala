@@ -87,12 +87,9 @@ def store(monkeypatch):
     monkeypatch.setattr(sessions, "CREATE_LIMITER", RateLimiter(sessions.CREATE_PER_HOUR))
     monkeypatch.setattr(sessions, "WRITE_LIMITER", RateLimiter(sessions.WRITES_PER_HOUR))
     monkeypatch.setattr(tf, "UPLOAD_LIMITER", RateLimiter(tf.UPLOADS_PER_HOUR))
-    try:
-        from app import wallet_proofs
-    except ImportError:  # RED: the module doesn't exist yet, and each test fails on its own for that
-        wallet_proofs = None
-    if wallet_proofs is not None:
-        monkeypatch.setattr(wallet_proofs, "PROOF_LIMITER", RateLimiter(wallet_proofs.UPLOADS_PER_HOUR))
+    from app import wallet_proofs
+
+    monkeypatch.setattr(wallet_proofs, "PROOF_LIMITER", RateLimiter(wallet_proofs.UPLOADS_PER_HOUR))
     fake = ProofStore()
     storage.set_store(fake)
     yield fake
