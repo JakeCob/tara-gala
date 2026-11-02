@@ -657,11 +657,12 @@ def test_the_50_proof_cap(client, dsn, store):
     assert proof_row(dsn, sid)["proof_path"] is None
     one_of_50 = sql(dsn, "select id from settlements where proof_path is not null limit 1")[0]["id"]
     assert upload(client, slug, one_of_50).status_code == 201, "replacing one of the 50 isn't a 51st"
-    # One removed row and one swept row free two places: this payment takes one, and is the 49th
-    two = [r["id"] for r in sql(dsn, "select id from settlements where proof_path is not null and id <> %s limit 2", (one_of_50,))]
-    sql(dsn, "update settlements set proof_path = null, proof_type = null, proof_bytes = null, proof_at = null where id = %s", (two[0],))
-    sql(dsn, "update settlements set proof_path = null, proof_type = null, proof_bytes = null where id = %s", (two[1],))
-    assert upload(client, slug, sid).status_code == 201
+    # Each freed place is tested alone: freeing both at once would hide a cap that still counts one of them
+    swept, removed = [r["id"] for r in sql(dsn, "select id from settlements where proof_path is not null and id <> %s limit 2", (one_of_50,))]
+    sql(dsn, "update settlements set proof_path = null, proof_type = null, proof_bytes = null where id = %s", (swept,))
+    assert upload(client, slug, sid).status_code == 201, "a swept row doesn't count"
+    sql(dsn, "update settlements set proof_path = null, proof_type = null, proof_bytes = null, proof_at = null where id = %s", (removed,))
+    assert upload(client, slug, pay(client, slug, people, amount=200)).status_code == 201, "a removed row doesn't count"
 
 
 def test_the_cap_filled_during_the_upload_is_a_409_not_a_51st(client, dsn, store):
@@ -979,13 +980,14 @@ def test_the_sweeper_runs_both_each_in_its_own_try(store, monkeypatch, caplog, r
 
     monkeypatch.setattr(tf, "sweep", trip_sweep)
     monkeypatch.setattr(wallet_proofs, "sweep_proofs", proof_sweep)
+    monkeypatch.setattr(tf, "manila_today", lambda: date(2030, 1, 1))  # never the real date, which may match UTC's
     thread = tf.start_sweeper(stop)
     assert thread is not None
     stop.wait(5)
     thread.join(5)
     assert not thread.is_alive(), "the thread exits on stop"
     assert [r if isinstance(r, str) else r[0] for r in ran] == ["trip", "proof"], "one failing doesn't stop the other"
-    assert ran[1][1] == tf.manila_today()
+    assert ran[1][1] == date(2030, 1, 1), "Manila's date, from manila_today"
     warnings = api_messages(caplog, logging.WARNING)
     if raises == "proof":
         assert "wallet proof sweep failed error=RuntimeError" in warnings

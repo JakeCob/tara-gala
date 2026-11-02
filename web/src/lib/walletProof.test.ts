@@ -181,6 +181,7 @@ test("T53-W10 a retry that fails again is still upload_failed, on the same payme
   const r = await wallet.markPaid(api, SLUG, transfer(), PICTURE, ID);
   assert.equal(r.stage, "upload_failed");
   assert.equal(r.stage === "upload_failed" && r.settlementId, ID);
+  assert.equal(r.stage === "upload_failed" && r.wallet, null, "a retry skips settle, so it has no new wallet: the dialog keeps the one it has");
   assert.deepEqual(api.calls.settle, []);
 });
 
@@ -215,6 +216,8 @@ test("T53-W12 addProof: POSTs the Blob as the body, typed as the picture", async
   assert.equal(calls[0].init?.method, "POST");
   assert.equal(calls[0].init?.body, PICTURE, "the Blob, not JSON");
   assert.deepEqual(calls[0].init?.headers, { "content-type": "image/jpeg" });
+  await wallet.walletApi.addProof(SLUG, ID, new Blob(["made up"], { type: "image/png" }));
+  assert.deepEqual(calls[1].init?.headers, { "content-type": "image/png" }, "the picture's own type, never a fixed one");
 });
 
 test("T53-W12 addProof failures: 404 keeps its detail, 409 is a rejection, a throw is offline", async () => {
