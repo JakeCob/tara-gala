@@ -446,6 +446,20 @@ def test_t60_24_prods_shredded_rows_heal_on_the_first_run(dsn, client):
         assert shows(client, d, "10:15") == 1, d
 
 
+def test_t60_25_tg59s_real_booked_rows_keep_every_other_date(dsn, client, tmp_path):
+    """The repo's data/routes_trips.csv as merged by TG-59, then a scrape: manual on the booked dates, scraped elsewhere."""
+    shutil.copy(ROOT / "data" / "routes_trips.csv", tmp_path / "routes_trips.csv")
+    (tmp_path / "spots.csv").write_text("slug,name,category,lat,lng,description,visit_minutes,entrance_fee_php\n", encoding="utf-8")
+    assert load_data.run(dsn, tmp_path, dry_run=False) == 0
+    scrape(dsn, later(1))
+    scrape(dsn, later(2), back_sold_out=[SUN])
+    for d in window(later(2)):
+        out = [x["source"] for x in search(client, d, "to") if (x["service_class"], x["departure_time"]) == (FC, "10:15")]
+        back = [x["source"] for x in search(client, d, "from") if (x["service_class"], x["departure_time"]) == (FC, "16:15")]
+        assert out == (["manual"] if d == FRI else ["scraped"]), d
+        assert back == (["manual"] if d == SUN else ["scraped"]), d
+
+
 def test_t60_r1_the_rule_is_written_down():
     section = (ROOT / "README.md").read_text(encoding="utf-8").split("## 4.")[1].split("## 5.")[0]
     assert "**Stable rows.**" in section
