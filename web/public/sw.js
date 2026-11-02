@@ -3,7 +3,7 @@
 // self.TG_SW and the event handlers. Bump SW_VERSION on every change so old static and page caches rotate.
 // Nothing at the top level may touch caches or fetch.
 
-const SW_VERSION = "2026-11-02.1"; // bump on every edit of this file
+const SW_VERSION = "2026-11-02.2"; // bump on every edit of this file
 const DATA_VERSION = "1"; // bump only if the stored data format changes
 const NETWORK_TIMEOUT_MS = 4000;
 const SAVED_AT_HEADER = "X-TG-Saved-At";
@@ -92,7 +92,7 @@ function isServerFailure(res) {
   return res.status >= 500;
 }
 
-/** A copy of `res` carrying the moment it was stored. Pass it a clone. */
+/** A copy of `res` carrying how new it is: the moment its GET left (TG-54). Pass it a clone. */
 function stampSavedAt(res, iso) {
   const headers = new Headers(res.headers);
   headers.set(SAVED_AT_HEADER, iso);
@@ -109,8 +109,11 @@ function readSavedAt(res) {
  * `result` resolves { response, source: "network" | "cache" | "none", savedAt } as soon as there's an answer
  * (the cached copy after `timeoutMs` if the network is slow). `done` resolves once the network answer has been
  * written, or has failed, and never rejects: the fetch handler passes it to waitUntil straight away.
+ * The stamp is when the GET left: the answer can't hold anything newer. A slow GET landing after a later one keeps
+ * its hands off that newer copy (TG-54).
  */
 function networkFirst({ network, readCache, writeCache, timeoutMs, nowIso }) {
+  const leftAt = nowIso();
   let pending;
   try {
     pending = Promise.resolve(network());
@@ -121,7 +124,12 @@ function networkFirst({ network, readCache, writeCache, timeoutMs, nowIso }) {
   const answer = pending.then((res) => ({ res, copy: shouldStore(res) ? res.clone() : null }));
 
   const done = answer
-    .then(({ copy }) => copy && writeCache(stampSavedAt(copy, nowIso())), () => undefined)
+    .then(async ({ copy }) => {
+      if (!copy) return;
+      const held = await readCache();
+      if (held && readSavedAt(held) > leftAt) return;
+      await writeCache(stampSavedAt(copy, leftAt));
+    }, () => undefined)
     .then(
       () => undefined,
       (err) => warn(`cache write failed error=${errorName(err)}`),

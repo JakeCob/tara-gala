@@ -1285,7 +1285,7 @@ test("TG54-S3 the older of two GETs landing last leaves the newer copy in the ca
       timeoutMs: 1000,
       nowIso: () => left,
     });
-  let answerOlder = (_: Response) => {};
+  let answerOlder: (res: Response) => void = () => {};
   const older = get("2026-11-06T01:00:00.000Z", () => new Promise<Response>((r) => (answerOlder = r)));
   await get("2026-11-06T01:00:02.000Z", async () => json({ marks: ["row:d1-02"] })).done;
   answerOlder(json({ marks: [] }));

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, type PremadeSummary } from "@/lib/api";
 import {
-  type Hotel, type Trip, type TripLoad, type TripResult, afterGet, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
+  type Hotel, type Trip, type TripLoad, type TripResult, afterGet, answerFrom, datesLine, fetchFile, forgetTrip, hotelMapsUrl, hotelTime, rememberTrip,
   slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
@@ -44,16 +44,18 @@ export default function TripView({ slug }: { slug: string }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const keptFiles = useRef(new Set<string>());
-  const writesLanded = useRef(0); // TG-54: a GET sent before a write landed may not hold it
+  const shownAt = useRef(0); // TG-54: how new the trip on screen is: when its GET left, or when a write landed
 
   useEffect(() => {
     let live = true;
-    const sent = writesLanded.current;
+    const left = Date.now();
     tripApi.get(slug).then((r) => {
       if (!live) return;
-      const overtaken = writesLanded.current !== sent;
-      console.info("[tg-trip] load ok=%s", r.ok ? (r.saved ? "saved" : overtaken ? "overtaken" : "yes") : r.why);
-      if (r.ok) {
+      const from = answerFrom(r, left);
+      const overtaken = from < shownAt.current;
+      console.info("[tg-trip] load ok=%s", r.ok ? (overtaken ? "overtaken" : r.savedAt ? "saved" : "yes") : r.why);
+      if (r.ok && !overtaken) {
+        shownAt.current = from;
         remember(r.trip);
         keepFilesOffline(r.trip, keptFiles.current);
       }
@@ -111,7 +113,7 @@ export default function TripView({ slug }: { slug: string }) {
       setNotice({ text: tripFailureMessage(r), error: true });
       return false;
     }
-    writesLanded.current++;
+    shownAt.current = Date.now();
     setLoad({ state: "ready", trip: r.trip });
     remember(r.trip);
     setNotice({ text: done, error: false });
