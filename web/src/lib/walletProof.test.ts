@@ -374,6 +374,7 @@ test("T53-W22 the dialog follows WorldSheet: native, Close first, no backdrop cl
   assert.doesNotMatch(src, /\bcapture\b/, "phones open the gallery, not the camera");
   assert.match(src, /accept=\{ACCEPT\}/);
   assert.match(src, /picked\([^)]*,\s*fitPhoto\)/, "every proof is redrawn, so metadata goes");
+  assert.match(src, /if \(holding\.current \|\| fitting\) return;/, "a tap during the redraw would record the payment with no proof");
   const files = read("src/components/TripFiles.tsx");
   assert.match(files, /export const ACCEPT\b/);
   assert.match(files, /export async function picked\([^\n]*\bfit\b[^\n]*=\s*fitForUpload/, "fit defaults to fitForUpload, so tickets don't change");
@@ -390,6 +391,7 @@ test("T53-W24 P11: rows load no proof; only Show proof fetches one", () => {
 
 test("T53-W25 each row's buttons say which payment they're for", () => {
   const src = view();
+  assert.match(src, /<p className=\{PX\.meta\}>Proof deleted\.<\/p>/, "the swept line is PX.meta");
   for (const name of ["Show proof for", "Add proof for", "Change proof for"]) {
     assert.ok(src.includes(name), name);
   }
