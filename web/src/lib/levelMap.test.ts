@@ -1,6 +1,7 @@
 // TG-52: the trip as a game level map, one world per day. Run with `npm test` (node --test, type stripping).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Guide, GuideRow, Mark } from "./guide.ts";
 import { marksByKey } from "./guide.ts";
@@ -205,18 +206,37 @@ test("TG56-8 the map picks the snake by its measured width, and phones keep the 
   assert.match(map, /map \? snakeRoad\(map, W\) : pixelRoad\(roadStops\(levelPoints\(count\), START_POINT, goalPoint\(count\), W\), W, H\)/);
   assert.match(map, /map \? snakeScenery\(map, W, seed\) : levelScenery\(levelPoints\(count\), W, seed\)/);
   assert.match(map, /min-w-0 max-w-88 flex-1 pixel-frame/, "the sign's cap holds on both");
+  assert.match(map, /useMemo\(\(\) => \(W >= SNAKE_MIN_PX \? snakeMap\(count, W\) : null\), \[W, count\]\)/, "the road takes the same switch as the tiles");
+  assert.match(map, /width: TILE_PX \+ SIGN_GAP \+ snake\.sign \}/, "a sign is as wide as the sums allow");
+  assert.match(map, /style=\{snake \? \{ marginTop: TILE_PX \/ 2 \+ SIGN_DROP \} : undefined\}/, "a sign hangs below the road");
+  assert.match(map, /snake \? "items-start" : "-translate-y-1\/2 items-center"/, "a phone's tile stays centred on its spot");
+  assert.match(map, /!snake && !left && "flex-row-reverse"/, "and its right-hand rows stay mirrored");
 });
 
 test("TG56-9 a plan with a guide: the level map only, as wide as a trip; a premade plan is unchanged", () => {
   const list = readFileSync("src/components/ItineraryList.tsx", "utf8");
   const guided = list.indexOf("it.guide ? (");
   const old = list.indexOf("<OverworldMap");
+  assert.equal(list.match(/<OverworldMap /g)?.length, 1, "the old map is drawn once");
+  assert.doesNotMatch(list.slice(guided, list.indexOf(") : map ? (")), /OverworldMap|Tap a stop/, "and never in the guide's branch");
   assert.ok(guided > 0 && guided < list.indexOf("<LevelMap guide={it.guide} />") && list.indexOf("<LevelMap guide={it.guide} />") < old, "the guide's branch comes first");
   assert.equal(list.match(/<LevelMap /g)?.length, 1);
   assert.match(list, /it\.guide \? "lg:\[&_button\]:w-auto lg:\[&_button\]:self-start" : undefined/, "Copy link doesn't stretch across the row");
   assert.match(list, /\) : map \? \(\n\s+<>\n\s+<p className="text-sm">Tap a stop or a ride for details\.<\/p>/, "the old map stays for plans without a guide");
   assert.match(list, /<div data-wide="" className="contents">\n\s+<LevelMap guide=\{it\.guide\} \/>\n\s+\{confirmNote && <p className=\{PX\.meta\}>\{confirmNote\}<\/p>\}/, "confirm with the operator stays");
   assert.match(readFileSync("src/app/i/[slug]/page.tsx", "utf8"), /md:max-w-md lg:has-\[\[data-wide\]\]:max-w-none/, "from lg only, and only with a guide");
+});
+
+test("TG56-10 a phone's map is main's, cell for cell: spots, road and scenery, pinned to 00ece84", () => {
+  const rows = [];
+  for (const W of [282, 342, 442, 699, 714]) {
+    for (const count of [1, 4, 7, 9, 10]) {
+      const pts = levelPoints(count);
+      const road = pixelRoad(roadStops(pts, START_POINT, goalPoint(count), W), W, worldHeight(count));
+      rows.push([pts, runsPath(road.curb), runsPath(road.asphalt), runsPath(road.dash), levelScenery(pts, W, 7)]);
+    }
+  }
+  assert.equal(createHash("sha256").update(JSON.stringify(rows)).digest("hex").slice(0, 16), "6776a21fa3fcce84", "a deliberate change to the phone map updates this hash");
 });
 
 test("LM4 the map opens on the group's world, else the first world not finished", () => {
