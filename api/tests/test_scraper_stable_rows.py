@@ -133,7 +133,8 @@ def test_t60_4_the_owners_plan_and_premades_stay_valid_without_a_reload(dsn, cli
         plan = {k: v for k, v in stored[0].items() if k != "guide"}
         result = validate_plan(conn, plan, trip_date=stored[1], return_date=stored[2])
     assert result.ok, [str(e) for e in result.errors]
-    assert len(client.get("/premade-itineraries").json()) == 3
+    in_file = json.loads(load_premade.DEFAULT_FILE.read_text(encoding="utf-8"))["itineraries"]
+    assert len(client.get("/premade-itineraries").json()) == len(in_file) > 0, "a plan is hidden"
 
 
 # ---------------------------------------------------------------- when a weekday really goes
