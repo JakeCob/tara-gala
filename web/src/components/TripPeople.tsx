@@ -4,11 +4,13 @@
 // Who's coming, Who's here (the arrival check at the first meet-up) and the edit list. Every result stays next to its
 // control, never in the trip's notice area: on a long list that's off-screen (TG-53). Anyone with the trip's link can
 // change all of it, and nothing here writes to the wallet: the two lists only meet in one copy of the wallet's names.
+// PR 2 adds the invite: a second, limited link (JoinView) the group answers through, turned on by Invite the group.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PX, PixelBox, PixelButton, SectionTitle, cx } from "@/components/pixel";
 import { BlobImage } from "@/components/PhotoViewer";
 import { ACCEPT, picked, useFile } from "@/components/TripFiles";
 import { manilaToday } from "@/lib/api";
+import { runShare, shareDeps } from "@/lib/itinerary";
 import type { Guide } from "@/lib/guide";
 import {
   type Attendee, type Rsvp, arrivalInput, arrivalTime, comingLines, comingSummary, correctedAt, expected, meetLine, openFace, peopleOf, waitingLine,
@@ -68,6 +70,7 @@ export default function TripPeople({ trip, plan, busy, apply }: {
   const [name, setName] = useState("");
   const [fixing, setFixing] = useState<{ id: string; time: string } | null>(null);
   const [walletNames, setWalletNames] = useState<{ wallet: string; count: number } | null>(null);
+  const [invited, setInvited] = useState<{ text: string; url?: string } | null>(null);
 
   useEffect(() => {
     if (!walletSlug) return;
@@ -140,6 +143,32 @@ export default function TripPeople({ trip, plan, busy, apply }: {
     if (r?.ok) setFixing(null);
   }
 
+  /** Turns the invite on if it's off, then shares its link. The trip's own link is never in it */
+  async function onInvite() {
+    if (holding.current) return;
+    setInvited(null);
+    let invite = trip.invite_slug;
+    if (!invite) {
+      const r = await save("invite", "invite-on", () => tripApi.startInvite(slug));
+      invite = r?.ok ? r.trip.invite_slug : null;
+      if (!invite) return;
+    }
+    const url = `${window.location.origin}/join/${invite}`;
+    const outcome = await runShare(shareDeps(navigator), { title: "Tara Gala invite", text: `Are you coming to "${trip.name}"? Tap to answer.`, url });
+    console.info("[tg-trip] invite-share outcome=%s", outcome);
+    if (outcome === "copied") setInvited({ text: "Link copied. Send it to the group." });
+    if (outcome === "manual") setInvited({ text: "Copy this link and send it to the group.", url });
+  }
+
+  async function onStopInvite() {
+    if (holding.current || !window.confirm("Turn off this invite? The link stops working. Invite the group makes a new one.")) return;
+    const r = await save("invite-off", "invite-off", () => tripApi.stopInvite(slug));
+    if (r?.ok) {
+      setInvited(null);
+      setSaid("The invite is off.");
+    }
+  }
+
   function pickFor(p: Attendee) {
     if (holding.current) return;
     forWho.current = p;
@@ -154,11 +183,17 @@ export default function TripPeople({ trip, plan, busy, apply }: {
     await save(who.id, "avatar-add", () => tripApi.addFile(slug, "avatar", p.picture, { attendee_id: who.id }));
   }
 
+  const inviteButton = (
+    <PixelButton variant="secondary" aria-disabled={off} onClick={onInvite}>
+      Invite the group
+    </PixelButton>
+  );
+
   return (
     <PixelBox as="section" aria-labelledby="people-title" className={cx("flex min-w-0 flex-col gap-3 p-4", wide && "md:col-span-2")}>
       <SectionTitle id="people-title">{face === "here" ? "Who's here" : "Who's coming"}</SectionTitle>
       <p role="status" className="sr-only">{said}</p>
-      {face === "empty" && <p className="text-sm text-muted">No names yet. Add the people you&apos;re asking.</p>}
+      {face === "empty" && <p className="text-sm text-muted">No names yet. Add the people you&apos;re asking, or send the invite and they can add themselves.</p>}
 
       {face === "coming" && (
         <>
@@ -278,6 +313,7 @@ export default function TripPeople({ trip, plan, busy, apply }: {
 
       {face !== "empty" && (
         <div className="flex flex-wrap gap-2">
+          {face === "coming" && inviteButton}
           {face !== "edit" && (
             <PixelButton variant="secondary" onClick={() => setChosen(face === "here" ? null : "here")}>
               {face === "here" ? "Who's coming" : "Who's here"}
@@ -287,6 +323,31 @@ export default function TripPeople({ trip, plan, busy, apply }: {
             {face === "edit" ? "Close" : "Edit the list"}
           </PixelButton>
         </div>
+      )}
+
+      {face === "empty" && <div className="flex flex-wrap gap-2">{inviteButton}</div>}
+      {(face === "empty" || face === "coming") && (
+        <>
+          {problem("invite")}
+          {invited && (
+            <div role="status" className="flex flex-col gap-2">
+              <p className="text-sm">{invited.text}</p>
+              {invited.url && (
+                <input readOnly className={cx(PX.input, "w-full text-sm")} aria-label="The invite's link" value={invited.url} onFocus={(e) => e.currentTarget.select()} />
+              )}
+            </div>
+          )}
+          <p className={PX.meta}>The invite only lets people say if they&apos;re coming. It doesn&apos;t open the trip.</p>
+        </>
+      )}
+
+      {face === "edit" && trip.invite_slug && (
+        <>
+          <PixelButton variant="secondary" className="self-start px-4 text-sm" aria-disabled={off} onClick={onStopInvite}>
+            Turn off the invite
+          </PixelButton>
+          {problem("invite-off")}
+        </>
       )}
 
       {face === "edit" && <p className={PX.meta}>Anyone with the trip&apos;s link can change this list.</p>}

@@ -303,6 +303,7 @@ GET_ROUTES = {
     "/wallets/{share_slug}/settlements/{settlement_id}/proof",  # TG-53: one payment's proof, inside its own wallet only
     "/sessions/{share_slug}",  # TG-52: one trip session by exact slug, with its own linked itinerary's slug
     "/sessions/{share_slug}/files/{file_id}",  # TG-52 PR 2: one shared file, inside its own trip only
+    "/invites/{invite_slug}",  # TG-58 PR 2: one invite by exact slug: the trip's name, dates and names, never the trip
 }
 OTHER_ROUTES = {
     ("POST", "/plan"),  # TG-20: inserts a planner row, never reads the table
@@ -338,6 +339,11 @@ OTHER_ROUTES = {
     ("DELETE", "/sessions/{share_slug}/attendees/{attendee_id}"),
     ("PUT", "/sessions/{share_slug}/attendees/{attendee_id}/arrival"),
     ("DELETE", "/sessions/{share_slug}/attendees/{attendee_id}/arrival"),
+    # TG-58 PR 2: the invite link, turned on and off under the trip's own slug, and its two public writes
+    ("PUT", "/sessions/{share_slug}/invite"),
+    ("DELETE", "/sessions/{share_slug}/invite"),
+    ("POST", "/invites/{invite_slug}/answers"),
+    ("POST", "/invites/{invite_slug}/attendees/{attendee_id}/photo"),
 }
 
 
@@ -348,9 +354,10 @@ def test_no_hidden_or_renamed_listing_route():
     served = {(m, r.path) for r in app.routes for m in (getattr(r, "methods", None) or set()) if m != "HEAD"}
     assert served == {("GET", p) for p in GET_ROUTES} | OTHER_ROUTES
     takes_slug = [r.path for r in app.routes if "{" in getattr(r, "path", "")]
-    # the only parameterised itinerary path is the exact-slug read; TG-50's wallet and TG-52's session paths all start
-    # at one exact slug
-    assert [p for p in takes_slug if not p.startswith(("/wallets/{share_slug}", "/sessions/{share_slug}"))] == ["/itineraries/{share_slug}"]
+    # the only parameterised itinerary path is the exact-slug read; TG-50's wallet, TG-52's session and TG-58's invite
+    # paths all start at one exact slug
+    starts = ("/wallets/{share_slug}", "/sessions/{share_slug}", "/invites/{invite_slug}")
+    assert [p for p in takes_slug if not p.startswith(starts)] == ["/itineraries/{share_slug}"]
 
 
 def test_only_exact_slug_and_premade_reads_touch_itineraries():

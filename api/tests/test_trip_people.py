@@ -393,7 +393,7 @@ def test_session_shape(client):  # A25
     by_kind = {f["kind"]: f for f in trip["files"]}
     assert by_kind["avatar"]["attendee_id"] == aid
     assert "attendee_id" in by_kind["ticket"] and by_kind["ticket"]["attendee_id"] is None
-    assert "invite_slug" not in trip, "PR 2 adds it"
+    assert trip["invite_slug"] is None, "PR 2: null until someone turns the invite on"
 
 
 def test_writes_return_the_trip_privately(client):  # A26

@@ -22,6 +22,7 @@ from .premade import router as premade_router
 from .sessions import router as sessions_router
 from .trip_files import router as trip_files_router
 from .trip_files import start_sweeper
+from .trip_invites import router as trip_invites_router
 from .trip_marks import router as trip_marks_router
 from .trip_people import router as trip_people_router
 from .wallet_proofs import router as wallet_proofs_router
@@ -150,3 +151,4 @@ app.include_router(sessions_router)
 app.include_router(trip_files_router)
 app.include_router(trip_marks_router)
 app.include_router(trip_people_router)
+app.include_router(trip_invites_router)
