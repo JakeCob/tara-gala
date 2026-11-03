@@ -217,10 +217,10 @@ export default function TripPeople({ trip, plan, apply }: {
                     <Avatar slug={slug} file={photo} name={p.name} />
                   </PixelButton>
                   <span className="min-w-0 font-semibold break-words">{p.name}</span>
-                  <PixelButton variant="icon" className="row-span-2 inline-flex items-center justify-center self-start" aria-label={`Remove ${p.name}`} aria-disabled={off} onClick={() => onRemove(p)}>
+                  <PixelButton variant="icon" className="row-span-2 inline-flex items-center justify-center self-start max-[359px]:row-span-1" aria-label={`Remove ${p.name}`} aria-disabled={off} onClick={() => onRemove(p)}>
                     <span aria-hidden="true">✕</span>
                   </PixelButton>
-                  <select id={answerId(p.id)} aria-label={`${p.name}'s answer`} className={cx(PX.input, "w-full min-w-0")} value={p.rsvp}
+                  <select id={answerId(p.id)} aria-label={`${p.name}'s answer`} className={cx(PX.input, "w-full min-w-0 max-[359px]:col-span-2")} value={p.rsvp}
                     onChange={(e) => save(p.id, "attendee-answer", () => tripApi.setAnswer(slug, p.id, e.target.value as Rsvp))}>
                     {ANSWERS.map((a) => (
                       <option key={a.value} value={a.value}>{a.label}</option>
@@ -245,14 +245,16 @@ export default function TripPeople({ trip, plan, apply }: {
       {(face === "empty" || face === "edit") && (
         <>
           <input ref={picker} type="file" accept={ACCEPT} hidden onChange={onPick} />
-          <form onSubmit={onAdd} noValidate className="flex items-end gap-2">
-            <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-              <span className="font-semibold">Add a name</span>
-              <input id={ADD} className={cx(PX.input, "w-full")} value={name} maxLength={30} autoComplete="off" onChange={(e) => setName(e.target.value)} />
-            </label>
-            <PixelButton type="submit" variant="secondary" aria-disabled={off}>Add</PixelButton>
+          <form onSubmit={onAdd} noValidate className="flex flex-col gap-3">
+            <div className="flex items-end gap-2">
+              <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+                <span className="font-semibold">Add a name</span>
+                <input id={ADD} className={cx(PX.input, "w-full")} value={name} maxLength={30} autoComplete="off" onChange={(e) => setName(e.target.value)} />
+              </label>
+              <PixelButton type="submit" variant="secondary" aria-disabled={off}>Add</PixelButton>
+            </div>
+            {problem("add")}
           </form>
-          {problem("add")}
         </>
       )}
 
