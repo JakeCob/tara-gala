@@ -302,6 +302,17 @@ test("T27-6 RSC and prefetch requests and other /_next paths are bypassed", () =
   for (const r of cases) assert.deepEqual(strategy(r), BYPASS, `${r.url} ${JSON.stringify(r.headers)}`);
 });
 
+test("T58-J11 the invite: its API answers are never saved, and /join/<slug> is a page, never data (F5)", () => {
+  const slug = "0123456789abcdef0123456789abcdef";
+  for (const origins of [LOCAL, PROD]) {
+    for (const path of [`/invites/${slug}`, `/invites/${slug}/answers`, `/invites/${slug}/attendees/11111111-1111-4111-8111-111111111111/photo`]) {
+      assert.deepEqual(strategy(req(`${origins.api}${path}`), origins), BYPASS, path);
+      assert.deepEqual(strategy(req(`${origins.api}${path}`, { method: "POST" }), origins), BYPASS, `POST ${path}`);
+    }
+    assert.deepEqual(strategy(req(`${origins.app}/join/${slug}`, { mode: "navigate" }), origins), PAGE_FIRST);
+  }
+});
+
 test("T27-7 navigations are network-first; saved /i/* pages go to the data cache", () => {
   for (const origins of [LOCAL, PROD]) {
     for (const path of ["/", "/baguio", "/baguio?terminal=vl-baguio", "/some-page-not-built-yet", "/i/abc/extra"]) {

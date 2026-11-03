@@ -285,10 +285,7 @@ test("T58-W27 plain words, and no colour on a time", () => {
   assert.doesNotMatch(box(), /text-danger|text-success|text-warning|bg-danger/);
 });
 
-test("T58-W28 no invite in PR 1 (F2): PR 2 replaces this with T58-J9", () => {
-  assert.doesNotMatch(box(), /invite/i);
-  assert.match(box(), /No names yet\. Add the people you're asking\./);
-});
+// T58-W28 (no invite in PR 1) is replaced by T58-J9 in invite.test.ts, with F2's sentence restored
 
 test("T58-W29 fences: these files don't change, and TripPeople writes nothing to a wallet", () => {
   const changed = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/src/components/LevelMap.tsx", "web/public/sw.js", "web/package.json", "web/package-lock.json", "package.json", "package-lock.json"], { cwd: new URL("../", WEB), encoding: "utf8" });
