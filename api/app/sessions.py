@@ -1,6 +1,7 @@
 """Trip sessions (TG-52): one secret link for the whole trip. A session points at an itinerary (a saved or ready-made
 plan) and a shared wallet, and holds the hotel and the files the party shares (trip_files.py: tickets, payout QRs,
-the hotel's screenshot) and its list of people (trip_people.py).
+the hotel's screenshot) and its list of people (trip_people.py), who can be asked through a limited invite link
+(trip_invites.py).
 
 Like a wallet, a session has no owner and no accounts: anyone with its share link can read it and write to it. The
 slug is 128 random bits and is the only key. Opening a session shows its wallet's and itinerary's links too, so the
@@ -161,6 +162,7 @@ class SessionOut(BaseModel):
     files: list[FileOut]
     marks: list[MarkOut]
     attendees: list[AttendeeOut]
+    invite_slug: str | None  # the limited invite link (trip_invites.py), null until someone turns it on
 
 
 # ---------------------------------------------------------------- database
@@ -190,7 +192,7 @@ def _session_id(conn, share_slug: str, lock: bool = False) -> UUID:
 
 def _load(conn, session_id: UUID) -> SessionOut:
     s = conn.execute(
-        """select s.share_slug, s.name, s.start_date, s.return_date, s.created_at,
+        """select s.share_slug, s.name, s.start_date, s.return_date, s.created_at, s.invite_slug,
                   i.share_slug as itinerary_slug, w.share_slug as wallet_slug, w.name as wallet_name
            from trip_sessions s
            left join itineraries i on i.id = s.itinerary_id
@@ -225,6 +227,7 @@ def _load(conn, session_id: UUID) -> SessionOut:
         files=[FileOut(**f) for f in files],
         marks=[MarkOut(**m) for m in marks],
         attendees=[AttendeeOut(**a) for a in attendees],
+        invite_slug=s["invite_slug"],
     )
 
 

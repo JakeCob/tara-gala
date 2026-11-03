@@ -349,7 +349,7 @@ def test_closed_after_return_date(client, monkeypatch):  # I17
 
 def test_closed_uses_manila_today():  # I17, mutant 41: the closing day is Manila's, not the machine's
     code = Path(ti.__file__).read_text(encoding="utf-8")
-    assert "from .trip_files import manila_today" in code
+    assert re.search(r"from \.trip_files import [\w, ]*\bmanila_today\b", code)
     assert re.search(r"manila_today\(\)\s*>\s*", code), "after return_date, not on it"
 
 
@@ -534,7 +534,8 @@ def test_invite_logs(client, caplog, monkeypatch):  # I27 (F1)
 def test_rate_limit_is_logged_as_a_warning(client, caplog, monkeypatch):  # I27, plan §9
     caplog.set_level(logging.INFO)
     _, invite, ids = invited(client)
-    monkeypatch.setattr(ti, "INVITE_LIMITER", RateLimiter(0))
+    monkeypatch.setattr(ti, "INVITE_LIMITER", RateLimiter(1))
+    ti.INVITE_LIMITER.hit("testclient")
     assert answer(client, invite, attendee_id=ids["Ana"], answer="yes").status_code == 429
     [hit] = [r for r in caplog.records if "rate limited" in r.getMessage()]
     assert hit.levelno == logging.WARNING and invite not in hit.getMessage()

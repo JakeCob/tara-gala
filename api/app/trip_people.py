@@ -52,6 +52,17 @@ def _refuse(share_slug: str, status: int, reason: str) -> HTTPException:
     return HTTPException(status, reason)
 
 
+def name_refused(conn, session_id: UUID, name: str) -> str | None:
+    """Why a new name can't join this list, or None. The invite (trip_invites.py) asks the same before it adds one."""
+    taken = conn.execute(
+        "select 1 from session_attendees where session_id = %s and lower(name) = lower(%s)", (session_id, name)
+    ).fetchone()
+    if taken:
+        return "name_taken"
+    count = conn.execute("select count(*) as n from session_attendees where session_id = %s", (session_id,)).fetchone()["n"]
+    return "party_full" if count >= MAX_ATTENDEES else None
+
+
 def _one(share_slug: str, row) -> None:
     """A write that named a person must have found them on this trip."""
     if row is None:
@@ -61,14 +72,8 @@ def _one(share_slug: str, row) -> None:
 @router.post("/sessions/{share_slug}/attendees", status_code=201, response_model=SessionOut)
 def add_attendee(share_slug: str, body: AttendeeIn, request: Request, response: Response) -> SessionOut:
     def change(conn, session_id: UUID) -> None:
-        taken = conn.execute(
-            "select 1 from session_attendees where session_id = %s and lower(name) = lower(%s)", (session_id, body.name)
-        ).fetchone()
-        if taken:
-            raise _refuse(share_slug, 409, "name_taken")
-        count = conn.execute("select count(*) as n from session_attendees where session_id = %s", (session_id,)).fetchone()["n"]
-        if count >= MAX_ATTENDEES:
-            raise _refuse(share_slug, 409, "party_full")
+        if reason := name_refused(conn, session_id, body.name):
+            raise _refuse(share_slug, 409, reason)
         conn.execute("insert into session_attendees (session_id, name) values (%s, %s)", (session_id, body.name))
 
     session = _write(share_slug, request, "attendee-add", change)

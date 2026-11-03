@@ -6,6 +6,7 @@ stack trace and turned into a generic 500 JSON. See README section 5.
 
 import logging
 import os
+import re
 import sys
 import time
 from collections.abc import Iterable, Mapping
@@ -18,6 +19,13 @@ LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 request_log = logging.getLogger("tara_gala.request")
+
+# An invite slug is a key anyone can use, so the request log keeps only its first 8 characters (TG-58)
+_INVITE_PATH = re.compile(r"^(/invites/[^/]{8})[^/]+")
+
+
+def logged_path(path: str) -> str:
+    return _INVITE_PATH.sub(r"\1*", path)
 
 
 class RedactingFormatter(logging.Formatter):
@@ -90,7 +98,7 @@ class RequestLogMiddleware:
             await self.app(scope, receive, send_and_track)
         except Exception as exc:
             # class name only on this line (greppable); the message is in the redacted traceback below it
-            request_log.exception("unhandled error method=%s path=%r error=%s", scope["method"], scope["path"], type(exc).__name__)
+            request_log.exception("unhandled error method=%s path=%r error=%s", scope["method"], logged_path(scope["path"]), type(exc).__name__)
             # Once the response has started nothing more can be sent; the connection just closes
             if status is None:
                 status = 500
@@ -98,5 +106,5 @@ class RequestLogMiddleware:
         finally:
             request_log.info(
                 "request method=%s path=%r status=%s duration_ms=%.1f",
-                scope["method"], scope["path"], status, (time.perf_counter() - start) * 1000,
+                scope["method"], logged_path(scope["path"]), status, (time.perf_counter() - start) * 1000,
             )
