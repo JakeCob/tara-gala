@@ -639,7 +639,7 @@ function DeleteTrip({ trip, onDeleted }: { trip: Trip; onDeleted: () => void }) 
       <summary className="cursor-pointer font-semibold">Delete this trip</summary>
       <form onSubmit={onDelete} noValidate className="mt-3 flex flex-col gap-3">
         <p className="text-muted">
-          This deletes the trip, its hotel, its list of people and their photos, and its shared tickets and QRs for everyone. The plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
+          This deletes the trip, its hotel, its list of people and their photos, and its shared tickets and QRs from the server, not from phones that already saved the trip. The plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
         </p>
         <input className={PX.input} value={typed} autoComplete="off" aria-label="Trip name, to confirm" onChange={(e) => setTyped(e.target.value)} />
         {problem && <Problem text={problem} />}

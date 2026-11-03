@@ -110,7 +110,7 @@ export default function TripPeople({ trip, plan, apply }: {
   }
 
   async function onRemove(p: Attendee) {
-    if (holding.current || !window.confirm(`Remove ${p.name} from this list? Their answer, arrival time and photo go too. The wallet doesn't change.`)) return;
+    if (holding.current || !window.confirm(`Remove ${p.name} from this list? Their answer, arrival time and photo are deleted from the server, not from phones that already saved the trip. The wallet doesn't change.`)) return;
     const next = list[list.findIndex((x) => x.id === p.id) + 1];
     const r = await save(p.id, "attendee-remove", () => tripApi.removeAttendee(slug, p.id));
     if (r?.ok) requestAnimationFrame(() => document.getElementById(next ? answerId(next.id) : ADD)?.focus());
@@ -230,7 +230,7 @@ export default function TripPeople({ trip, plan, apply }: {
                 {photo && (
                   <div className="pb-2 pl-[3.25rem]">
                     <PixelButton variant="secondary" aria-label={`Remove ${p.name}'s photo`} aria-disabled={off}
-                      onClick={() => !holding.current && window.confirm(`Remove ${p.name}'s photo?`) && save(p.id, "avatar-remove", () => tripApi.deleteFile(slug, photo.id))}>
+                      onClick={() => !holding.current && window.confirm(`Remove ${p.name}'s photo? It's deleted from the server, not from phones that already saved the trip.`) && save(p.id, "avatar-remove", () => tripApi.deleteFile(slug, photo.id))}>
                       Remove photo
                     </PixelButton>
                   </div>
@@ -283,7 +283,7 @@ export default function TripPeople({ trip, plan, apply }: {
       {face === "edit" && (
         <>
           <p className={PX.meta}>Anyone with the trip&apos;s link can change this list.</p>
-          <p className={PX.meta}>Everyone with the trip&apos;s link sees these photos. They stay until the trip is deleted.</p>
+          <p className={PX.meta}>Everyone with the trip&apos;s link sees these photos. They stay until you remove them or delete the trip. That deletes them from the server, not from phones that already saved the trip.</p>
         </>
       )}
     </PixelBox>

@@ -255,7 +255,7 @@ test("T58-W23 TripPeople: results stay next to the control", () => {
 });
 
 test("T58-W24 DeleteTrip names the people and their photos", () => {
-  assert.match(view().replace(/\s+/g, " "), /This deletes the trip, its hotel, its list of people and their photos, and its shared tickets and QRs for everyone\./);
+  assert.match(view().replace(/\s+/g, " "), /This deletes the trip, its hotel, its list of people and their photos, and its shared tickets and QRs from the server, not from phones that already saved the trip\. The plan and the wallet keep their own links\./);
 });
 
 test("T58-W25 avatars stay out of the albums and tickets", () => {
@@ -274,7 +274,7 @@ test("T58-W26 Avatar markup", () => {
   assert.match(src, /aria-hidden="true"/);
   assert.match(src, /`\$\{[^}]*\? "Change" : "Add"\} \$\{[^}]*\}'s photo`|Add \$\{[^}]*\}'s photo/);
   assert.match(src, /Change \$\{[^}]*\}'s photo|"Change"/);
-  assert.match(src, /Everyone with the trip's link sees these photos\. They stay until the trip is deleted\./);
+  assert.match(src, /Everyone with the trip's link sees these photos\. They stay until you remove them or delete the trip\. That deletes them from the server, not from phones that already saved the trip\./);
 });
 
 test("T58-W27 plain words, and no colour on a time", () => {
@@ -300,8 +300,8 @@ test("T58-W29 fences: these files don't change, and TripPeople writes nothing to
 
 test("T58-W30 confirms: the remove sentence, the photo's, and none on Undo", () => {
   const src = box();
-  assert.match(src, /`Remove \$\{[^}]*\} from this list\? Their answer, arrival time and photo go too\. The wallet doesn't change\.`/);
-  assert.match(src, /window\.confirm\(`Remove \$\{[^}]*\}'s photo\?`\)/);
+  assert.match(src, /`Remove \$\{[^}]*\} from this list\? Their answer, arrival time and photo are deleted from the server, not from phones that already saved the trip\. The wallet doesn't change\.`/);
+  assert.match(src, /window\.confirm\(`Remove \$\{[^}]*\}'s photo\? It's deleted from the server, not from phones that already saved the trip\.`\)/);
   const undo = src.slice(src.indexOf("function onUndo"), src.indexOf("\n  }\n", src.indexOf("function onUndo")));
   assert.ok(undo.length > 0);
   assert.doesNotMatch(undo, /confirm/);
