@@ -47,7 +47,7 @@ export type Trip = {
   files: TripFile[];
   marks: Mark[]; // PR 3: the shared checklist's ticks and the picks
   attendees?: Attendee[]; // TG-58: absent on a saved copy from before it, so read it through peopleOf
-  invite_slug?: string | null; // TG-58 PR 2
+  invite_slug?: string | null; // TG-58 PR 2: the limited invite link, null until someone turns it on
 };
 
 // ---------------------------------------------------------------- pure
@@ -260,6 +260,10 @@ export const tripApi = {
   /** With no `at`, the server's time, and a second tap keeps the first. `at` is a correction, as Manila wall time */
   arrive: (slug: string, id: string, at?: string) => one(call(`${attendee(slug, id)}/arrival`, { method: "PUT", body: at ? { at } : {} })),
   clearArrival: (slug: string, id: string) => one(call(`${attendee(slug, id)}/arrival`, { method: "DELETE" })),
+  /** TG-58 PR 2: turns on the invite link; a second call keeps the same one */
+  startInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "PUT" })),
+  /** The invite link stops working; startInvite then makes a new one */
+  stopInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "DELETE" })),
 };
 
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;
