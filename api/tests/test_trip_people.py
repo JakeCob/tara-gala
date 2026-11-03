@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg
@@ -16,7 +17,7 @@ from starlette.requests import Request
 from app import sessions as s
 from app import trip_files as tf
 from app.limits import RateLimiter
-from conftest import ROOT
+from conftest import ROOT, build_schema
 from test_guide import barkada, trip as guide_trip  # noqa: F401  fixtures
 from test_trip_files import JPEG, PNG, TRIP, fake_store, trip_with_wallet, upload  # noqa: F401  fake_store is an autouse fixture
 
@@ -70,9 +71,14 @@ def image(size: int, head: bytes = PNG) -> bytes:
 
 def schema_shape(dsn) -> list:
     return [
-        rows(dsn, "select table_name, column_name, data_type, is_nullable, column_default from information_schema.columns where table_schema = 'public' order by 1, 2"),
+        rows(dsn, "select table_name, ordinal_position, column_name, data_type, is_nullable, column_default, is_identity from information_schema.columns where table_schema = 'public' order by 1, 2"),
         rows(dsn, "select conrelid::regclass::text as t, conname, pg_get_constraintdef(oid) as d from pg_constraint where connamespace = 'public'::regnamespace order by 1, 2"),
         rows(dsn, "select tablename, indexname, indexdef from pg_indexes where schemaname = 'public' order by 1, 2"),
+        rows(dsn, "select relname, relkind::text, relrowsecurity, relforcerowsecurity from pg_class where relnamespace = 'public'::regnamespace and relkind in ('r', 'v') order by 1"),
+        rows(dsn, "select tablename, policyname, cmd, roles::text, qual, with_check from pg_policies where schemaname = 'public' order by 1, 2"),
+        rows(dsn, "select viewname, definition from pg_views where schemaname = 'public' order by 1"),
+        rows(dsn, "select proname, pg_get_functiondef(oid) as d from pg_proc where pronamespace = 'public'::regnamespace order by 1"),
+        rows(dsn, "select tgrelid::regclass::text as t, tgname, pg_get_triggerdef(oid) as d from pg_trigger where not tgisinternal order by 1, 2"),
     ]
 
 
@@ -85,6 +91,24 @@ def test_migration_is_a_no_op_on_schema_sql(dsn):  # A1
         conn.execute(sql)
         conn.execute(sql)
     assert schema_shape(dsn) == before
+
+
+def test_migration_over_mains_schema_matches_schema_sql(dsn):  # test-audit G2, as its §3 does by hand
+    # main's schema.sql from before TG-58 (e753435), byte for byte
+    build_schema((Path(__file__).parent / "fixtures" / "schema_before_tg58.sql").read_text(encoding="utf-8"))
+    with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as conn:
+        sid = conn.execute("insert into trip_sessions (name, start_date, return_date) values ('T', '2026-11-06', '2026-11-08') returning id").fetchone()["id"]
+        fid = conn.execute(
+            "insert into session_files (session_id, kind, storage_path, content_type, bytes) values (%s, 'photo', %s, 'image/png', 1) returning id",
+            (sid, str(uuid4())),
+        ).fetchone()["id"]
+        sql = MIGRATION.read_text(encoding="utf-8")
+        conn.execute(sql)
+        conn.execute(sql)
+        assert conn.execute("select kind, attendee_id from session_files where id = %s", (fid,)).fetchall() == [{"kind": "photo", "attendee_id": None}]
+    upgraded = schema_shape(dsn)
+    build_schema((ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8"))
+    assert upgraded == schema_shape(dsn)
 
 
 def test_tables_and_rls(dsn):  # A2

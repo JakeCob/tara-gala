@@ -74,15 +74,19 @@ def _frozen_scraper_clock(monkeypatch):
     monkeypatch.setattr(vl, "manila_now", lambda: datetime(2026, 11, 1, 4, 0, tzinfo=MANILA))
 
 
-@pytest.fixture()
-def dsn():
-    schema = (ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8")
+def build_schema(schema: str) -> None:
+    """Drop `public` and build it again from the given schema SQL."""
     with psycopg.connect(TEST_DSN, autocommit=True) as conn:
         conn.execute("drop schema if exists public cascade")
         conn.execute("create schema public")
         for t in ("service_class", "data_source", "trip_report_status", "last_mile_mode", "spot_category", "passenger_type"):
             conn.execute(f"drop type if exists {t} cascade")
         conn.execute(schema)
+
+
+@pytest.fixture()
+def dsn():
+    build_schema((ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8"))
     return TEST_DSN
 
 
