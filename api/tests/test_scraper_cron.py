@@ -32,6 +32,15 @@ FAKE_PY = """#!/bin/sh
 # Fake python for TG-8 tests: records what the wrapper gave it, prints nothing, exits with $FAKE_RC.
 d="$FAKE_DIR"
 mkdir -p "$d"
+case "$1" in
+data/*) # a plan loader (TG-60): one line per call, with its own exit code
+    same=dsn-differs
+    [ "$DATABASE_URL" = "$(cat "$d/dsn")" ] && same=dsn-ok
+    printf '%s %s\\n' "$*" "$same" >> "$d/loaders"
+    pwd >> "$d/loader-cwd"
+    case "$1 ${2:-}" in *"${FAKE_LOADER_FAIL:-no-such-file}"*) exit 3 ;; esac
+    exit 0 ;;
+esac
 printf '%s\\0' "$@" > "$d/argv"
 pwd > "$d/cwd"
 (umask 077; printf '%s' "$DATABASE_URL" > "$d/dsn")
@@ -105,6 +114,18 @@ class H:
 
     def dsn(self) -> str:
         return (self.fake_dir / "dsn").read_text()
+
+    def loaders(self) -> list[str]:
+        f = self.fake_dir / "loaders"
+        return f.read_text().splitlines() if f.exists() else []
+
+    def commit_itineraries(self, *names: str) -> None:
+        d = self.src / "data" / "itineraries"
+        d.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (d / name).write_text("{}\n")
+        self.git("add", "data")
+        self.git("commit", "-q", "-m", "itineraries")
 
 
 @pytest.fixture()
@@ -306,6 +327,55 @@ def test_arguments_pass_through_and_dry_run_does_not_count(h):
     assert cp.returncode == 0
     assert h.argv() == ["scraper/victory_liner.py", "--dry-run", "--direction", "to-baguio"]
     assert not last_success(h).exists()
+
+
+# --- plans re-resolve after a scrape (TG-60) ------------------------------------------------------------
+
+def test_t60_c1_a_good_scrape_reloads_every_itinerary_then_the_premades(h):
+    h.commit_itineraries("b-trip.json", "a-trip.json")
+    cp = h.run()
+    assert cp.returncode == 0, cp.stdout
+    assert h.loaders() == [
+        "data/load_itinerary.py data/itineraries/a-trip.json dsn-ok",
+        "data/load_itinerary.py data/itineraries/b-trip.json dsn-ok",
+        "data/load_premade.py dsn-ok",
+    ]
+    assert set((h.fake_dir / "loader-cwd").read_text().split()) == {str(h.state / "code")}
+    assert h.argv() == ["scraper/victory_liner.py"]
+    assert re.search(r"END rc=0 duration_s=\d+$", wrapper_lines(cp)[-1])
+    assert all(LINE_RE.match(l) for l in wrapper_lines(cp))
+
+
+def test_t60_c2_no_itinerary_files_still_reloads_the_premades(h):
+    assert h.run().returncode == 0
+    assert h.loaders() == ["data/load_premade.py dsn-ok"]
+
+
+def test_t60_c3_a_dry_run_loads_nothing(h):
+    h.commit_itineraries("a-trip.json")
+    assert h.run("--dry-run").returncode == 0
+    assert h.loaders() == []
+
+
+def test_t60_c4_a_failed_scrape_loads_nothing(h):
+    h.commit_itineraries("a-trip.json")
+    assert h.run(rc=1).returncode == 1
+    assert h.loaders() == []
+
+
+@pytest.mark.parametrize("failing,named", [("a-trip.json", "a-trip.json"), ("load_premade", "load_premade.py")])
+def test_t60_c5_a_loader_failure_is_a_warning_not_a_failed_scrape(h, failing, named):
+    h.commit_itineraries("a-trip.json", "b-trip.json")
+    cp = h.run(extra={"FAKE_LOADER_FAIL": failing})
+    assert cp.returncode == 0, cp.stdout
+    warnings = [l for l in wrapper_lines(cp) if " WARNING " in l]
+    assert len(warnings) == 1 and named in warnings[0] and "rc=3" in warnings[0]
+    assert len(h.loaders()) == 3, "the other loaders still run"
+    assert last_success(h).exists()
+
+
+def test_t60_c6_the_wrapper_never_touches_trip_sessions():
+    assert "trip_sessions" not in CRON_SH.read_text(encoding="utf-8")
 
 
 # --- secrets (B5, D2) ---------------------------------------------------------------------------------

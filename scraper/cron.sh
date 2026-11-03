@@ -115,6 +115,21 @@ log "START sha=$SHA args=$*"
 cd "$CODE" || fail 3 "no code"
 "$PY" scraper/victory_liner.py "$@"
 rc=$?
+
+# 8. Saved plans re-point to today's rows by natural key (TG-60). A failed loader keeps that plan as it was and is a
+# WARNING, never a failed scrape. The loaders write only itineraries, in place by share_slug.
+if [ "$rc" -eq 0 ] && [ "$dry_run" = no ]; then
+    for file in data/itineraries/*.json; do
+        [ -f "$file" ] || continue
+        "$PY" data/load_itinerary.py "$file"
+        loaded=$?
+        [ "$loaded" -eq 0 ] || log "WARNING plan not re-resolved: ${file##*/} rc=$loaded"
+    done
+    "$PY" data/load_premade.py
+    loaded=$?
+    [ "$loaded" -eq 0 ] || log "WARNING plans not re-resolved: load_premade.py rc=$loaded"
+fi
+
 duration=$(( $(date +%s) - start ))
 if [ "$rc" -eq 0 ]; then
     log "END rc=0 duration_s=$duration"

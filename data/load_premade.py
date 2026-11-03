@@ -140,7 +140,7 @@ def _resolve_trip(cur, ref: TripKey, operators: dict[str, str], terminals: dict[
         return None, [f"{field}: {_unknown_seed(what, slug, known)}" for field, what, slug, known in seeds]
     cur.execute(
         """
-        select t.id, r.class::text, r.via, d.slug, t.days_of_week, t.valid_from, t.valid_to
+        select t.id, r.class::text, r.via, d.slug, t.days_of_week, t.valid_from, t.valid_to, t.source::text
         from trips t
         join routes r on r.id = t.route_id
         join operators o on o.id = r.operator_id
@@ -160,6 +160,9 @@ def _resolve_trip(cur, ref: TripKey, operators: dict[str, str], terminals: dict[
     ]
     if not matches:
         return None, [f"trip_id: no active {ref.operator} trip from {ref.origin} at {ref.departure} running on {ref.date}"]
+    manual = [row for row in matches if row[7] == "manual"]
+    if len(matches) > 1 and len(manual) == 1:  # a hand-entered row wins, as in the scraper
+        matches = manual
     if len(matches) > 1:
         options = ", ".join(f"{cls} via {via or '-'} to {dest}" for _, cls, via, dest, *_ in matches)
         return None, [f"trip_id: {len(matches)} trips match; add class, via or destination: {options}"]

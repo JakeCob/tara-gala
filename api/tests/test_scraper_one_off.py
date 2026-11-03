@@ -30,6 +30,7 @@ WINDOW = [date(2026, 10, 28) + timedelta(days=i) for i in range(14)]  # Wed Oct 
 TODAY = WINDOW[0]
 NOW = datetime(2026, 10, 28, 4, 0, tzinfo=vl.MANILA)
 LATER = NOW + timedelta(days=1)
+GRACE = NOW + timedelta(days=vl.RETIRE_AFTER_DAYS)  # TG-60: a departure missing this long is retired
 SAT1, SAT2 = date(2026, 10, 31), date(2026, 11, 7)
 SUN1, MON1 = date(2026, 11, 1), date(2026, 11, 2)
 WED2 = date(2026, 11, 4)  # window[7], today's weekday one week out
@@ -365,20 +366,19 @@ def test_t9_5_today_rule_rows(dsn):
     assert (days, vf, vt) == ([3], TODAY, TODAY)
 
 
-def test_t9_6_old_weekly_row_is_replaced(dsn, client):
+def test_t9_6_a_weekly_row_stays_weekly_while_a_date_of_it_is_listed(dsn):
+    """TG-60 ends TG-9's clean-up: a saved weekly row can't be told from a weekly extra, and plans hold its id."""
     run(dsn, daily())
-    with psycopg.connect(dsn) as conn:  # what main writes today: B weekly on Saturdays, no dates
+    with psycopg.connect(dsn) as conn:
         conn.execute(
             "insert into trips (route_id, departure_time, days_of_week, source, source_url, last_verified_at) "
             "values (%s, %s, '{6}', 'scraped', %s, %s)",
             (route_id(dsn), t(B), vl.SOURCE_URL, NOW - timedelta(days=1)),
         )
     res = run(dsn, daily() + seen(B, [SAT1]))
-    old, dated = rows(dsn, B)
-    assert (old[2], old[4]) == (None, False)
-    assert (dated[2], dated[3], dated[4]) == (SAT1, SAT1, True)
-    assert res.deactivated_by_direction["to-baguio"] == 1
-    assert ("regular_aircon", B) not in keys(search(client, SAT2))
+    [(_, days, vf, _, active, *_)] = rows(dsn, B)
+    assert (days, vf, active) == ([6], None, True)
+    assert res.deactivated_by_direction["to-baguio"] == 0
 
 
 def test_t9_7_rerun_is_idempotent(dsn):
@@ -415,12 +415,13 @@ def test_t9_9_one_off_becomes_regular_without_double_booking(dsn, client):
         assert keys(search(client, d)).count(("regular_aircon", B)) == 1
 
 
-def test_t9_9b_regular_becomes_one_off(dsn):
+def test_t9_9b_regular_does_not_become_one_off_on_one_missing_date(dsn):
+    """TG-60: Sat Nov 7 not listed may be sold out, and Sat Oct 31 is still listed: same row, same days."""
     run(dsn, daily() + seen(B, [SAT1, SAT2]))
+    [(row_id, *_)] = rows(dsn, B)
     run(dsn, daily() + seen(B, [SAT1]))
-    recurring, dated = rows(dsn, B)
-    assert (recurring[2], recurring[4]) == (None, False)
-    assert (dated[2], dated[4]) == (SAT1, True)
+    [(again, days, vf, _, active, *_)] = rows(dsn, B)
+    assert (again, days, vf, active) == (row_id, [6], None, True)
 
 
 def test_t9_14_one_off_log_lines_and_count(dsn):
@@ -437,20 +438,22 @@ def test_t9_14_one_off_log_lines_and_count(dsn):
 
 
 def test_log_names_weekday_changes_and_deactivations_only_when_they_happen(dsn):
-    """Log pass: the cron log says which weekly trip lost a weekday and which trips were deactivated."""
-    run(dsn, daily() + seen(B, [SAT1, SAT2]) + seen(C, [*FRIDAYS, SAT1, SAT2]))
+    """Log pass: the cron log says which weekly trip gained a weekday and which trips were deactivated."""
+    extra = seen(D, [SAT1])
+    run(dsn, daily() + extra + seen(B, [SAT1, SAT2]) + seen(C, FRIDAYS))
     lines = []
-    run(dsn, daily() + seen(B, [SAT1]) + seen(C, [*FRIDAYS, SAT1]), log=lines.append)
-    assert "  weekly: vl-cubao->vl-baguio regular_aircon 15:00 days [5, 6] -> [5]" in lines
+    both = seen(C, [*FRIDAYS, SAT1, SAT2])
+    run(dsn, daily() + extra + both, now=GRACE, log=lines.append)
+    assert "  weekly: vl-cubao->vl-baguio regular_aircon 15:00 days [5] -> [5, 6]" in lines
     assert "  deactivated: vl-cubao->vl-baguio regular_aircon 13:00 weekly" in lines
     assert not any("07:00" in line for line in lines), "an unchanged weekly trip prints nothing"
     again = []
-    run(dsn, daily() + seen(B, [SAT1]) + seen(C, [*FRIDAYS, SAT1]), log=again.append)
+    run(dsn, daily() + extra + both, now=GRACE, log=again.append)
     assert not [line for line in again if "weekly:" in line or "deactivated:" in line], "a stable rerun is quiet"
     shifted = [d + timedelta(days=4) for d in WINDOW]
     gone = []
     run(dsn, daily(days=shifted), window=shifted, now=datetime(2026, 11, 1, 4, 0, tzinfo=vl.MANILA), log=gone.append)
-    assert "  deactivated: vl-cubao->vl-baguio regular_aircon 13:00 on 2026-10-31" in gone
+    assert "  deactivated: vl-cubao->vl-baguio regular_aircon 13:30 on 2026-10-31" in gone
 
 
 def test_failed_run_prints_no_row_lines(dsn, monkeypatch):
@@ -491,7 +494,7 @@ def test_t9_u1_recurring_and_dated_rows_coexist(dsn):
 def test_t9_u2_inactive_dated_row_is_reused_even_when_months_old(dsn):
     run(dsn, daily() + seen(B, [SAT1]))
     [(row_id, *_)] = rows(dsn, B)
-    run(dsn, daily())
+    run(dsn, daily(), now=GRACE)
     with psycopg.connect(dsn) as conn:
         conn.execute("update trips set updated_at = '2026-03-01', last_verified_at = '2026-03-01' where id = %s", (row_id,))
     assert rows(dsn, B)[0][4] is False
@@ -501,14 +504,14 @@ def test_t9_u2_inactive_dated_row_is_reused_even_when_months_old(dsn):
     assert res.trips_new == 0
 
 
-def test_t9_u3_manual_dated_row_skips_the_departure(dsn):
+def test_t9_u3_manual_dated_row_wins_only_its_date(dsn):
     run(dsn, daily())
     add_manual(dsn, route_id(dsn), B, [6], SAT1, SAT1)
     before = manual_snapshot(dsn)
     res = run(dsn, daily() + seen(B, [SAT1, SAT2]))
     assert res.trips_skipped_manual == 1
     assert manual_snapshot(dsn) == before
-    assert [r[5] for r in rows(dsn, B)] == ["manual"]
+    assert [(r[5], r[2]) for r in rows(dsn, B)] == [("manual", SAT1), ("scraped", SAT2)]
 
 
 def test_t9_u4_manual_recurring_row_skips_dated_rows(dsn):
@@ -553,11 +556,11 @@ def test_t9_10b_manual_skip_counts_once_per_departure(dsn):
     add_manual(dsn, route_id(dsn), C, [5])
     res = run(dsn, daily() + seen(C, [*FRIDAYS, SAT1]))
     assert res.trips_skipped_manual == 1
-    assert res.trips_one_off == 0
-    assert [r[5] for r in rows(dsn, C)] == ["manual"]
+    assert res.trips_one_off == 1, "Sat Oct 31 isn't a date the manual row covers"
+    assert [(r[5], r[2]) for r in rows(dsn, C)] == [("manual", None), ("scraped", SAT1)]
 
 
-def test_t9_10c_hand_entered_undas_extra_wins_whole_departure(dsn, client):
+def test_t9_10c_hand_entered_undas_extra_wins_its_own_date(dsn, client):
     run(dsn, daily())
     add_manual(dsn, route_id(dsn), D, [0], SUN1, SUN1)
     before = manual_snapshot(dsn)
@@ -565,7 +568,7 @@ def test_t9_10c_hand_entered_undas_extra_wins_whole_departure(dsn, client):
     assert manual_snapshot(dsn) == before
     sun = [x for x in search(client, SUN1) if x["departure_time"] == D]
     assert [x["source"] for x in sun] == ["manual"]
-    assert ("regular_aircon", D) not in keys(search(client, MON1))
+    assert [x["source"] for x in search(client, MON1) if x["departure_time"] == D] == ["scraped"]
 
 
 def test_t9_10d_scraped_dated_rows_go_when_a_manual_row_arrives(dsn, client):
@@ -596,7 +599,7 @@ def to_side_state(dsn):
 def test_t9_11a_from_run_leaves_to_baguio_dated_rows(dsn):
     run(dsn, both_sides(), directions=BOTH)
     before = to_side_state(dsn)
-    res = run(dsn, daily(A_FROM, FROM_LEG), directions=FROM)
+    res = run(dsn, daily(A_FROM, FROM_LEG), directions=FROM, now=GRACE)
     assert rows(dsn, U_FROM, FROM_LEG)[0][4] is False
     assert to_side_state(dsn) == before
     assert res.deactivated_by_direction == {"from-baguio": 1}
@@ -604,7 +607,7 @@ def test_t9_11a_from_run_leaves_to_baguio_dated_rows(dsn):
 
 def test_t9_11b_to_run_leaves_from_baguio_dated_rows(dsn):
     run(dsn, both_sides(), directions=BOTH)
-    res = run(dsn, daily(), directions=TO)
+    res = run(dsn, daily(), directions=TO, now=GRACE)
     assert rows(dsn, B)[0][4] is False
     assert rows(dsn, U_FROM, FROM_LEG)[0][4] is True
     assert rows(dsn, A_FROM, FROM_LEG)[0][4] is True
@@ -613,7 +616,7 @@ def test_t9_11b_to_run_leaves_from_baguio_dated_rows(dsn):
 
 def test_t9_11c_both_run_counts_each_direction(dsn):
     run(dsn, both_sides(), directions=BOTH)
-    res = run(dsn, both_sides(b=False, u=False), directions=BOTH)
+    res = run(dsn, both_sides(b=False, u=False), directions=BOTH, now=GRACE)
     assert res.deactivated_by_direction == {"to-baguio": 1, "from-baguio": 1}
 
 
@@ -622,7 +625,7 @@ def test_t9_11d_direction_whose_departures_all_clash_with_manual_rows(dsn):
     run(dsn, both_sides(), directions=BOTH)
     add_manual(dsn, route_id(dsn, FROM_LEG), A_FROM, sorted(ALL_WEEK))
     before_manual, before_to = manual_snapshot(dsn), to_side_state(dsn)
-    res = run(dsn, both_sides(u=False), directions=BOTH)
+    res = run(dsn, both_sides(u=False), directions=BOTH, now=GRACE)
     assert rows(dsn, U_FROM, FROM_LEG)[0][4] is False
     assert manual_snapshot(dsn) == before_manual
     assert to_side_state(dsn) == before_to
