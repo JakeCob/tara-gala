@@ -26,6 +26,8 @@ INVITE_KEYS = {"name", "start_date", "return_date", "coming", "closed", "people"
 ANSWER_KEYS = {"attendee_id", "name", "answer"}
 HEX32 = re.compile(r"^[0-9a-f]{32}$")
 OPEN_DAY = date(2026, 11, 4)  # before TRIP's return_date, whatever today is
+# The module's own limiters, held before any fixture swaps them for a test (audit G2): each test replaces them all
+REAL = {"invite": ti.INVITE_LIMITER, "write": s.WRITE_LIMITER, "create": s.CREATE_LIMITER, "upload": tf.UPLOAD_LIMITER, "photo": tf.PHOTO_LIMITER}
 
 
 @pytest.fixture(autouse=True)
@@ -493,6 +495,13 @@ def test_invite_limit(client):  # I26
     assert client.patch(f"/sessions/{slug}/attendees/{aid}", json={"rsvp": "no"}).status_code == 200
     for _ in range(5):
         assert client.get(f"/invites/{invite}").status_code == 200, "reading isn't limited"
+
+
+def test_the_invite_has_its_own_budget():  # I26, mutant 49: the fixture's fresh limiter can't hide a shared one
+    invite = REAL["invite"]
+    assert isinstance(invite, RateLimiter)
+    assert all(invite is not other for name, other in REAL.items() if name != "invite")
+    assert (invite.limit, invite.window_s) == (60, 3600)
 
 
 def test_invite_logs(client, caplog, monkeypatch):  # I27 (F1)

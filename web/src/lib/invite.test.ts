@@ -174,6 +174,17 @@ test("T58-J8 JoinView markup: names as PixelChoice radios in a fieldset, and a f
   assert.match(src, /fitAvatar/);
   assert.match(src, /md:max-w-\[448px\]/, "desktop: the same box, 448px wide");
   assert.match(src, /md:mx-auto|md:self-center/, "and centred");
+  // One write at a time (audit G2): a second tap while an answer or photo is out does nothing
+  const fn = (name: string) => src.slice(src.indexOf(`async function ${name}(`), src.indexOf("\n  }\n", src.indexOf(`async function ${name}(`)));
+  for (const [name, call] of [["onAnswer", "inviteApi.answer("], ["onPick", "inviteApi.addPhoto("]]) {
+    const body = fn(name);
+    assert.ok(body.length > 0, name);
+    assert.match(body, /if \(holding\.current\) return;|if \(!saved \|\| holding\.current\) return;/, `${name} refuses while a write is out`);
+    assert.ok(body.indexOf("holding.current = true;") > -1 && body.indexOf("holding.current = true;") < body.indexOf(call), `${name} holds before it sends`);
+  }
+  // Review nit 3: nothing else on the page moves while a photo uploads
+  assert.match(src, /onClick=\{\(\) => !holding\.current && onChange\(\)\}/);
+  assert.match(src, /onClick=\{\(\) => !holding\.current && onNotMe\(\)\}/);
 });
 
 test("T58-J9 trip page: the invite button, its share text, the line under it, and turning it off", () => {
@@ -188,10 +199,19 @@ test("T58-J9 trip page: the invite button, its share text, the line under it, an
   assert.match(src, /The invite only lets people say if they're coming\. It doesn't open the trip\./);
   assert.match(src, /Turn off the invite/);
   assert.match(src, /window\.confirm\("Turn off this invite\? The link stops working\. Invite the group makes a new one\."\)/);
-  assert.match(src, /tripApi\.startInvite\(/);
-  assert.match(src, /tripApi\.stopInvite\(/);
+  // Both writes go through save, review M1's one-write guard (audit G2), and nothing calls them another way
+  assert.match(src, /save\("invite", "invite-on", \(\) => tripApi\.startInvite\(slug\)\)/);
+  assert.match(src, /save\("invite-off", "invite-off", \(\) => tripApi\.stopInvite\(slug\)\)/);
+  assert.equal(src.match(/tripApi\.(start|stop)Invite\(/g)?.length, 2);
   assert.match(src, /trip\.invite_slug/);
   assert.doesNotMatch(src, /variant="primary"/, "Share the trip keeps the page's one red button");
+});
+
+test("T58-J16 TG-54 on the join page: only the newest refresh after an answer may set the page (audit G1)", () => {
+  const src = join();
+  assert.match(src, /const asked = useRef\(0\);/);
+  assert.match(src, /const ask = \+\+asked\.current;\s+void inviteApi\.get\(slug\)\.then\(\(g\) => g\.ok && ask === asked\.current && setLoad\(/, "an older answer's refresh is dropped");
+  assert.equal(src.match(/setLoad\(/g)?.length, 2, "the first load and the guarded refresh: nothing else sets the page");
 });
 
 test("T58-J10 tripApi: startInvite is a PUT, stopInvite a DELETE", async () => {

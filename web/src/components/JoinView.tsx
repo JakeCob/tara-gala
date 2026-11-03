@@ -55,6 +55,7 @@ export default function JoinView({ slug }: { slug: string }) {
   const [failed, setFailed] = useState<Failed | null>(null);
   const [photo, setPhoto] = useState<Blob | null>(null);
   const holding = useRef(false);
+  const asked = useRef(0); // TG-54: only the newest refresh may land, so an older answer never replaces a newer one
   const picker = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -127,7 +128,8 @@ export default function JoinView({ slug }: { slug: string }) {
     setChanging(false);
     setName("");
     // The count and the list move on with this answer
-    void inviteApi.get(slug).then((g) => g.ok && setLoad({ state: "ready", invite: g.value }));
+    const ask = ++asked.current;
+    void inviteApi.get(slug).then((g) => g.ok && ask === asked.current && setLoad({ state: "ready", invite: g.value }));
     focusTitle();
   }
 
@@ -202,8 +204,8 @@ export default function JoinView({ slug }: { slug: string }) {
             <p className="text-base break-words">{`Thanks for telling the group, ${saved.name}.`}</p>
           )}
           <div className="flex flex-wrap gap-2">
-            <PixelButton variant="secondary" className="px-4" onClick={onChange}>Change my answer</PixelButton>
-            <PixelButton variant="secondary" className="px-4" onClick={onNotMe}>{`Not ${saved.name}?`}</PixelButton>
+            <PixelButton variant="secondary" className="px-4" aria-disabled={off} onClick={() => !holding.current && onChange()}>Change my answer</PixelButton>
+            <PixelButton variant="secondary" className="px-4" aria-disabled={off} onClick={() => !holding.current && onNotMe()}>{`Not ${saved.name}?`}</PixelButton>
           </div>
         </PixelBox>
       </div>
