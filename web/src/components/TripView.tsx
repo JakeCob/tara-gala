@@ -149,7 +149,9 @@ export default function TripView({ slug }: { slug: string }) {
 
   /** A write with no notice, for controls that show their own result (TG-58). */
   async function apply(action: string, op: () => Promise<TripResult>): Promise<TripResult> {
+    setBusy(true); // one write at a time on the page: each answer is the whole trip, so two could land out of order (TG-54)
     const r = await op();
+    setBusy(false);
     console.info("[tg-trip] %s ok=%s", action, r.ok ? "yes" : r.why);
     if (!r.ok) return r;
     shownAt.current = Date.now();
@@ -166,7 +168,7 @@ export default function TripView({ slug }: { slug: string }) {
     <div className="flex flex-col gap-6">
     <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start">
       <TripHeader trip={trip} busy={busy} write={write} />
-      <TripPeople trip={trip} plan={slot} apply={apply} />
+      <TripPeople trip={trip} plan={slot} busy={busy} apply={apply} />
     </div>
     {slot === "frame" && (
       <section data-map-loading aria-label="Trip progress" aria-busy="true" className="flex flex-col gap-3">

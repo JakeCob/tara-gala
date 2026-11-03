@@ -306,3 +306,26 @@ test("T58-W30 confirms: the remove sentence, the photo's, and none on Undo", () 
   assert.ok(undo.length > 0);
   assert.doesNotMatch(undo, /confirm/);
 });
+
+test("T58-W31 one write at a time on the page (review M1): the box's writes set busy, and it refuses while busy", () => {
+  const src = box();
+  const save = src.slice(src.indexOf("async function save("), src.indexOf("async function onAdd("));
+  assert.match(save, /if \(busy\) \{\s+console\.info\("\[tg-trip\] %s refused, another write is out", action\);[^\n]*\s+return null;\s+\}/, "a write elsewhere on the page holds the box too, and says so in the log");
+  assert.ok(save.indexOf("if (busy)") < save.indexOf("holding.current = true;"), "before the box takes its own hold");
+  assert.match(src, /const off = saving \|\| busy \|\| undefined;/, "its controls look held while any write is out");
+  const v = view();
+  const apply = v.slice(v.indexOf("async function apply("), v.indexOf("const onFail ="));
+  assert.ok(apply.indexOf("setBusy(true);") >= 0 && apply.indexOf("setBusy(true);") < apply.indexOf("await op()"), "busy before the write leaves");
+  assert.ok(apply.indexOf("setBusy(false);") > apply.indexOf("await op()"), "and clear once its answer is back");
+  assert.match(v, /<TripPeople trip=\{trip\} plan=\{slot\} busy=\{busy\} apply=\{apply\} \/>/);
+});
+
+test("T58-W32 Edit the list says how to add a photo, and what a photo means, above the rows (ux must)", () => {
+  const src = box();
+  const edit = src.slice(src.indexOf('{face === "edit" && ('));
+  const hint = edit.indexOf("<p className={PX.meta}>Tap the square beside a name to add a photo.</p>");
+  const line = edit.indexOf("<p className={PX.meta}>Everyone with the trip's link sees these photos.");
+  assert.ok(hint > 0 && hint < line && line < edit.indexOf("<ul className={ROWS}>"), "the hint, then the photo line, then the rows");
+  assert.equal(src.match(/Everyone with the trip's link sees these photos/g)?.length, 1, "moved, not copied");
+  assert.ok(src.indexOf("Anyone with the trip's link can change this list.") > src.indexOf('"Close" : "Edit the list"'), "stays under Close");
+});

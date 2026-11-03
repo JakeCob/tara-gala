@@ -49,8 +49,9 @@ function Avatar({ slug, file, name }: { slug: string; file: TripFile | undefined
   );
 }
 
-export default function TripPeople({ trip, plan, apply }: {
+export default function TripPeople({ trip, plan, busy, apply }: {
   trip: Trip;
+  busy: boolean;
   plan: Guide | "frame" | null;
   apply: (action: string, op: () => Promise<TripResult>) => Promise<TripResult>;
 }) {
@@ -81,13 +82,17 @@ export default function TripPeople({ trip, plan, apply }: {
   const face = list.length === 0 ? "empty" : (open ?? "coming");
   const wide = face === "here" || face === "edit";
   const copyCount = walletNames?.wallet === walletSlug ? (walletNames?.count ?? 0) : 0;
-  const off = saving || undefined;
+  const off = saving || busy || undefined;
   const fileOf = (id: string) => trip.files.find((f) => f.kind === "avatar" && f.attendee_id === id);
   const problem = (row: string) => (failed?.row === row ? <Alert text={failed.text} /> : null);
 
-  /** One write at a time across the box: each answer is the whole trip, so two could land out of order and hide a tap. */
+  /** One write at a time on the page (busy is a write from elsewhere): each answer is the whole trip, so two could land out of order and hide a tap. */
   async function save(row: string, action: string, op: () => Promise<TripResult>): Promise<TripResult | null> {
     if (holding.current) return null;
+    if (busy) {
+      console.info("[tg-trip] %s refused, another write is out", action); // a tap that did nothing, for whoever asks why
+      return null;
+    }
     holding.current = true;
     setSaving(true);
     setFailed(null);
@@ -206,40 +211,44 @@ export default function TripPeople({ trip, plan, apply }: {
       )}
 
       {face === "edit" && (
-        <ul className={ROWS}>
-          {list.map((p) => {
-            const photo = fileOf(p.id);
-            return (
-              <li key={p.id} className={ROW}>
-                <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 gap-y-1 py-2">
-                  <PixelButton variant="icon" className="row-span-2 inline-flex items-center justify-center self-start" aria-label={`${photo ? "Change" : "Add"} ${p.name}'s photo`}
-                    aria-disabled={off} onClick={() => pickFor(p)}>
-                    <Avatar slug={slug} file={photo} name={p.name} />
-                  </PixelButton>
-                  <span className="min-w-0 font-semibold break-words">{p.name}</span>
-                  <PixelButton variant="icon" className="row-span-2 inline-flex items-center justify-center self-start max-[359px]:row-span-1" aria-label={`Remove ${p.name}`} aria-disabled={off} onClick={() => onRemove(p)}>
-                    <span aria-hidden="true">✕</span>
-                  </PixelButton>
-                  <select id={answerId(p.id)} aria-label={`${p.name}'s answer`} className={cx(PX.input, "w-full min-w-0 max-[359px]:col-span-2")} value={p.rsvp}
-                    onChange={(e) => save(p.id, "attendee-answer", () => tripApi.setAnswer(slug, p.id, e.target.value as Rsvp))}>
-                    {ANSWERS.map((a) => (
-                      <option key={a.value} value={a.value}>{a.label}</option>
-                    ))}
-                  </select>
-                </div>
-                {photo && (
-                  <div className="pb-2 pl-[3.25rem]">
-                    <PixelButton variant="secondary" aria-label={`Remove ${p.name}'s photo`} aria-disabled={off}
-                      onClick={() => !holding.current && window.confirm(`Remove ${p.name}'s photo? It's deleted from the server, not from phones that already saved the trip.`) && save(p.id, "avatar-remove", () => tripApi.deleteFile(slug, photo.id))}>
-                      Remove photo
+        <>
+          <p className={PX.meta}>Tap the square beside a name to add a photo.</p>
+          <p className={PX.meta}>Everyone with the trip&apos;s link sees these photos. They stay until you remove them or delete the trip. That deletes them from the server, not from phones that already saved the trip.</p>
+          <ul className={ROWS}>
+            {list.map((p) => {
+              const photo = fileOf(p.id);
+              return (
+                <li key={p.id} className={ROW}>
+                  <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 gap-y-1 py-2">
+                    <PixelButton variant="icon" className="row-span-2 inline-flex items-center justify-center self-start" aria-label={`${photo ? "Change" : "Add"} ${p.name}'s photo`}
+                      aria-disabled={off} onClick={() => pickFor(p)}>
+                      <Avatar slug={slug} file={photo} name={p.name} />
                     </PixelButton>
+                    <span className="min-w-0 font-semibold break-words">{p.name}</span>
+                    <PixelButton variant="icon" className="row-span-2 inline-flex items-center justify-center self-start max-[359px]:row-span-1" aria-label={`Remove ${p.name}`} aria-disabled={off} onClick={() => onRemove(p)}>
+                      <span aria-hidden="true">✕</span>
+                    </PixelButton>
+                    <select id={answerId(p.id)} aria-label={`${p.name}'s answer`} className={cx(PX.input, "w-full min-w-0 max-[359px]:col-span-2")} value={p.rsvp}
+                      onChange={(e) => save(p.id, "attendee-answer", () => tripApi.setAnswer(slug, p.id, e.target.value as Rsvp))}>
+                      {ANSWERS.map((a) => (
+                        <option key={a.value} value={a.value}>{a.label}</option>
+                      ))}
+                    </select>
                   </div>
-                )}
-                {problem(p.id)}
-              </li>
-            );
-          })}
-        </ul>
+                  {photo && (
+                    <div className="pb-2 pl-[3.25rem]">
+                      <PixelButton variant="secondary" aria-label={`Remove ${p.name}'s photo`} aria-disabled={off}
+                        onClick={() => !holding.current && window.confirm(`Remove ${p.name}'s photo? It's deleted from the server, not from phones that already saved the trip.`) && save(p.id, "avatar-remove", () => tripApi.deleteFile(slug, photo.id))}>
+                        Remove photo
+                      </PixelButton>
+                    </div>
+                  )}
+                  {problem(p.id)}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       {(face === "empty" || face === "edit") && (
@@ -280,12 +289,7 @@ export default function TripPeople({ trip, plan, apply }: {
         </div>
       )}
 
-      {face === "edit" && (
-        <>
-          <p className={PX.meta}>Anyone with the trip&apos;s link can change this list.</p>
-          <p className={PX.meta}>Everyone with the trip&apos;s link sees these photos. They stay until you remove them or delete the trip. That deletes them from the server, not from phones that already saved the trip.</p>
-        </>
-      )}
+      {face === "edit" && <p className={PX.meta}>Anyone with the trip&apos;s link can change this list.</p>}
     </PixelBox>
   );
 }
