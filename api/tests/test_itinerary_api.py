@@ -331,6 +331,13 @@ OTHER_ROUTES = {
     ("DELETE", "/sessions/{share_slug}/files/{file_id}"),
     ("PUT", "/sessions/{share_slug}/marks/{key}"),  # TG-52 PR 3: the shared checklist and picks
     ("DELETE", "/sessions/{share_slug}/marks/{key}"),
+    # TG-58 PR 1: the trip's list of people, under the trip's own slug
+    ("POST", "/sessions/{share_slug}/attendees"),
+    ("POST", "/sessions/{share_slug}/attendees/from-wallet"),
+    ("PATCH", "/sessions/{share_slug}/attendees/{attendee_id}"),
+    ("DELETE", "/sessions/{share_slug}/attendees/{attendee_id}"),
+    ("PUT", "/sessions/{share_slug}/attendees/{attendee_id}/arrival"),
+    ("DELETE", "/sessions/{share_slug}/attendees/{attendee_id}/arrival"),
 }
 
 

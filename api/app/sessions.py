@@ -1,6 +1,6 @@
 """Trip sessions (TG-52): one secret link for the whole trip. A session points at an itinerary (a saved or ready-made
 plan) and a shared wallet, and holds the hotel and the files the party shares (trip_files.py: tickets, payout QRs,
-the hotel's screenshot). Later PRs add check-ins and photos.
+the hotel's screenshot) and its list of people (trip_people.py).
 
 Like a wallet, a session has no owner and no accounts: anyone with its share link can read it and write to it. The
 slug is 128 random bits and is the only key. Opening a session shows its wallet's and itinerary's links too, so the
@@ -127,6 +127,7 @@ class FileOut(BaseModel):
     kind: str
     label: str
     member_id: UUID | None
+    attendee_id: UUID | None  # whose profile photo
     content_type: str
     bytes: int
     delete_after: date | None
@@ -140,6 +141,14 @@ class MarkOut(BaseModel):
     updated_at: datetime
 
 
+class AttendeeOut(BaseModel):
+    id: UUID
+    name: str
+    rsvp: str  # pending, yes or no
+    rsvp_at: datetime | None
+    arrived_at: datetime | None  # at the first meet-up
+
+
 class SessionOut(BaseModel):
     share_slug: str
     name: str
@@ -151,6 +160,7 @@ class SessionOut(BaseModel):
     hotel: HotelOut | None
     files: list[FileOut]
     marks: list[MarkOut]
+    attendees: list[AttendeeOut]
 
 
 # ---------------------------------------------------------------- database
@@ -193,12 +203,15 @@ def _load(conn, session_id: UUID) -> SessionOut:
         (session_id,),
     ).fetchone()
     files = conn.execute(
-        """select id, kind, label, member_id, content_type, bytes, delete_after, row_key, created_at from session_files
+        """select id, kind, label, member_id, attendee_id, content_type, bytes, delete_after, row_key, created_at from session_files
            where session_id = %s order by kind, created_at, id""",
         (session_id,),
     ).fetchall()
     marks = conn.execute(
         "select key, value, updated_at from session_marks where session_id = %s order by updated_at, key", (session_id,)
+    ).fetchall()
+    attendees = conn.execute(
+        "select id, name, rsvp, rsvp_at, arrived_at from session_attendees where session_id = %s order by seq", (session_id,)
     ).fetchall()
     return SessionOut(
         share_slug=s["share_slug"],
@@ -211,6 +224,7 @@ def _load(conn, session_id: UUID) -> SessionOut:
         hotel=HotelOut(**hotel) if hotel else None,
         files=[FileOut(**f) for f in files],
         marks=[MarkOut(**m) for m in marks],
+        attendees=[AttendeeOut(**a) for a in attendees],
     )
 
 
@@ -223,7 +237,7 @@ def _shape(s: SessionOut) -> str:
     days = (s.return_date - s.start_date).days + 1
     return (
         f"days={days} itinerary={'yes' if s.itinerary_slug else 'no'} wallet={'yes' if s.wallet else 'no'} "
-        f"hotel={'yes' if s.hotel else 'no'} files={len(s.files)} marks={len(s.marks)}"
+        f"hotel={'yes' if s.hotel else 'no'} files={len(s.files)} marks={len(s.marks)} attendees={len(s.attendees)}"
     )
 
 

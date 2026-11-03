@@ -377,7 +377,8 @@ def test_writes_return_the_trip_privately(client):  # A26
     aid = person(client, slug)
     first = add(client, slug, "Ben")
     copied = client.post(f"/sessions/{slug}/attendees/from-wallet")
-    calls = [first, copied] + [client.request(m, u, json=b) for m, u, b in reversed(routes(slug, aid))]
+    answer, remove, arrive, clear = routes(slug, aid)
+    calls = [first, copied] + [client.request(m, u, json=b) for m, u, b in (answer, arrive, clear, remove)]
     for r in calls:
         assert r.status_code in (200, 201), r.text
         assert r.headers["cache-control"] == "private, no-cache"
@@ -423,7 +424,7 @@ def test_logs_carry_no_names_or_times(client, caplog):  # A28
     assert "attendees=" in text
     assert f"trip attendee copy share_slug={slug} added=2 skipped=0" in text
     for reason in ("name_taken", "party_full", "unknown_attendee", "no_wallet"):
-        assert f"trip attendee refused share_slug=" in text and f"reason={reason}" in text, reason
+        assert "trip attendee refused share_slug=" in text and f"reason={reason}" in text, reason
     for secret in ("Zsazsa", "Quentin", "Xenia", "xenia", "Yolanda", "Wilhelmina", "09:47", "T01:47", "01:47"):
         assert secret not in text, secret
 
