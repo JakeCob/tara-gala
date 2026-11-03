@@ -1,7 +1,7 @@
 // TG-27 Part B: a saved itinerary opens offline, end to end (README section 6, "Offline and install").
 // Drives headless Chrome over the DevTools protocol with Node's built-in WebSocket: no dependencies.
 //
-//   node scripts/offline-e2e.mjs --origin http://localhost:3040 [--slug premade-chill] [--port 9040] [--out dir]
+//   node scripts/offline-e2e.mjs --origin http://localhost:3040 [--slug premade-food-trip] [--port 9040] [--out dir]
 //
 // It follows the four "before the trip" steps online in a fresh profile, then takes both the page and the
 // service worker offline and reloads the saved itinerary and /plan. Exits 1 on the first run with any FAIL.
@@ -19,7 +19,7 @@ import { parseArgs } from "node:util";
 const { values: args } = parseArgs({
   options: {
     origin: { type: "string", default: "http://localhost:3040" },
-    slug: { type: "string", default: "premade-chill" },
+    slug: { type: "string", default: "premade-food-trip" },
     port: { type: "string", default: "9040" },
     out: { type: "string" },
     dates: { type: "string", default: "2026-11-06,2026-11-08" },
