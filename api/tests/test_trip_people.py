@@ -77,7 +77,7 @@ def schema_shape(dsn) -> list:
         rows(dsn, "select relname, relkind::text, relrowsecurity, relforcerowsecurity from pg_class where relnamespace = 'public'::regnamespace and relkind in ('r', 'v') order by 1"),
         rows(dsn, "select tablename, policyname, cmd, roles::text, qual, with_check from pg_policies where schemaname = 'public' order by 1, 2"),
         rows(dsn, "select viewname, definition from pg_views where schemaname = 'public' order by 1"),
-        rows(dsn, "select proname, pg_get_functiondef(oid) as d from pg_proc where pronamespace = 'public'::regnamespace order by 1"),
+        rows(dsn, "select proname, pg_get_functiondef(oid) as d from pg_proc where pronamespace = 'public'::regnamespace order by 1, 2"),
         rows(dsn, "select tgrelid::regclass::text as t, tgname, pg_get_triggerdef(oid) as d from pg_trigger where not tgisinternal order by 1, 2"),
     ]
 
