@@ -119,7 +119,8 @@ def test_t60_3_daily_churn_changes_no_rows(dsn):
         assert row_ids(dsn) == before, f"rows changed on day +{shift}"
 
 
-def test_t60_4_the_owners_plan_and_premades_stay_valid_without_a_reload(dsn, client, tmp_path):
+@pytest.mark.parametrize("out_gone, back_gone", [([FRI], [SUN]), ([FRI, NEXT_FRI], [SUN, NEXT_SUN])], ids=["one", "both"])
+def test_t60_4_the_owners_plan_and_premades_stay_valid_without_a_reload(dsn, client, tmp_path, out_gone, back_gone):
     shutil.copy(ROOT / "data" / "spots.csv", tmp_path / "spots.csv")
     shutil.copy(ROOT / "data" / "last_mile_routes.csv", tmp_path / "last_mile_routes.csv")
     (tmp_path / "routes_trips.csv").write_text("", encoding="utf-8")
@@ -127,7 +128,7 @@ def test_t60_4_the_owners_plan_and_premades_stay_valid_without_a_reload(dsn, cli
     scrape(dsn)
     assert load_itinerary.run(dsn, ITINERARY, dry_run=False) == 0
     assert load_premade.run(dsn, load_premade.DEFAULT_FILE, dry_run=False, prune=False) == 0
-    scrape(dsn, later(1), out_missing=[FRI], back_sold_out=[SUN])
+    scrape(dsn, later(1), out_gone, back_gone)
     with psycopg.connect(dsn) as conn:
         stored = conn.execute("select plan, trip_date, return_date from itineraries where share_slug = %s", (OWNER_SLUG,)).fetchone()
         plan = {k: v for k, v in stored[0].items() if k != "guide"}
@@ -137,24 +138,35 @@ def test_t60_4_the_owners_plan_and_premades_stay_valid_without_a_reload(dsn, cli
     assert len(client.get("/premade-itineraries").json()) == len(in_file) > 0, "a plan is hidden"
 
 
-# ---------------------------------------------------------------- when a weekday really goes
+# ---------------------------------------------------------------- a weekday never goes on a scrape's word
 
-def test_t60_5_a_weekday_goes_only_when_every_date_of_it_is_missing(dsn, client):
+def test_t60_5_one_scrape_never_takes_a_weekday_off_a_weekly_row(dsn, client):
+    """Both Saturdays of the window sold out. The review and audit's G1: VL doesn't relist a sold-out date."""
     only_out(dsn)
     [(row_id, *_)] = fc(dsn, "10:15", TO_LEG)
     lines = []
-    days = window(later(1))
-    saturdays = [d for d in days if d.weekday() == 5]
+    saturdays = [d for d in window(later(1)) if d.weekday() == 5]
     assert len(saturdays) == 2
     only_out(dsn, 1, saturdays, log=lines.append)
-    [(again, days_after, *_)] = fc(dsn, "10:15", TO_LEG)
-    assert (again, sorted(days_after)) == (row_id, sorted(ALL_WEEK - {6}))
-    assert shows(client, SAT, "10:15") == 0
-    assert any(line.startswith("  weekly: vl-cubao->vl-baguio first_class 10:15") for line in lines)
+    assert [(r[0], sorted(r[1]), r[2], r[4]) for r in fc(dsn, "10:15", TO_LEG)] == [(row_id, sorted(ALL_WEEK), None, True)]
+    assert shows(client, SAT, "10:15") == 1
+    assert not [line for line in lines if "weekly:" in line], "the row didn't change"
+    assert "  not listed: vl-cubao->vl-baguio first_class 10:15 on 2026-11-07, 2026-11-14 (kept)" in lines
 
 
-def test_t60_6_one_required_date_is_not_enough_to_drop_a_weekday():
-    """Today is exempt for an early bus, so its weekday has one required date left: one miss proves nothing."""
+def test_t60_5b_the_sold_out_date_stays_when_only_the_later_one_is_relisted(dsn, client):
+    """Audit G1, the next morning: Nov 14 is back, Nov 7 stays sold out and is never relisted."""
+    only_out(dsn)
+    only_out(dsn, 1, [SAT, SAT + timedelta(days=7)])
+    only_out(dsn, 2, [SAT])
+    [row] = fc(dsn, "10:15", TO_LEG)
+    assert (sorted(row[1]), row[2]) == (sorted(ALL_WEEK), None)
+    assert shows(client, SAT, "10:15") == 1
+    assert shows(client, SAT + timedelta(days=7), "10:15") == 1
+
+
+def test_t60_6_only_required_dates_count_as_not_listed():
+    """Today is exempt for an early bus, so its absence today is no evidence. Next Tuesday's is."""
     days = window()
     tuesday_next = days[7]
     early = [o for d in days if d not in (days[0], tuesday_next) for o in vl.parse_response(OUT[:1], *TO_LEG, d)]
@@ -162,17 +174,15 @@ def test_t60_6_one_required_date_is_not_enough_to_drop_a_weekday():
     assert dep < (NOW + vl.TODAY_MARGIN).time()
     every_day = [o for d in days for o in vl.parse_response(OUT[-1:], *TO_LEG, d)]  # so the leg answered on both dates
     spec = vl.aggregate(early + every_day, days, verified_at=NOW)[(*TO_LEG, early[0].service_class)]
-    assert 2 not in spec.absent.get(dep, set())
-    assert tuesday_next in spec.not_listed[dep]
+    assert spec.not_listed[dep] == {tuesday_next}
 
 
-def test_t60_7_aggregate_reports_absent_weekdays_and_not_listed_dates():
+def test_t60_7_aggregate_reports_dates_and_not_listed_dates():
     days = window()
     gone = [d for d in days if d.weekday() == 5]
     obs = out_obs(days, gone + [FRI])
     spec = vl.aggregate(obs, days, verified_at=NOW)[(*TO_LEG, FC)]
     dep = next(o.departure for o in obs if o.departure.strftime("%H:%M") == "10:15")
-    assert spec.absent[dep] == {6}  # both Saturdays missing; Friday was listed on Nov 13
     assert spec.not_listed[dep] == {*gone, FRI}
     assert spec.dates[dep] == set(days) - {*gone, FRI}
 
@@ -468,4 +478,3 @@ def test_t60_r1_the_rule_is_written_down():
     for words in ("not listed", "3 days", "last_verified_at", "load_itinerary.py", "load_premade.py"):
         assert words in section, words
     assert vl.RETIRE_AFTER_DAYS == 3
-    assert vl.MIN_ABSENT_DATES == 2

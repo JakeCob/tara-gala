@@ -438,16 +438,17 @@ def test_t9_14_one_off_log_lines_and_count(dsn):
 
 
 def test_log_names_weekday_changes_and_deactivations_only_when_they_happen(dsn):
-    """Log pass: the cron log says which weekly trip lost a weekday and which trips were deactivated."""
+    """Log pass: the cron log says which weekly trip gained a weekday and which trips were deactivated."""
     extra = seen(D, [SAT1])
-    run(dsn, daily() + extra + seen(B, [SAT1, SAT2]) + seen(C, [*FRIDAYS, SAT1, SAT2]))
+    run(dsn, daily() + extra + seen(B, [SAT1, SAT2]) + seen(C, FRIDAYS))
     lines = []
-    run(dsn, daily() + extra + seen(C, FRIDAYS), now=GRACE, log=lines.append)
-    assert "  weekly: vl-cubao->vl-baguio regular_aircon 15:00 days [5, 6] -> [5]" in lines
+    both = seen(C, [*FRIDAYS, SAT1, SAT2])
+    run(dsn, daily() + extra + both, now=GRACE, log=lines.append)
+    assert "  weekly: vl-cubao->vl-baguio regular_aircon 15:00 days [5] -> [5, 6]" in lines
     assert "  deactivated: vl-cubao->vl-baguio regular_aircon 13:00 weekly" in lines
     assert not any("07:00" in line for line in lines), "an unchanged weekly trip prints nothing"
     again = []
-    run(dsn, daily() + extra + seen(C, FRIDAYS), now=GRACE, log=again.append)
+    run(dsn, daily() + extra + both, now=GRACE, log=again.append)
     assert not [line for line in again if "weekly:" in line or "deactivated:" in line], "a stable rerun is quiet"
     shifted = [d + timedelta(days=4) for d in WINDOW]
     gone = []

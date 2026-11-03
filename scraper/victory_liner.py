@@ -53,10 +53,8 @@ DELAY_SECONDS = 2.0
 # Today counts as a required date only for departures at least this long after the scrape: earlier buses may
 # already have left or closed online sales. A guess until a few real 04:00 runs are compared (TG-9).
 TODAY_MARGIN = timedelta(hours=3)
-# Sold-out trips vanish from the API, so one missing date proves nothing (TG-60). A weekly row loses a weekday only
-# when at least this many dates of it came back without the departure, and none with it...
-MIN_ABSENT_DATES = 2
-# ...and a departure listed nowhere in the window is retired once it's gone this many days without a sighting.
+# Sold-out trips vanish from the API and a sold-out date isn't relisted, so no scrape takes a weekday off a weekly row
+# (TG-60). Only a departure listed nowhere in the window retires, once it's gone this many days without a sighting.
 RETIRE_AFTER_DAYS = 3
 CLASS_MAP = {
     "REGULAR AIRCON": "regular_aircon",
@@ -105,8 +103,8 @@ class Observation:
 class RouteSpec:
     """One route's aggregate. trips holds only departures with at least one REGULAR weekday (the recurring row);
     a departure seen only on one-off dates is absent from trips and present only in one_off.
-    Use departures() for every departure on the route. dates, not_listed and absent are this run's evidence, which
-    apply() weighs against the rows already saved."""
+    Use departures() for every departure on the route. dates and not_listed are this run's evidence, which apply()
+    weighs against the rows already saved."""
 
     fare: float
     minutes: int
@@ -115,7 +113,6 @@ class RouteSpec:
     one_off: dict[time, set[date]] = field(default_factory=dict)  # departure -> dated-only days
     dates: dict[time, set[date]] = field(default_factory=dict)  # departure -> every date it was listed
     not_listed: dict[time, set[date]] = field(default_factory=dict)  # departure -> required dates it wasn't listed
-    absent: dict[time, set[int]] = field(default_factory=dict)  # departure -> weekdays missing on all their dates
 
     def departures(self) -> set[time]:
         return self.trips.keys() | self.one_off.keys()
@@ -275,8 +272,6 @@ def aggregate(
             spec.dates[dep] = set(dep_days)
             if not_listed := required - dep_days:
                 spec.not_listed[dep] = not_listed
-            if absent := {w for w, ds in required_by_dow.items() if len(ds) >= MIN_ABSENT_DATES and not ds & dep_days}:
-                spec.absent[dep] = absent
         routes[key] = spec
     return routes
 
@@ -371,7 +366,7 @@ def apply(
     """Upsert into the open transaction. Matching keys follow data/load_data.py.
 
     Saved plans hold trip ids, so rows stay put (TG-60; README section 4). For a departure the API listed this run:
-    - its weekly row keeps its id and its days, and gains regular ones. A weekday goes only if it's in spec.absent.
+    - its weekly row keeps its id and its days, and gains regular ones. It never loses a weekday on a scrape's word.
     - a listed date outside those days gets a dated row, as aggregate() decided; a dated row that wasn't listed stays
       until its date passes, or until the weekly row takes that weekday over.
     A departure listed nowhere in the window goes after RETIRE_AFTER_DAYS without a sighting. Only a listing updates
@@ -448,7 +443,7 @@ def apply(
             ours = next((id_ for id_, src, vf in existing if src == "scraped" and vf is None), None)
             saved_days = set(old_weekly[ours][0]) if ours and old_weekly[ours][1] else set()
             manual_days = _manual_weekdays(manual, today)
-            days = sorted(((saved_days - spec.absent.get(dep, set())) | spec.trips.get(dep, set())) - manual_days)
+            days = sorted((saved_days | spec.trips.get(dep, set())) - manual_days)
             for d in sorted(spec.dates[dep]):
                 if _dow(d) in days or _manual_covers(manual, d):
                     continue
