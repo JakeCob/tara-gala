@@ -260,6 +260,7 @@ create table trip_sessions (
   itinerary_id  uuid references itineraries(id) on delete set null,
   wallet_id     uuid references wallets(id) on delete set null,
   created_at    timestamptz not null default now(),
+  invite_slug   text unique check (invite_slug ~ '^[0-9a-f]{32}$'),  -- TG-58: the limited invite link, null until turned on
   check (return_date between start_date and start_date + 30)
 );
 
@@ -276,14 +277,30 @@ create table session_hotels (
   check (check_out is null or check_in is null or check_out > check_in)
 );
 
+-- The trip's list of people (TG-58): names, their answer and when they reached the first meet-up. Separate from the
+-- wallet's members; the API can copy the wallet's names in once, and nothing links the two lists.
+create table session_attendees (
+  id          uuid primary key default gen_random_uuid(),
+  seq         bigint generated always as identity,  -- keeps the list in the order it was entered
+  session_id  uuid not null references trip_sessions(id) on delete cascade,
+  name        text not null check (char_length(name) between 1 and 30),
+  rsvp        text not null default 'pending' check (rsvp in ('pending', 'yes', 'no')),
+  rsvp_at     timestamptz,
+  arrived_at  timestamptz,  -- at the first meet-up
+  created_at  timestamptz not null default now(),
+  check ((rsvp = 'pending') = (rsvp_at is null))
+);
+create unique index session_attendees_name on session_attendees (session_id, lower(name));
+
 -- Files the party shares on a trip (TG-52 PR 2): bus tickets, each person's payout QR and the hotel's booking
--- screenshot, and the trip's photos (PR 4). The bytes live in a private Supabase Storage bucket at storage_path
--- ("<session id>/<file id>"); the API serves them to people with the trip's link. Tickets, QRs and the hotel
--- screenshot are deleted 14 days after the trip (delete_after); photos stay until someone deletes them.
+-- screenshot, the trip's photos (PR 4), and each attendee's profile photo (TG-58). The bytes live in a private
+-- Supabase Storage bucket at storage_path ("<session id>/<file id>"); the API serves them to people with the trip's
+-- link. Tickets, QRs and the hotel screenshot are deleted 14 days after the trip (delete_after); photos and profile
+-- photos stay until someone deletes them or the trip.
 create table session_files (
   id            uuid primary key default gen_random_uuid(),
   session_id    uuid not null references trip_sessions(id) on delete cascade,
-  kind          text not null check (kind in ('ticket', 'payout_qr', 'hotel_proof', 'photo')),
+  kind          text not null check (kind in ('ticket', 'payout_qr', 'hotel_proof', 'photo', 'avatar')),
   member_id     uuid references wallet_members(id) on delete cascade,  -- whose payout QR
   label         text not null default '' check (char_length(label) <= 40),
   storage_path  text unique not null,
@@ -292,11 +309,14 @@ create table session_files (
   delete_after  date,
   row_key       text check (row_key ~ '^d[1-9]-[0-9]{2}$'),  -- a photo's checklist row: where the group was (PR 4)
   created_at    timestamptz not null default now(),
-  check ((kind = 'payout_qr') = (member_id is not null))
+  attendee_id   uuid references session_attendees(id) on delete cascade,  -- whose profile photo (TG-58)
+  check ((kind = 'payout_qr') = (member_id is not null)),
+  constraint session_files_avatar_attendee check ((kind = 'avatar') = (attendee_id is not null))
 );
 create index session_files_session on session_files (session_id);
 create unique index session_files_one_qr on session_files (session_id, member_id) where kind = 'payout_qr';
 create unique index session_files_one_proof on session_files (session_id) where kind = 'hotel_proof';
+create unique index session_files_one_avatar on session_files (attendee_id) where kind = 'avatar';
 
 -- The trip's shared checklist and picks (TG-52 PR 3): a tick on a day row of the itinerary's guide ("row:d2-05"), a
 -- tick on a to-do ("todo:03"), or a pick ("pick:sunrise" = "B"). Unticking deletes the row. Keys come from the guide.
@@ -373,6 +393,7 @@ alter table expense_shares     enable row level security;
 alter table settlements        enable row level security;
 alter table trip_sessions      enable row level security;
 alter table session_hotels     enable row level security;
+alter table session_attendees  enable row level security;
 alter table session_files      enable row level security;
 alter table session_marks      enable row level security;
 
@@ -387,6 +408,7 @@ create policy public_read on last_mile_routes   for select using (true);
 -- itineraries: no public policy (TG-32). Party names are private; share links are served by the API.
 -- wallets, wallet_members, expenses, expense_shares, settlements: no public policy (TG-50). Same as itineraries.
 -- trip_sessions, session_hotels, session_files, session_marks: no public policy (TG-52). Same as the wallets.
+-- session_attendees: no public policy (TG-58). It holds names.
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP

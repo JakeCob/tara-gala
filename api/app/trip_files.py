@@ -1,6 +1,7 @@
 """Files a trip's party shares (TG-52 PR 2): bus tickets, each person's payout QR, and the hotel's booking screenshot.
 PR 4 adds the trip's photos: shrunk on the phone, tagged with the checklist row the group was at, seen and deletable by
-anyone with the link, and kept until someone deletes them (owner, 2026-11-01).
+anyone with the link, and kept until someone deletes them (owner, 2026-11-01). TG-58 adds each attendee's profile
+photo, one per person, kept until the trip is deleted (owner, 2026-11-03).
 
 Owner decision (2026-11-01, "share both"): tickets and payout QRs are uploaded to the trip, reversing TG-50's
 on-phone rule, so everyone with the trip's link sees them. To keep that exposure short, tickets, QRs and the hotel's
@@ -30,10 +31,12 @@ router = APIRouter(tags=["trip-files"])
 logger = logging.getLogger("tara_gala.api")
 
 MANILA = ZoneInfo("Asia/Manila")
-KINDS = ("ticket", "payout_qr", "hotel_proof", "photo")
+KINDS = ("ticket", "payout_qr", "hotel_proof", "photo", "avatar")
+KEPT = ("photo", "avatar")  # no delete_after: the sweep leaves them
 ROW_KEY = re.compile(r"^d[1-9]-[0-9]{2}$")
 MAX_TICKETS = 30
 MAX_PHOTOS = 300  # about 90 MB at the phone's ~300 KB each: inside the free 1 GB
+MAX_AVATAR_BYTES = 200_000  # far above the phone's 256px JPEG, so only a hand-made request reaches it
 NOT_FOUND = "File not found"
 UPLOADS_PER_HOUR = 120
 UPLOAD_LIMITER = RateLimiter(UPLOADS_PER_HOUR)
@@ -42,7 +45,17 @@ PHOTO_LIMITER = RateLimiter(PHOTOS_PER_HOUR)
 SWEEP_EVERY_SECONDS = 3600
 
 
-def _save(share_slug: str, kind: str, label: str, member_id: UUID | None, content_type: str, data: bytes, row_key: str | None = None) -> SessionOut:
+def _save(
+    share_slug: str,
+    kind: str,
+    label: str,
+    member_id: UUID | None,
+    content_type: str,
+    data: bytes,
+    row_key: str | None = None,
+    attendee_id: UUID | None = None,
+    only_new: bool = False,  # an avatar only fills an empty slot, it doesn't replace one
+) -> SessionOut:
     replaced: list[str] = []
     with db.get_conn() as conn:
         session_id = _session_id(conn, share_slug, lock=True)
@@ -63,6 +76,17 @@ def _save(share_slug: str, kind: str, label: str, member_id: UUID | None, conten
             replaced = [r["storage_path"] for r in conn.execute(
                 "delete from session_files where session_id = %s and kind = 'hotel_proof' returning storage_path", (session_id,)
             )]
+        elif kind == "avatar":
+            on_trip = conn.execute("select 1 from session_attendees where id = %s and session_id = %s", (attendee_id, session_id)).fetchone()
+            if not on_trip:
+                logger.info("trip file refused share_slug=%s kind=%s reason=unknown_attendee", share_slug, kind)
+                raise HTTPException(422, "unknown_attendee")
+            if only_new and conn.execute("select 1 from session_files where attendee_id = %s and kind = 'avatar'", (attendee_id,)).fetchone():
+                logger.info("trip file refused share_slug=%s kind=%s reason=photo_taken", share_slug, kind)
+                raise HTTPException(409, "photo_taken")
+            replaced = [r["storage_path"] for r in conn.execute(
+                "delete from session_files where attendee_id = %s and kind = 'avatar' returning storage_path", (attendee_id,)
+            )]
         else:
             cap, detail = (MAX_PHOTOS, "too_many_photos") if kind == "photo" else (MAX_TICKETS, "too_many_tickets")
             count = conn.execute("select count(*) as n from session_files where session_id = %s and kind = %s", (session_id, kind)).fetchone()["n"]
@@ -77,10 +101,10 @@ def _save(share_slug: str, kind: str, label: str, member_id: UUID | None, conten
             logger.warning("trip file upload failed share_slug=%s kind=%s bytes=%d", share_slug, kind, len(data))
             raise HTTPException(503, "storage_unavailable") from None
         conn.execute(
-            """insert into session_files (id, session_id, kind, member_id, label, storage_path, content_type, bytes, delete_after, row_key)
-               values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (file_id, session_id, kind, member_id, label, path, content_type, len(data),
-             None if kind == "photo" else trip["return_date"] + timedelta(days=RETAIN_DAYS), row_key),
+            """insert into session_files (id, session_id, kind, member_id, attendee_id, label, storage_path, content_type, bytes, delete_after, row_key)
+               values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (file_id, session_id, kind, member_id, attendee_id, label, path, content_type, len(data),
+             None if kind in KEPT else trip["return_date"] + timedelta(days=RETAIN_DAYS), row_key),
         )
         session = _load(conn, session_id)
     _forget(replaced, share_slug)
@@ -98,15 +122,34 @@ def _forget(paths: list[str], share_slug: str) -> None:
         logger.warning("trip file storage cleanup failed share_slug=%s count=%d", share_slug, len(paths))
 
 
+async def image_body(request: Request, share_slug: str, kind: str, limit: int = MAX_BYTES) -> tuple[str, bytes]:
+    """The request's image and its sniffed type, or 413 or 422. Stops reading past `limit`, Content-Length or not."""
+    declared = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    size = int(request.headers.get("content-length") or 0)
+    if size > limit:
+        raise HTTPException(413, "too_big")
+    data = bytearray()
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > limit:
+            raise HTTPException(413, "too_big")
+    sniffed = sniff(bytes(data))
+    if sniffed is None or sniffed != declared:
+        logger.info("trip file refused share_slug=%s kind=%s reason=not_an_image bytes=%d", share_slug, kind, len(data))
+        raise HTTPException(422, "not_an_image")
+    return sniffed, bytes(data)
+
+
 @router.post("/sessions/{share_slug}/files", status_code=201, response_model=SessionOut)
 async def add_file(
     share_slug: str,
     request: Request,
     response: Response,
-    kind: str = Query(..., description="ticket, payout_qr, hotel_proof or photo"),
+    kind: str = Query(..., description="ticket, payout_qr, hotel_proof, photo or avatar"),
     label: str = Query("", max_length=200),
     member_id: UUID | None = Query(None, description="whose payout QR"),
     row_key: str | None = Query(None, description="a photo's checklist row, e.g. d2-05"),
+    attendee_id: UUID | None = Query(None, description="whose profile photo"),
 ) -> SessionOut:
     _limit(PHOTO_LIMITER if kind == "photo" else UPLOAD_LIMITER, request, "file-add")
     if kind not in KINDS:
@@ -124,18 +167,11 @@ async def add_file(
         raise HTTPException(422, "bad_row_key")
     if (kind == "payout_qr") != (member_id is not None):
         raise HTTPException(422, "unknown_member")
-    declared = request.headers.get("content-type", "").split(";")[0].strip().lower()
-    size = int(request.headers.get("content-length") or 0)
-    if size > MAX_BYTES:
-        raise HTTPException(413, "too_big")
-    data = await request.body()
-    if len(data) > MAX_BYTES:
-        raise HTTPException(413, "too_big")
-    sniffed = sniff(data)
-    if sniffed is None or sniffed != declared:
-        logger.info("trip file refused share_slug=%s kind=%s reason=not_an_image bytes=%d", share_slug, kind, len(data))
-        raise HTTPException(422, "not_an_image")
-    session = await run_in_threadpool(_save, share_slug, kind, label, member_id, sniffed, data, row_key)
+    if (kind == "avatar") != (attendee_id is not None):
+        logger.info("trip file refused share_slug=%s kind=%s reason=unknown_attendee", share_slug, kind)
+        raise HTTPException(422, "unknown_attendee")
+    sniffed, data = await image_body(request, share_slug, kind, MAX_AVATAR_BYTES if kind == "avatar" else MAX_BYTES)
+    session = await run_in_threadpool(_save, share_slug, kind, label, member_id, sniffed, data, row_key, attendee_id)
     _private(response)
     return session
 

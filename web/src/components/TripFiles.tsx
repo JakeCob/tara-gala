@@ -14,7 +14,7 @@ export const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 export const THUMB_BOX = "h-24 w-[72px] shrink-0 border-2 border-frame bg-screen-paper object-cover object-top";
 
 /** One shared picture, fetched once (the service worker keeps a copy for offline). */
-function useFile(slug: string, file: TripFile | undefined) {
+export function useFile(slug: string, file: TripFile | undefined) {
   const [got, setGot] = useState<{ id: string; blob: Blob | null } | null>(null);
   const id = file?.id; // by id: a poll or write brings new objects for the same files
   useEffect(() => {

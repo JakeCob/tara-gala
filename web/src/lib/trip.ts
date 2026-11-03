@@ -4,6 +4,7 @@
 import { API_URL, savedAnswer } from "./api.ts";
 import type { Guide, Mark } from "./guide.ts";
 import { SLUG_PATTERN } from "./itinerary.ts";
+import type { Attendee, Rsvp } from "./people.ts";
 import { WALLET_SLUG } from "./wallet.ts";
 
 export const TRIP_SLUG = /^[0-9a-f]{32}$/; // the API's SLUG, 128 random bits in hex
@@ -17,7 +18,7 @@ export type Hotel = {
   booking_ref: string;
   notes: string;
 };
-export type FileKind = "ticket" | "payout_qr" | "hotel_proof" | "photo";
+export type FileKind = "ticket" | "payout_qr" | "hotel_proof" | "photo" | "avatar";
 /** A file the party shares on the trip (PR 2): its bytes come from fileUrl(). */
 export type TripFile = {
   id: string;
@@ -28,6 +29,7 @@ export type TripFile = {
   bytes: number;
   delete_after: string | null;
   row_key: string | null; // a photo's checklist row ("d2-05")
+  attendee_id: string | null; // whose picture an avatar is (TG-58)
   created_at: string;
 };
 export const MAX_FILE_BYTES = 5 * 1024 * 1024; // the API's cap
@@ -44,6 +46,8 @@ export type Trip = {
   hotel: Hotel | null;
   files: TripFile[];
   marks: Mark[]; // PR 3: the shared checklist's ticks and the picks
+  attendees?: Attendee[]; // TG-58: absent on a saved copy from before it, so read it through peopleOf
+  invite_slug?: string | null; // TG-58 PR 2
 };
 
 // ---------------------------------------------------------------- pure
@@ -162,6 +166,10 @@ const DETAIL: Record<string, string> = {
   unknown_member: "That person isn't in this trip's wallet. Refresh and try again.",
   unknown_key: "That row isn't in this trip's plan any more. Refresh and try again.",
   no_guide: "This trip's plan has no checklist.",
+  name_taken: "Someone on the list already has that name.",
+  party_full: "The list is full: it holds up to 30 people.",
+  unknown_attendee: "That person isn't on the list any more. Refresh and try again.",
+  no_wallet: "This trip has no wallet to copy names from.",
 };
 
 /** One plain sentence for a failed call. */
@@ -208,6 +216,7 @@ async function call(path: string, init?: { method: Method; body?: unknown; raw?:
 }
 
 const at = (slug: string) => `/sessions/${encodeURIComponent(slug)}`;
+const attendee = (slug: string, id: string) => `${at(slug)}/attendees/${encodeURIComponent(id)}`;
 const one = (p: Promise<TripResult | { ok: true; trip: null }>) => p as Promise<TripResult>;
 
 /** The worker's saved copy of this trip, for the screen to show while the GET is out (TG-57). */
@@ -230,11 +239,12 @@ export const tripApi = {
   removeHotel: (slug: string) => one(call(`${at(slug)}/hotel`, { method: "DELETE" })),
   remove: (slug: string, name: string) => call(at(slug), { method: "DELETE", body: { name } }),
   /** Uploads one picture as the raw body; the rest rides in the query (no multipart). */
-  addFile: (slug: string, kind: FileKind, picture: Blob, opts: { label?: string; member_id?: string; row_key?: string } = {}) => {
+  addFile: (slug: string, kind: FileKind, picture: Blob, opts: { label?: string; member_id?: string; row_key?: string; attendee_id?: string } = {}) => {
     const q = new URLSearchParams({ kind });
     if (opts.label) q.set("label", opts.label);
     if (opts.member_id) q.set("member_id", opts.member_id);
     if (opts.row_key) q.set("row_key", opts.row_key);
+    if (opts.attendee_id) q.set("attendee_id", opts.attendee_id);
     return one(call(`${at(slug)}/files?${q}`, { method: "POST", raw: picture }));
   },
   /** Tick a row or to-do ("done"), or make a pick ("B"); anyone can, in any order */
@@ -242,6 +252,14 @@ export const tripApi = {
     one(call(`${at(slug)}/marks/${encodeURIComponent(key)}`, { method: "PUT", body: { value } })),
   unmark: (slug: string, key: string) => one(call(`${at(slug)}/marks/${encodeURIComponent(key)}`, { method: "DELETE" })),
   deleteFile: (slug: string, id: string) => one(call(`${at(slug)}/files/${encodeURIComponent(id)}`, { method: "DELETE" })),
+  addAttendee: (slug: string, name: string) => one(call(`${at(slug)}/attendees`, { method: "POST", body: { name } })),
+  /** Copies the attached wallet's names once; nothing links them afterwards */
+  copyWalletNames: (slug: string) => one(call(`${at(slug)}/attendees/from-wallet`, { method: "POST" })),
+  setAnswer: (slug: string, id: string, rsvp: Rsvp) => one(call(attendee(slug, id), { method: "PATCH", body: { rsvp } })),
+  removeAttendee: (slug: string, id: string) => one(call(attendee(slug, id), { method: "DELETE" })),
+  /** With no `at`, the server's time, and a second tap keeps the first. `at` is a correction, as Manila wall time */
+  arrive: (slug: string, id: string, at?: string) => one(call(`${attendee(slug, id)}/arrival`, { method: "PUT", body: at ? { at } : {} })),
+  clearArrival: (slug: string, id: string) => one(call(`${attendee(slug, id)}/arrival`, { method: "DELETE" })),
 };
 
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;

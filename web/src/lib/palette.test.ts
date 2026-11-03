@@ -304,6 +304,7 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/TripView.tsx", "{notice.text}", "alertText"], // TG-52: a write that failed
   ["src/components/TripView.tsx", "No signal, and this trip", "alertText"], // TG-52: the trip didn't load
   ["src/components/TripView.tsx", "{text}", "alertText"], // TG-52: a form's problem (plan or wallet link, hotel, dates, delete)
+  ["src/components/TripPeople.tsx", "{text}", "alertText"], // TG-58: a failed write, under its row or form
 ];
 const tsxFiles = () =>
   git("ls-files", "src/**/*.tsx", "src/*.tsx").split("\n").filter(Boolean).map((f) => f.replace(/^web\//, ""));
