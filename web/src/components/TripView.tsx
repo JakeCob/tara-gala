@@ -10,6 +10,7 @@ import {
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
+import TripPeople from "./TripPeople";
 import { fetchItinerary, savedItinerary } from "@/lib/api";
 import { fitPhoto } from "@/lib/shrink";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
@@ -140,19 +141,22 @@ export default function TripView({ slug }: { slug: string }) {
   async function write(action: string, op: () => Promise<TripResult>, done: string): Promise<boolean> {
     setBusy(true);
     setNotice(null);
-    const r = await op();
+    const r = await apply(action, op);
     setBusy(false);
+    setNotice(r.ok ? { text: done, error: false } : { text: tripFailureMessage(r), error: true });
+    return r.ok;
+  }
+
+  /** A write with no notice, for controls that show their own result (TG-58). */
+  async function apply(action: string, op: () => Promise<TripResult>): Promise<TripResult> {
+    const r = await op();
     console.info("[tg-trip] %s ok=%s", action, r.ok ? "yes" : r.why);
-    if (!r.ok) {
-      setNotice({ text: tripFailureMessage(r), error: true });
-      return false;
-    }
+    if (!r.ok) return r;
     shownAt.current = Date.now();
     setLoad({ state: "ready", trip: r.trip });
     remember(r.trip);
-    setNotice({ text: done, error: false });
     void tripApi.get(slug); // the service worker saves GETs, not this write: refresh the offline copy
-    return true;
+    return r;
   }
 
   const onFail = (text: string) => setNotice({ text, error: true });
@@ -160,7 +164,10 @@ export default function TripView({ slug }: { slug: string }) {
   const theGuide = slot === "frame" ? null : slot;
   return (
     <div className="flex flex-col gap-6">
-    <TripHeader trip={trip} busy={busy} write={write} />
+    <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start">
+      <TripHeader trip={trip} busy={busy} write={write} />
+      <TripPeople trip={trip} plan={slot} apply={apply} />
+    </div>
     {slot === "frame" && (
       <section data-map-loading aria-label="Trip progress" aria-busy="true" className="flex flex-col gap-3">
         <SectionTitle>Trip progress</SectionTitle>
@@ -632,7 +639,7 @@ function DeleteTrip({ trip, onDeleted }: { trip: Trip; onDeleted: () => void }) 
       <summary className="cursor-pointer font-semibold">Delete this trip</summary>
       <form onSubmit={onDelete} noValidate className="mt-3 flex flex-col gap-3">
         <p className="text-muted">
-          This deletes the trip, its hotel, and its shared tickets and QRs for everyone. The plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
+          This deletes the trip, its hotel, its list of people and their photos, and its shared tickets and QRs for everyone. The plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
         </p>
         <input className={PX.input} value={typed} autoComplete="off" aria-label="Trip name, to confirm" onChange={(e) => setTyped(e.target.value)} />
         {problem && <Problem text={problem} />}

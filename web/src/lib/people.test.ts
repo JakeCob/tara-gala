@@ -33,7 +33,7 @@ const yes = (name: string, over: Partial<Attendee> = {}) => person(name, { rsvp:
 const no = (name: string, over: Partial<Attendee> = {}) => person(name, { rsvp: "no", rsvp_at: "2026-11-02T01:00:00Z", ...over });
 const here = (name: string) => yes(name, { arrived_at: "2026-11-06T01:12:00Z" });
 const trip = (over: Partial<Trip> = {}) => ({ share_slug: SLUG, name: "Baguio", start_date: "2026-11-06", return_date: "2026-11-08", attendees: [person("Ana")], ...over }) as Trip;
-const realGuide = () => JSON.parse(readFileSync(new URL("../data/itineraries/baguio-barkada-2026-11-06.json", new URL("../", WEB)), "utf8")).guide as Guide;
+const realGuide = () => JSON.parse(readFileSync(new URL("../data/itineraries/baguio-barkada-2026-11-06.json", WEB), "utf8")).guide as Guide;
 const row = (key: string, time: string, plan: string, over = {}) => ({ key, time, plan, note: "", place: null, bus: null, show_if: null, hide_if: null, ...over });
 const oneDay = (rows: unknown[], day = 1) => ({ days: [{ day, title: "", intro: "", pick: null, rows, tips: [] }] }) as unknown as Guide;
 
