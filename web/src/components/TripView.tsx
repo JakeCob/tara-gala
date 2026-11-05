@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
+import { chatRequest } from "@/lib/chat";
 import { flags } from "@/lib/flags";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
 import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
@@ -376,6 +377,18 @@ export default function TripView({ slug }: { slug: string }) {
       console.info("[tg-trip] plan edit mode on after=add-place");
       setEditing(true);
     },
+    chat: flags.chatbotLive ? {
+      slug,
+      send: async (log, text, focus) => {
+        const s = shownRef.current;
+        if (!s) return { ok: false, why: "rejected" };
+        const r = await tripApi.chat(slug, chatRequest(baseOf(s), log, text, focus)); // the plan on screen as the question goes (review M1)
+        if (!r.ok && r.why === "clash") setReloads((n) => n + 1); // another phone saved first: fetch the newer plan to ask about
+        return r;
+      },
+      // The proposal's own plan and base, never the base of a newer plan: a stale proposal gets the server's 409 (review M1)
+      apply: (p) => planWrite("plan-chat-apply", () => tripApi.savePlan(slug, p.base, p.stored, "chat"), { kind: "chat" }, null, "chat"),
+    } : null,
     entry: (addPlace) => (
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap gap-2">

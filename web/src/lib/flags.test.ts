@@ -54,7 +54,7 @@ afterEach(() => {
 
 test("defaults when unset", () => {
   clearFlagEnv();
-  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false });
+  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, chatbotLive: false });
   assert.deepEqual(readFlags(), FLAG_DEFAULTS);
 });
 

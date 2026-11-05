@@ -97,7 +97,8 @@ test("T61-P16 the states keep the composer: busy, cap, off, no signal, no fit, a
   assert.match(src, /\{NO_FIT\}|NO_FIT/);
   assert.match(src, /APPLY_CLASH/);
   assert.match(src, />\s*Ask again\s*</);
-  assert.match(src, /aria-disabled=\{!online \|\| sending \|\| undefined\}/, "Send waits offline and while a message is out");
+  assert.match(src, /aria-disabled=\{!online \|\| sending \|\| undefined\}>\s*\{sending \? "Sending\.\.\." : "Send"\}/, "Send waits offline and while a message is out");
+  assert.match(src, /if \(!words \|\| sendingRef\.current \|\| !online\) return;/, "and a tap on it then does nothing");
   assert.match(src, /role="alert"|alertText|PlanProblem/);
 });
 
@@ -137,7 +138,7 @@ test("T61-P20 logs: the action, outcomes and counts, never the chat's words, a n
     for (const args of logs) {
       assert.match(args, /^"\[tg-trip\] /, `${file}: ${args}`);
       const values = args.slice(args.indexOf('"', 1) + 1);
-      assert.doesNotMatch(values, /\b(name|names|text|note|plan|typed|link|maps_url|lat|lng|label|item|query|changes|detail|reply|message|messages|said|log|place\.\w+)\b/, `${file}: ${args}`);
+      assert.doesNotMatch(values, /\b(name|names|text|note|plan|typed|link|maps_url|lat|lng|label|item|query|changes|detail|reply|message|messages|said|log|words|draft|ask|history|proposal|need_link|place\.\w+)\b/, `${file}: ${args}`);
     }
   }
   const chatLogs = [...chat().matchAll(/console\.info\("\[tg-trip\] chat (\w+)/g)].map((m) => m[1]);

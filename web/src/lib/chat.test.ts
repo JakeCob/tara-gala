@@ -96,9 +96,11 @@ test("T61-W10c the log is kept per trip, at most 30 entries, and an open proposa
 test("T61-W10d alerts and the proposal's plan are never stored: only the words on screen", async () => {
   const { saveLog } = await load();
   const s = store();
+  // An entry that carries a plan by mistake: only the words may reach the phone's store
+  const leaky = { kind: "bot", text: "a", changes: [line("New", "x")], proposal: "open", stored: { days: [] }, guide: { days: [] }, base: BASE };
   saveLog(s, SLUG, [
-    { kind: "user", text: "q" },
-    { kind: "bot", text: "a", changes: [line("New", "x")], proposal: "open" },
+    { kind: "user", text: "q", base: BASE } as never,
+    leaky as never,
     { kind: "alert", text: "The chatbot needs signal." },
   ]);
   const raw = s.data.get(`tg-chat:${SLUG}`)!;

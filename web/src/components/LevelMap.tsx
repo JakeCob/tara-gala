@@ -16,7 +16,9 @@ import { chibiLook, spriteSrc } from "@/lib/sprites";
 import { busChangedLine, busNotice, busWarningLine } from "@/lib/planLines";
 import { type TripFile, fetchFile } from "@/lib/trip";
 import { fnv1a, usableWidth } from "@/lib/world";
+import type { NeedLink } from "@/lib/chat";
 import BusSwap, { type BusAt, swapTitle } from "./BusSwap";
+import PlanChat from "./PlanChat";
 import { LegLine } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import { BudgetEdits, PickEdits, SourcesEdits, TodoEdits } from "./PlanTextEditors";
@@ -71,6 +73,10 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const [placing, setPlacing] = useState(false); // TG-61 round 4: Add a place, which asks where it fits
   const addPlace = () => setPlacing(true);
   const [swapping, setSwapping] = useState<BusAt | null>(null); // TG-61: Swap this bus, from the Buses panel
+  // TG-61 PR 2: the chat, opened from the map or from a stop's proposal with its message
+  const [chatting, setChatting] = useState<{ ask: { text: string; focus: string | null } | null } | null>(null);
+  // The chatbot's Paste a Google Maps link: the find step at the place it named (after or instead of a stop), or a World
+  const [linking, setLinking] = useState<{ key: string | null; world: number; start: "find" | "replace" } | null>(null);
   const focusTo = useRef<string | null>(null); // TG-61: the level to focus once a change is on screen
   const editing = !!editor?.editing;
   const warned = (["getting_there", "getting_home"] as const).flatMap((table) => guide[table].buses.flatMap((b, index) => (b.warning ? [{ table, index }] : [])));
@@ -132,11 +138,32 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
     setAdding(false);
     setPlacing(false);
     setSwapping(null);
+    setLinking(null);
     if (!focus) return;
     focusTo.current = focus.key;
     tabPicked.current = true;
     setWorld(focus.day); // a move can take it to another World
   };
+  /** From a proposal: the stop's dialog gives way to the chat, which sends this message at once (ux.md §4.4) */
+  const askChat = (text: string, focus: string | null) => {
+    setOpen(null);
+    setAdding(false);
+    setPlacing(false);
+    setChatting({ ask: { text, focus } });
+  };
+  const linkFor = (need: NeedLink) => {
+    const at = need.at;
+    const key = at && "after" in at ? at.after : at && "replace" in at ? at.replace : null;
+    const home = key ? guide.days.find((d) => d.rows.some((r) => r.key === key))?.day : undefined;
+    const toWorld = home ?? (at && "first_of_day" in at && guide.days.some((d) => d.day === at.first_of_day) ? at.first_of_day : day.day);
+    console.info("[tg-trip] chat pin-ask find at=%s", home ? (at && "replace" in at ? "replace" : "after") : "world");
+    setChatting(null);
+    tabPicked.current = true;
+    setWorld(toWorld);
+    setLinking({ key: home ? key : null, world: toWorld, start: home && at && "replace" in at ? "replace" : "find" });
+  };
+  const linkDay = linking ? guide.days.find((d) => d.day === linking.world) : undefined;
+  const linkLevel = linking?.key && linkDay ? (levels(linkDay, byKey).find((l) => l.row.key === linking.key) ?? null) : null;
 
   const goTo = (n: number) => {
     if (n !== world) tabTapped.current = true;
@@ -278,9 +305,20 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       </div>
 
       {editing && editor && (
-        <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setAdding(true)}>
-          Add a stop to World {day.day}
-        </PixelButton>
+        <div className="flex flex-wrap gap-2">
+          <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setAdding(true)}>
+            Add a stop to World {day.day}
+          </PixelButton>
+          {editor.chat && (
+            <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm"
+              onClick={() => {
+                console.info("[tg-trip] chat open from=map");
+                setChatting({ ask: null });
+              }}>
+              Ask the chatbot
+            </PixelButton>
+          )}
+        </div>
       )}
 
       <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
@@ -307,16 +345,26 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         // but its close event waits for the next frame, so that event only clears its own tap (TG-54).
         <LevelDialog key={open.tap} level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)}
           onClose={() => setOpen((o) => (o?.tap === open.tap ? null : o))} onTick={onTick}
-          change={editor && { editor, guide, marks: marks ?? [], files: photos?.files ?? [], world: day.day, onDone: changed }} />
+          change={editor && { editor, guide, marks: marks ?? [], files: photos?.files ?? [], world: day.day, onDone: changed, onAsk: editor.chat ? askChat : undefined }} />
       )}
       {adding && editor && (
         <PlanDialog label={`Add a stop to World ${day.day}`} bare onClose={() => setAdding(false)}>
-          <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={null} world={day.day} start="find" onClose={() => setAdding(false)} onDone={changed} />
+          <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={null} world={day.day} start="find" onClose={() => setAdding(false)} onDone={changed}
+            onAsk={editor.chat ? askChat : undefined} />
         </PlanDialog>
+      )}
+      {linking && editor && (
+        <PlanDialog label={linkLevel ? (linking.start === "replace" ? `Replace Level ${linkLevel.label}` : `Add a stop after Level ${linkLevel.label}`) : `Add a stop to World ${linking.world}`} bare onClose={() => setLinking(null)}>
+          <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={linkLevel} world={linking.world} start={linkLevel ? linking.start : "find"}
+            onClose={() => setLinking(null)} onDone={changed} />
+        </PlanDialog>
+      )}
+      {chatting && editor?.chat && (
+        <PlanChat editor={editor} chat={editor.chat} ask={chatting.ask} onClose={() => setChatting(null)} onNeedLink={linkFor} />
       )}
       {placing && editor && (
         <PlanDialog label="Add a place" bare onClose={() => setPlacing(false)}>
-          <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={null} world={day.day} start="fit" onClose={() => setPlacing(false)}
+          <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={null} world={day.day} start="fit" onClose={() => setPlacing(false)} onAsk={editor.chat ? askChat : undefined}
             onDone={(focus) => {
               if (!editor.editing) editor.startEditing(); // opened outside edit mode: the bar shows the result and Undo
               changed(focus);
@@ -361,7 +409,7 @@ function WorldGround({ W, count, world }: { W: number; count: number; world: num
 }
 
 /** TG-61: what the level dialog needs to change its stop, on the trip page only. */
-type Change = { editor: PlanEditor; guide: Guide; marks: readonly Mark[]; files: readonly TripFile[]; world: number; onDone: (focus: Focus) => void };
+type Change = { editor: PlanEditor; guide: Guide; marks: readonly Mark[]; files: readonly TripFile[]; world: number; onDone: (focus: Focus) => void; onAsk?: (text: string, focus: string | null) => void };
 
 /** The booked bus that sets a bus row's time, and its warning if the schedule dropped it (ux.md §7). */
 function bookedFor(guide: Guide, row: GuideRow) {
@@ -399,7 +447,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
       <div className="pixel-box flex flex-col gap-3 bg-card p-4 text-foreground">
         {changing && change ? (
           <StopChange editor={change.editor} guide={change.guide} marks={change.marks} files={change.files} level={level} world={change.world} start="menu"
-            onClose={() => dialog.current?.close()} onBack={change.editor.editing ? undefined : () => setChanging(false)} onDone={change.onDone} />
+            onClose={() => dialog.current?.close()} onBack={change.editor.editing ? undefined : () => setChanging(false)} onDone={change.onDone} onAsk={change.onAsk} />
         ) : (<>
         <div className="flex items-start justify-between gap-3">
           <p className="text-sm font-bold tabular-nums">Level {level.label} · {formatTime(r.time)}</p>

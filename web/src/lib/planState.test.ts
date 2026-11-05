@@ -32,7 +32,7 @@ test("T61-W12a shown is built from one answer: its guide, slug and version go to
   assert.match(write, /const s = shownRef\.current;/);
   assert.match(write, /const base = baseOf\(s\);/, "the base and the guide come from one object");
   assert.match(write, /run\(base, toStored\(s\.guide\)\)/);
-  assert.equal(view.match(/baseOf\(/g)?.length, 2, "the save and the suggestion: nowhere else");
+  assert.equal(view.match(/baseOf\(/g)?.length, 3, "the save, the suggestion and the chat's question (TG-61 PR 2): nowhere else");
   assert.match(view, /setShown\(\(prev\) => \(acceptPlan\(prev, next, /);
   assert.equal(view.match(/setShown\(/g)?.length, 3, "the saved copy, the live GET and the save: each through the guard");
   assert.doesNotMatch(view, /setShown\(\(prev\) => (?!\(accept(Plan|Saved)\(prev, next, )/);

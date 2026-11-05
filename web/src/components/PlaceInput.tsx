@@ -12,6 +12,7 @@ import { farLine, pinLine } from "@/lib/planLines";
 import { type SuggestIn, planFailureMessage, planOutcome } from "@/lib/trip";
 import { ChangeList, LegLine, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
+import { askLine } from "@/lib/chat";
 
 /** What goes there: a spot or trip place, a link the server pins on Apply, or a note with no pin. `pin` is the pin the
  * group pasted for a link the server couldn't pin (round 5), sent again as typed with every call about that link. */
@@ -260,7 +261,7 @@ function rippleWords(s: Suggestion, rowName: (key: string) => string, rowTime: (
 }
 
 /** The proposal (ux.md §4.4): time, how to get there, the later stops, what changes, and Apply. */
-export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, rowName, rowTime, onApplied, onBack, onClash }: {
+export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, rowName, rowTime, onApplied, onBack, onClash, onAsk }: {
   editor: PlanEditor;
   chosen: Chosen;
   at: At;
@@ -274,6 +275,8 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
   onApplied: (focus: Focus) => void;
   onBack: () => void;
   onClash: () => void;
+  /** TG-61 PR 2: Ask the chatbot, with this place already in the message (ux.md §4.4) */
+  onAsk?: (message: string) => void;
 }) {
   const s = chosen.suggestion;
   const slotKept = kind === "replace";
@@ -404,7 +407,18 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
         {applying ? "Applying..." : "Apply"}
       </PixelButton>
       <p className={PX.meta}>Nothing changes until you tap Apply.</p>
-      <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onBack}>Back</PixelButton>
+      <div className="flex flex-wrap gap-2">
+        <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm" onClick={onBack}>Back</PixelButton>
+        {onAsk && (
+          <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm"
+            onClick={() => {
+              console.info("[tg-trip] chat ask from=proposal kind=%s", kind);
+              onAsk(askLine(chosen.name));
+            }}>
+            Ask the chatbot
+          </PixelButton>
+        )}
+      </div>
     </div>
   );
 }

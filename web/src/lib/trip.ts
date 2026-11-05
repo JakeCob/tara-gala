@@ -5,6 +5,7 @@ import { API_URL, savedAnswer } from "./api.ts";
 import type { Guide, Mark } from "./guide.ts";
 import { type Itinerary, SLUG_PATTERN } from "./itinerary.ts";
 import type { Attendee, Rsvp } from "./people.ts";
+import { type ChatAnswer, type ChatIn, chatAnswer } from "./chat.ts";
 import type { GuideIn, Suggestion } from "./planEdit.ts";
 import type { ChangeLine, PlanEdits } from "./planLines.ts";
 import { WALLET_SLUG } from "./wallet.ts";
@@ -268,6 +269,17 @@ async function ask<T>(path: string, init: { method: Method; body: unknown }): Pr
   if (detail === "need_pin") return { ok: false, why: "rejected", detail, name: typeof body?.name === "string" ? body.name : null };
   return { ok: false, why: "rejected", detail };
 }
+/** TG-61 PR 2: one question to the chatbot. Every answer, the limits' 429s included, is read by chatAnswer */
+async function askChat(path: string, body: ChatIn): Promise<ChatAnswer> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { cache: "no-store", method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  } catch {
+    return { ok: false, why: "offline" };
+  }
+  return chatAnswer(res.status, await res.json().catch(() => null));
+}
+
 export const tripApi = {
   create: (name: string, start_date: string, return_date: string) =>
     one(call("/sessions", { method: "POST", body: { name, start_date, return_date } })),
@@ -315,6 +327,8 @@ export const tripApi = {
   suggest: (slug: string, body: SuggestIn) => ask<Suggestion>(`${at(slug)}/plan/suggest`, { method: "POST", body }),
   /** The server reads the link itself; the phone never sends a pin */
   addPlace: (slug: string, body: { link: string; name: string; pin?: string }) => ask<TripPlace>(`${at(slug)}/places`, { method: "POST", body }),
+  /** TG-61 PR 2: a proposal at most; saves nothing. Apply is savePlan with the proposal's own base and source "chat" */
+  chat: (slug: string, body: ChatIn) => askChat(`${at(slug)}/plan/chat`, body),
 };
 
 const PLAN_DETAIL: Record<string, string> = {
