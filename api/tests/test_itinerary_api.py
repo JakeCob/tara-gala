@@ -345,6 +345,8 @@ OTHER_ROUTES = {
     ("DELETE", "/sessions/{share_slug}/invite"),
     ("PUT", "/sessions/{share_slug}/plan"),  # TG-61: edit the trip's own copy of its plan, behind PLAN_EDITING
     ("POST", "/sessions/{share_slug}/plan/undo"),
+    ("POST", "/sessions/{share_slug}/plan/suggest"),  # TG-61: builder B's, behind the same flag
+    ("POST", "/sessions/{share_slug}/places"),
     ("POST", "/invites/{invite_slug}/answers"),
     ("POST", "/invites/{invite_slug}/attendees/{attendee_id}/photo"),
 }

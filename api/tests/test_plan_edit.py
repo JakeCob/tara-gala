@@ -171,6 +171,8 @@ def test_editing_is_off_by_default(trip, client):  # noqa: F811
     it = plan_of(client, trip)
     assert save(client, trip, stored(it["guide"])).status_code == 404
     assert undo(client, trip).status_code == 404
+    assert client.post(f"/sessions/{trip}/plan/suggest", json={}).status_code == 404, "builder B's routes too"
+    assert client.post(f"/sessions/{trip}/places", json={"link": "https://maps.app.goo.gl/x", "name": "x"}).status_code == 404
     assert session(client, trip)["plan_edits"] is None, "reads gain their fields with the flag off"
 
 
@@ -622,6 +624,9 @@ def test_a_body_over_128_kb_is_refused_before_its_parsed(t, client, caplog):  # 
     r = client.put(f"/sessions/{t}/plan", content=chunks(), headers={"content-type": "application/json"})
     assert r.status_code == 413 and r.json() == {"detail": "too_big"}
     assert "body too big path=/sessions/{share_slug}/plan" in caplog.text and t not in caplog.text.split("body too big")[1].splitlines()[0]
+    for path in ("plan/undo", "plan/suggest", "places", "plan/chat"):  # every capped route, chat included for PR 2
+        r = client.post(f"/sessions/{t}/{path}", content=body, headers={"content-type": "application/json"})
+        assert r.status_code == 413, path
     small = client.put(f"/sessions/{t}/plan", content=b'{"base": {}}', headers={"content-type": "application/json"})
     assert small.status_code == 422, "a small body still reaches the route"
 
