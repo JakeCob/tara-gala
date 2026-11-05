@@ -333,11 +333,40 @@ export default function TripView({ slug }: { slug: string }) {
       return r;
     },
     addPlace: (link, name) => tripApi.addPlace(slug, { link, name }),
-    top: (
+    startEditing: () => {
+      console.info("[tg-trip] plan edit mode on after=add-place");
+      setEditing(true);
+    },
+    entry: (addPlace) => (
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap gap-2">
+          <PixelButton variant="secondary" aria-disabled={!online || undefined}
+            onClick={() => {
+              if (!online) {
+                console.info("[tg-trip] plan edit mode offline");
+                return;
+              }
+              console.info("[tg-trip] plan edit mode on");
+              setEditing(true);
+            }}>
+            Edit the plan
+          </PixelButton>
+          <PixelButton variant="secondary" aria-disabled={!online || undefined}
+            onClick={() => {
+              console.info("[tg-trip] plan add-place open=%s", online ? "yes" : "offline");
+              if (online) addPlace();
+            }}>
+            Add a place
+          </PixelButton>
+        </div>
+        {!online && <p className={PX.meta}>Editing needs signal. You can still tick stops.</p>}
+      </div>
+    ),
+    top: (addPlace) => (
       <>
         {editing && (
-          <PlanEditBar edits={trip.plan_edits ?? null} status={barSaid} can={canEdit(shown, trip, online, planWriting)} stale={stale} today={manilaToday()}
-            onUndo={() => void onUndo()} onReload={() => setReloads((n) => n + 1)}
+          <PlanEditBar edits={trip.plan_edits ?? null} status={barSaid} can={canEdit(shown, trip, online, planWriting)} online={online} stale={stale} today={manilaToday()}
+            onAddPlace={addPlace} onUndo={() => void onUndo()} onReload={() => setReloads((n) => n + 1)}
             onDone={() => {
               console.info("[tg-trip] plan edit mode off");
               setEditing(false);
@@ -367,22 +396,6 @@ export default function TripView({ slug }: { slug: string }) {
       <section aria-labelledby="progress-title" className="flex flex-col gap-3">
         <SectionTitle id="progress-title">Trip progress</SectionTitle>
         <p className="text-sm text-muted md:max-w-prose">{editing && editor ? EDIT_INTRO : VIEW_INTRO}</p>
-        {editor && !editing && (
-          <div className="flex flex-col gap-1">
-            <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!online || undefined}
-              onClick={() => {
-                if (!online) {
-                  console.info("[tg-trip] plan edit mode offline");
-                  return;
-                }
-                console.info("[tg-trip] plan edit mode on");
-                setEditing(true);
-              }}>
-              Edit the plan
-            </PixelButton>
-            {!online && <p className={PX.meta}>Editing needs signal. You can still tick stops.</p>}
-          </div>
-        )}
         <LevelMap
           guide={theGuide}
           marks={trip.marks}

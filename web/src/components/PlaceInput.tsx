@@ -19,14 +19,18 @@ export type Chosen = { place: PlaceIn | null; link: string | null; name: string;
 const MAX_NAME = 80;
 const ON_FILE = "No opening hours or jeep routes on file.";
 
-export function FindPlace({ editor, at, noteFor, onChosen, onBack }: {
+export function FindPlace({ editor, at, noteFor, startText, finding: findingLabel, onChosen, onBack }: {
   editor: PlanEditor;
   at: SuggestIn["at"];
+  /** Back from a later step keeps what was typed (ux.md §4.8) */
+  startText?: string;
+  /** What Find and a picked place say while the server works */
+  finding?: string;
   noteFor: (name: string) => Suggestion;
   onChosen: (c: Chosen) => void;
   onBack: () => void;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(startText ?? "");
   const [searched, setSearched] = useState<string | null>(null);
   const [found, setFound] = useState<Found[]>([]);
   const [finding, setFinding] = useState(false);
@@ -100,7 +104,7 @@ export function FindPlace({ editor, at, noteFor, onChosen, onBack }: {
         <p className={PX.meta}>Paste a Google Maps link, or type a place or store name.</p>
         {problem && <PlanProblem text={problem} />}
         <PixelButton type="submit" variant="primary" aria-disabled={finding || undefined} className="w-full px-4 py-3">
-          {finding ? "Finding..." : "Find"}
+          {finding ? (findingLabel ?? "Finding...") : "Find"}
         </PixelButton>
       </form>
 

@@ -19,7 +19,7 @@ export type GuidePlace = {
 };
 /** TG-61: how to get to a row from the one before, as the API built it: a route on file, or an estimate from the distance. */
 export type LegOut =
-  | { kind: "route"; last_mile_route_id: string; mode: string; minutes: number; fare_min_php: number | null; fare_max_php: number | null; signboard: string | null; last_verified_at: string | null }
+  | { kind: "route"; last_mile_route_id: string; mode: string; minutes: number | null; fare_min_php: number | null; fare_max_php: number | null; signboard: string | null; last_verified_at: string | null }
   | { kind: "estimate"; mode: "walk" | "taxi"; minutes: number; km: number };
 export type Condition = { pick: string; is: string };
 export type GuideRow = {

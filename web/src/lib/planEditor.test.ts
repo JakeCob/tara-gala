@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
 const view = () => read("src/components/TripView.tsx");
-const TG61 = ["TripView", "LevelMap", "StopChange", "PlaceInput", "BusSwap", "PlanEditBar", "PlanTextEditors", "PlanBits"].map((f) => `src/components/${f}.tsx`);
+const TG61 = ["TripView", "LevelMap", "StopChange", "PlaceInput", "BusSwap", "PlanEditBar", "PlanTextEditors", "PlanBits", "FitPlace"].map((f) => `src/components/${f}.tsx`);
 
 test("T61-W11a the /i/ page never gets an editor, so a plan can only be changed from its trip", () => {
   for (const file of ["src/components/ItineraryList.tsx", "src/components/ItineraryView.tsx"]) assert.doesNotMatch(read(file), /editor=/, file);
@@ -91,4 +91,25 @@ test("T61-W11i a PixelButton given a className keeps its padding: className repl
       assert.match(m[1], /\bp[xy]?-\d/, `${file}: ${m[0].slice(0, 90)}`);
     }
   }
+});
+
+test("T61-W11j Add a place (ux.md §4.8): on the bar and beside Edit the plan, with the offline rule; one Apply, on the proposal", () => {
+  const v = view();
+  const entry = v.slice(v.indexOf("entry: (addPlace) =>"), v.indexOf("top: (addPlace) =>"));
+  assert.match(entry, /Edit the plan[\s\S]*Add a place/, "beside Edit the plan, outside edit mode");
+  assert.equal(entry.match(/aria-disabled=\{!online \|\| undefined\}/g)?.length, 2, "both need signal");
+  const bar = read("src/components/PlanEditBar.tsx").slice(read("src/components/PlanEditBar.tsx").indexOf("return ("));
+  assert.ok(bar.indexOf("Editing the plan") < bar.indexOf("Done editing") && bar.indexOf("Done editing") < bar.indexOf("Add a place"), "the top line, then Add a place first on the second row");
+  assert.ok(bar.indexOf("Add a place") < bar.indexOf("{undoLabel(edits)}"));
+  assert.match(bar, /aria-disabled=\{!online \|\| undefined\} onClick=\{\(\) => \{\s+console\.info\("\[tg-trip\] plan add-place bar open=%s", online \? "yes" : "offline"\);\s+if \(online\) onAddPlace\(\);/, "it saves nothing, so only signal holds it");
+  const map = read("src/components/LevelMap.tsx");
+  assert.match(map, /start="fit"/);
+  assert.match(map, /if \(!editor\.editing\) editor\.startEditing\(\);/, "applied from outside edit mode, the page switches into it");
+  const fit = read("src/components/FitPlace.tsx");
+  assert.doesNotMatch(fit.replace(/^\s*(\/\/|\*).*$/gm, ""), /Apply/, "a card is a preview: Apply is only on the proposal");
+  assert.doesNotMatch(fit, /At the start of the day/, "no fit starts a day, and neither does the manual choice");
+  const change = read("src/components/StopChange.tsx");
+  assert.match(change, /\{step\.mode === "fit" \? "Find where it fits again" : "Check my change again"\}/);
+  assert.match(change, /editor\.suggest\(\{ anywhere: true \}, place\)/, "a clash asks where it fits again (B60)");
+  assert.match(change, /\{ k: "fit", chosen: step\.fitFrom \?\? step\.chosen, fit: step\.fit! \}/, "the proposal's Back returns to every choice, not only the one picked");
 });

@@ -12,16 +12,21 @@ import { type At, type PlaceIn, type RowIn, type Suggestion, noteSuggestion, nud
 import { levelLabel, removeConfirm } from "@/lib/planLines";
 import { type SuggestIn, type TripFile, planFailureMessage } from "@/lib/trip";
 import BusSwap, { type BusAt, busAt, swapTitle } from "./BusSwap";
+import FitPlace, { type FitState, type Slot } from "./FitPlace";
 import { PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import { type Chosen, FindPlace, Proposal } from "./PlaceInput";
 
-type Mode = "replace" | "add" | "move";
+type Mode = "replace" | "add" | "move" | "fit";
+type SlotAt = Exclude<SuggestIn["at"], { anywhere: true }>;
+/** A fit's proposal knows its slot, which may be on another day than the map, and the choice Back returns to. */
+type Proposed = { mode: Mode; chosen: Chosen; day: number; slot?: Slot; fit?: FitState; fitFrom?: Chosen };
 type Step =
   | { k: "menu" }
-  | { k: "find"; mode: "replace" | "add" }
-  | { k: "propose"; mode: Mode; chosen: Chosen; day: number }
-  | { k: "clash"; mode: Mode; chosen: Chosen; day: number }
+  | { k: "find"; mode: "replace" | "add" | "fit"; text?: string }
+  | { k: "fit"; chosen: Chosen; fit: FitState }
+  | ({ k: "propose" } & Proposed)
+  | ({ k: "clash" } & Proposed)
   | { k: "time" }
   | { k: "move" }
   | { k: "bus" };
@@ -62,13 +67,14 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
   /** The stop, or null for "Add a stop to World N" */
   level: Level | null;
   world: number;
-  start: "menu" | "find";
+  /** fit: Add a place, which asks the server where the place fits (ux.md §4.8) */
+  start: "menu" | "find" | "fit";
   onClose: () => void;
   /** Back from the menu, to the stop's own view (when it was opened from there) */
   onBack?: () => void;
   onDone: (focus: Focus) => void;
 }) {
-  const [step, setStep] = useState<Step>(start === "find" ? { k: "find", mode: "add" } : { k: "menu" });
+  const [step, setStep] = useState<Step>(start === "menu" ? { k: "menu" } : { k: "find", mode: start === "fit" ? "fit" : "add" });
   const [said, setSaid] = useState("");
   const [problem, setProblem] = useState("");
   const used = useRef<string | null>(null);
@@ -93,7 +99,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
       return;
     }
     if (step.k === "menu" && used.current) box.current?.querySelector<HTMLElement>(`[data-menu="${used.current}"]`)?.focus();
-    else if (step.k !== "find" && step.k !== "propose") top.current?.focus();
+    else if (step.k !== "find" && step.k !== "propose" && step.k !== "fit") top.current?.focus();
   }, [step.k]);
 
   const go = (name: "replace" | "add" | "time" | "move" | "bus", next: Step) => {
@@ -106,7 +112,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
 
   // Where a found place would go, for the server's suggestion and the phone's own (a note with no pin)
   const addAfter = level ? key : (last?.key ?? null);
-  const suggestAt = (mode: Mode, toDay = world): SuggestIn["at"] => {
+  const suggestAt = (mode: Mode, toDay = world): SlotAt => {
     if (mode === "replace" && key) return { replace: key };
     const target = guide.days.find((d) => d.day === toDay);
     const after = mode === "move" ? (target?.rows.filter((r) => r.key !== key).at(-1)?.key ?? null) : addAfter;
@@ -164,8 +170,20 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     if (!out.ignored) setProblem(out.message);
   }
 
-  async function onRecheck(s: { mode: Mode; chosen: Chosen; day: number }) {
+  // Where a place fits, asked again: after a clash the ranking can change with the newer plan (B60, ux.md §4.8)
+  async function onRefit(s: Proposed) {
     if (off) return;
+    const { chosen } = s;
+    const place = (chosen.place ?? (chosen.link ? { link: chosen.link } : null)) as SuggestIn["place"] | null;
+    const r = place ? await editor.suggest({ anywhere: true }, place) : null;
+    if (r && !r.ok) return setProblem(planFailureMessage(r));
+    setProblem("");
+    setStep({ k: "fit", chosen: r?.ok ? { ...chosen, suggestion: { ...r.body, name: chosen.name } } : chosen, fit: s.fit ?? { pick: 0, manual: !place, day: world, after: null } });
+  }
+
+  async function onRecheck(s: Proposed) {
+    if (off) return;
+    if (s.mode === "fit") return onRefit(s);
     const { chosen } = s;
     const r = chosen.place ? await editor.suggest(suggestAt(s.mode, s.day), chosen.place as SuggestIn["place"]) : chosen.link ? await editor.suggest(suggestAt(s.mode, s.day), { link: chosen.link }) : null;
     if (r && !r.ok) return setProblem(planFailureMessage(r));
@@ -181,9 +199,13 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
       case "menu":
         return row ? `${where} · ${formatTime(row.time)}` : where;
       case "find":
+        if (step.mode === "fit") return "Add a place";
         return step.mode === "replace" ? `Replace ${where}` : level ? `Add a stop after ${where}` : `Add a stop to ${where}`;
+      case "fit":
+        return `Where ${step.chosen.name} fits`;
       case "propose":
       case "clash":
+        if (step.slot) return `Add ${step.chosen.name} after Level ${label(step.slot.after) ?? ""}`;
         if (step.mode === "replace") return `Replace ${where} with ${step.chosen.name}`;
         if (step.mode === "move") return `Move ${where} to World ${step.day}`;
         return level ? `Add ${step.chosen.name} after ${where}` : `Add ${step.chosen.name} to ${where}`;
@@ -196,7 +218,13 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     }
   })();
 
-  const fit = (mode: Mode, toDay: number) => {
+  const fit = (mode: Mode, toDay: number, slot?: Slot) => {
+    if (slot) {
+      const rows = guide.days.find((d) => d.day === slot.day)?.rows ?? [];
+      const i = rows.findIndex((r) => r.key === slot.after);
+      const next = rows[i + 1];
+      return i >= 0 && next ? `Fits between ${formatTime(rows[i].time)} and ${formatTime(next.time)}.` : "After the last stop of the day.";
+    }
     if (mode === "replace") return "Keeps this stop's time slot.";
     if (mode === "move") return `At the end of World ${toDay}.`;
     const after = addAfter ? day.rows.findIndex((r) => r.key === addAfter) : -1;
@@ -204,15 +232,16 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     if (after < 0) return "The first stop of the day.";
     return next ? `Fits between ${formatTime(day.rows[after].time)} and ${formatTime(next.time)}.` : "After the last stop of the day.";
   };
-  const fromFor = (mode: Mode, toDay: number): string | null => {
+  const fromFor = (mode: Mode, toDay: number, slot?: Slot): string | null => {
+    if (slot) return whereFrom(guide.days.flatMap((d) => d.rows).find((r) => r.key === slot.after));
     if (mode === "replace") return whereFrom(before);
     if (mode === "move") return whereFrom(guide.days.find((d) => d.day === toDay)?.rows.filter((r) => r.key !== key).at(-1));
     return addAfter ? whereFrom(day.rows.find((r) => r.key === addAfter)) : null;
   };
   const rowName = (k: string) => guide.days.flatMap((d) => d.rows).find((r) => r.key === k)?.plan ?? "a stop";
   const rowTime = (k: string) => guide.days.flatMap((d) => d.rows).find((r) => r.key === k)?.time ?? null;
-  const doneFor = (mode: Mode, toDay: number) =>
-    mode === "replace" ? ({ kind: "replace" } as const) : mode === "move" ? ({ kind: "move", day: toDay } as const) : ({ kind: "add", after: addAfter, day: world } as const);
+  const doneFor = (mode: Mode, toDay: number, slot?: Slot) =>
+    slot ? ({ kind: "add", after: slot.after, day: slot.day, world: true } as const) : mode === "replace" ? ({ kind: "replace" } as const) : mode === "move" ? ({ kind: "move", day: toDay } as const) : ({ kind: "add", after: addAfter, day: world } as const);
 
   return (
     <div ref={box} className="flex flex-col gap-3">
@@ -263,16 +292,34 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
       )}
 
       {step.k === "find" && (
-        <FindPlace editor={editor} at={suggestAt(step.mode)} noteFor={noteFor(step.mode)}
-          onChosen={(chosen) => setStep({ k: "propose", mode: step.mode, chosen, day: world })}
+        <FindPlace editor={editor} at={step.mode === "fit" ? { anywhere: true } : suggestAt(step.mode)} noteFor={noteFor(step.mode === "fit" ? "add" : step.mode)}
+          startText={step.text} finding={step.mode === "fit" ? "Finding where it fits..." : undefined}
+          onChosen={(chosen) => {
+            const name = chosen.name || chosen.suggestion.name || "";
+            if (step.mode === "fit") setStep({ k: "fit", chosen: { ...chosen, name }, fit: { pick: 0, manual: !(chosen.place || chosen.link), day: world, after: null } });
+            else setStep({ k: "propose", mode: step.mode, chosen, day: world });
+          }}
           onBack={() => (level ? setStep({ k: "menu" }) : onClose())} />
       )}
 
+      {step.k === "fit" && (
+        <>
+          {(step.chosen.link || step.chosen.place && "trip_place_id" in step.chosen.place) && (
+            <span className={cx(PX.chip, "self-start")}>Added by your group, not verified</span>
+          )}
+          <FitPlace editor={editor} guide={guide} marks={marks} chosen={step.chosen} start={step.fit}
+            onNext={(slot, suggestion, state) => setStep({ k: "propose", mode: "fit", day: slot.day, slot, fit: state, fitFrom: step.chosen, chosen: { ...step.chosen, suggestion } })}
+            onBack={() => setStep({ k: "find", mode: "fit", text: step.chosen.link ?? step.chosen.name })} />
+        </>
+      )}
+
       {step.k === "propose" && (
-        <Proposal key={`${step.mode}-${step.day}-${step.chosen.name}`} editor={editor} chosen={step.chosen} at={atFor(step.mode, step.day)} kind={step.mode}
-          anchor={step.mode === "add" ? addAfter : key} done={doneFor(step.mode, step.day)} fit={fit(step.mode, step.day)} from={fromFor(step.mode, step.day)}
+        <Proposal key={`${step.mode}-${step.day}-${step.slot?.after}-${step.chosen.name}`} editor={editor} chosen={step.chosen}
+          at={step.slot ? { after: step.slot.after } : atFor(step.mode, step.day)} kind={step.mode === "fit" ? "add" : step.mode}
+          anchor={step.slot ? step.slot.after : step.mode === "add" ? addAfter : key} done={doneFor(step.mode, step.day, step.slot)}
+          fit={fit(step.mode, step.day, step.slot)} from={fromFor(step.mode, step.day, step.slot)}
           rowName={rowName} rowTime={rowTime} onApplied={onDone}
-          onBack={() => setStep(step.mode === "move" ? { k: "move" } : { k: "find", mode: step.mode })}
+          onBack={() => setStep(step.mode === "move" ? { k: "move" } : step.mode === "fit" ? { k: "fit", chosen: step.fitFrom ?? step.chosen, fit: step.fit! } : { k: "find", mode: step.mode })}
           onClash={() => setStep({ ...step, k: "clash" })} />
       )}
 
@@ -287,7 +334,9 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           <>
             <ClashBox lead="Someone just changed the plan, so your change wasn't saved." rest="The map now shows their version. Check your change against it, then tap Apply again." />
             {problem && <PlanProblem text={problem} />}
-            <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={off || undefined} onClick={() => onRecheck(step)}>Check my change again</PixelButton>
+            <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={off || undefined} onClick={() => onRecheck(step)}>
+              {step.mode === "fit" ? "Find where it fits again" : "Check my change again"}
+            </PixelButton>
             <p role="status" className="text-sm empty:sr-only">{off ? editor.status : ""}</p>
           </>
         )

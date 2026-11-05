@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import type { Guide, GuideRow } from "./guide.ts";
 import {
   type GuideIn, type RowIn, type Suggestion, addRow, applySuggestion, editBudget, editPickOption, editSources, editTodo, legIn, moveRow, nudgeRow,
-  removeRow, replacePlace, setRow, swapBus, toStored, findPlaces, focusAfter, isLink, noteSuggestion,
+  removeRow, replacePlace, setRow, swapBus, toStored, findPlaces, focusAfter, isLink, noteSuggestion, type Fit, applyFit, fitSuggestion,
 } from "./planEdit.ts";
 import { planFailureMessage, planOutcome, tripApi } from "./trip.ts";
 
@@ -256,4 +256,36 @@ test("T61-W15 the new and changed rows after a save, for focus: a minted key, el
   assert.equal(focusAfter(two, gone, "d1-02"), "d1-01");
   const empty = { days: [{ day: 1, rows: [] }, { day: 2, rows: [{ key: "d2-01" }] }] } as unknown as Guide;
   assert.equal(focusAfter({ days: [{ day: 1, rows: [{ key: "d1-01" }] }, { day: 2, rows: [{ key: "d2-01" }] }] } as unknown as Guide, empty, "d1-01"), null, "an emptied day has nothing to focus");
+});
+
+// ---------------------------------------------------------------- TG-61 round 4: where does it fit?
+
+const fit = (over: Partial<Fit> = {}): Fit => ({
+  day: 2, after: "d2-01", time: "06:30", leg: { kind: "estimate", mode: "taxi", minutes: 8, km: 2.1 }, ripple: [], notes: [],
+  changes: [{ word: "New", day: 2, text: "6:30 AM Cafe", part: "stop" }], condition: { pick: "sunrise", is: "A", kind: "show_if" },
+  reason: { kind: "near_stops", near_key: "d2-01", near_km: 0.4, free_min: 90, dropped: 0 }, ...over,
+});
+
+test("T61-W17 (plan.md W13) applyFit saves only the chosen fit, after its anchor, with the anchor's condition, which is the fit's", () => {
+  const g = base();
+  const out = applyFit(g, fit(), { place: spot("s9"), plan: "Cafe", time: "06:30", ripple: true });
+  assert.deepEqual(keys(out, 2), ["d2-01", null, "d2-02", "d2-03"]);
+  const fresh = out.days[1].rows[1];
+  assert.deepEqual(fresh, { key: null, time: "06:30", plan: "Cafe", note: "", place: spot("s9"), show_if: { pick: "sunrise", is: "A" }, leg: { estimate: { mode: "taxi", minutes: 8, km: 2.1 } } });
+  const f = fit();
+  assert.deepEqual({ pick: fresh.show_if!.pick, is: fresh.show_if!.is, kind: "show_if" }, f.condition, "the condition the card showed is the one saved");
+  const later = applyFit(g, fit({ day: 1, after: "d1-03", condition: null, ripple: [{ key: "d1-04", time: "17:30" }] }), { place: spot("s9"), plan: "Cafe", time: "15:00", ripple: true });
+  assert.equal(rowOf(later, "d1-04").time, "17:30", "its ripple, when kept");
+  assert.equal(later.days[0].rows[3].show_if, undefined);
+  assert.deepEqual(keys(applyFit(g, fit(), { place: spot("s9"), plan: "Cafe", time: "06:30", ripple: true }), 1), keys(g, 1), "no other day changes");
+});
+
+test("T61-W18 a fit becomes the proposal's suggestion: its own time, leg, ripple and lines, the place's fields kept", () => {
+  const s = sug({ name: "Cafe", lat: 16.4, lng: 120.6, maps_url: "https://maps.app.goo.gl/x", fits: [fit(), fit({ day: 1, after: "d1-03" })] });
+  const second = fitSuggestion(s, s.fits![1]);
+  assert.equal(second.name, "Cafe");
+  assert.equal(second.maps_url, "https://maps.app.goo.gl/x");
+  assert.equal(second.time, "06:30");
+  assert.deepEqual(second.changes, s.fits![1].changes);
+  assert.equal(second.fits, undefined, "the proposal doesn't carry the other choices");
 });

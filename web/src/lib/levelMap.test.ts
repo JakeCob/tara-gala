@@ -343,7 +343,8 @@ test("LM11b at every width the map has the whole row, with the World toggle righ
   assert.equal(map.match(/style=\{\{ maxWidth: band \}\}/g)?.length, 2, "the stops and the levels share the road's band");
   assert.match(map, /const band = snake \? undefined : BAND_PX;/, "the band is for the zig-zag: the snake has the whole row");
   assert.match(map, /const BAND = "absolute inset-0 mx-auto"/, "the band is centred");
-  assert.match(map, /return \(\n\s+<div className="flex flex-col gap-4">\n\s+<header/, "no cap or grid on the whole block");
+  // TG-61: the trip page's Edit the plan and Add a place may come first (ux.md §2, §4.8)
+  assert.match(map, /return \(\n\s+<div className="flex flex-col gap-4">\n(\s+\{editor && !editing && editor\.entry\(addPlace\)\}\n)?\s+<header/, "no cap or grid on the whole block");
   assert.match(map, /<div className="w-full">\n\s+<section ref=\{screen\}/, "none on the world");
   assert.match(readFileSync("src/components/TripView.tsx", "utf8"), /<section aria-labelledby="progress-title" className="flex flex-col gap-3">/, "none on the page's section");
   assert.match(map, /const list = levels\(day, byKey\);/, "time order");

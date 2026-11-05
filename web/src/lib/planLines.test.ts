@@ -116,3 +116,48 @@ test("T61-L9 a level's number on the map counts only the rows that show for the 
   assert.equal(levelLabel(g, [{ key: "pick:sunrise", value: "A", updated_at: "" }], "d2-03"), "2-2");
   assert.equal(levelLabel(g, [], "d9-99"), null);
 });
+
+test("T61-L10 where it fits: each card's five lines, from the server's fit (ux.md §4.8)", async () => {
+  const { fitLines, fitFooter, duration, NO_FIT } = await import("./planLines.ts");
+  const rows: Record<string, { plan: string; time: string; place: string | null }> = {
+    "d2-04": { plan: "BenCab Museum", time: "13:00", place: "BenCab Museum" },
+    "d1-04": { plan: "Check in at the condo", time: "14:30", place: "Finteo Skylands" },
+    "d1-05": { plan: "Walk", time: "16:00", place: null },
+    "d1-06": { plan: "Groceries and breakfast stuff", time: "18:00", place: null },
+  };
+  const row = (k: string) => rows[k] ?? null;
+  const best = {
+    day: 2, after: "d2-04", time: "14:00", leg: { kind: "estimate" as const, mode: "taxi" as const, minutes: 8, km: 2.1 }, ripple: [], notes: [], changes: [],
+    condition: null, reason: { kind: "near_stops" as const, near_key: "d2-04", near_km: 0.4, free_min: 90, dropped: 0 },
+  };
+  assert.deepEqual(fitLines(best, row), {
+    when: "World 2 · 2:00 PM to 3:00 PM", slot: "After BenCab Museum", travel: "Taxi, about 8 min, 2.1 km (estimate)", moves: "Nothing else moves.",
+    why: "Near BenCab Museum (400 m). 1 h 30 min free there.", chip: null,
+  });
+  const second = { ...best, day: 1, after: "d1-04", time: "16:30", leg: { kind: "estimate" as const, mode: "walk" as const, minutes: 12, km: 0.9 },
+    ripple: [{ key: "d1-05", time: "17:00" }, { key: "d1-06", time: "19:00" }], condition: { pick: "sunrise", is: "A", kind: "show_if" as const },
+    reason: { kind: "near_hotel" as const, near_key: "d1-04", near_km: 2.14, free_min: 0, dropped: 0 } };
+  const two = fitLines(second, row);
+  assert.equal(two.moves, "Moves 2 later stops 1 h later.");
+  assert.equal(two.why, "Near your hotel (2.1 km).", "near_hotel names the hotel; no free time, so that part is left out");
+  assert.equal(fitLines({ ...best, reason: { ...best.reason, free_min: 0 } }, row).why, "Near BenCab Museum (400 m).");
+  assert.equal(two.chip, "Only if the group picks A");
+  assert.equal(fitLines({ ...second, ripple: [{ key: "d1-06", drop: true }] }, row).moves, "Drops Groceries and breakfast stuff.");
+  assert.equal(fitLines({ ...second, condition: { pick: "sunrise", is: "B", kind: "hide_if" } }, row).chip, "Not if the group picks B");
+  const route = fitLines({ ...best, leg: { kind: "route", last_mile_route_id: "lm", mode: "jeep", minutes: 15, fare_min_php: 13, fare_max_php: 15, signboard: "Trancoville", last_verified_at: "2026-10-26T02:00:00Z" } }, row);
+  assert.equal(route.travel, "Jeep, Trancoville signboard, about 15 min · ₱13–15 · Checked Oct 26");
+  const nopin = fitLines({ ...best, leg: null, reason: { kind: "free_time", near_key: null, near_km: null, free_min: 45, dropped: 0 } }, row);
+  assert.equal(nopin.travel, "No travel estimate: one of the places has no pin.");
+  assert.equal(nopin.why, "45 min free there.");
+  assert.equal(fitLines({ ...best, leg: null, reason: { kind: "free_time", near_key: null, near_km: null, free_min: -20, dropped: 1 } }, row).why, "The day runs 20 min over.");
+  assert.equal(fitLines({ ...best, leg: null, reason: { kind: "free_time", near_key: "d2-04", near_km: 0.4, free_min: 0, dropped: 0 } }, row).why, null, "free_time has no Near part, and 0 adds nothing");
+  assert.deepEqual([duration(45), duration(60), duration(90), duration(125)], ["45 min", "1 h", "1 h 30 min", "2 h 5 min"]);
+  assert.deepEqual(fitFooter([best, second], true), ["Ranked by how close it is to the stops around it, and by free time that day.", "Estimates come from the distance, not routes on file."]);
+  assert.deepEqual(fitFooter([{ ...best, leg: null }], false), ["Ranked by free time only: this place has no pin."]);
+  assert.equal(NO_FIT, "No free slot for it on this plan. Choose the day yourself, and the later stops can move to make room.");
+});
+
+test("T61-L11 after a fit's Apply the bar names the World, since the map may show another day; a route with no minutes leaves them out", () => {
+  assert.equal(resultLine([L("New", "Ghibli Store", 2)], { kind: "add", after: "d1-03", day: 2, world: true }, level), "Added Ghibli Store to World 2, after Level 1-3.");
+  assert.equal(legLines({ kind: "route", last_mile_route_id: "lm", mode: "jeep", minutes: null, fare_min_php: 13, fare_max_php: 15, signboard: "Trancoville", last_verified_at: null }).line, "Jeep, Trancoville signboard · ₱13–15");
+});

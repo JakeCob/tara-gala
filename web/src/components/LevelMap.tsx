@@ -68,6 +68,8 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const [open, setOpen] = useState<{ key: string; tap: number } | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [adding, setAdding] = useState(false); // TG-61: Add a stop to World N
+  const [placing, setPlacing] = useState(false); // TG-61 round 4: Add a place, which asks where it fits
+  const addPlace = () => setPlacing(true);
   const [swapping, setSwapping] = useState<BusAt | null>(null); // TG-61: Swap this bus, from the Buses panel
   const focusTo = useRef<string | null>(null); // TG-61: the level to focus once a change is on screen
   const editing = !!editor?.editing;
@@ -128,6 +130,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const changed = (focus: Focus) => {
     setOpen(null);
     setAdding(false);
+    setPlacing(false);
     setSwapping(null);
     if (!focus) return;
     focusTo.current = focus.key;
@@ -143,6 +146,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
 
   return (
     <div className="flex flex-col gap-4">
+      {editor && !editing && editor.entry(addPlace)}
       <header className="flex flex-col gap-1">
         <h2 className="text-xl font-bold text-balance">{guide.title}</h2>
         {guide.summary && <p className="text-sm text-muted md:max-w-prose">{guide.summary}</p>}
@@ -183,7 +187,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         </ul>
       )}
 
-      {editor?.top}
+      {editor?.top(addPlace)}
       {editor && warned.length > 0 && (
         <PixelBox tone="alert" className="flex flex-col gap-2 p-3 md:max-w-2xl">
           <p className="text-sm font-semibold text-danger-text">{busNotice(warned.length)}</p>
@@ -308,6 +312,15 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       {adding && editor && (
         <PlanDialog label={`Add a stop to World ${day.day}`} bare onClose={() => setAdding(false)}>
           <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={null} world={day.day} start="find" onClose={() => setAdding(false)} onDone={changed} />
+        </PlanDialog>
+      )}
+      {placing && editor && (
+        <PlanDialog label="Add a place" bare onClose={() => setPlacing(false)}>
+          <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={null} world={day.day} start="fit" onClose={() => setPlacing(false)}
+            onDone={(focus) => {
+              if (!editor.editing) editor.startEditing(); // opened outside edit mode: the bar shows the result and Undo
+              changed(focus);
+            }} />
         </PlanDialog>
       )}
       {swapping && editor && (

@@ -3,6 +3,7 @@
 
 import { formatTime, formatVerified } from "./api.ts";
 import { type BusWarning, type Guide, type LegOut, type Mark, marksByKey, rowShows } from "./guide.ts";
+import type { Fit } from "./planEdit.ts";
 
 export type ChangeLine = { word: string; day: number | null; text: string; part?: "stop" | "ripple" };
 export type PlanVersion = { seq: number; source: "copy" | "hand" | "chat" | "undo"; changes: ChangeLine[]; created_at: string };
@@ -11,7 +12,7 @@ export type PlanEdits = { seq: number; versions: PlanVersion[] };
 
 /** What this phone just did, for the edit bar's line. */
 export type Done =
-  | { kind: "add"; after: string | null; day: number }
+  | { kind: "add"; after: string | null; day: number; world?: boolean } // world: a fit, which may be on another day than the map
   | { kind: "replace" }
   | { kind: "edit"; key: string }
   | { kind: "move"; day: number }
@@ -50,7 +51,8 @@ export function resultLine(lines: ChangeLine[], done: Done, levelOf: (key: strin
     case "add": {
       const added = lines.find((l) => l.word === "New") ?? first;
       const after = done.after && levelOf(done.after);
-      said = after ? `Added ${added?.text ?? ""} after Level ${after}.` : `Added ${added?.text ?? ""} at the start of World ${done.day}.`;
+      if (done.world && after) said = `Added ${added?.text ?? ""} to World ${done.day}, after Level ${after}.`;
+      else said = after ? `Added ${added?.text ?? ""} after Level ${after}.` : `Added ${added?.text ?? ""} at the start of World ${done.day}.`;
       break;
     }
     case "replace": {
@@ -171,7 +173,8 @@ export function legLines(leg: LegOut): { line: string; note: string } {
   const lo = leg.fare_min_php;
   const hi = leg.fare_max_php;
   const fare = lo == null ? "" : ` · ${hi == null || hi === lo ? peso(lo) : `${peso(lo)}–${hi.toLocaleString("en-PH")}`}`;
-  return { line: `${mode(leg.mode)}${sign}, about ${leg.minutes} min${fare}`, note: `${formatVerified(leg.last_verified_at)} · Fares and routes change. Confirm with the driver or a local before you ride.` };
+  const minutes = leg.minutes == null ? "" : `, about ${leg.minutes} min`;
+  return { line: `${mode(leg.mode)}${sign}${minutes}${fare}`, note: `${formatVerified(leg.last_verified_at)} · Fares and routes change. Confirm with the driver or a local before you ride.` };
 }
 
 /** The far warning: rounded to 10 km over 100 km, else to the km (review nit 2). */
@@ -208,4 +211,60 @@ export function levelLabel(guide: Pick<Guide, "days">, marks: readonly Mark[], k
     if (i >= 0) return `${d.day}-${i + 1}`;
   }
   return null;
+}
+
+// ---------------------------------------------------------------- where does it fit? (ux.md §4.8)
+
+const STAY = 60; // spots have no visit_minutes yet, so the server's stay is an hour (options.md §5.4)
+export const NO_FIT = "No free slot for it on this plan. Choose the day yourself, and the later stops can move to make room.";
+
+/** Guide §7's durations: 45 min, 1 h, 1 h 30 min. */
+export function duration(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
+}
+const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const hhmmOf = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const distance = (km: number) => (km < 1 ? `${Math.max(100, Math.round(km * 10) * 100)} m` : `${km.toFixed(1)} km`);
+const listed = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/** A fit card's lines (ux.md §4.8). Stops are named by their plan text, as their level numbers change once it's in. */
+export function fitLines(fit: Fit, row: (key: string) => { plan: string; time: string; place: string | null } | null) {
+  const start = minutesOf(fit.time);
+  const travel = !fit.leg
+    ? "No travel estimate: one of the places has no pin."
+    : fit.leg.kind === "estimate"
+      ? `${legLines(fit.leg).line} (estimate)`
+      : `${legLines(fit.leg).line} · ${formatVerified(fit.leg.last_verified_at)}`;
+  const drops = fit.ripple.filter((r) => "drop" in r).map((r) => row(r.key)?.plan ?? "a stop");
+  const shifts = fit.ripple.filter((r): r is { key: string; time: string } => "time" in r);
+  const was = shifts[0] && row(shifts[0].key)?.time;
+  const by = was ? minutesOf(shifts[0].time) - minutesOf(was) : 0;
+  const moves = drops.length
+    ? `Drops ${listed(drops)}.`
+    : shifts.length
+      ? `Moves ${shifts.length} later stop${shifts.length === 1 ? "" : "s"}${by > 0 ? ` ${duration(by)} later` : ""}.`
+      : "Nothing else moves.";
+  const r = fit.reason;
+  const near = r.near_km == null ? null : r.kind === "near_hotel" ? `Near your hotel (${distance(r.near_km)}).`
+    : r.kind === "near_stops" && r.near_key ? `Near ${row(r.near_key)?.place ?? row(r.near_key)?.plan ?? "a stop"} (${distance(r.near_km)}).` : null;
+  const free = r.free_min > 0 ? `${duration(r.free_min)} free there.` : r.free_min < 0 ? `The day runs ${duration(-r.free_min)} over.` : null;
+  const why = [near, free].filter(Boolean).join(" ") || null;
+  const c = fit.condition;
+  return {
+    when: `World ${fit.day} · ${formatTime(fit.time)} to ${formatTime(hhmmOf(start + STAY))}`,
+    slot: `After ${row(fit.after)?.plan ?? "a stop"}`,
+    travel,
+    moves,
+    why,
+    chip: c ? `${c.kind === "show_if" ? "Only if" : "Not if"} the group picks ${c.is}` : null,
+  };
+}
+
+/** Under the cards: how they were ranked, and that an estimate is one. */
+export function fitFooter(fits: readonly Fit[], pinned: boolean): string[] {
+  if (!pinned) return ["Ranked by free time only: this place has no pin."];
+  const ranked = "Ranked by how close it is to the stops around it, and by free time that day.";
+  return fits.some((f) => f.leg?.kind === "estimate") ? [ranked, "Estimates come from the distance, not routes on file."] : [ranked];
 }

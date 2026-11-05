@@ -48,6 +48,21 @@ export type Suggestion = {
   ripple: ({ key: string; time: string } | { key: string; drop: true })[];
   notes: string[];
   changes: { word: string; day: number | null; text: string; part?: "stop" | "ripple" }[];
+  /** TG-61 round 4: with at {anywhere: true}, up to 3 slots, best first; [] when none fits. Absent otherwise */
+  fits?: Fit[] | null;
+};
+/** One slot where a place fits (options.md §5.5). `after` is never null: no fit starts a day. */
+export type Fit = {
+  day: number;
+  after: string;
+  time: string;
+  leg: LegOut | null;
+  ripple: Suggestion["ripple"];
+  notes: string[];
+  changes: Suggestion["changes"];
+  /** The anchor's own condition, which the new row takes */
+  condition: { pick: string; is: string; kind: "show_if" | "hide_if" } | null;
+  reason: { kind: "near_stops" | "near_hotel" | "free_time"; near_key: string | null; near_km: number | null; free_min: number; dropped: number };
 };
 /** Where a stop goes: in place of a row, after one, first on a day, or a row moved to the end of another day. */
 export type At = { replace: string } | { after: string } | { first_of_day: number } | { move: string; day: number };
@@ -315,4 +330,18 @@ export function focusAfter(before: Guide, after: Guide, anchor: string): string 
   const day = before.days.find((d) => d.rows.some((r) => r.key === anchor))?.rows.map((r) => r.key) ?? [];
   const i = day.indexOf(anchor);
   return day.slice(i + 1).find((k) => now.has(k)) ?? day.slice(0, i).reverse().find((k) => now.has(k)) ?? null;
+}
+
+// ---------------------------------------------------------------- where does it fit? (owner round 4)
+
+/** A chosen fit as the proposal's suggestion: the place's fields stay, the slot's are the fit's. */
+export function fitSuggestion(s: Suggestion, fit: Fit): Suggestion {
+  const { fits: _others, ...place } = s;
+  void _others;
+  return { ...place, time: fit.time, leg: fit.leg, ripple: fit.ripple, notes: fit.notes, changes: fit.changes };
+}
+
+/** Only the chosen fit, after its anchor: the new row takes the anchor's condition, which is the fit's (plan.md §15). */
+export function applyFit(g: GuideIn, fit: Fit, picked: { place: PlaceIn | null; plan: string; time: string; ripple: boolean }): GuideIn {
+  return applySuggestion(g, { after: fit.after }, { name: null, lat: null, lng: null, maps_url: null, km_from_baguio: null, far: false, time: fit.time, leg: fit.leg, ripple: fit.ripple, notes: fit.notes, changes: fit.changes }, picked);
 }

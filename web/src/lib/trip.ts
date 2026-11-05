@@ -62,7 +62,7 @@ export type PlanBase = { itinerary_slug: string; seq: number };
 export type PlanSaved = { itinerary: Itinerary; changes: ChangeLine[] };
 export type SuggestIn = {
   base: PlanBase;
-  at: { replace: string } | { after: string } | { first_of_day: number };
+  at: { replace: string } | { after: string } | { first_of_day: number } | { anywhere: true };
   place: { spot_id: string } | { trip_place_id: string } | { link: string };
 };
 
