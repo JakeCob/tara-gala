@@ -36,7 +36,7 @@ export default function PlanEditBar({ edits, status, can, stale, today, onUndo, 
       </div>
       <p role="status" aria-live="polite" className="text-sm break-words empty:sr-only">{status}</p>
       {stale && (
-        <PixelButton variant="secondary" className="self-start" onClick={onReload}>
+        <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onReload}>
           Reload the plan
         </PixelButton>
       )}

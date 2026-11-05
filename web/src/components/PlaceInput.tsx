@@ -9,7 +9,7 @@ import { formatTime } from "@/lib/api";
 import { type At, type Found, type PlaceIn, type Suggestion, applySuggestion, findPlaces, isLink } from "@/lib/planEdit";
 import type { ChangeLine, Done } from "@/lib/planLines";
 import { farLine } from "@/lib/planLines";
-import { type SuggestIn, planFailureMessage } from "@/lib/trip";
+import { type SuggestIn, planFailureMessage, planOutcome } from "@/lib/trip";
 import { ChangeList, LegLine, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 
@@ -53,11 +53,14 @@ export function FindPlace({ editor, at, noteFor, onChosen, onBack }: {
       console.info("[tg-trip] plan find kind=name spots=%s", editor.spots ? "yes" : "no");
       return;
     }
-    if (!editor.online) return setProblem("Finding a link needs signal.");
+    if (!editor.online) {
+      console.info("[tg-trip] plan find kind=link ok=offline");
+      return setProblem("Finding a link needs signal.");
+    }
     setFinding(true);
     const r = await editor.suggest(at, { link: typed });
     setFinding(false);
-    console.info("[tg-trip] plan find kind=link ok=%s", r.ok ? "yes" : r.why === "rejected" ? r.detail : r.why);
+    console.info("[tg-trip] plan find kind=link ok=%s", planOutcome(r));
     if (!r.ok) return setProblem(planFailureMessage(r));
     setPinned({ link: typed, suggestion: r.body });
     setName((r.body.name ?? "").slice(0, MAX_NAME));
@@ -149,10 +152,10 @@ export function FindPlace({ editor, at, noteFor, onChosen, onBack }: {
       {!pinned && (
         <>
           <p className="text-sm">Not listed? Paste its Google Maps link to pin it.</p>
-          <PixelButton variant="secondary" className="self-start" onClick={onNoteOnly}>Add it as a note, no pin</PixelButton>
+          <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onNoteOnly}>Add it as a note, no pin</PixelButton>
         </>
       )}
-      <PixelButton variant="secondary" className="self-start" onClick={onBack}>Back</PixelButton>
+      <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onBack}>Back</PixelButton>
     </div>
   );
 }
@@ -215,7 +218,7 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
     let place = chosen.place;
     if (chosen.link) {
       const r = await editor.addPlace(chosen.link, plan.slice(0, MAX_NAME));
-      console.info("[tg-trip] plan place add ok=%s", r.ok ? "yes" : r.why === "rejected" ? r.detail : r.why);
+      console.info("[tg-trip] plan place add ok=%s", planOutcome(r));
       if (!r.ok) {
         setApplying(false);
         return setProblem(planFailureMessage(r));
@@ -308,7 +311,7 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
         {applying ? "Applying..." : "Apply"}
       </PixelButton>
       <p className={PX.meta}>Nothing changes until you tap Apply.</p>
-      <PixelButton variant="secondary" className="self-start" onClick={onBack}>Back</PixelButton>
+      <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onBack}>Back</PixelButton>
     </div>
   );
 }

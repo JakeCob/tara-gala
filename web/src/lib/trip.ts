@@ -335,6 +335,12 @@ const PLAN_DETAIL: Record<string, string> = {
   bad_place: "Give the place a name of 1 to 80 letters.",
 };
 
+/** A plan call's outcome for a log line: yes, a failure kind, or a code we know. Never the server's free text. */
+export function planOutcome(r: { ok: true } | { ok: false; why: TripFailure; detail?: string }): string {
+  if (r.ok) return "yes";
+  return r.why === "rejected" ? (r.detail && PLAN_DETAIL[r.detail] ? r.detail : "other") : r.why;
+}
+
 /** One plain sentence for a failed plan call (ux.md §4.3, §6). */
 export function planFailureMessage(r: { why: TripFailure; detail?: string }): string {
   if (r.why === "clash") return "Someone just changed the plan, so your change wasn't saved.";

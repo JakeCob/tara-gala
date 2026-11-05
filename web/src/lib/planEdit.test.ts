@@ -8,7 +8,7 @@ import {
   type GuideIn, type RowIn, type Suggestion, addRow, applySuggestion, editBudget, editPickOption, editSources, editTodo, legIn, moveRow, nudgeRow,
   removeRow, replacePlace, setRow, swapBus, toStored, findPlaces, focusAfter, isLink, noteSuggestion,
 } from "./planEdit.ts";
-import { planFailureMessage, tripApi } from "./trip.ts";
+import { planFailureMessage, planOutcome, tripApi } from "./trip.ts";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/tg61-owner-guide.json", import.meta.url), "utf8")) as { out: Guide; stored: GuideIn };
 const spot = (id: string) => ({ spot_id: id });
@@ -179,6 +179,11 @@ test("T61-W9 a 409 plan_changed comes back as why clash with the newer plan's sl
   assert.equal(planFailureMessage(r as never), "That stop isn't in the plan any more. Check the map, then try again.");
   assert.match(planFailureMessage({ why: "clash" }), /^Someone just changed the plan/);
   assert.equal(planFailureMessage({ why: "rejected", detail: "too_big" }), "That change is too big to save. Try a smaller one.", "not the picture's message");
+  // a log carries a code we know, never the server's free text
+  assert.equal(planOutcome({ why: "rejected", detail: "unknown_key", ok: false }), "unknown_key");
+  assert.equal(planOutcome({ why: "rejected", detail: "Cafe at 16.41,120.59 https://x", ok: false }), "other");
+  assert.equal(planOutcome({ ok: false, why: "clash" }), "clash");
+  assert.equal(planOutcome({ ok: true }), "yes");
 });
 
 test("T61-W9b the plan calls: their paths, bodies and answers", async () => {
@@ -245,4 +250,10 @@ test("T61-W15 the new and changed rows after a save, for focus: a minted key, el
   assert.equal(focusAfter(before, added, "d1-01"), "d1-04");
   assert.equal(focusAfter(before, removed, "d1-02"), "d1-03");
   assert.equal(focusAfter(before, before, "d1-02"), "d1-02");
+  // Removing a day's last stop stays in that World: the stop before it, never the next World's first
+  const two = { days: [{ day: 1, rows: [{ key: "d1-01" }, { key: "d1-02" }] }, { day: 2, rows: [{ key: "d2-01" }] }] } as unknown as Guide;
+  const gone = { days: [{ day: 1, rows: [{ key: "d1-01" }] }, { day: 2, rows: [{ key: "d2-01" }] }] } as unknown as Guide;
+  assert.equal(focusAfter(two, gone, "d1-02"), "d1-01");
+  const empty = { days: [{ day: 1, rows: [] }, { day: 2, rows: [{ key: "d2-01" }] }] } as unknown as Guide;
+  assert.equal(focusAfter({ days: [{ day: 1, rows: [{ key: "d1-01" }] }, { day: 2, rows: [{ key: "d2-01" }] }] } as unknown as Guide, empty, "d1-01"), null, "an emptied day has nothing to focus");
 });

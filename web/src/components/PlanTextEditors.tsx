@@ -202,7 +202,10 @@ export function PickEdits({ editor, day, chosen }: { editor: PlanEditor; day: Gu
     if (pick.options.length <= MIN_OPTIONS) return setProblem("A pick needs at least two choices.");
     const n = dependants(id);
     const ask = n ? `Remove choice ${id}? Its ${n} stop${n === 1 ? "" : "s"} will show whatever the group picks.` : `Remove choice ${id}?`;
-    if (!window.confirm(ask)) return;
+    if (!window.confirm(ask)) {
+      console.info("[tg-trip] plan pick remove declined");
+      return;
+    }
     const why = await save({ remove: id });
     setProblem(why ?? "");
     if (!why) setOpen(null);
@@ -239,7 +242,7 @@ export function PickEdits({ editor, day, chosen }: { editor: PlanEditor; day: Gu
               return why;
             }} />
         ) : (
-          <PixelButton variant="secondary" className="self-start" aria-disabled={off || undefined} onClick={() => !off && setOpen("new")}>Add a choice</PixelButton>
+          <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={off || undefined} onClick={() => !off && setOpen("new")}>Add a choice</PixelButton>
         ))}
     </div>
   );

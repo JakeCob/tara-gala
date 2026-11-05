@@ -10,7 +10,7 @@ import { type Done, type PlanVersion, copyLine, justChanged, levelLabel, resultL
 import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "@/lib/planState";
 import {
   type Answer, type Hotel, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
-  hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
+  hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, planOutcome, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
 import PlanEditBar from "./PlanEditBar";
@@ -255,14 +255,17 @@ export default function TripView({ slug }: { slug: string }) {
     }
     const base = baseOf(s); // the same object as the guide below: never a base from one answer and a plan from another
     const req = run(base, toStored(s.guide));
-    if (!req) return IGNORED;
+    if (!req) {
+      console.info("[tg-trip] plan %s no change", action);
+      return IGNORED;
+    }
     writingPlan.current = true;
     setPlanWriting(true);
     setPlanSaid("Saving...");
     const r = await req;
     writingPlan.current = false;
     setPlanWriting(false);
-    console.info("[tg-trip] plan %s ok=%s base_seq=%d seq=%s", action, r.ok ? "yes" : r.why === "rejected" ? r.detail : r.why, base.seq, r.ok ? (r.body.itinerary.seq ?? "none") : "-");
+    console.info("[tg-trip] plan %s ok=%s base_seq=%d seq=%s", action, planOutcome(r), base.seq, r.ok ? (r.body.itinerary.seq ?? "none") : "-");
     if (!r.ok) {
       const message = planFailureMessage(r);
       if (r.why === "clash") clashWait.current = source === "undo" ? "undo" : "edit";
@@ -288,9 +291,15 @@ export default function TripView({ slug }: { slug: string }) {
 
   async function onUndo() {
     const edits = tripRef.current?.plan_edits;
-    if (!edits || edits.versions[0]?.seq === 0) return setPlanSaid("Nothing to undo yet.");
+    if (!edits || edits.versions[0]?.seq === 0) {
+      console.info("[tg-trip] plan undo nothing");
+      return setPlanSaid("Nothing to undo yet.");
+    }
     const ask = undoConfirm(edits, mine.current, Date.now());
-    if (ask && !window.confirm(ask)) return;
+    if (ask && !window.confirm(ask)) {
+      console.info("[tg-trip] plan undo declined");
+      return;
+    }
     const redo = undoLabel(edits) === "Redo";
     await planWrite("plan-undo", (base) => tripApi.undoPlan(slug, base), { kind: "undo", redo, undone: (redo ? edits.versions[1] : edits.versions[0]) ?? null }, null, "undo");
   }
@@ -320,7 +329,7 @@ export default function TripView({ slug }: { slug: string }) {
       const s = shownRef.current;
       if (!s) return { ok: false, why: "rejected" };
       const r = await tripApi.suggest(slug, { base: baseOf(s), at, place });
-      console.info("[tg-trip] plan suggest at=%s place=%s ok=%s", Object.keys(at)[0], Object.keys(place)[0], r.ok ? "yes" : r.why === "rejected" ? r.detail : r.why);
+      console.info("[tg-trip] plan suggest at=%s place=%s ok=%s", Object.keys(at)[0], Object.keys(place)[0], planOutcome(r));
       return r;
     },
     addPlace: (link, name) => tripApi.addPlace(slug, { link, name }),
@@ -360,9 +369,12 @@ export default function TripView({ slug }: { slug: string }) {
         <p className="text-sm text-muted md:max-w-prose">{editing && editor ? EDIT_INTRO : VIEW_INTRO}</p>
         {editor && !editing && (
           <div className="flex flex-col gap-1">
-            <PixelButton variant="secondary" className="self-start" aria-disabled={!online || undefined}
+            <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!online || undefined}
               onClick={() => {
-                if (!online) return;
+                if (!online) {
+                  console.info("[tg-trip] plan edit mode offline");
+                  return;
+                }
                 console.info("[tg-trip] plan edit mode on");
                 setEditing(true);
               }}>

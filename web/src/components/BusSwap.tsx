@@ -97,7 +97,7 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
           {applying ? "Applying..." : "Apply"}
         </PixelButton>
         <p className={PX.meta}>Nothing changes until you tap Apply.</p>
-        <PixelButton variant="secondary" className="self-start" onClick={() => setPicked(null)}>Back</PixelButton>
+        <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={() => setPicked(null)}>Back</PixelButton>
       </div>
     );
   }
@@ -114,12 +114,12 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
         <ul className="flex flex-col gap-3">
           {others.map((t) => (
             <TripCard key={t.trip_id} trip={t}
-              action={<PixelButton variant="secondary" className="self-start" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setPicked(t)}>Use this bus</PixelButton>} />
+              action={<PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setPicked(t)}>Use this bus</PixelButton>} />
           ))}
         </ul>
       )}
       {others[0]?.confirm_note && <p className={PX.meta}>{others[0].confirm_note}</p>}
-      {onBack && <PixelButton variant="secondary" className="self-start" onClick={onBack}>Back</PixelButton>}
+      {onBack && <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onBack}>Back</PixelButton>}
     </div>
   );
 }

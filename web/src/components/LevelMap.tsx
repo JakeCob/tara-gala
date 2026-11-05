@@ -187,7 +187,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       {editor && warned.length > 0 && (
         <PixelBox tone="alert" className="flex flex-col gap-2 p-3 md:max-w-2xl">
           <p className="text-sm font-semibold text-danger-text">{busNotice(warned.length)}</p>
-          <PixelButton variant="secondary" className="self-start"
+          <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm"
             onClick={() => { setMenu("buses"); requestAnimationFrame(() => document.querySelector("[data-bus-warning]")?.scrollIntoView({ block: "center" })); }}>
             Show buses
           </PixelButton>
@@ -274,7 +274,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       </div>
 
       {editing && editor && (
-        <PixelButton variant="secondary" className="self-start" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setAdding(true)}>
+        <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setAdding(true)}>
           Add a stop to World {day.day}
         </PixelButton>
       )}
@@ -502,7 +502,7 @@ function Buses({ table, onSwap, can }: { table: BusTable; onSwap?: (index: numbe
             {b.trip ? `${formatTime(b.trip.departure_time)} ${b.trip.operator_name}: ` : ""}{busWarningLine(b.warning, b.date)}
           </p>
           {b.booked && <p className="text-sm">You marked it booked, so check your ticket with {b.trip?.operator_name ?? "the bus company"} before you swap.</p>}
-          <PixelButton variant="secondary" className="self-start" aria-disabled={!can || undefined} onClick={() => can && onSwap(i)}>Swap this bus</PixelButton>
+          <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!can || undefined} onClick={() => can && onSwap(i)}>Swap this bus</PixelButton>
         </PixelBox>
       ))}
       <p className={PX.meta}>

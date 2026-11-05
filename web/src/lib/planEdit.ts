@@ -304,14 +304,15 @@ export function noteSuggestion(g: GuideIn, at: { after: string } | { first_of_da
 }
 
 /** Which level to focus once a change is on screen: the row the server just minted, else the row it was about, else
- * the next one after it (a removal). */
+ * (a removal) the next one on its day, or the one before it when it was the day's last. Never another World's. */
 export function focusAfter(before: Guide, after: Guide, anchor: string): string | null {
   const keysOf = (g: Guide) => g.days.flatMap((d) => d.rows.map((r) => r.key));
   const had = new Set(keysOf(before));
-  const now = keysOf(after);
-  const minted = now.find((k) => !had.has(k));
+  const now = new Set(keysOf(after));
+  const minted = [...now].find((k) => !had.has(k));
   if (minted) return minted;
-  if (now.includes(anchor)) return anchor;
-  const old = keysOf(before);
-  return old.slice(old.indexOf(anchor) + 1).find((k) => now.includes(k)) ?? null;
+  if (now.has(anchor)) return anchor;
+  const day = before.days.find((d) => d.rows.some((r) => r.key === anchor))?.rows.map((r) => r.key) ?? [];
+  const i = day.indexOf(anchor);
+  return day.slice(i + 1).find((k) => now.has(k)) ?? day.slice(0, i).reverse().find((k) => now.has(k)) ?? null;
 }

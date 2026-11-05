@@ -61,7 +61,7 @@ test("T61-W11f logs: the action, codes, versions and counts, never a name, note,
     for (const args of logs) {
       assert.match(args, /^"\[tg-trip\] /, `${file}: ${args}`);
       const values = args.slice(args.indexOf('"', 1) + 1);
-      assert.doesNotMatch(values, /\b(name|names|text|note|plan|typed|link|maps_url|lat|lng|label|item|query|changes|place\.\w+)\b/, `${file}: ${args}`);
+      assert.doesNotMatch(values, /\b(name|names|text|note|plan|typed|link|maps_url|lat|lng|label|item|query|changes|detail|place\.\w+)\b/, `${file}: ${args}`);
     }
   }
 });
@@ -83,4 +83,12 @@ test("T61-W11h the copy line, the delete sentence and the trip place's chip use 
   // ux's own chip says "not verified", and the done badge is the sprite ui-badge-verified: both are allowed
   const words = TG61.map(read).join("\n").replace(/^\s*(\/\/|\*|\/\*).*$/gm, "").replaceAll("not verified", "").replaceAll("ui-badge-verified", "");
   assert.doesNotMatch(words, /\bverified\b|\bconfirmed\b|checked in|\bquest\b|\bXP\b/, "never verified, confirmed or checked in (ux.md §11)");
+});
+
+test("T61-W11i a PixelButton given a className keeps its padding: className replaces the variant's layout", () => {
+  for (const file of TG61) {
+    for (const m of read(file).matchAll(/<PixelButton\b[^>]*?\sclassName="([^"]*)"/g)) {
+      assert.match(m[1], /\bp[xy]?-\d/, `${file}: ${m[0].slice(0, 90)}`);
+    }
+  }
 });

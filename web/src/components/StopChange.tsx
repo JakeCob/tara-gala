@@ -84,8 +84,14 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
   const picks = marksByKey(marks);
   const label = (k: string) => levelLabel(guide, marks, k);
 
-  // Back to the menu puts focus on the button that was used (ux.md §12)
+  // Back to the menu puts focus on the button that was used; a new step starts at its heading (ux.md §12). On first
+  // open, showModal has already put focus on Close
+  const opened = useRef(false);
   useEffect(() => {
+    if (!opened.current) {
+      opened.current = true;
+      return;
+    }
     if (step.k === "menu" && used.current) box.current?.querySelector<HTMLElement>(`[data-menu="${used.current}"]`)?.focus();
     else if (step.k !== "find" && step.k !== "propose") top.current?.focus();
   }, [step.k]);
@@ -149,7 +155,10 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     if (off || !row || !key) return;
     const ticked = picks.get(rowMark(row))?.value === "done";
     const photos = files.filter((f) => f.kind === "photo" && f.row_key === key).length;
-    if (!window.confirm(removeConfirm(row.plan, world, ticked, photos))) return;
+    if (!window.confirm(removeConfirm(row.plan, world, ticked, photos))) {
+      console.info("[tg-trip] plan remove declined");
+      return;
+    }
     const out = await editor.save("plan-remove", (g) => removeRow(g, key), { kind: "remove" }, key);
     if (out.ok) return onDone(out.focus);
     if (!out.ignored) setProblem(out.message);
@@ -225,31 +234,31 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           )}
           <div className="flex flex-col gap-2">
             {row.bus ? (
-              <PixelButton data-menu="replace" variant="secondary" className="w-full justify-center" aria-disabled={off || undefined} onClick={() => go("bus", { k: "bus" })}>
+              <PixelButton data-menu="replace" variant="secondary" className="inline-flex w-full items-center justify-center px-4 text-sm" aria-disabled={off || undefined} onClick={() => go("bus", { k: "bus" })}>
                 Change the bus
               </PixelButton>
             ) : (
-              <PixelButton data-menu="replace" variant="secondary" className="w-full justify-center" aria-disabled={off || undefined} onClick={() => go("replace", { k: "find", mode: "replace" })}>
+              <PixelButton data-menu="replace" variant="secondary" className="inline-flex w-full items-center justify-center px-4 text-sm" aria-disabled={off || undefined} onClick={() => go("replace", { k: "find", mode: "replace" })}>
                 Replace this stop
               </PixelButton>
             )}
-            <PixelButton data-menu="add" variant="secondary" className="w-full justify-center" aria-disabled={off || undefined} onClick={() => go("add", { k: "find", mode: "add" })}>
+            <PixelButton data-menu="add" variant="secondary" className="inline-flex w-full items-center justify-center px-4 text-sm" aria-disabled={off || undefined} onClick={() => go("add", { k: "find", mode: "add" })}>
               Add a stop after it
             </PixelButton>
-            <PixelButton data-menu="time" variant="secondary" className="w-full justify-center" aria-disabled={off || undefined} onClick={() => go("time", { k: "time" })}>
+            <PixelButton data-menu="time" variant="secondary" className="inline-flex w-full items-center justify-center px-4 text-sm" aria-disabled={off || undefined} onClick={() => go("time", { k: "time" })}>
               Change time and note
             </PixelButton>
-            <PixelButton data-menu="move" variant="secondary" className="w-full justify-center" aria-disabled={off || undefined} onClick={() => go("move", { k: "move" })}>
+            <PixelButton data-menu="move" variant="secondary" className="inline-flex w-full items-center justify-center px-4 text-sm" aria-disabled={off || undefined} onClick={() => go("move", { k: "move" })}>
               Move
             </PixelButton>
             {!row.bus && (
-              <PixelButton data-menu="remove" variant="secondary" className="w-full justify-center" aria-disabled={off || undefined} onClick={onRemove}>
+              <PixelButton data-menu="remove" variant="secondary" className="inline-flex w-full items-center justify-center px-4 text-sm" aria-disabled={off || undefined} onClick={onRemove}>
                 Remove this stop
               </PixelButton>
             )}
           </div>
           {problem && <PlanProblem text={problem} />}
-          {onBack && <PixelButton variant="secondary" className="self-start" onClick={onBack}>Back</PixelButton>}
+          {onBack && <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onBack}>Back</PixelButton>}
         </>
       )}
 
@@ -272,13 +281,13 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
         (key && step.mode !== "add" ? !guide.days.some((d) => d.rows.some((r) => r.key === key)) : false) ? (
           <>
             <ClashBox lead="Someone just changed the plan, and this stop isn't in it any more." rest="Your change wasn't saved. Changes shows what they did." />
-            <PixelButton variant="secondary" className="self-start" onClick={onClose}>Close</PixelButton>
+            <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onClose}>Close</PixelButton>
           </>
         ) : (
           <>
             <ClashBox lead="Someone just changed the plan, so your change wasn't saved." rest="The map now shows their version. Check your change against it, then tap Apply again." />
             {problem && <PlanProblem text={problem} />}
-            <PixelButton variant="secondary" className="self-start" aria-disabled={off || undefined} onClick={() => onRecheck(step)}>Check my change again</PixelButton>
+            <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={off || undefined} onClick={() => onRecheck(step)}>Check my change again</PixelButton>
             <p role="status" className="text-sm empty:sr-only">{off ? editor.status : ""}</p>
           </>
         )
@@ -319,7 +328,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           )}
           <p className={PX.meta}>Its tick and photos move with it.</p>
           {problem && <PlanProblem text={problem} />}
-          <PixelButton variant="secondary" className="self-start" onClick={() => setStep({ k: "menu" })}>Back</PixelButton>
+          <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={() => setStep({ k: "menu" })}>Back</PixelButton>
         </>
       )}
 
