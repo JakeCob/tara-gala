@@ -244,9 +244,25 @@ export async function savedTrip(slug: string, store?: Parameters<typeof savedAns
 /** TG-61: an answer that isn't the trip. A clash carries the newer plan's slug and version. */
 export type Answer<T> = { ok: true; body: T } | { ok: false; why: TripFailure; detail?: string; clash?: PlanBase };
 
-const planTodo = (): never => {
-  throw new Error("TG-61: not built yet");
-};
+/** A call whose answer isn't the trip (TG-61's plan routes). The same failures as call, plus the clash. */
+async function ask<T>(path: string, init: { method: Method; body: unknown }): Promise<Answer<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { cache: "no-store", method: init.method, headers: { "content-type": "application/json" }, body: JSON.stringify(init.body) });
+  } catch {
+    return { ok: false, why: "offline" };
+  }
+  if (res.ok) return { ok: true, body: (await res.json()) as T };
+  if (res.status === 404) return { ok: false, why: "not_found" };
+  if (res.status === 429) return { ok: false, why: "rate_limited" };
+  if (res.status >= 500) return { ok: false, why: "server" };
+  const body = await res.json().catch(() => null);
+  const detail = typeof body?.detail === "string" ? body.detail : undefined;
+  if (res.status === 409 && detail === "plan_changed") {
+    return { ok: false, why: "clash", detail, clash: { itinerary_slug: String(body.itinerary_slug), seq: Number(body.seq) } };
+  }
+  return { ok: false, why: "rejected", detail };
+}
 export const tripApi = {
   create: (name: string, start_date: string, return_date: string) =>
     one(call("/sessions", { method: "POST", body: { name, start_date, return_date } })),
@@ -286,13 +302,45 @@ export const tripApi = {
   startInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "PUT" })),
   /** The invite link stops working; startInvite then makes a new one */
   stopInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "DELETE" })),
-  savePlan: (_slug: string, _base: PlanBase, _guide: GuideIn, _source: "hand" | "chat"): Promise<Answer<PlanSaved>> => planTodo(),
-  undoPlan: (_slug: string, _base: PlanBase): Promise<Answer<PlanSaved>> => planTodo(),
-  suggest: (_slug: string, _body: SuggestIn): Promise<Answer<Suggestion>> => planTodo(),
-  addPlace: (_slug: string, _body: { link: string; name: string }): Promise<Answer<TripPlace>> => planTodo(),
+  /** TG-61: the whole new guide, worked out from `base`. A 409 means another phone saved first: nothing was written */
+  savePlan: (slug: string, base: PlanBase, guide: GuideIn, source: "hand" | "chat") => ask<PlanSaved>(`${at(slug)}/plan`, { method: "PUT", body: { base, guide, source } }),
+  /** Undoes the newest version, or puts back the change an undo took out */
+  undoPlan: (slug: string, base: PlanBase) => ask<PlanSaved>(`${at(slug)}/plan/undo`, { method: "POST", body: { base } }),
+  /** A proposal for one stop; saves nothing */
+  suggest: (slug: string, body: SuggestIn) => ask<Suggestion>(`${at(slug)}/plan/suggest`, { method: "POST", body }),
+  /** The server reads the link itself; the phone never sends a pin */
+  addPlace: (slug: string, body: { link: string; name: string }) => ask<TripPlace>(`${at(slug)}/places`, { method: "POST", body }),
 };
 
-export const planFailureMessage = (_r: { why: TripFailure; detail?: string }): string => planTodo();
+const PLAN_DETAIL: Record<string, string> = {
+  unknown_key: "That stop isn't in the plan any more. Check the map, then try again.",
+  unknown_place: "That place isn't on Tara Gala any more. Pick another one.",
+  no_change: "That's how the plan is already, so nothing changed.",
+  nothing_to_undo: "Nothing to undo yet.",
+  cannot_undo: "That change can't be undone: a place in it isn't on Tara Gala any more.",
+  option_picked: "The group picked that choice. Unpick it first.",
+  bus_table_changed: "Buses can only be swapped here, not added or taken out.",
+  unknown_trip: "That bus isn't on the schedule any more. Pick another one.",
+  trip_inactive: "That bus isn't on the schedule any more. Pick another one.",
+  trip_not_running: "That bus doesn't run on that day. Pick another one.",
+  wrong_direction: "That bus goes the other way. Pick another one.",
+  too_many_rows: "This plan already has as many stops as it can hold.",
+  too_many_versions: "This plan has been changed as many times as it can hold.",
+  bad_plan: "That change doesn't fit the plan. Check it and try again.",
+  too_big: "That change is too big to save. Try a smaller one.",
+  link_unreadable: "We couldn't read that link. Open the place in Google Maps, tap Share, and copy the link again.",
+  link_no_pin: "That link has no pin. Open the place in Google Maps and share it from there.",
+  link_not_maps: "That isn't a Google Maps link. Paste one, or type a place name.",
+  too_many_places: "This trip already has 100 places of its own, the most it can hold.",
+  bad_place: "Give the place a name of 1 to 80 letters.",
+};
+
+/** One plain sentence for a failed plan call (ux.md §4.3, §6). */
+export function planFailureMessage(r: { why: TripFailure; detail?: string }): string {
+  if (r.why === "clash") return "Someone just changed the plan, so your change wasn't saved.";
+  if (r.why === "rejected" && r.detail && PLAN_DETAIL[r.detail]) return PLAN_DETAIL[r.detail];
+  return tripFailureMessage(r);
+}
 
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;
 
