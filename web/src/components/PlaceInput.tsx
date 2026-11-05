@@ -8,13 +8,17 @@ import { PX, PixelBox, PixelButton, PixelChoice, cx } from "@/components/pixel";
 import { formatTime } from "@/lib/api";
 import { type At, type Found, type PlaceIn, type Suggestion, applySuggestion, findPlaces, isLink } from "@/lib/planEdit";
 import type { ChangeLine, Done } from "@/lib/planLines";
-import { farLine } from "@/lib/planLines";
+import { farLine, pinLine } from "@/lib/planLines";
 import { type SuggestIn, planFailureMessage, planOutcome } from "@/lib/trip";
 import { ChangeList, LegLine, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 
-/** What goes there: a spot or trip place, a link the server pins on Apply, or a note with no pin. */
-export type Chosen = { place: PlaceIn | null; link: string | null; name: string; suggestion: Suggestion };
+/** What goes there: a spot or trip place, a link the server pins on Apply, or a note with no pin. `pin` is the pin the
+ * group pasted for a link the server couldn't pin (round 5), sent again as typed with every call about that link. */
+export type Chosen = { place: PlaceIn | null; link: string | null; pin: string | null; name: string; suggestion: Suggestion };
+
+/** A link, with the group's pasted pin when it has one (round 5) */
+export const linkPlace = (c: Pick<Chosen, "link" | "pin">) => (c.pin ? { link: c.link!, pin: c.pin } : { link: c.link! });
 
 const MAX_NAME = 80;
 const ON_FILE = "No opening hours or jeep routes on file.";
@@ -35,7 +39,11 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
   const [found, setFound] = useState<Found[]>([]);
   const [finding, setFinding] = useState(false);
   const [problem, setProblem] = useState("");
-  const [pinned, setPinned] = useState<{ link: string; suggestion: Suggestion } | null>(null);
+  const [pinned, setPinned] = useState<{ link: string; pin: string | null; suggestion: Suggestion } | null>(null);
+  // Round 5: a link the server couldn't pin, or the group's own "wrong spot": the Pin field is open
+  const [needPin, setNeedPin] = useState<string | null>(null);
+  const [pinText, setPinText] = useState("");
+  const [pinProblem, setPinProblem] = useState("");
   const [name, setName] = useState("");
   const [nameProblem, setNameProblem] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -49,6 +57,8 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
     e.preventDefault();
     setProblem("");
     setPinned(null);
+    setNeedPin(null);
+    setPinProblem("");
     const typed = text.trim();
     if (!typed) return setProblem("Paste a Google Maps link, or type a place or store name.");
     if (!isLink(typed)) {
@@ -65,9 +75,41 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
     const r = await editor.suggest(at, { link: typed });
     setFinding(false);
     console.info("[tg-trip] plan find kind=link ok=%s", planOutcome(r));
+    if (!r.ok && r.detail === "need_pin") {
+      // Not an error: the next step (ux.md §4.3 round 5)
+      setNeedPin(typed);
+      setName((r.name ?? "").slice(0, MAX_NAME));
+      return;
+    }
     if (!r.ok) return setProblem(planFailureMessage(r));
-    setPinned({ link: typed, suggestion: r.body });
+    setPinned({ link: typed, pin: null, suggestion: r.body });
     setName((r.body.name ?? "").slice(0, MAX_NAME));
+  }
+
+  /** The pasted pin, sent as typed with the link: the server parses it, and makes no fetch. */
+  async function onPin() {
+    const link = needPin ?? pinned?.link;
+    const typed = name.trim();
+    if (!typed || typed.length > MAX_NAME) {
+      console.info("[tg-trip] plan find kind=pin ok=no why=name");
+      return setNameProblem("Type its name first.");
+    }
+    if (!link || finding) return;
+    const pin = pinText; // as typed: the server parses it (the field caps it at 60)
+    if (!pin.trim()) {
+      console.info("[tg-trip] plan find kind=pin ok=no why=empty");
+      return setPinProblem("Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.");
+    }
+    setFinding(true);
+    setPinProblem("");
+    const r = await editor.suggest(at, { link, pin });
+    setFinding(false);
+    console.info("[tg-trip] plan find kind=pin ok=%s", planOutcome(r));
+    if (!r.ok) return r.detail === "bad_pin" ? setPinProblem(planFailureMessage(r)) : setProblem(planFailureMessage(r));
+    setNeedPin(null);
+    setPinned({ link, pin, suggestion: r.body });
+    console.info("[tg-trip] plan find pin far=%s", r.body.far ? "yes" : "no");
+    if (!r.body.far) onChosen({ place: null, link, pin, name: typed, suggestion: r.body });
   }
 
   async function onPick(f: Found) {
@@ -78,22 +120,23 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
     setFinding(false);
     console.info("[tg-trip] plan find kind=%s ok=%s", f.kind, r.ok ? "yes" : r.why);
     if (!r.ok) return setProblem(planFailureMessage(r));
-    onChosen({ place, link: null, name: f.name, suggestion: r.body });
+    onChosen({ place, link: null, pin: null, name: f.name, suggestion: r.body });
   }
 
   function onNoteOnly() {
     const typed = text.trim();
     if (!typed || isLink(typed)) return setProblem("Type what you'll do there first.");
-    onChosen({ place: null, link: null, name: typed.slice(0, 120), suggestion: noteFor(typed.slice(0, 120)) });
+    onChosen({ place: null, link: null, pin: null, name: typed.slice(0, 120), suggestion: noteFor(typed.slice(0, 120)) });
   }
 
   function onNext() {
     const typed = name.trim();
     if (!typed || typed.length > MAX_NAME) return setNameProblem("Type its name first.");
-    if (pinned) onChosen({ place: null, link: pinned.link, name: typed, suggestion: pinned.suggestion });
+    if (pinned) onChosen({ place: null, link: pinned.link, pin: pinned.pin, name: typed, suggestion: pinned.suggestion });
   }
 
   const s = pinned?.suggestion;
+  const said = s ? pinLine(s) : null;
   return (
     <div className="flex flex-col gap-3">
       <form onSubmit={onFind} noValidate className="flex flex-col gap-2">
@@ -108,7 +151,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
         </PixelButton>
       </form>
 
-      {searched !== null && !pinned && (
+      {searched !== null && !pinned && !needPin && (
         found.length > 0 ? (
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-sm font-semibold">On Tara Gala</legend>
@@ -127,17 +170,48 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
         )
       )}
 
-      {pinned && s && (
+      {(needPin || (pinned && s)) && (
         <div className={cx(PX.box.skin, "flex flex-col gap-2 p-3")}>
+          {needPin && (
+            <p className="text-sm">That link has no pin we can read. In Google Maps, press and hold the place, copy the numbers that show up, and paste them here.</p>
+          )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">Name</span>
             <input className={PX.input} value={name} maxLength={MAX_NAME} autoComplete="off" onChange={(e) => { setName(e.target.value); setNameProblem(""); }} />
           </label>
           {nameProblem && <PlanProblem text={nameProblem} />}
+          {needPin ? (
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-semibold">Pin</span>
+                <span className={PX.meta}>Two numbers, like 16.4138, 120.5964.</span>
+                <input className={PX.input} value={pinText} maxLength={60} inputMode="decimal" autoComplete="off"
+                  onChange={(e) => { setPinText(e.target.value); setPinProblem(""); }} />
+              </label>
+              {pinProblem && <PlanProblem text={pinProblem} />}
+              <PixelButton variant="primary" className="w-full px-4 py-3" aria-disabled={finding || undefined} onClick={onPin}>
+                {finding ? (findingLabel ?? "Finding...") : "Next"}
+              </PixelButton>
+            </>
+          ) : s && (<>
           <span className={cx(PX.chip, "self-start")}>Added by your group, not verified</span>
-          <p className={PX.meta}>
-            Pinned from your link{s.km_from_baguio != null && !s.far ? `, about ${Math.round(s.km_from_baguio)} km from Baguio` : ""}. {ON_FILE}
-          </p>
+          {said?.href ? (
+            <>
+              <p className="text-sm">
+                {said.lead}
+                <a className={PX.inlineLink} href={said.href} target="_blank" rel="noopener noreferrer">{said.link}<span aria-hidden="true">&nbsp;↗</span></a>
+              </p>
+              <button type="button" className={cx(PX.inlineLink, "min-h-11 self-start text-left text-sm")}
+                onClick={() => { console.info("[tg-trip] plan find wrong-spot"); setNeedPin(pinned!.link); setPinned(null); }}>
+                Wrong spot? Paste the pin instead.
+              </button>
+              <p className={PX.meta}>{s.km_from_baguio != null && !s.far ? `About ${Math.round(s.km_from_baguio)} km from Baguio. ` : ""}{ON_FILE}</p>
+            </>
+          ) : (
+            <p className={PX.meta}>
+              {said?.lead ?? `Pinned from your link${s.km_from_baguio != null && !s.far ? `, about ${Math.round(s.km_from_baguio)} km from Baguio` : ""}.`} {ON_FILE}
+            </p>
+          )}
           {s.far ? (
             <PixelBox tone="alert" className="flex flex-col gap-2 p-3">
               <p className="text-sm font-semibold text-danger-text">{farLine(s.km_from_baguio ?? 0)}</p>
@@ -150,10 +224,11 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
           ) : (
             <PixelButton variant="primary" className="w-full px-4 py-3" onClick={onNext}>Next</PixelButton>
           )}
+          </>)}
         </div>
       )}
 
-      {!pinned && (
+      {!pinned && !needPin && (
         <>
           <p className="text-sm">Not listed? Paste its Google Maps link to pin it.</p>
           <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onNoteOnly}>Add it as a note, no pin</PixelButton>
@@ -221,7 +296,7 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
     setProblem("");
     let place = chosen.place;
     if (chosen.link) {
-      const r = await editor.addPlace(chosen.link, plan.slice(0, MAX_NAME));
+      const r = await editor.addPlace(chosen.link, plan.slice(0, MAX_NAME), chosen.pin);
       console.info("[tg-trip] plan place add ok=%s", planOutcome(r));
       if (!r.ok) {
         setApplying(false);
@@ -250,6 +325,16 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
   return (
     <div className="flex flex-col gap-3">
       <p ref={heading} tabIndex={-1} className="sr-only">Proposed change</p>
+      {/* Round 5: an address pin is said again here, so it's seen before Apply (ux.md §4.3) */}
+      {(() => {
+        const p = pinLine(s);
+        return p?.href ? (
+          <p className={PX.meta}>
+            {p.lead}
+            <a className={PX.inlineLink} href={p.href} target="_blank" rel="noopener noreferrer">{p.link}<span aria-hidden="true">&nbsp;↗</span></a>
+          </p>
+        ) : null;
+      })()}
       <section className="flex flex-col gap-1">
         <p className="text-sm font-semibold">Time</p>
         {changing ? (

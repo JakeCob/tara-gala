@@ -27,7 +27,7 @@ export type PlanEditor = {
   edits: PlanEdits | null;
   save: (action: string, edit: (g: GuideIn) => GuideIn | null, done: Done, anchor: string | null) => Promise<SaveOutcome>;
   suggest: (at: SuggestIn["at"], place: SuggestIn["place"]) => Promise<Answer<Suggestion>>;
-  addPlace: (link: string, name: string) => Promise<Answer<TripPlace>>;
+  addPlace: (link: string, name: string, pin: string | null) => Promise<Answer<TripPlace>>;
   /** The edit bar and the plan's own notices, drawn above the World tabs. addPlace opens Add a place (ux.md §4.8) */
   top: (addPlace: () => void) => ReactNode;
   /** Outside edit mode: Edit the plan and Add a place, under Trip progress's intro (ux.md §2, §4.8) */

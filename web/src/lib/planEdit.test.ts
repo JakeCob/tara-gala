@@ -289,3 +289,24 @@ test("T61-W18 a fit becomes the proposal's suggestion: its own time, leg, ripple
   assert.deepEqual(second.changes, s.fits![1].changes);
   assert.equal(second.fits, undefined, "the proposal doesn't carry the other choices");
 });
+
+// ---------------------------------------------------------------- round 5: links with no pin
+
+test("T61-W9c need_pin brings the link's name, so the pin step can fill it in; a typed pin travels as text next to the link", async () => {
+  answer(422, { detail: "need_pin", name: "Neko-ya" });
+  assert.deepEqual(await tripApi.suggest(TRIP, { base: { itinerary_slug: "c0ffee", seq: 5 }, at: { anywhere: true }, place: { link: "https://maps.app.goo.gl/x" } }),
+    { ok: false, why: "rejected", detail: "need_pin", name: "Neko-ya" });
+  answer(422, { detail: "need_pin", name: null });
+  assert.deepEqual(await tripApi.addPlace(TRIP, { link: "https://maps.app.goo.gl/x", name: "Neko-ya" }), { ok: false, why: "rejected", detail: "need_pin", name: null });
+  let sent = answer(200, sug({ pin_source: "typed" }));
+  await tripApi.suggest(TRIP, { base: { itinerary_slug: "c0ffee", seq: 5 }, at: { after: "d1-03" }, place: { link: "https://maps.app.goo.gl/x", pin: "16.4138, 120.5964" } });
+  assert.deepEqual(JSON.parse(String(sent[0].init.body)).place, { link: "https://maps.app.goo.gl/x", pin: "16.4138, 120.5964" }, "as typed: the server parses it");
+  sent = answer(201, { id: "tp", name: "Neko-ya", lat: 16.4, lng: 120.6, maps_url: "https://maps.app.goo.gl/x", created_at: "", pin_source: "typed" });
+  await tripApi.addPlace(TRIP, { link: "https://maps.app.goo.gl/x", name: "Neko-ya", pin: "16.4138, 120.5964" });
+  assert.deepEqual(JSON.parse(String(sent[0].init.body)), { link: "https://maps.app.goo.gl/x", name: "Neko-ya", pin: "16.4138, 120.5964" });
+  answer(422, { detail: "bad_pin" });
+  const bad = await tripApi.suggest(TRIP, { base: { itinerary_slug: "c0ffee", seq: 5 }, at: { after: "d1-03" }, place: { link: "https://maps.app.goo.gl/x", pin: "0,0" } });
+  assert.equal(planFailureMessage(bad as never), "Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.");
+  assert.equal(planOutcome(bad as never), "bad_pin");
+  assert.equal(planOutcome({ ok: false, why: "rejected", detail: "link_no_pin" }), "other", "retired in round 5");
+});

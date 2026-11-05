@@ -332,7 +332,7 @@ export default function TripView({ slug }: { slug: string }) {
       console.info("[tg-trip] plan suggest at=%s place=%s ok=%s", Object.keys(at)[0], Object.keys(place)[0], planOutcome(r));
       return r;
     },
-    addPlace: (link, name) => tripApi.addPlace(slug, { link, name }),
+    addPlace: (link, name, pin) => tripApi.addPlace(slug, pin ? { link, name, pin } : { link, name }),
     startEditing: () => {
       console.info("[tg-trip] plan edit mode on after=add-place");
       setEditing(true);

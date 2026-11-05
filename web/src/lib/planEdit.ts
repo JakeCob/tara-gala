@@ -48,6 +48,8 @@ export type Suggestion = {
   ripple: ({ key: string; time: string } | { key: string; drop: true })[];
   notes: string[];
   changes: { word: string; day: number | null; text: string; part?: "stop" | "ripple" }[];
+  /** Round 5: where a link's pin came from; null for a spot or a trip place */
+  pin_source?: "link" | "address" | "typed" | null;
   /** TG-61 round 4: with at {anywhere: true}, up to 3 slots, best first; [] when none fits. Absent otherwise */
   fits?: Fit[] | null;
 };

@@ -268,3 +268,16 @@ export function fitFooter(fits: readonly Fit[], pinned: boolean): string[] {
   const ranked = "Ranked by how close it is to the stops around it, and by free time that day.";
   return fits.some((f) => f.leg?.kind === "estimate") ? [ranked, "Estimates come from the distance, not routes on file."] : [ranked];
 }
+
+// ---------------------------------------------------------------- round 5: links with no pin (ux.md §4.3)
+
+/** The line under a link's chip: where its pin came from. An address pin links to itself, so the group can check it. */
+export function pinLine(s: { pin_source?: "link" | "address" | "typed" | null; lat: number | null; lng: number | null; km_from_baguio: number | null }):
+  { lead: string; link: string | null; href: string | null; rest: string } | null {
+  if (!s.pin_source) return null;
+  const km = s.km_from_baguio != null ? `, about ${Math.round(s.km_from_baguio)} km from Baguio` : "";
+  if (s.pin_source === "address" && s.lat != null && s.lng != null) {
+    return { lead: "Pin from the address, ", link: "check it on Google Maps", href: `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`, rest: "" };
+  }
+  return { lead: s.pin_source === "typed" ? `Pin you pasted${km}.` : `Pinned from your link${km}.`, link: null, href: null, rest: "" };
+}

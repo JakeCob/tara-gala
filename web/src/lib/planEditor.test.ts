@@ -113,3 +113,16 @@ test("T61-W11j Add a place (ux.md §4.8): on the bar and beside Edit the plan, w
   assert.match(change, /editor\.suggest\(\{ anywhere: true \}, place\)/, "a clash asks where it fits again (B60)");
   assert.match(change, /\{ k: "fit", chosen: step\.fitFrom \?\? step\.chosen, fit: step\.fit! \}/, "the proposal's Back returns to every choice, not only the one picked");
 });
+
+test("T61-W11k round 5: need_pin is the next step, not an error; the pin goes up as typed with the link, on every call about it", () => {
+  const place = read("src/components/PlaceInput.tsx");
+  assert.match(place, /if \(!r\.ok && r\.detail === "need_pin"\) \{[\s\S]{0,120}setNeedPin\(typed\);\s+setName\(\(r\.name \?\? ""\)/, "the link's name fills in Name");
+  assert.match(place, /inputMode="decimal"/);
+  assert.match(place, /editor\.suggest\(at, \{ link, pin \}\)/);
+  assert.match(place, /const pin = pinText; \/\/ as typed/, "never trimmed or cut: the server parses it");
+  assert.match(place, /editor\.addPlace\(chosen\.link, plan\.slice\(0, MAX_NAME\), chosen\.pin\)/, "Apply sends the same pin");
+  assert.match(place, /Wrong spot\? Paste the pin instead\./);
+  assert.doesNotMatch(place + read("src/lib/trip.ts"), /link_no_pin/, "retired in round 5");
+  for (const file of ["src/components/StopChange.tsx", "src/components/FitPlace.tsx"]) assert.match(read(file), /linkPlace\(chosen\)/, `${file}: a recheck keeps the pin`);
+  assert.match(view(), /addPlace: \(link, name, pin\) => tripApi\.addPlace\(slug, pin \? \{ link, name, pin \} : \{ link, name \}\)/);
+});

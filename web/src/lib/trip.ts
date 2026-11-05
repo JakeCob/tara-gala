@@ -55,7 +55,9 @@ export type Trip = {
 };
 
 /** TG-61: a place only this trip has, pinned by the server from a Google Maps link. Never verified. */
-export type TripPlace = { id: string; name: string; lat: number; lng: number; maps_url: string; created_at: string };
+export type TripPlace = { id: string; name: string; lat: number; lng: number; maps_url: string; created_at: string; pin_source?: PinSource | null };
+/** Round 5: where a link's pin came from: the link itself, the address in it (check it), or the group's pasted pin. */
+export type PinSource = "link" | "address" | "typed";
 /** The plan a change is worked out from: the copy's slug and version, or the shared plan's slug and 0. */
 export type PlanBase = { itinerary_slug: string; seq: number };
 /** A save's answer: the whole new plan, from the same transaction (review M1), and the server's lines for it. */
@@ -63,7 +65,8 @@ export type PlanSaved = { itinerary: Itinerary; changes: ChangeLine[] };
 export type SuggestIn = {
   base: PlanBase;
   at: { replace: string } | { after: string } | { first_of_day: number } | { anywhere: true };
-  place: { spot_id: string } | { trip_place_id: string } | { link: string };
+  /** pin: the coordinates the group pasted, as typed (round 5); only next to a link. The server parses them */
+  place: { spot_id: string } | { trip_place_id: string } | { link: string; pin?: string };
 };
 
 // ---------------------------------------------------------------- pure
@@ -242,7 +245,8 @@ export async function savedTrip(slug: string, store?: Parameters<typeof savedAns
 }
 
 /** TG-61: an answer that isn't the trip. A clash carries the newer plan's slug and version. */
-export type Answer<T> = { ok: true; body: T } | { ok: false; why: TripFailure; detail?: string; clash?: PlanBase };
+/** need_pin (round 5) carries the name read from the link, or null, for the pin step's Name field. */
+export type Answer<T> = { ok: true; body: T } | { ok: false; why: TripFailure; detail?: string; clash?: PlanBase; name?: string | null };
 
 /** A call whose answer isn't the trip (TG-61's plan routes). The same failures as call, plus the clash. */
 async function ask<T>(path: string, init: { method: Method; body: unknown }): Promise<Answer<T>> {
@@ -261,6 +265,7 @@ async function ask<T>(path: string, init: { method: Method; body: unknown }): Pr
   if (res.status === 409 && detail === "plan_changed") {
     return { ok: false, why: "clash", detail, clash: { itinerary_slug: String(body.itinerary_slug), seq: Number(body.seq) } };
   }
+  if (detail === "need_pin") return { ok: false, why: "rejected", detail, name: typeof body?.name === "string" ? body.name : null };
   return { ok: false, why: "rejected", detail };
 }
 export const tripApi = {
@@ -309,7 +314,7 @@ export const tripApi = {
   /** A proposal for one stop; saves nothing */
   suggest: (slug: string, body: SuggestIn) => ask<Suggestion>(`${at(slug)}/plan/suggest`, { method: "POST", body }),
   /** The server reads the link itself; the phone never sends a pin */
-  addPlace: (slug: string, body: { link: string; name: string }) => ask<TripPlace>(`${at(slug)}/places`, { method: "POST", body }),
+  addPlace: (slug: string, body: { link: string; name: string; pin?: string }) => ask<TripPlace>(`${at(slug)}/places`, { method: "POST", body }),
 };
 
 const PLAN_DETAIL: Record<string, string> = {
@@ -329,7 +334,8 @@ const PLAN_DETAIL: Record<string, string> = {
   bad_plan: "That change doesn't fit the plan. Check it and try again.",
   too_big: "That change is too big to save. Try a smaller one.",
   link_unreadable: "We couldn't read that link. Open the place in Google Maps, tap Share, and copy the link again.",
-  link_no_pin: "That link has no pin. Open the place in Google Maps and share it from there.",
+  need_pin: "That link has no pin we can read. In Google Maps, press and hold the place, copy the numbers that show up, and paste them here.",
+  bad_pin: "Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.",
   link_not_maps: "That isn't a Google Maps link. Paste one, or type a place name.",
   too_many_places: "This trip already has 100 places of its own, the most it can hold.",
   bad_place: "Give the place a name of 1 to 80 letters.",

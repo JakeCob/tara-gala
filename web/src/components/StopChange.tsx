@@ -15,7 +15,7 @@ import BusSwap, { type BusAt, busAt, swapTitle } from "./BusSwap";
 import FitPlace, { type FitState, type Slot } from "./FitPlace";
 import { PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
-import { type Chosen, FindPlace, Proposal } from "./PlaceInput";
+import { type Chosen, FindPlace, Proposal, linkPlace } from "./PlaceInput";
 
 type Mode = "replace" | "add" | "move" | "fit";
 type SlotAt = Exclude<SuggestIn["at"], { anywhere: true }>;
@@ -136,7 +136,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     const r = place ? await editor.suggest(s, place as SuggestIn["place"]) : null;
     if (r && !r.ok) return setProblem(planFailureMessage(r));
     const suggestion = r?.ok ? r.body : noteFor("move", toDay)(row.plan);
-    setStep({ k: "propose", mode: "move", day: toDay, chosen: { place, link: null, name: row.plan, suggestion } });
+    setStep({ k: "propose", mode: "move", day: toDay, chosen: { place, link: null, pin: null, name: row.plan, suggestion } });
   }
 
   async function onNudge(dir: -1 | 1) {
@@ -174,7 +174,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
   async function onRefit(s: Proposed) {
     if (off) return;
     const { chosen } = s;
-    const place = (chosen.place ?? (chosen.link ? { link: chosen.link } : null)) as SuggestIn["place"] | null;
+    const place = (chosen.place ?? (chosen.link ? linkPlace(chosen) : null)) as SuggestIn["place"] | null;
     const r = place ? await editor.suggest({ anywhere: true }, place) : null;
     if (r && !r.ok) return setProblem(planFailureMessage(r));
     setProblem("");
@@ -185,7 +185,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     if (off) return;
     if (s.mode === "fit") return onRefit(s);
     const { chosen } = s;
-    const r = chosen.place ? await editor.suggest(suggestAt(s.mode, s.day), chosen.place as SuggestIn["place"]) : chosen.link ? await editor.suggest(suggestAt(s.mode, s.day), { link: chosen.link }) : null;
+    const r = chosen.place ? await editor.suggest(suggestAt(s.mode, s.day), chosen.place as SuggestIn["place"]) : chosen.link ? await editor.suggest(suggestAt(s.mode, s.day), linkPlace(chosen)) : null;
     if (r && !r.ok) return setProblem(planFailureMessage(r));
     setProblem("");
     setStep({ ...s, k: "propose", chosen: { ...chosen, suggestion: r?.ok ? r.body : noteFor(s.mode, s.day)(chosen.name) } });
@@ -319,7 +319,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           anchor={step.slot ? step.slot.after : step.mode === "add" ? addAfter : key} done={doneFor(step.mode, step.day, step.slot)}
           fit={fit(step.mode, step.day, step.slot)} from={fromFor(step.mode, step.day, step.slot)}
           rowName={rowName} rowTime={rowTime} onApplied={onDone}
-          onBack={() => setStep(step.mode === "move" ? { k: "move" } : step.mode === "fit" ? { k: "fit", chosen: step.fitFrom ?? step.chosen, fit: step.fit! } : { k: "find", mode: step.mode })}
+          onBack={() => setStep(step.mode === "move" ? { k: "move" } : step.mode === "fit" ? { k: "fit", chosen: step.fitFrom ?? step.chosen, fit: step.fit! } : { k: "find", mode: step.mode, text: step.chosen.link ?? step.chosen.name })}
           onClash={() => setStep({ ...step, k: "clash" })} />
       )}
 

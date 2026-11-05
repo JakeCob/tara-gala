@@ -161,3 +161,13 @@ test("T61-L11 after a fit's Apply the bar names the World, since the map may sho
   assert.equal(resultLine([L("New", "Ghibli Store", 2)], { kind: "add", after: "d1-03", day: 2, world: true }, level), "Added Ghibli Store to World 2, after Level 1-3.");
   assert.equal(legLines({ kind: "route", last_mile_route_id: "lm", mode: "jeep", minutes: null, fare_min_php: 13, fare_max_php: 15, signboard: "Trancoville", last_verified_at: null }).line, "Jeep, Trancoville signboard · ₱13–15");
 });
+
+test("T61-L12 where a link's pin came from (round 5): the link, the address (check it), or pasted by the group", async () => {
+  const { pinLine } = await import("./planLines.ts");
+  assert.deepEqual(pinLine({ pin_source: "address", lat: 16.4138, lng: 120.5964, km_from_baguio: 2 }), {
+    lead: "Pin from the address, ", link: "check it on Google Maps", href: "https://www.google.com/maps/search/?api=1&query=16.4138,120.5964", rest: "",
+  });
+  assert.deepEqual(pinLine({ pin_source: "typed", lat: 16.4, lng: 120.6, km_from_baguio: 2 }), { lead: "Pin you pasted, about 2 km from Baguio.", link: null, href: null, rest: "" });
+  assert.deepEqual(pinLine({ pin_source: "link", lat: 16.4, lng: 120.6, km_from_baguio: 3 }), { lead: "Pinned from your link, about 3 km from Baguio.", link: null, href: null, rest: "" });
+  assert.equal(pinLine({ pin_source: null, lat: null, lng: null, km_from_baguio: null }), null, "a spot or trip place: nothing to say");
+});
