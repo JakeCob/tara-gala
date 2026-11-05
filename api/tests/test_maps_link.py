@@ -1,5 +1,6 @@
 """TG-61 L1 to L27: reading a pin and a name from a Google Maps link (api/app/maps_link.py, options.md §4). The IDs are
-test-plan.md §3.2's; L28 on are cases it doesn't number.
+test-plan.md §3.2's; L28 on are cases it doesn't number. N1 on are owner round 5's links with no pin: the address is
+geocoded with Nominatim (a MockTransport stand-in here), Google's pages are never read, and a typed pin is accepted.
 
 No test reaches Google. Every request goes to an httpx.MockTransport that answers from a table and records what was
 asked, so each test asserts the exact hosts requested: none for a refused link. The fixtures under fixtures/maps_links/
@@ -23,27 +24,44 @@ SHORT = "https://maps.app.goo.gl/Zx9Synthetic"
 PLACE = "https://www.google.com/maps/place/Kapihan+sa+Ulap/@16.4101,120.5902,17z/data=!3m1!4b1!8m2!3d16.41234!4d120.59321"
 
 
+GEO = "nominatim.openstreetmap.org"
+
+
 class Clock:
-    """A fake time.monotonic(): it moves only when a test moves it."""
+    """A fake time.monotonic(): it moves only when a test moves it, or when the code under test sleeps on it."""
 
     def __init__(self):
         self.t = 1000.0
+        self.slept: list[float] = []
 
     def __call__(self) -> float:
         return self.t
 
+    def sleep(self, s: float) -> None:
+        self.slept.append(s)
+        self.t += s
+
 
 class Net:
-    """Answers each URL from `table` (a Response, a callable, or an exception to raise) and records every request."""
+    """Answers each URL from `table` (a Response, a callable, or an exception to raise) and records every request.
+    Nominatim is answered by its query, from `geo`: a list is its JSON reply, and an unknown query finds nothing."""
 
-    def __init__(self, table: dict | None = None):
+    def __init__(self, table: dict | None = None, geo: dict | None = None):
         self.table = table or {}
+        self.geo = geo or {}
         self.asked: list[str] = []
+        self.headers: list[httpx.Headers] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         self.asked.append(url)
-        answer = self.table.get(url)
+        self.headers.append(request.headers)
+        if request.url.host == GEO:
+            answer = self.geo.get(request.url.params.get("q"), [])
+            if isinstance(answer, list):
+                return httpx.Response(200, json=answer)
+        else:
+            answer = self.table.get(url)
         if answer is None:
             return httpx.Response(404)
         if isinstance(answer, Exception):
@@ -53,6 +71,10 @@ class Net:
     @property
     def hosts(self) -> list[str]:
         return [httpx.URL(u).host for u in self.asked]
+
+    @property
+    def geocoded(self) -> list[str]:
+        return [httpx.URL(u).params.get("q") for u in self.asked if httpx.URL(u).host == GEO]
 
     def client(self) -> httpx.Client:
         return httpx.Client(transport=httpx.MockTransport(self))
@@ -74,9 +96,10 @@ def empty_cache():
 
 
 def resolve(link: str, net: Net, clock=None) -> ml.Resolved:
-    """One fresh resolve: the cache is emptied first (the cache's own tests call ml.resolve)."""
+    """One fresh resolve: the caches are emptied first (the caches' own tests call ml.resolve)."""
     ml.clear_cache()
-    return ml.resolve(link, client=net.client(), clock=clock or Clock())
+    clock = clock or Clock()
+    return ml.resolve(link, client=net.client(), clock=clock, sleep=clock.sleep)
 
 
 def refused(link: str, net: Net, clock=None) -> LinkError:
@@ -96,23 +119,27 @@ def test_there_are_fixtures_and_each_says_what_it_is():
     for f in fixtures():
         d = json.loads(f.read_text(encoding="utf-8"))
         assert d["_note"], f"{f.name}: say whether it's synthetic or a real recording"
-        assert set(d) <= {"_note", "link", "hops", "expect"}
+        assert set(d) <= {"_note", "link", "hops", "geocode", "expect"}
 
 
 @pytest.mark.parametrize("path", fixtures(), ids=lambda p: p.stem)
-def test_every_fixture_resolves_as_recorded(path):  # L1 to L6, synthetic until task 0's recordings
+def test_every_fixture_resolves_as_recorded(path):  # L1 to L6 and N1; synthetic until task 0's recordings
     d = json.loads(path.read_text(encoding="utf-8"))
     table = {h["url"]: redirect(h["location"], h["status"]) if "location" in h else page(h["html"], h["status"]) for h in d["hops"]}
-    net = Net(table)
+    net = Net(table, d.get("geocode"))
     want = d["expect"]
     if want["outcome"] == "ok":
         got = resolve(d["link"], net)
         assert (got.lat, got.lng, got.name, got.pin) == (want["lat"], want["lng"], want["name"], want["pin"])
         assert got.maps_url == want["maps_url"]
     else:
-        assert refused(d["link"], net).code == want["outcome"]
-    asked = [h["url"] for h in d["hops"]]
-    assert net.asked == asked, "exactly the recorded hops are requested, in order, and nothing past them"
+        e = refused(d["link"], net)
+        assert e.code == want["outcome"]
+        if "name" in want:
+            assert e.name == want["name"]
+    assert [u for u in net.asked if httpx.URL(u).host != GEO] == [h["url"] for h in d["hops"]], \
+        "exactly the recorded hops are requested, in order, and no Google page past them"
+    assert net.geocoded == want["geocoded"]
 
 
 # ---------------------------------------------------------------- L7 and L26: the URL forms, read with no request
@@ -144,12 +171,13 @@ def test_the_name_is_decoded_and_kept_short():  # L7
     assert got.name == "A" * 80
 
 
-def test_a_name_in_q_is_read_and_the_pin_still_needed():  # L15
-    with pytest.raises(LinkError) as e:
-        ml.resolve("https://www.google.com/maps?q=Good+Taste+Restaurant", client=Net().client(), clock=Clock())
-    assert e.value.code == "link_no_pin"
+def test_a_name_in_q_is_read_and_the_pin_still_needed():  # L15, N2
+    net = Net()
+    e = refused("https://www.google.com/maps?q=Good+Taste+Restaurant", net)
+    assert (e.code, e.name) == ("need_pin", "Good Taste Restaurant")
+    assert net.geocoded == ["Good Taste Restaurant"], "geocoded, and nothing found"
     parsed = ml.parse(httpx.URL("https://www.google.com/maps?q=Good+Taste+Restaurant"))
-    assert (parsed.name, parsed.lat, parsed.pin) == ("Good Taste Restaurant", None, "none")
+    assert (parsed.name, parsed.lat, parsed.pin, parsed.address) == ("Good Taste Restaurant", None, "none", "Good Taste Restaurant")
 
 
 @pytest.mark.parametrize("url", [
@@ -157,13 +185,13 @@ def test_a_name_in_q_is_read_and_the_pin_still_needed():  # L15
     "https://www.google.com/maps?q=91,120",
     "https://www.google.com/maps?q=16,181",
     "https://www.google.com/maps/@nan,120.5,17z",
-    "https://www.google.com/maps/place/x/data=!3dinf!4d120.5",
-    "https://www.google.com/maps/place/x/data=!3d0!4d0",
+    "https://www.google.com/maps/data=!3dinf!4d120.5",
+    "https://www.google.com/maps/data=!3d0!4d0",
 ])
 def test_a_pin_must_be_finite_in_range_and_not_zero_zero(url):  # L18
     net = Net()
-    assert refused(url, net).code == "link_no_pin"
-    assert net.asked == []
+    assert refused(url, net).code == "need_pin"
+    assert net.asked == [], "no address either, so nothing to geocode: a bad pin is never read as an address"
 
 
 @pytest.mark.parametrize("text", [
@@ -258,7 +286,7 @@ def test_only_redirect_statuses_are_followed(status):  # L29
     for bad in (200, 304, 404, 500):
         net = Net({SHORT: redirect(PLACE, bad) if bad != 200 else page("<html></html>")})
         e = refused(SHORT, net)
-        assert e.code in ("link_unreadable", "link_no_pin"), bad
+        assert e.code == ("need_pin" if bad == 200 else "link_unreadable"), bad
         if bad != 200:
             assert e.reason == f"status_{bad}"
     net = Net({SHORT: httpx.Response(302)})
@@ -271,25 +299,23 @@ def test_a_hop_that_times_out_is_unreadable():  # L14, B29
     assert (e.code, e.reason) == ("link_unreadable", "timeout")
 
 
-def test_a_body_over_512_kb_is_cut_there():  # L16
+def test_google_pages_are_never_read_for_a_pin():  # L16, N3 (owner round 5: their og:image is the requester's location)
+    og = page('<meta content="https://maps.google.com/maps/api/staticmap?center=60.17%2C24.94&amp;zoom=15" property="og:image">'
+              "<script>window.APP_INITIALIZATION_STATE=[[[1,24.94,60.17]]]</script>")
+    place = "https://www.google.com/maps/place/Panaderia/"
+    net = Net({SHORT: redirect(place), place: og}, {"Panaderia": [{"lat": "16.4178", "lon": "120.5987"}]})
+    got = resolve(SHORT, net)
+    assert (got.lat, got.lng, got.pin) == (16.4178, 120.5987, "address")
+    assert net.hosts == ["maps.app.goo.gl", GEO], "the place page is never requested"
     sent = []
 
-    def chunks(head: bytes, tail: bytes):
-        def gen():
-            for i in range(100):
-                sent.append(1)
-                yield (head if i == 0 else b"") + b"x" * 65536 + (tail if i == 8 else b"")
-        return gen()
+    def body():
+        sent.append(1)
+        yield b"<html>centre=60.17%2C24.94</html>"
 
-    pin = b'center=16.4178%2C120.5987'
-    big = "https://www.google.com/maps/place/Big"
-    net = Net({SHORT: redirect(big), big: lambda r: httpx.Response(200, content=chunks(pin, b""))})
-    assert resolve(SHORT, net).pin == "page", "a centre= inside the first 512 KB is read"
-    assert len(sent) <= 9, "and reading stops at 512 KB"
-    sent.clear()
-    net = Net({SHORT: redirect(big), big: lambda r: httpx.Response(200, content=chunks(b"", pin))})
-    assert refused(SHORT, net).code == "link_no_pin", "a centre= past the cut isn't found"
-    assert len(sent) <= 9
+    net = Net({SHORT: lambda r: httpx.Response(200, content=body())})
+    e = refused(SHORT, net)
+    assert (e.code, e.reason) == ("need_pin", "no_address") and sent == [], "a short link's own page isn't read either"
 
 
 def test_a_consent_or_sign_in_hop_is_unreadable_and_not_requested():  # L17
@@ -387,7 +413,7 @@ def test_a_slow_second_hop_stops_the_chain():  # L22
     assert len(net.asked) == 2, "the third hop is never started"
 
 
-def test_a_body_read_stops_at_the_deadline_between_chunks():  # L22
+def test_a_geocoder_reply_stops_at_the_deadline_between_chunks():  # L22, N9
     clock = Clock()
     sent = []
 
@@ -395,25 +421,17 @@ def test_a_body_read_stops_at_the_deadline_between_chunks():  # L22
         for _ in range(5):
             sent.append(1)
             clock.t += 3.0
-            yield b"<html>" + b" " * 1000
+            yield b" " * 1000
 
-    net = Net({SHORT: redirect("https://www.google.com/maps/place/Slow"),
-               "https://www.google.com/maps/place/Slow": lambda r: httpx.Response(200, content=chunks())})
+    net = Net({SHORT: redirect("https://www.google.com/maps/place/Slow")}, {"Slow": lambda r: httpx.Response(200, content=chunks())})
     e = refused(SHORT, net, clock)
-    assert (e.code, e.reason) == ("link_unreadable", "deadline")
+    assert (e.code, e.reason) == ("need_pin", "geocode_deadline")
     assert len(sent) == 3, "stopped as the third chunk passes 8 s"
 
 
-# ---------------------------------------------------------------- L16 and L19: the page fallback and the cache
+# ---------------------------------------------------------------- L19: the cache
 
-def test_the_final_page_gives_the_pin_only_when_the_url_has_none():  # L16, B30
-    html = '<meta content="https://maps.google.com/maps/api/staticmap?center=16.4178%2C120.5987&amp;zoom=15" property="og:image">'
-    net = Net({SHORT: redirect("https://www.google.com/maps/place/Panaderia"), "https://www.google.com/maps/place/Panaderia": page(html)})
-    got = resolve(SHORT, net)
-    assert (got.lat, got.lng, got.pin, got.name) == (16.4178, 120.5987, "page", "Panaderia")
-    markers = '<img src="https://maps.googleapis.com/maps/api/staticmap?markers=16.4001%2C120.6002&size=1x1">'
-    net = Net({SHORT: page(markers)})
-    assert resolve(SHORT, net).pin == "page"
+def test_a_url_with_its_pin_is_never_fetched():  # L26
     net = Net({SHORT: redirect(PLACE)})
     resolve(SHORT, net)
     assert net.asked == [SHORT], "the place URL has its pin, so it isn't fetched"
@@ -487,5 +505,166 @@ def test_the_default_client_takes_no_proxy_and_follows_nothing():  # L32
         assert c.timeout == httpx.Timeout(ml.HOP_TIMEOUT_S)
     finally:
         c.close()
-    assert ml.HOP_TIMEOUT_S == 4.0 and ml.DEADLINE_S == 8.0 and ml.MAX_HOPS == 5 and ml.MAX_BODY == 512 * 1024
+    assert ml.HOP_TIMEOUT_S == 4.0 and ml.DEADLINE_S == 8.0 and ml.MAX_HOPS == 5
+    assert not hasattr(ml, "page_pin") and not hasattr(ml, "MAX_BODY"), "no code reads a Google page any more"
     assert math.isclose(ml.CACHE_TTL_S, 900) and ml.CACHE_SIZE == 256
+
+
+# ---------------------------------------------------------------- N: owner round 5, links with no pin
+
+ADDRESS = "Unit 2, Made-up Bakery, Made-up St, Baguio, 2600 Benguet"
+NO_PIN = "https://www.google.com/maps/place/Unit+2,+Made-up+Bakery,+Made-up+St,+Baguio,+2600+Benguet/data=!4m2!3m1!1s0x0:0x1"
+FOUND = [{"lat": "16.4101", "lon": "120.5999", "display_name": "Made-up St, Baguio"}]
+
+
+def test_the_geocode_request_is_one_checked_url(monkeypatch):  # N4
+    seen = []
+    real = ml.geocoder_allowed
+    monkeypatch.setattr(ml, "geocoder_allowed", lambda u: seen.append(u) or real(u))
+    net = Net({SHORT: redirect(NO_PIN)}, {ADDRESS: FOUND})
+    got = resolve(SHORT, net)
+    assert (got.lat, got.lng, got.pin, got.pin_source) == (16.4101, 120.5999, "address", "address")
+    u = httpx.URL(net.asked[-1])
+    assert (u.scheme, u.host, u.port, u.path) == ("https", GEO, None, "/search")
+    assert dict(u.params) == {"q": ADDRESS, "format": "jsonv2", "limit": "1", "countrycodes": "ph"}
+    assert net.headers[-1]["user-agent"] == ml.GEOCODER_UA == "TaraGala/1.0 (trip planner)"
+    assert len(seen) == 1 and str(seen[0]) == net.asked[-1]
+    assert got.maps_url == SHORT and got.name == ADDRESS
+
+
+@pytest.mark.parametrize("u, ok", [
+    ("https://nominatim.openstreetmap.org/search?q=x", True),
+    ("https://nominatim.openstreetmap.org./search?q=x", True),
+    ("http://nominatim.openstreetmap.org/search?q=x", False),
+    ("https://nominatim.openstreetmap.org/reverse?lat=1", False),
+    ("https://nominatim.openstreetmap.org:8080/search", False),
+    ("https://u@nominatim.openstreetmap.org/search", False),
+    ("https://nominatim.openstreetmap.org.evil.io/search", False),
+    ("https://evil.io/search", False),
+])
+def test_the_geocoder_guard(u, ok):  # N4
+    assert ml.geocoder_allowed(httpx.URL(u)) is ok
+
+
+def test_an_address_is_tried_shorter_up_to_three_times():  # N5
+    assert ml.queries(ADDRESS) == [ADDRESS, "Made-up Bakery, Made-up St, Baguio, 2600 Benguet", "Made-up St, Baguio, 2600 Benguet"]
+    assert ml.queries("Made-up Bakery, Baguio") == ["Made-up Bakery, Baguio"], "under 3 parts: tried once as it is"
+    assert ml.queries("A, B, C") == ["A, B, C"], "never fewer than 3 parts, so never just a city or province"
+    assert ml.queries("  ") == []
+    net = Net({SHORT: redirect(NO_PIN)}, {"Made-up St, Baguio, 2600 Benguet": FOUND})
+    clock = Clock()
+    got = resolve(SHORT, net, clock)
+    assert got.pin == "address" and net.geocoded == ml.queries(ADDRESS)
+    assert clock.slept == [1.0, 1.0], "at most one request a second"
+
+
+def test_one_request_a_second_across_resolves():  # N6
+    clock = Clock()
+    net = Net({SHORT: redirect(NO_PIN), f"{SHORT}2": redirect(NO_PIN.replace("Unit+2", "Unit+3"))},
+              {ADDRESS: FOUND, ADDRESS.replace("Unit 2", "Unit 3"): FOUND})
+    ml.clear_cache()
+    ml.resolve(SHORT, client=net.client(), clock=clock, sleep=clock.sleep)
+    clock.t += 0.25
+    ml.resolve(f"{SHORT}2", client=net.client(), clock=clock, sleep=clock.sleep)
+    assert clock.slept == [0.75], "the second trip's lookup waits out the rest of the second"
+    assert ml.GEOCODE_GAP_S == 1.0
+
+
+def test_an_address_is_geocoded_once_and_a_miss_is_kept_15_minutes():  # N7
+    clock = Clock()
+    other = f"{SHORT}B"
+    net = Net({SHORT: redirect(NO_PIN), other: redirect(NO_PIN + "!18m1!1e1")}, {ADDRESS: FOUND})
+    ml.clear_cache()
+    ml.resolve(SHORT, client=net.client(), clock=clock, sleep=clock.sleep)
+    ml.resolve(other, client=net.client(), clock=clock, sleep=clock.sleep)
+    assert net.geocoded == [ADDRESS], "another link to the same address reads the cache"
+    miss = "https://www.google.com/maps/place/Nowhere+Made-up/"
+    net = Net({f"{SHORT}C": redirect(miss), f"{SHORT}D": redirect(miss)})
+    for link in (f"{SHORT}C", f"{SHORT}D"):
+        with pytest.raises(LinkError):
+            ml.resolve(link, client=net.client(), clock=clock, sleep=clock.sleep)
+    assert net.geocoded == ["Nowhere Made-up"], "a miss is kept too"
+    clock.t += ml.GEOCODE_MISS_TTL_S + 1
+    ml.clear_cache(geocodes=False)
+    with pytest.raises(LinkError):
+        ml.resolve(f"{SHORT}C", client=net.client(), clock=clock, sleep=clock.sleep)
+    assert net.geocoded == ["Nowhere Made-up"] * 2, "for 15 minutes"
+    assert ml.GEOCODE_HIT_TTL_S == 24 * 3600
+
+
+@pytest.mark.parametrize("answer, reason", [
+    (httpx.Response(429), "geocode_status_429"),
+    (httpx.Response(500), "geocode_status_500"),
+    (httpx.ReadTimeout("slow"), "geocode_timeout"),
+    (httpx.ConnectError("no route"), "geocode_network"),
+    (httpx.Response(302, headers={"location": "http://169.254.169.254/"}), "geocode_status_302"),
+    (httpx.Response(200, content=b"<html>not json</html>"), "geocode_bad_json"),
+    (httpx.Response(200, json={"lat": "16.4", "lon": "120.5"}), "geocode_bad_json"),
+    (httpx.Response(200, json=[{"lat": "91", "lon": "120.5"}]), "geocode_none"),
+    (httpx.Response(200, json=[{"lat": "0", "lon": "0"}]), "geocode_none"),
+    (httpx.Response(200, json=[{"lat": 16.4}]), "geocode_none"),
+    (httpx.Response(200, content=b"[" + b" " * (70 * 1024) + b"]"), "geocode_too_big"),
+])
+def test_a_geocoder_failure_is_need_pin(answer, reason):  # N8
+    net = Net({SHORT: redirect(NO_PIN)}, {ADDRESS: answer})
+    e = refused(SHORT, net)
+    assert (e.code, e.reason, e.name) == ("need_pin", reason, ADDRESS)
+    assert "169.254" not in " ".join(net.asked), "a geocoder redirect is never followed"
+    if reason not in ("geocode_none",):
+        assert net.geocoded == [ADDRESS], "a failure stops the tries"
+
+
+def test_need_pin_keeps_the_name_and_carries_nothing_else():  # N9
+    e = refused("https://www.google.com/maps/place/Made-up+Shop/", Net())
+    assert (e.code, e.name, str(e), e.args) == ("need_pin", "Made-up Shop", "need_pin", ("need_pin",))
+    assert e.__cause__ is None and e.__context__ is None
+
+
+def test_a_centre_from_a_redirect_is_not_trusted():  # N10
+    hop = "https://www.google.com/maps/place/Made-up+Shop/@60.17,24.94,15z"
+    net = Net({SHORT: redirect(hop)}, {"Made-up Shop": FOUND})
+    got = resolve(SHORT, net)
+    assert (got.lat, got.pin) == (16.4101, "address"), "Google may centre a redirect on the requester"
+    got = resolve("https://www.google.com/maps/place/Made-up+Shop/@16.4123,120.5932,17z", Net())
+    assert (got.lat, got.pin) == (16.4123, "center"), "a long link someone pasted is their own map"
+
+
+@pytest.mark.parametrize("text, pin", [
+    ("16.4138, 120.5964", (16.4138, 120.5964)),
+    ("16.4138,120.5964", (16.4138, 120.5964)),
+    ("  16.413800 ,  120.596400 ", (16.4138, 120.5964)),
+    ("-16.5, -120.25", (-16.5, -120.25)),
+])
+def test_a_typed_pin_is_read(text, pin):  # N11
+    assert ml.typed_pin(text) == pin
+
+
+@pytest.mark.parametrize("text", ["abc", "16.4", "16.4, 120.5, 3", "91, 120", "16.4, 181", "0, 0", "nan, 120", "16.4; 120.5",
+                                  "1" * 61, "16.4\n120.5", ""])
+def test_a_bad_typed_pin_is_refused(text):  # N11
+    with pytest.raises(LinkError) as e:
+        ml.typed_pin(text)
+    assert (e.value.code, str(e.value)) == ("bad_pin", "bad_pin")
+
+
+def test_a_typed_pin_with_its_link_makes_no_request():  # N12
+    net = Net()
+    got = ml.typed(f"Made-up Shop\n{SHORT}?g_st=ic", "16.4138, 120.5964")
+    assert (got.lat, got.lng, got.pin, got.pin_source, got.maps_url, got.name) == (16.4138, 120.5964, "typed", "typed", SHORT, None)
+    assert net.asked == []
+    with pytest.raises(LinkError) as e:
+        ml.typed("https://evil.io/x", "16.4138, 120.5964")
+    assert e.value.code == "link_not_maps"
+
+
+def test_the_geocode_logs_carry_no_address(caplog):  # N13
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    resolve(SHORT, Net({SHORT: redirect(NO_PIN)}, {"Made-up St, Baguio, 2600 Benguet": FOUND}))
+    refused(SHORT, Net({SHORT: redirect(NO_PIN)}, {ADDRESS: httpx.Response(503)}))
+    lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api"]
+    assert "maps link geocode outcome=found tries=3 cache=no" in " ".join(lines)
+    assert any(m.startswith("maps link resolve outcome=ok hops=1 final=long") and "pin=address" in m for m in lines), lines
+    assert any("maps link geocode outcome=failed tries=1 cache=no" in m and "reason=geocode_status_503" in m for m in lines)
+    assert any("outcome=need_pin" in m and "reason=geocode_status_503" in m for m in lines)
+    for leak in ("Made-up", "Bakery", "Baguio", "Benguet", "Unit", "16.41", "120.59", "Zx9", "goo.gl", "nominatim"):
+        assert leak not in caplog.text, leak

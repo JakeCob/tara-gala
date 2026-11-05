@@ -1,0 +1,35 @@
+{
+  "_note": "REAL redirect, the owner's link 1 (Android share, Neko-ya Novelty Shop), recorded from the dev box on 2026-11-05 (_team/tickets/TG-61/owner-links/1-android-neko-ya.*). Its Location has an address and no pin (owner round 5). The Nominatim replies are a MockTransport stand-in: the first two queries find nothing, and the third gives the pin the owner's note recorded (Olympian Lane Building, 16.41388, 120.59642).",
+  "link": "https://maps.app.goo.gl/CdNzAdm2XtP3fZ8J8?g_st=ac",
+  "hops": [
+    {
+      "url": "https://maps.app.goo.gl/CdNzAdm2XtP3fZ8J8?g_st=ac",
+      "status": 302,
+      "location": "https://www.google.com/maps/place/Ground+Floor,+Neko-ya+Novelty+Shop,+Olympian+Lane+Bldg,+Mabini+St,+Baguio,+2600+Benguet/data=!4m2!3m1!1s0x3391a1ec9c43f10f:0x5e2795d65fa0bc68!18m1!1e1?utm_source=mstt_1&entry=gps&coh=192189&g_ep=CAESBzI2LjQzLjUYACCenQoqyAEsOTQyNjc3MjcsOTQyOTIxOTUsOTQyOTk1MzIsMTAwNzk2NDk4LDEwMDc5Nzc2MSwxMDA3OTY1MzUsOTQyMDczOTQsOTQyMDc1MDYsOTQyMDg1MDYsOTQyMTg2NTMsOTQyMjk4MzksOTQyNzUxNjgsOTQyNzk2MTksMTAwODQ4MDk2LDEwMDg0MDY1NiwxMDA4MjUwMjUsMTAwODIwMjM3LDEwMDgyMjQ5NCwxMDA4Mjc5NzUsMTAwODM4MzU5LDEyMTgxNjQ2MUICUEg%3D&skid=d6aec449-a1c1-4e49-a65f-191e6a431573&g_st=ac"
+    }
+  ],
+  "geocode": {
+    "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet": [],
+    "Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet": [],
+    "Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet": [
+      {
+        "lat": "16.41388",
+        "lon": "120.59642",
+        "display_name": "Olympian Lane Building, Mabini Street, Baguio"
+      }
+    ]
+  },
+  "expect": {
+    "outcome": "ok",
+    "lat": 16.41388,
+    "lng": 120.59642,
+    "name": "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio",
+    "pin": "address",
+    "maps_url": "https://maps.app.goo.gl/CdNzAdm2XtP3fZ8J8",
+    "geocoded": [
+      "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet",
+      "Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet",
+      "Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet"
+    ]
+  }
+}

@@ -2,9 +2,19 @@
   "_note": "SYNTHETIC, made up for TG-61 before the owner's six real links arrive (plan.md §4 task 0). Not a real place, link or chain: the shape follows options.md §4. Replace or add the real recordings beside it.",
   "link": "Kapihan sa Ulap (made up)\nhttps://maps.app.goo.gl/Zx9SyntheticA1?g_st=ic",
   "hops": [
-    {"url": "https://maps.app.goo.gl/Zx9SyntheticA1?g_st=ic", "status": 302,
-     "location": "https://www.google.com/maps/place/Kapihan+sa+Ulap+(made+up)/@16.4101,120.5902,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d16.41234!4d120.59321!16s%2Fg%2F11synthetic?entry=tts&g_st=ic"}
+    {
+      "url": "https://maps.app.goo.gl/Zx9SyntheticA1?g_st=ic",
+      "status": 302,
+      "location": "https://www.google.com/maps/place/Kapihan+sa+Ulap+(made+up)/@16.4101,120.5902,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d16.41234!4d120.59321!16s%2Fg%2F11synthetic?entry=tts&g_st=ic"
+    }
   ],
-  "expect": {"outcome": "ok", "lat": 16.41234, "lng": 120.59321, "name": "Kapihan sa Ulap (made up)", "pin": "path",
-             "maps_url": "https://maps.app.goo.gl/Zx9SyntheticA1"}
+  "expect": {
+    "outcome": "ok",
+    "lat": 16.41234,
+    "lng": 120.59321,
+    "name": "Kapihan sa Ulap (made up)",
+    "pin": "path",
+    "maps_url": "https://maps.app.goo.gl/Zx9SyntheticA1",
+    "geocoded": []
+  }
 }
