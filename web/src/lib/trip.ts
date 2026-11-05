@@ -3,8 +3,10 @@
 
 import { API_URL, savedAnswer } from "./api.ts";
 import type { Guide, Mark } from "./guide.ts";
-import { SLUG_PATTERN } from "./itinerary.ts";
+import { type Itinerary, SLUG_PATTERN } from "./itinerary.ts";
 import type { Attendee, Rsvp } from "./people.ts";
+import type { GuideIn, Suggestion } from "./planEdit.ts";
+import type { ChangeLine, PlanEdits } from "./planLines.ts";
 import { WALLET_SLUG } from "./wallet.ts";
 
 export const TRIP_SLUG = /^[0-9a-f]{32}$/; // the API's SLUG, 128 random bits in hex
@@ -48,6 +50,20 @@ export type Trip = {
   marks: Mark[]; // PR 3: the shared checklist's ticks and the picks
   attendees?: Attendee[]; // TG-58: absent on a saved copy from before it, so read it through peopleOf
   invite_slug?: string | null; // TG-58 PR 2: the limited invite link, null until someone turns it on
+  plan_edits?: PlanEdits | null; // TG-61: the copy's newest versions; absent on a saved copy from before it
+  places?: TripPlace[]; // TG-61: the places this group pinned from a link
+};
+
+/** TG-61: a place only this trip has, pinned by the server from a Google Maps link. Never verified. */
+export type TripPlace = { id: string; name: string; lat: number; lng: number; maps_url: string; created_at: string };
+/** The plan a change is worked out from: the copy's slug and version, or the shared plan's slug and 0. */
+export type PlanBase = { itinerary_slug: string; seq: number };
+/** A save's answer: the whole new plan, from the same transaction (review M1), and the server's lines for it. */
+export type PlanSaved = { itinerary: Itinerary; changes: ChangeLine[] };
+export type SuggestIn = {
+  base: PlanBase;
+  at: { replace: string } | { after: string } | { first_of_day: number };
+  place: { spot_id: string } | { trip_place_id: string } | { link: string };
 };
 
 // ---------------------------------------------------------------- pure
@@ -112,7 +128,7 @@ export function toInput(wall: string | null): string {
 
 // ---------------------------------------------------------------- API
 
-export type TripFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected";
+export type TripFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected" | "clash";
 /** `savedAt`: the service worker answered with its copy, not the API; this is when that copy's GET left (ms). */
 export type TripResult = { ok: true; trip: Trip; savedAt?: number } | { ok: false; why: TripFailure; detail?: string };
 export type TripLoad = { state: "loading" } | { state: "ready"; trip: Trip } | { state: "error"; why: TripFailure };
@@ -225,6 +241,12 @@ export async function savedTrip(slug: string, store?: Parameters<typeof savedAns
   return saved?.body.share_slug === slug ? { trip: saved.body, savedAt: saved.savedAt } : null;
 }
 
+/** TG-61: an answer that isn't the trip. A clash carries the newer plan's slug and version. */
+export type Answer<T> = { ok: true; body: T } | { ok: false; why: TripFailure; detail?: string; clash?: PlanBase };
+
+const planTodo = (): never => {
+  throw new Error("TG-61: not built yet");
+};
 export const tripApi = {
   create: (name: string, start_date: string, return_date: string) =>
     one(call("/sessions", { method: "POST", body: { name, start_date, return_date } })),
@@ -264,7 +286,13 @@ export const tripApi = {
   startInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "PUT" })),
   /** The invite link stops working; startInvite then makes a new one */
   stopInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "DELETE" })),
+  savePlan: (_slug: string, _base: PlanBase, _guide: GuideIn, _source: "hand" | "chat"): Promise<Answer<PlanSaved>> => planTodo(),
+  undoPlan: (_slug: string, _base: PlanBase): Promise<Answer<PlanSaved>> => planTodo(),
+  suggest: (_slug: string, _body: SuggestIn): Promise<Answer<Suggestion>> => planTodo(),
+  addPlace: (_slug: string, _body: { link: string; name: string }): Promise<Answer<TripPlace>> => planTodo(),
 };
+
+export const planFailureMessage = (_r: { why: TripFailure; detail?: string }): string => planTodo();
 
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;
 

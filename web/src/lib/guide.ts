@@ -6,7 +6,21 @@ import type { Trip } from "./api.ts";
 import type { SpriteName } from "./sprites.ts";
 import { placeSprite } from "./sprites.ts";
 
-export type GuidePlace = { kind: "spot" | "terminal"; id: string; name: string | null; category: string | null; lodging: boolean };
+/** TG-61: a trip place is one the group pinned from a Google Maps link; only it has a pin and a link of its own. */
+export type GuidePlace = {
+  kind: "spot" | "terminal" | "trip_place";
+  id: string;
+  name: string | null;
+  category: string | null;
+  lodging: boolean;
+  lat?: number | null;
+  lng?: number | null;
+  maps_url?: string | null;
+};
+/** TG-61: how to get to a row from the one before, as the API built it: a route on file, or an estimate from the distance. */
+export type LegOut =
+  | { kind: "route"; last_mile_route_id: string; mode: string; minutes: number; fare_min_php: number | null; fare_max_php: number | null; signboard: string | null; last_verified_at: string | null }
+  | { kind: "estimate"; mode: "walk" | "taxi"; minutes: number; km: number };
 export type Condition = { pick: string; is: string };
 export type GuideRow = {
   key: string;
@@ -17,6 +31,7 @@ export type GuideRow = {
   bus: "outbound" | "return" | null;
   show_if: Condition | null;
   hide_if: Condition | null;
+  leg?: LegOut | null; // TG-61: absent before it
 };
 export type PickOption = { id: string; label: string; leave: string; what: string; place: GuidePlace | null };
 export type GuideDay = {
@@ -27,7 +42,8 @@ export type GuideDay = {
   rows: GuideRow[];
   tips: string[];
 };
-export type BusRow = { trip_id: string; date: string; trip: Trip | null; note: string; booked: boolean };
+export type BusWarning = "gone" | "retired" | "not_running";
+export type BusRow = { trip_id: string; date: string; trip: Trip | null; note: string; booked: boolean; warning?: BusWarning | null };
 export type BusTable = { title: string; intro: string; buses: BusRow[]; tips: string[] };
 export type Guide = {
   title: string;

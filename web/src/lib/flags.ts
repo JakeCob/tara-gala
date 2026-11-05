@@ -7,6 +7,7 @@ export type Flags = {
   realMap: boolean;
   serviceWorker: boolean;
   overworldMap: boolean;
+  planEditing: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -15,6 +16,7 @@ export const FLAG_DEFAULTS: Flags = {
   realMap: false,
   serviceWorker: true,
   overworldMap: true,
+  planEditing: false, // TG-61: the hand editor, until the API's PLAN_EDITING is on
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -39,6 +41,7 @@ export function readFlags(): Flags {
     realMap: parseFlag(process.env.NEXT_PUBLIC_REAL_MAP, FLAG_DEFAULTS.realMap),
     serviceWorker: parseFlag(process.env.NEXT_PUBLIC_SERVICE_WORKER, FLAG_DEFAULTS.serviceWorker),
     overworldMap: parseFlag(process.env.NEXT_PUBLIC_OVERWORLD_MAP, FLAG_DEFAULTS.overworldMap),
+    planEditing: parseFlag(process.env.NEXT_PUBLIC_PLAN_EDITING, FLAG_DEFAULTS.planEditing),
   };
 }
 
