@@ -13,7 +13,6 @@ Logs carry the trip slug, codes and counts, never a name, a link or a pin.
 
 import logging
 import math
-from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -23,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from . import db, maps_link, plan_suggest, sessions  # modules, not names: plan_suggest reads this one's limiter and places too
 from .limits import RateLimiter
-from .sessions import _limit, _private, _session_id
+from .sessions import TripPlaceOut, _limit, _private, _session_id  # one TripPlaceOut, as SessionOut.places
 
 router = APIRouter(tags=["trip-places"])
 logger = logging.getLogger("tara_gala.api")
@@ -44,15 +43,6 @@ class PlaceIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     link: Link
     name: PlaceName
-
-
-class TripPlaceOut(BaseModel):
-    id: UUID
-    name: str
-    lat: float
-    lng: float
-    maps_url: str
-    created_at: datetime
 
 
 _COLUMNS = "id, name, lat, lng, maps_url, created_at"
