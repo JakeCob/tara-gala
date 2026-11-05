@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Guide } from "./guide.ts";
-import { type Shown, acceptPlan, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "./planState.ts";
+import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "./planState.ts";
 import type { PlanSaved, Trip } from "./trip.ts";
 
 const WEB = new URL("../../", import.meta.url);
@@ -28,8 +28,14 @@ test("T61-W12a shown is built from one answer: its guide, slug and version go to
   // TripView sets the guide only through shownFrom, and the base only through baseOf(shown)
   const view = read("src/components/TripView.tsx");
   assert.doesNotMatch(view, /itinerary_slug: /, "no base is put together from parts");
-  assert.match(view, /baseOf\(shown\)/);
+  const write = view.slice(view.indexOf("async function planWrite("), view.indexOf("async function onUndo("));
+  assert.match(write, /const s = shownRef\.current;/);
+  assert.match(write, /const base = baseOf\(s\);/, "the base and the guide come from one object");
+  assert.match(write, /run\(base, toStored\(s\.guide\)\)/);
+  assert.equal(view.match(/baseOf\(/g)?.length, 2, "the save and the suggestion: nowhere else");
   assert.match(view, /setShown\(\(prev\) => \(acceptPlan\(prev, next, /);
+  assert.equal(view.match(/setShown\(/g)?.length, 3, "the saved copy, the live GET and the save: each through the guard");
+  assert.doesNotMatch(view, /setShown\(\(prev\) => (?!\(accept(Plan|Saved)\(prev, next, )/);
 });
 
 test("T61-W12b an older answer for the same plan is refused: a slow GET, or the service worker's saved copy", () => {
@@ -74,4 +80,14 @@ test("T61-W12e canEdit: off while a write is out, offline, while another phone's
   assert.equal(canEdit(plan(SHARED, 0), trip(SHARED, null), true, false), false, "R2: never compare null with 0");
   assert.equal(canEdit({ ...five, guide: null }, trip(COPY, 5), true, false), false);
   assert.equal(canEdit(null, trip(COPY, 5), true, false), false);
+});
+
+test("T61-W12f TG-57 still holds: the worker's saved copy only fills a gap, or brings a newer version of the copy", () => {
+  assert.equal(acceptSaved(null, plan(COPY, 4), COPY), true, "nothing on screen yet");
+  assert.equal(acceptSaved(plan(SHARED, null, "live"), plan(SHARED, null, "saved"), SHARED), false, "the live answer landed first: keep it");
+  assert.equal(acceptSaved(plan(COPY, 5), plan(COPY, 5), COPY), false);
+  assert.equal(acceptSaved(plan(COPY, 4), plan(COPY, 5), COPY), true, "a newer version, as other phones' ticks arrive on slow signal");
+  assert.equal(acceptSaved(plan(COPY, 5), plan(COPY, 4), COPY), false);
+  assert.equal(acceptSaved(plan(SHARED, null), plan(COPY, 3), COPY), true, "the trip moved to its copy");
+  assert.equal(acceptSaved(null, plan(SHARED, null), COPY), false, "never another plan's copy");
 });

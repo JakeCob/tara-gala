@@ -3,7 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  type ChangeLine, type PlanVersion, changeRows, copyLine, historyLine, justChanged, resultLine, summaryOf, undoConfirm, undoLabel,
+  type ChangeLine, type PlanVersion, busNotice, busWarningLine, changeRows, copyLine, farLine, historyLine, justChanged, legLines, removeConfirm, resultLine,
+  summaryOf, undoConfirm, undoLabel,
 } from "./planLines.ts";
 
 const L = (word: string, text: string, day: number | null = 1): ChangeLine => ({ word, day, text });
@@ -19,6 +20,7 @@ test("T61-L1 the edit bar's line for each change this phone makes", () => {
   assert.equal(resultLine([L("Moved", "Burnham Park walk")], { kind: "nudge", dir: "earlier" }, level), "Moved Burnham Park walk earlier.");
   assert.equal(resultLine([L("Dropped", "Burnham Park walk")], { kind: "remove" }, level), "Removed Burnham Park walk. Undo brings it back.");
   assert.equal(resultLine([L("Bus", "Home: Victory Liner 11:00 AM", null)], { kind: "bus", from: "10:15", to: "11:00" }, level), "Swapped the 10:15 AM bus for the 11:00 AM.");
+  assert.equal(resultLine([L("Bus", "x", null)], { kind: "bus", from: null, to: "11:00" }, level), "Swapped the bus for the 11:00 AM.", "the old bus is gone from the schedule");
   assert.equal(resultLine([L("Budget", "Food", null)], { kind: "list", what: "budget" }, level), "Changed the budget.");
   assert.equal(resultLine([L("To-do", "Bring jackets", null)], { kind: "list", what: "todo" }, level), "Changed the to-do list.");
   assert.equal(resultLine([L("Sources", "Map", null)], { kind: "list", what: "sources" }, level), "Changed the sources.");
@@ -76,4 +78,41 @@ test("T61-L6 the copy line, from the newest version's time", () => {
   assert.equal(copyLine(true, { seq: 3, versions: [v(3, "hand", [L("New", "x")], "2026-11-05T07:12:00Z")] }), "Your group's own copy of the plan, last changed Nov 5, 3:12 PM.");
   assert.equal(copyLine(false, null), null, "before the first edit, no line");
   assert.equal(copyLine(true, null), "Your group's own copy of the plan.", "the /i/ page has no history");
+});
+
+test("T61-L7 how to get there: a route with its Checked line, or an estimate with no fare and its own line", () => {
+  assert.deepEqual(legLines({ kind: "route", last_mile_route_id: "lm", mode: "jeep", minutes: 15, fare_min_php: 13, fare_max_php: 15, signboard: "Trancoville", last_verified_at: "2026-10-26T02:00:00Z" }), {
+    line: "Jeep, Trancoville signboard, about 15 min · ₱13–15",
+    note: "Checked Oct 26 · Fares and routes change. Confirm with the driver or a local before you ride.",
+  });
+  assert.equal(legLines({ kind: "route", last_mile_route_id: "lm", mode: "taxi", minutes: 8, fare_min_php: 120, fare_max_php: 120, signboard: null, last_verified_at: null }).line, "Taxi, about 8 min · ₱120");
+  assert.deepEqual(legLines({ kind: "estimate", mode: "taxi", minutes: 10, km: 1.8 }), {
+    line: "Taxi, about 10 min, 1.8 km",
+    note: "An estimate from the distance, not a route on file. A jeep may go there: ask a local.",
+  });
+  assert.equal(legLines({ kind: "estimate", mode: "walk", minutes: 12, km: 0.9 }).line, "Walk, about 12 min, 900 m");
+  assert.doesNotMatch(JSON.stringify(legLines({ kind: "estimate", mode: "taxi", minutes: 10, km: 1.8 })), /₱|jeep,/i);
+});
+
+test("T61-L8 far, removal and bus lines", () => {
+  assert.equal(farLine(243), "This is about 240 km from Baguio. Add it anyway?");
+  assert.equal(farLine(26.4), "This is about 26 km from Baguio. Add it anyway?");
+  assert.equal(removeConfirm("Burnham Park walk", 1, true, 2), "Remove Burnham Park walk from World 1? Its tick and 2 photos are hidden, not deleted. Undo brings them back.");
+  assert.equal(removeConfirm("Museum", 3, false, 1), "Remove Museum from World 3? Its photo is hidden, not deleted. Undo brings it back.");
+  assert.equal(removeConfirm("Museum", 3, true, 0), "Remove Museum from World 3? Its tick is hidden, not deleted. Undo brings it back.");
+  assert.equal(removeConfirm("Museum", 3, false, 0), "Remove Museum from World 3? Undo brings it back.");
+  assert.equal(busWarningLine("retired", "2026-11-06"), "This bus isn't on the schedule any more.");
+  assert.equal(busWarningLine("gone", "2026-11-06"), "This bus isn't on the schedule any more.");
+  assert.equal(busWarningLine("not_running", "2026-11-06"), "This bus isn't on the schedule for Fri, Nov 6 any more.");
+  assert.equal(busNotice(1), "A bus in this plan isn't on the schedule any more.");
+  assert.equal(busNotice(2), "2 buses in this plan aren't on the schedule any more.");
+});
+
+test("T61-L9 a level's number on the map counts only the rows that show for the picks", async () => {
+  const { levelLabel } = await import("./planLines.ts");
+  const row = (key: string, extra = {}) => ({ key, time: "09:00", plan: key, note: "", place: null, bus: null, show_if: null, hide_if: null, ...extra });
+  const g = { days: [{ day: 2, rows: [row("d2-01", { show_if: { pick: "sunrise", is: "A" } }), row("d2-02", { show_if: { pick: "sunrise", is: "B" } }), row("d2-03")] }] } as never;
+  assert.equal(levelLabel(g, [], "d2-03"), "2-3");
+  assert.equal(levelLabel(g, [{ key: "pick:sunrise", value: "A", updated_at: "" }], "d2-03"), "2-2");
+  assert.equal(levelLabel(g, [], "d9-99"), null);
 });

@@ -1,7 +1,8 @@
 // TG-61: the words for a plan change. The server sends each change as a ChangeLine {word, day, text}; the phone writes
 // the sentences (review S8), with its own level numbers only for a change it made itself (ux.md §3.1).
 
-import { formatTime } from "./api.ts";
+import { formatTime, formatVerified } from "./api.ts";
+import { type BusWarning, type Guide, type LegOut, type Mark, marksByKey, rowShows } from "./guide.ts";
 
 export type ChangeLine = { word: string; day: number | null; text: string; part?: "stop" | "ripple" };
 export type PlanVersion = { seq: number; source: "copy" | "hand" | "chat" | "undo"; changes: ChangeLine[]; created_at: string };
@@ -16,7 +17,7 @@ export type Done =
   | { kind: "move"; day: number }
   | { kind: "nudge"; dir: "earlier" | "later" }
   | { kind: "remove" }
-  | { kind: "bus"; from: string; to: string }
+  | { kind: "bus"; from: string | null; to: string }
   | { kind: "list"; what: "budget" | "todo" | "sources" | "pick" }
   | { kind: "chat" }
   | { kind: "undo"; redo: boolean; undone: PlanVersion | null };
@@ -71,7 +72,7 @@ export function resultLine(lines: ChangeLine[], done: Done, levelOf: (key: strin
       said = `Removed ${text}. Undo brings it back.`;
       break;
     case "bus":
-      said = `Swapped the ${formatTime(done.from)} bus for the ${formatTime(done.to)}.`;
+      said = done.from ? `Swapped the ${formatTime(done.from)} bus for the ${formatTime(done.to)}.` : `Swapped the bus for the ${formatTime(done.to)}.`;
       break;
     case "list":
       said = LISTS[done.what];
@@ -155,4 +156,56 @@ export function copyLine(edited: boolean, edits: PlanEdits | null | undefined): 
   if (!edited) return null;
   const at = edits?.versions[0]?.created_at;
   return at ? `Your group's own copy of the plan, last changed ${dayOf(at)}, ${clock(at)}.` : "Your group's own copy of the plan.";
+}
+
+const peso = (n: number) => `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+const mode = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
+
+/** How to get there (ux.md §4.4): a route on file with its trust line, or an estimate, which never has a fare (D1). */
+export function legLines(leg: LegOut): { line: string; note: string } {
+  if (leg.kind === "estimate") {
+    const far = leg.km < 1 ? `${Math.round(leg.km * 1000)} m` : `${leg.km} km`;
+    return { line: `${mode(leg.mode)}, about ${leg.minutes} min, ${far}`, note: "An estimate from the distance, not a route on file. A jeep may go there: ask a local." };
+  }
+  const sign = leg.signboard ? `, ${leg.signboard} signboard` : "";
+  const lo = leg.fare_min_php;
+  const hi = leg.fare_max_php;
+  const fare = lo == null ? "" : ` · ${hi == null || hi === lo ? peso(lo) : `${peso(lo)}–${hi.toLocaleString("en-PH")}`}`;
+  return { line: `${mode(leg.mode)}${sign}, about ${leg.minutes} min${fare}`, note: `${formatVerified(leg.last_verified_at)} · Fares and routes change. Confirm with the driver or a local before you ride.` };
+}
+
+/** The far warning: rounded to 10 km over 100 km, else to the km (review nit 2). */
+export function farLine(km: number): string {
+  const shown = km > 100 ? Math.round(km / 10) * 10 : Math.round(km);
+  return `This is about ${shown} km from Baguio. Add it anyway?`;
+}
+
+/** The confirm before a stop is removed (ux.md §4.7): its tick and photos are hidden, not deleted. */
+export function removeConfirm(plan: string, world: number, ticked: boolean, photos: number): string {
+  const parts = [ticked ? "tick" : "", photos === 1 ? "photo" : photos > 1 ? `${photos} photos` : ""].filter(Boolean);
+  const ask = `Remove ${plan} from World ${world}?`;
+  if (!parts.length) return `${ask} Undo brings it back.`;
+  const many = parts.length > 1 || photos > 1;
+  return `${ask} Its ${parts.join(" and ")} ${many ? "are" : "is"} hidden, not deleted. Undo brings ${many ? "them" : "it"} back.`;
+}
+
+/** A bus row's warning (ux.md §7). The date is a plain calendar day. */
+export function busWarningLine(warning: BusWarning, date: string): string {
+  if (warning !== "not_running") return "This bus isn't on the schedule any more.";
+  const [y, m, d] = date.split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  return `This bus isn't on the schedule for ${day} any more.`;
+}
+
+/** The one notice above the World tabs. */
+export const busNotice = (n: number) => (n === 1 ? "A bus in this plan isn't on the schedule any more." : `${n} buses in this plan aren't on the schedule any more.`);
+
+/** A row's level on the map ("2-3"): its place among the day's rows that show for the picks. */
+export function levelLabel(guide: Pick<Guide, "days">, marks: readonly Mark[], key: string): string | null {
+  const picks = marksByKey(marks);
+  for (const d of guide.days) {
+    const i = d.rows.filter((r) => rowShows(r, picks)).findIndex((r) => r.key === key);
+    if (i >= 0) return `${d.day}-${i + 1}`;
+  }
+  return null;
 }

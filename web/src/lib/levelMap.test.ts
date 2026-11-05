@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Guide, GuideRow, Mark } from "./guide.ts";
-import { marksByKey, whereNow } from "./guide.ts";
+import { marksByKey, placeIcon, whereNow } from "./guide.ts";
 import { BAND_PX, COLUMNS, GAP_PX, PAD_PX, SIGN_DROP, SIGN_GAP, SIGN_ROOM, SNAKE_MIN_PX, START_POINT, TILE_PX, TOP_PX, UNIT, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadBand, roadStops, runsPath, snakeMap, snakeRoad, snakeScenery, startWorld, worldHeight } from "./levelMap.ts";
 
 const row = (key: string, extra: Partial<GuideRow> = {}): GuideRow => ({
@@ -425,4 +425,10 @@ test("TG57-10 a saved start, then fresh marks on a later day: the map follows th
   assert.match(map, /if \(groupDay && !tabPicked\.current && !inDialog\) setWorld\(groupDay\);\s+\}, \[groupDay, inDialog\]\);/, "an open dialog keeps its World until it closes");
   const goTo = map.slice(map.indexOf("const goTo ="), map.indexOf("return (", map.indexOf("const goTo =")));
   assert.match(goTo, /tabPicked\.current = true;/, "a World picked by hand stays picked");
+});
+
+test("T61-W16 a trip place opens directions to its own pin, with the plain stop icon; spots and terminals search by name", () => {
+  assert.equal(placeMapsUrl({ name: "Cafe", kind: "trip_place", lat: 16.4123, lng: 120.5987 }), "https://www.google.com/maps/dir/?api=1&destination=16.4123,120.5987");
+  assert.equal(placeMapsUrl({ name: "Burnham Park", kind: "spot" }), "https://www.google.com/maps/search/?api=1&query=Burnham%20Park%2C%20Benguet%2C%20Philippines");
+  assert.equal(placeIcon({ kind: "trip_place", id: "tp", name: "Cafe", category: null, lodging: false, lat: 16.4, lng: 120.6, maps_url: "https://maps.app.goo.gl/x" }), "place-other");
 });

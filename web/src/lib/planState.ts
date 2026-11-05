@@ -31,6 +31,14 @@ export function acceptPlan(shown: Shown | null, next: Shown, sessionSlug: string
   return next.seq !== null && next.seq >= shown.seq;
 }
 
+/** TG-57 with versions: the worker's saved copy fills a gap, or brings a newer version of this copy; it never replaces
+ * a live answer for the same plan. */
+export function acceptSaved(shown: Shown | null, next: Shown, sessionSlug: string | null): boolean {
+  if (!acceptPlan(shown, next, sessionSlug)) return false;
+  if (!shown || shown.slug !== next.slug) return true;
+  return shown.seq !== null && next.seq !== null && next.seq > shown.seq;
+}
+
 /** Whether the plan on screen is the newest this phone knows of. R2: a shared plan (no edits yet) has a null seq. */
 export function inStep(shown: Shown | null, trip: Pick<Trip, "itinerary_slug" | "plan_edits">): boolean {
   if (!shown || shown.slug !== trip.itinerary_slug) return false;

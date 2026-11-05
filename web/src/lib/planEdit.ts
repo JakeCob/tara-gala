@@ -251,3 +251,67 @@ export function editPickOption(
   }
   return { ...out, days: out.days.map((dd, j) => (j === d ? { ...dd, pick: { ...pick, options } } : dd)) };
 }
+
+// ---------------------------------------------------------------- finding a place, and the phone's own proposals
+
+/** A spot from GET /spots, as the place search needs it. */
+export type SpotLite = { spot_id: string; slug: string; name: string; city: string; category: string; lat: number | null; lng: number | null };
+export type Found = { kind: "spot" | "trip_place"; id: string; name: string; line: string };
+const MAX_FOUND = 8;
+const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+const titled = (s: string) => s.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+
+/** A typed name, on the phone only (ux.md §4.3): the trip's own places first, then Tara Gala's spots. */
+export function findPlaces(query: string, spots: readonly SpotLite[], places: readonly { id: string; name: string }[]): Found[] {
+  const q = plain(query);
+  if (!q) return [];
+  const own = places.filter((p) => plain(p.name).includes(q)).map((p): Found => ({ kind: "trip_place", id: p.id, name: p.name, line: "Added by your group" }));
+  const ours = spots.filter((s) => plain(s.name).includes(q)).map((s): Found => ({ kind: "spot", id: s.spot_id, name: s.name, line: `${titled(s.category)} · ${s.city}` }));
+  return [...own, ...ours].slice(0, MAX_FOUND);
+}
+
+/** The place field holds a link: it starts with one, or it's share text with one in it. */
+export const isLink = (text: string) => /https?:\/\//i.test(text);
+
+const HOUR = 60;
+const LAST_SLOT = 23 * 60 + 45;
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const toHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const clockOf = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+};
+
+/** A stop with no pin is proposed on the phone, since the server has nothing to measure (B25): an hour after the stop
+ * before it, or an hour before the day's first. No leg and no ripple. */
+export function noteSuggestion(g: GuideIn, at: { after: string } | { first_of_day: number }, plan: string): Suggestion {
+  let day: number;
+  let time: number;
+  if ("after" in at) {
+    const w = where(g, at.after);
+    day = w ? g.days[w.d].day : 1;
+    time = Math.min(LAST_SLOT, toMin(w?.row.time ?? "08:00") + HOUR);
+  } else {
+    day = at.first_of_day;
+    const first = g.days[dayIndex(g, day)]?.rows[0];
+    time = first ? Math.max(0, toMin(first.time) - HOUR) : 9 * HOUR;
+  }
+  const hhmm = toHHMM(Math.ceil(time / 15) * 15);
+  return {
+    name: plan, lat: null, lng: null, maps_url: null, km_from_baguio: null, far: false, time: hhmm, leg: null, ripple: [], notes: [],
+    changes: [{ word: "New", day, text: `${clockOf(hhmm)} ${plan}`, part: "stop" }],
+  };
+}
+
+/** Which level to focus once a change is on screen: the row the server just minted, else the row it was about, else
+ * the next one after it (a removal). */
+export function focusAfter(before: Guide, after: Guide, anchor: string): string | null {
+  const keysOf = (g: Guide) => g.days.flatMap((d) => d.rows.map((r) => r.key));
+  const had = new Set(keysOf(before));
+  const now = keysOf(after);
+  const minted = now.find((k) => !had.has(k));
+  if (minted) return minted;
+  if (now.includes(anchor)) return anchor;
+  const old = keysOf(before);
+  return old.slice(old.indexOf(anchor) + 1).find((k) => now.includes(k)) ?? null;
+}

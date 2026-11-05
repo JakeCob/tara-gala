@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import type { Guide, GuideRow } from "./guide.ts";
 import {
   type GuideIn, type RowIn, type Suggestion, addRow, applySuggestion, editBudget, editPickOption, editSources, editTodo, legIn, moveRow, nudgeRow,
-  removeRow, replacePlace, setRow, swapBus, toStored,
+  removeRow, replacePlace, setRow, swapBus, toStored, findPlaces, focusAfter, isLink, noteSuggestion,
 } from "./planEdit.ts";
 import { planFailureMessage, tripApi } from "./trip.ts";
 
@@ -203,4 +203,46 @@ test("T61-W9b the plan calls: their paths, bodies and answers", async () => {
     throw new TypeError("offline");
   }) as typeof fetch;
   assert.deepEqual(await tripApi.savePlan(TRIP, { itinerary_slug: "c0ffee", seq: 4 }, base(), "hand"), { ok: false, why: "offline" });
+});
+
+// ---------------------------------------------------------------- finding a place, and the proposal's own helpers
+
+const SPOTS = [
+  { spot_id: "s1", slug: "cafe-by-the-ruins", name: "Café by the Ruins", city: "Baguio", category: "cafe", lat: 16.41, lng: 120.59 },
+  { spot_id: "s2", slug: "cafe-yagam", name: "Cafe Yagam", city: "Baguio", category: "cafe", lat: null, lng: null },
+  { spot_id: "s3", slug: "burnham", name: "Burnham Park", city: "Baguio", category: "park", lat: 16.41, lng: 120.59 },
+];
+const PLACES = [{ id: "tp1", name: "Yagam Annex", lat: 16.4, lng: 120.6, maps_url: "https://maps.app.goo.gl/x", created_at: "" }];
+
+test("T61-W13 a name is found on the phone, ignoring case and accents; the trip's own places come first, at most 8", () => {
+  assert.deepEqual(findPlaces("CAFE", SPOTS, PLACES).map((p) => p.name), ["Café by the Ruins", "Cafe Yagam"]);
+  assert.deepEqual(findPlaces("yagam", SPOTS, PLACES), [
+    { kind: "trip_place", id: "tp1", name: "Yagam Annex", line: "Added by your group" },
+    { kind: "spot", id: "s2", name: "Cafe Yagam", line: "Cafe · Baguio" },
+  ]);
+  assert.deepEqual(findPlaces("  ", SPOTS, PLACES), []);
+  assert.equal(findPlaces("a", Array.from({ length: 20 }, (_, i) => ({ ...SPOTS[0], spot_id: `x${i}` })), []).length, 8);
+  assert.equal(isLink(" https://maps.app.goo.gl/abc"), true);
+  assert.equal(isLink("Look: https://maps.app.goo.gl/abc"), true, "share text with the link in it");
+  assert.equal(isLink("Cafe Yagam"), false);
+});
+
+test("T61-W14 a note-only stop is proposed on the phone: an hour after the stop before it, no leg, nothing sent", () => {
+  const g = base();
+  const s = noteSuggestion(g, { after: "d1-03" }, "Pasalubong");
+  assert.equal(s.time, "15:15", "14:15 plus an hour");
+  assert.equal(s.leg, null);
+  assert.deepEqual(s.ripple, []);
+  assert.deepEqual(s.changes, [{ word: "New", day: 1, text: "3:15 PM Pasalubong", part: "stop" }]);
+  assert.equal(noteSuggestion(g, { first_of_day: 2 }, "Coffee").time, "08:00", "the start of a day");
+  assert.equal(noteSuggestion(g, { after: "d1-04" }, "Late").time, "17:30");
+});
+
+test("T61-W15 the new and changed rows after a save, for focus: a minted key, else the next row after a removal", () => {
+  const before = { days: [{ day: 1, rows: [{ key: "d1-01" }, { key: "d1-02" }, { key: "d1-03" }] }] } as unknown as Guide;
+  const added = { days: [{ day: 1, rows: [{ key: "d1-01" }, { key: "d1-04" }, { key: "d1-02" }, { key: "d1-03" }] }] } as unknown as Guide;
+  const removed = { days: [{ day: 1, rows: [{ key: "d1-01" }, { key: "d1-03" }] }] } as unknown as Guide;
+  assert.equal(focusAfter(before, added, "d1-01"), "d1-04");
+  assert.equal(focusAfter(before, removed, "d1-02"), "d1-03");
+  assert.equal(focusAfter(before, before, "d1-02"), "d1-02");
 });

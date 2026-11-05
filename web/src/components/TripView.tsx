@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
-import { fetchPremade, type PremadeSummary } from "@/lib/api";
+import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
+import { flags } from "@/lib/flags";
+import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
+import { type Done, type PlanVersion, copyLine, justChanged, levelLabel, resultLine, undoConfirm, undoLabel } from "@/lib/planLines";
+import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "@/lib/planState";
 import {
-  type Hotel, type PlanGuide, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, fillGuide, forgetTrip, hotelMapsUrl,
-  hotelTime, mapSlot, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
+  type Answer, type Hotel, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
+  hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
+import PlanEditBar from "./PlanEditBar";
+import type { PlanEditor, SaveOutcome } from "./PlanEditor";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
 import TripPeople from "./TripPeople";
 import { fetchItinerary, savedItinerary } from "@/lib/api";
@@ -17,6 +23,17 @@ import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, wal
 
 type Notice = { text: string; error: boolean };
 const subscribeNothing = () => () => {};
+const subscribeOnline = (on: () => void) => {
+  window.addEventListener("online", on);
+  window.addEventListener("offline", on);
+  return () => {
+    window.removeEventListener("online", on);
+    window.removeEventListener("offline", on);
+  };
+};
+const VIEW_INTRO = "Each stop is a level. Tap one to mark it done or add photos, from any phone. The group stands on the last level done.";
+const EDIT_INTRO = "Tap a stop to change, move or remove it. Each change saves right away, for everyone with the trip's link.";
+const IGNORED: SaveOutcome = { ok: false, message: "", clash: false, ignored: true };
 const NO_HOTEL: Hotel = { name: "", address: "", check_in: null, check_out: null, booking_ref: "", notes: "" };
 
 /** This phone's note of the trip, with its wallet so the wallet page can find the payout QRs */
@@ -92,29 +109,92 @@ export default function TripView({ slug }: { slug: string }) {
     };
   }, []);
 
-  // The plan's guide (day tables, buses, pick, budget, to-dos): the trip's checklist and progress map
+  // The plan's guide (day tables, buses, pick, budget, to-dos): the trip's checklist and progress map. TG-61: a copy's
+  // plan changes under its slug, so the screen holds the plan with its version, from one answer, and every answer goes
+  // through the guard: never another plan's, never an older version (review M1, M2)
   const planSlug = load.state === "ready" ? load.trip.itinerary_slug : null;
-  const [guide, setGuide] = useState<PlanGuide | null>(null);
-  const retry = guide?.plan === planSlug && guide?.failed ? reloads : 0; // a failed fetch tries again with the polls
+  const planSeq = load.state === "ready" ? (load.trip.plan_edits?.seq ?? null) : null;
+  const [shown, setShown] = useState<Shown | null>(null);
+  const [planMiss, setPlanMiss] = useState<string | null>(null); // this plan's fetch failed or came back older: the polls try again
+  const shownRef = useRef<Shown | null>(null);
+  const sessionSlug = useRef<string | null>(null);
+  const tripRef = useRef<Trip | null>(null);
+  useEffect(() => {
+    shownRef.current = shown;
+  }, [shown]);
+  useEffect(() => {
+    sessionSlug.current = planSlug;
+    tripRef.current = load.state === "ready" ? load.trip : null;
+  }, [planSlug, load]);
+  const retry = planMiss === planSlug ? reloads : 0; // a failed fetch tries again with the polls
   useEffect(() => {
     if (!planSlug) return;
     let live = true;
     void savedItinerary(planSlug).then((saved) => {
       if (!live || !saved) return;
-      console.info("[tg-trip] guide saved copy");
-      setGuide((prev) => fillGuide(prev, { plan: planSlug, guide: saved.body.guide ?? null }));
+      const next = shownFrom(saved.body);
+      console.info("[tg-trip] guide saved copy seq=%s", next.seq ?? "none");
+      setShown((prev) => (acceptSaved(prev, next, sessionSlug.current) ? next : prev));
     });
     fetchItinerary(planSlug).then(
-      (it) => live && setGuide({ plan: planSlug, guide: it?.guide ?? null }),
+      (it) => {
+        if (!live) return;
+        const next = shownFrom(it ?? { share_slug: planSlug });
+        const took = acceptPlan(shownRef.current, next, sessionSlug.current);
+        console.info("[tg-trip] guide seq=%s took=%s", next.seq ?? "none", took ? "yes" : "no");
+        setPlanMiss(took ? null : planSlug); // an older answer (the worker's copy, offline) keeps waiting for the newer plan
+        setShown((prev) => (acceptPlan(prev, next, sessionSlug.current) ? next : prev));
+      },
       () => {
         console.info("[tg-trip] guide failed live=%s", live);
-        if (live) setGuide((prev) => fillGuide(prev, { plan: planSlug, guide: null, failed: true })); // offline with no copy: the rest of the trip still shows
+        if (live) setPlanMiss(planSlug); // offline with no copy: the rest of the trip still shows
       },
     );
     return () => {
       live = false;
     };
-  }, [planSlug, retry]);
+  }, [planSlug, planSeq, retry]);
+
+  // TG-61: editing the plan. Edit mode belongs to this phone only, and isn't remembered (ux.md §3)
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+  const [editing, setEditing] = useState(false);
+  const [planWriting, setPlanWriting] = useState(false);
+  const writingPlan = useRef(false); // set in the handler, so a second tap in the same tick sees it
+  const [planSaid, setPlanSaid] = useState("");
+  const [otherLine, setOtherLine] = useState("");
+  const clashWait = useRef<"edit" | "undo" | null>(null);
+  const mine = useRef(new Map<number, number>()); // this phone's own versions, and when: Undo asks first otherwise
+  const [spots, setSpots] = useState<SpotLite[] | null>(null);
+  const spotsAsked = useRef(false);
+  const wantSpots = useCallback(() => {
+    if (spotsAsked.current) return;
+    spotsAsked.current = true;
+    void fetchSpots().then((list) => {
+      console.info("[tg-trip] plan spots ok=%s count=%d", list ? "yes" : "no", list?.length ?? 0);
+      if (list) setSpots(list);
+      else spotsAsked.current = false; // try again on the next find
+    });
+  }, []);
+
+  // A newer plan landed: after a clash, say what changed; from another phone, say so above the tabs (ux.md §6)
+  const lastSeq = useRef<number | null>(null);
+  const trip0 = load.state === "ready" ? load.trip : null;
+  const synced = !!trip0 && inStep(shown, trip0);
+  useEffect(() => {
+    const seq = shown?.seq ?? null;
+    const before = lastSeq.current;
+    lastSeq.current = seq;
+    if (!synced || seq === null) return;
+    const v = trip0?.plan_edits?.versions.find((x) => x.seq === seq);
+    if (clashWait.current) {
+      console.info("[tg-trip] plan caught up after clash seq=%d", seq);
+      setPlanSaid(clashWait.current === "undo" ? "Someone just changed the plan, so there's a newer change to undo." : v ? justChanged(v) : "");
+      clashWait.current = null;
+    } else if (before !== null && seq > before && v && !mine.current.has(seq)) {
+      console.info("[tg-trip] plan other phone seq=%d", seq);
+      setOtherLine(justChanged(v));
+    }
+  }, [shown?.seq, synced, trip0]);
 
   // TG-57: a first open's GETs go past the service worker: ask again once it's here, so the next open has its copies.
   // Only the worker needs these answers, so the GET the screen is waiting on carries on
@@ -161,9 +241,103 @@ export default function TripView({ slug }: { slug: string }) {
     return r;
   }
 
+  /**
+   * TG-61: one plan write. The change is worked out from the plan on screen at the moment it goes, with that plan's
+   * own base, so a second tap can never pair a new base with an old plan (review M1). A tap while a write is out, or
+   * while a newer plan isn't on screen yet, is ignored, not queued (ux.md §3.3).
+   */
+  async function planWrite(action: string, run: (base: PlanBase, stored: GuideIn) => Promise<Answer<PlanSaved>> | null, done: Done, anchor: string | null, source: PlanVersion["source"]): Promise<SaveOutcome> {
+    const s = shownRef.current;
+    const t = tripRef.current;
+    if (writingPlan.current || !s?.guide || !t || !canEdit(s, t, navigator.onLine, false)) {
+      console.info("[tg-trip] plan %s ignored", action);
+      return IGNORED;
+    }
+    const base = baseOf(s); // the same object as the guide below: never a base from one answer and a plan from another
+    const req = run(base, toStored(s.guide));
+    if (!req) return IGNORED;
+    writingPlan.current = true;
+    setPlanWriting(true);
+    setPlanSaid("Saving...");
+    const r = await req;
+    writingPlan.current = false;
+    setPlanWriting(false);
+    console.info("[tg-trip] plan %s ok=%s base_seq=%d seq=%s", action, r.ok ? "yes" : r.why === "rejected" ? r.detail : r.why, base.seq, r.ok ? (r.body.itinerary.seq ?? "none") : "-");
+    if (!r.ok) {
+      const message = planFailureMessage(r);
+      if (r.why === "clash") clashWait.current = source === "undo" ? "undo" : "edit";
+      if (r.why === "clash" || r.why === "offline" || r.why === "server") setReloads((n) => n + 1); // the newer plan, or an answer that may have been lost
+      setPlanSaid(r.why === "clash" ? "Updating the map..." : r.why === "offline" ? "Editing needs signal. Your last change wasn't saved." : message);
+      return { ok: false, message, clash: r.why === "clash" };
+    }
+    const saved = r.body;
+    const next = shownFrom(saved.itinerary);
+    mine.current.set(next.seq ?? 0, Date.now());
+    sessionSlug.current = saved.itinerary.share_slug; // R1: a save under the trip's lock names its current plan
+    shownRef.current = next;
+    shownAt.current = Date.now(); // a session GET that left before this save would put the old plan back
+    setLoad((prev) => (prev.state === "ready" ? { state: "ready", trip: afterPlanSaved(prev.trip, saved, source, new Date().toISOString()) } : prev));
+    setShown((prev) => (acceptPlan(prev, next, saved.itinerary.share_slug) ? next : prev));
+    const g = next.guide;
+    setPlanSaid(resultLine(saved.changes, done, (k) => (g ? levelLabel(g, t.marks, k) : null), { firstCopy: s.seq === null }));
+    setReloads((n) => n + 1); // the session's own answer, so the worker keeps the new plan's link
+    const key = anchor && g ? focusAfter(s.guide, g, anchor) : null;
+    const day = key && g?.days.find((d) => d.rows.some((r) => r.key === key))?.day;
+    return g ? { ok: true, guide: g, focus: key && day ? { key, day } : null } : { ok: false, message: "", clash: false };
+  }
+
+  async function onUndo() {
+    const edits = tripRef.current?.plan_edits;
+    if (!edits || edits.versions[0]?.seq === 0) return setPlanSaid("Nothing to undo yet.");
+    const ask = undoConfirm(edits, mine.current, Date.now());
+    if (ask && !window.confirm(ask)) return;
+    const redo = undoLabel(edits) === "Redo";
+    await planWrite("plan-undo", (base) => tripApi.undoPlan(slug, base), { kind: "undo", redo, undone: (redo ? edits.versions[1] : edits.versions[0]) ?? null }, null, "undo");
+  }
+
   const onFail = (text: string) => setNotice({ text, error: true });
-  const slot = mapSlot(trip.itinerary_slug, guide);
+  const slot = mapSlot(trip.itinerary_slug, shown ? { plan: shown.slug, guide: shown.guide } : planMiss ? { plan: planMiss, guide: null } : null);
   const theGuide = slot === "frame" ? null : slot;
+  const stale = !!shown && !synced && planMiss === trip.itinerary_slug; // review M2: the newer plan didn't come, or came back older
+  const barSaid = !online
+    ? planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
+    : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : !synced && !planWriting && shown ? "Updating the map..." : planSaid;
+  const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {
+    editing,
+    can: canEdit(shown, trip, online, planWriting),
+    online,
+    writing: planWriting,
+    status: barSaid,
+    places: trip.places ?? [],
+    spots,
+    wantSpots,
+    edits: trip.plan_edits ?? null,
+    save: (action, edit, done, anchor) => planWrite(action, (base, g) => {
+      const next = edit(g);
+      return next ? tripApi.savePlan(slug, base, next, "hand") : null;
+    }, done, anchor, "hand"),
+    suggest: async (at, place) => {
+      const s = shownRef.current;
+      if (!s) return { ok: false, why: "rejected" };
+      const r = await tripApi.suggest(slug, { base: baseOf(s), at, place });
+      console.info("[tg-trip] plan suggest at=%s place=%s ok=%s", Object.keys(at)[0], Object.keys(place)[0], r.ok ? "yes" : r.why === "rejected" ? r.detail : r.why);
+      return r;
+    },
+    addPlace: (link, name) => tripApi.addPlace(slug, { link, name }),
+    top: (
+      <>
+        {editing && (
+          <PlanEditBar edits={trip.plan_edits ?? null} status={barSaid} can={canEdit(shown, trip, online, planWriting)} stale={stale} today={manilaToday()}
+            onUndo={() => void onUndo()} onReload={() => setReloads((n) => n + 1)}
+            onDone={() => {
+              console.info("[tg-trip] plan edit mode off");
+              setEditing(false);
+            }} />
+        )}
+        <p role="status" aria-live="polite" className="text-sm empty:sr-only">{otherLine}</p>
+      </>
+    ),
+  } : undefined;
   return (
     <div className="flex flex-col gap-6">
     <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start">
@@ -183,12 +357,25 @@ export default function TripView({ slug }: { slug: string }) {
     {theGuide && (
       <section aria-labelledby="progress-title" className="flex flex-col gap-3">
         <SectionTitle id="progress-title">Trip progress</SectionTitle>
-        <p className="text-sm text-muted md:max-w-prose">
-          Each stop is a level. Tap one to mark it done or add photos, from any phone. The group stands on the last level done.
-        </p>
+        <p className="text-sm text-muted md:max-w-prose">{editing && editor ? EDIT_INTRO : VIEW_INTRO}</p>
+        {editor && !editing && (
+          <div className="flex flex-col gap-1">
+            <PixelButton variant="secondary" className="self-start" aria-disabled={!online || undefined}
+              onClick={() => {
+                if (!online) return;
+                console.info("[tg-trip] plan edit mode on");
+                setEditing(true);
+              }}>
+              Edit the plan
+            </PixelButton>
+            {!online && <p className={PX.meta}>Editing needs signal. You can still tick stops.</p>}
+          </div>
+        )}
         <LevelMap
           guide={theGuide}
           marks={trip.marks}
+          editor={editor}
+          copyLine={copyLine(!!shown?.edited, trip.plan_edits)}
           photos={{
             slug,
             files: trip.files,
@@ -214,7 +401,7 @@ export default function TripView({ slug }: { slug: string }) {
             },
             onDelete: (file) => void write("photo-delete", () => tripApi.deleteFile(slug, file.id), "Photo deleted."),
           }}
-          busy={busy}
+          busy={busy || planWriting}
           problem={notice?.error ? notice.text : null}
           said={notice && !notice.error ? notice.text : ""}
           onOpenLevel={() => setNotice(null)}
@@ -641,7 +828,7 @@ function DeleteTrip({ trip, onDeleted }: { trip: Trip; onDeleted: () => void }) 
       <summary className="cursor-pointer font-semibold">Delete this trip</summary>
       <form onSubmit={onDelete} noValidate className="mt-3 flex flex-col gap-3">
         <p className="text-muted">
-          This deletes the trip, its hotel, its list of people and their photos, and its shared tickets and QRs from the server, not from phones that already saved the trip. The plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
+          This deletes the trip, its hotel, its list of people and their photos, its own copy of the plan and the places your group added, and its shared tickets and QRs from the server, not from phones that already saved the trip. The shared plan and the wallet keep their own links. Type <span className="font-semibold text-foreground">{trip.name}</span> to confirm.
         </p>
         <input className={PX.input} value={typed} autoComplete="off" aria-label="Trip name, to confirm" onChange={(e) => setTyped(e.target.value)} />
         {problem && <Problem text={problem} />}

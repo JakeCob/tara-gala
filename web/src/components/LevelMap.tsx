@@ -1,20 +1,26 @@
 "use client";
 
-import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { Thumb } from "@/components/TripFiles";
 import { Sprite } from "@/components/WorldSheet";
 import { formatClass, formatTime, formatVerified } from "@/lib/api";
-import { type BusTable, type Guide, type Mark, marksByKey, pickMark, placeIcon, rowMark, todoMark, whereNow } from "@/lib/guide";
+import { type BusTable, type Guide, type GuideRow, type Mark, marksByKey, pickMark, placeIcon, rowMark, todoMark, whereNow } from "@/lib/guide";
 import {
   BAND_PX, SIGN_DROP, SIGN_GAP, SNAKE_MIN_PX, START_POINT, TILE_PX, type Level, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, snakeMap, snakeRoad, snakeScenery,
   startWorld, worldHeight,
 } from "@/lib/levelMap";
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
+import { busNotice, busWarningLine } from "@/lib/planLines";
 import { type TripFile, fetchFile } from "@/lib/trip";
 import { fnv1a, usableWidth } from "@/lib/world";
+import BusSwap, { type BusAt, swapTitle } from "./BusSwap";
+import { LegLine } from "./PlanBits";
+import type { Focus, PlanEditor } from "./PlanEditor";
+import { BudgetEdits, PickEdits, SourcesEdits, TodoEdits } from "./PlanTextEditors";
+import StopChange, { PlanDialog } from "./StopChange";
 
 export type Photos = {
   slug: string;
@@ -36,6 +42,10 @@ type Props = {
   onTick?: (key: string, done: boolean) => void;
   onPick?: (pickKey: string, option: string) => void;
   photos?: Photos;
+  /** TG-61: the trip page's plan editor. The plan's own page (/i/) never passes one, so it can't be edited there */
+  editor?: PlanEditor;
+  /** TG-61: "Your group's own copy of the plan, last changed ..." under the summary */
+  copyLine?: string | null;
 };
 
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
@@ -51,12 +61,17 @@ const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of t
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
   const [open, setOpen] = useState<{ key: string; tap: number } | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  const [adding, setAdding] = useState(false); // TG-61: Add a stop to World N
+  const [swapping, setSwapping] = useState<BusAt | null>(null); // TG-61: Swap this bus, from the Buses panel
+  const focusTo = useRef<string | null>(null); // TG-61: the level to focus once a change is on screen
+  const editing = !!editor?.editing;
+  const warned = (["getting_there", "getting_home"] as const).flatMap((table) => guide[table].buses.flatMap((b, index) => (b.warning ? [{ table, index }] : [])));
   const here = marks ? whereNow(guide, marks) : null;
   const day = guide.days.find((d) => d.day === world) ?? guide.days[0];
   const list = levels(day, byKey);
@@ -101,6 +116,25 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   useEffect(() => {
     if (groupDay && !tabPicked.current && !inDialog) setWorld(groupDay);
   }, [groupDay, inDialog]);
+  // After a change, focus its level once it's drawn, and centre it (ux.md §3.1). Like the tab scroll above: after any render
+  useEffect(() => {
+    const key = focusTo.current;
+    const button = key && screen.current?.querySelector<HTMLElement>(`[data-level="${key}"] button`);
+    if (!button) return; // not drawn yet, or hidden by a pick: a later render tries again
+    focusTo.current = null;
+    button.focus();
+    button.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+  const changed = (focus: Focus) => {
+    setOpen(null);
+    setAdding(false);
+    setSwapping(null);
+    if (!focus) return;
+    focusTo.current = focus.key;
+    tabPicked.current = true;
+    setWorld(focus.day); // a move can take it to another World
+  };
+
   const goTo = (n: number) => {
     if (n !== world) tabTapped.current = true;
     tabPicked.current = true;
@@ -112,6 +146,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       <header className="flex flex-col gap-1">
         <h2 className="text-xl font-bold text-balance">{guide.title}</h2>
         {guide.summary && <p className="text-sm text-muted md:max-w-prose">{guide.summary}</p>}
+        {copyLine && <p className={PX.meta}>{copyLine}</p>}
       </header>
 
       <div className="flex flex-col gap-1">
@@ -122,7 +157,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       {day.pick && (
         <PixelBox className="flex flex-col gap-2 p-4 md:max-w-2xl">
           <p className="font-semibold">{day.pick.title}</p>
-          <ul className="flex flex-col gap-2">
+          {editing && editor ? <PickEdits editor={editor} day={day} chosen={chosen} /> : <ul className="flex flex-col gap-2">
             {day.pick.options.map((o) => (
               <li key={o.id} className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-2 last:border-b-0 last:pb-0">
                 <span className="min-w-0 flex-1 text-sm">
@@ -137,7 +172,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
                 )}
               </li>
             ))}
-          </ul>
+          </ul>}
           {marks && <p className={PX.meta}>{chosen ? `The group picked ${chosen}.` : "Nobody has picked yet: the map shows every option."}</p>}
         </PixelBox>
       )}
@@ -146,6 +181,17 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
           {day.tips.map((t) => <li key={t}>{t}</li>)}
         </ul>
+      )}
+
+      {editor?.top}
+      {editor && warned.length > 0 && (
+        <PixelBox tone="alert" className="flex flex-col gap-2 p-3 md:max-w-2xl">
+          <p className="text-sm font-semibold text-danger-text">{busNotice(warned.length)}</p>
+          <PixelButton variant="secondary" className="self-start"
+            onClick={() => { setMenu("buses"); requestAnimationFrame(() => document.querySelector("[data-bus-warning]")?.scrollIntoView({ block: "center" })); }}>
+            Show buses
+          </PixelButton>
+        </PixelBox>
       )}
 
       <nav aria-label="Days" className="flex flex-wrap gap-2">
@@ -214,6 +260,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
                     <span className="min-w-0 max-w-88 flex-1 pixel-frame bg-screen-paper px-2 py-1 leading-snug text-screen-ink" style={snake ? { marginTop: TILE_PX / 2 + SIGN_DROP } : undefined}>
                       <span className="block text-sm font-bold tabular-nums">{formatTime(l.row.time)}</span>
                       <span className="block text-xs">{l.row.plan}</span>
+                      {l.row.place?.kind === "trip_place" && <span className="mt-0.5 inline-block text-xs font-semibold">Added by your group</span>}
                       {shots > 0 && <span className="block text-xs">{shots} photo{shots === 1 ? "" : "s"}</span>}
                       {l.done && <span className="sr-only">, done</span>}
                       {isHere && <span className="sr-only">, the group is here</span>}
@@ -226,6 +273,12 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         </section>
       </div>
 
+      {editing && editor && (
+        <PixelButton variant="secondary" className="self-start" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setAdding(true)}>
+          Add a stop to World {day.day}
+        </PixelButton>
+      )}
+
       <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
         {([["buses", "Buses"], ["budget", "Budget"], ["todo", "To-do"], ["sources", "Sources"], ...(photos ? [["album", "Album"]] : [])] as [Menu, string][]).map(([key, name]) => (
           <PixelButton key={key} variant={menu === key ? "primary" : "secondary"} aria-pressed={menu === key} className="px-3 text-sm"
@@ -236,20 +289,31 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       </nav>
       {menu === "buses" && (
         <div className="flex flex-col gap-5">
-          <Buses table={guide.getting_there} />
-          <Buses table={guide.getting_home} />
+          <Buses table={guide.getting_there} onSwap={editor && ((index) => setSwapping({ table: "getting_there", index }))} can={!!editor?.can} />
+          <Buses table={guide.getting_home} onSwap={editor && ((index) => setSwapping({ table: "getting_home", index }))} can={!!editor?.can} />
         </div>
       )}
-      {menu === "budget" && <Budget guide={guide} />}
-      {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} />}
-      {menu === "sources" && <Sources guide={guide} />}
+      {menu === "budget" && (editing && editor ? <EditPanel title="Budget per person"><BudgetEdits editor={editor} guide={guide} /></EditPanel> : <Budget guide={guide} />)}
+      {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} editor={editing ? editor : undefined} />}
+      {menu === "sources" && (editing && editor ? <EditPanel title="Sources"><SourcesEdits editor={editor} guide={guide} /></EditPanel> : <Sources guide={guide} />)}
       {menu === "album" && photos && <Album photos={photos} guide={guide} busy={busy} />}
 
       {open && current && (
         // Keyed by tap: each one gets its own dialog, because showModal runs once on mount. close() shuts a dialog at once
         // but its close event waits for the next frame, so that event only clears its own tap (TG-54).
         <LevelDialog key={open.tap} level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)}
-          onClose={() => setOpen((o) => (o?.tap === open.tap ? null : o))} onTick={onTick} />
+          onClose={() => setOpen((o) => (o?.tap === open.tap ? null : o))} onTick={onTick}
+          change={editor && { editor, guide, marks: marks ?? [], files: photos?.files ?? [], world: day.day, onDone: changed }} />
+      )}
+      {adding && editor && (
+        <PlanDialog label={`Add a stop to World ${day.day}`} bare onClose={() => setAdding(false)}>
+          <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={null} world={day.day} start="find" onClose={() => setAdding(false)} onDone={changed} />
+        </PlanDialog>
+      )}
+      {swapping && editor && (
+        <PlanDialog label={swapTitle(guide[swapping.table].buses[swapping.index])} onClose={() => setSwapping(null)}>
+          <BusSwap editor={editor} guide={guide} at={swapping} onApplied={changed} />
+        </PlanDialog>
       )}
     </div>
   );
@@ -283,13 +347,26 @@ function WorldGround({ W, count, world }: { W: number; count: number; world: num
   );
 }
 
-function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose, onTick }: {
+/** TG-61: what the level dialog needs to change its stop, on the trip page only. */
+type Change = { editor: PlanEditor; guide: Guide; marks: readonly Mark[]; files: readonly TripFile[]; world: number; onDone: (focus: Focus) => void };
+
+/** The booked bus that sets a bus row's time, and its warning if the schedule dropped it (ux.md §7). */
+function bookedFor(guide: Guide, row: GuideRow) {
+  const table = row.bus === "outbound" ? "getting_there" : row.bus === "return" ? "getting_home" : null;
+  return table ? guide[table].buses.find((b) => b.booked) : undefined;
+}
+
+function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose, onTick, change }: {
   level: Level; live: boolean; busy?: boolean; problem?: string | null; said?: string; photos?: Photos; shots: TripFile[]; onClose: () => void; onTick?: (key: string, done: boolean) => void;
+  change?: Change;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const [shown, setShown] = useState<{ blob: Blob; label: string } | null>(null);
+  // In edit mode a tap opens the change menu; otherwise Change this stop swaps the content to it (ux.md §4.1)
+  const [changing, setChanging] = useState(!!change?.editor.editing);
   const r = level.row;
+  const booked = change ? bookedFor(change.guide, r) : undefined;
   useEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
   }, []);
@@ -307,6 +384,10 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
       onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}
       className="m-auto w-[min(28rem,calc(100%-2rem))] bg-transparent p-0 text-foreground backdrop:bg-screen-ink/60">
       <div className="pixel-box flex flex-col gap-3 bg-card p-4 text-foreground">
+        {changing && change ? (
+          <StopChange editor={change.editor} guide={change.guide} marks={change.marks} files={change.files} level={level} world={change.world} start="menu"
+            onClose={() => dialog.current?.close()} onBack={change.editor.editing ? undefined : () => setChanging(false)} onDone={change.onDone} />
+        ) : (<>
         <div className="flex items-start justify-between gap-3">
           <p className="text-sm font-bold tabular-nums">Level {level.label} · {formatTime(r.time)}</p>
           {/* First in the DOM, so showModal() focuses Close */}
@@ -316,7 +397,17 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
         </div>
         <p className="text-lg font-bold">{r.plan}</p>
         {r.note && <p className="text-sm">{r.note}</p>}
-        {r.place?.name && (
+        {r.place?.name && r.place.kind === "trip_place" ? (
+          // TG-61: a place the group pinned from a link; never "verified" (ux.md §5)
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-semibold break-words">{r.place.name}</p>
+            <span className={cx(PX.chip, "self-start")}>Added by your group, not verified</span>
+            <a className={cx(PX.btn.secondary.skin, PX.btn.secondary.layout, "self-start")} href={placeMapsUrl({ name: r.place.name, kind: r.place.kind, lat: r.place.lat, lng: r.place.lng })}
+              target="_blank" rel="noopener noreferrer">
+              Directions in Google Maps<span aria-hidden="true">&nbsp;↗</span>
+            </a>
+          </div>
+        ) : r.place?.name && (
           <p className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-semibold">{r.place.name}</span>
             <a className={PX.inlineLink} href={placeMapsUrl({ name: r.place.name, kind: r.place.kind })} target="_blank" rel="noopener noreferrer">
@@ -324,6 +415,13 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
             </a>
           </p>
         )}
+        {r.leg && (
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-semibold">How to get here</p>
+            <LegLine leg={r.leg} />
+          </div>
+        )}
+        {booked?.warning && <p className="text-sm font-semibold">{busWarningLine(booked.warning, booked.date)}</p>}
         {live && (
           <PixelButton variant={level.done ? "secondary" : "primary"} className="px-4 py-3" aria-disabled={busy}
             onClick={() => !busy && onTick?.(rowMark(r), !level.done)}>
@@ -353,13 +451,21 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
         )}
         {problem && <PixelBox as="p" tone="alertText" role="alert" className="p-2 text-sm">{problem}</PixelBox>}
         <p role="status" className="text-sm empty:sr-only">{said}</p>
+        {change && change.editor.online && (
+          <div className="border-t-2 border-border pt-3">
+            <PixelButton variant="secondary" aria-disabled={!change.editor.can || undefined} onClick={() => change.editor.can && setChanging(true)}>
+              {booked?.warning ? "Change the bus" : "Change this stop"}
+            </PixelButton>
+          </div>
+        )}
+        </>)}
       </div>
       <PhotoViewer photo={shown} onClose={() => setShown(null)} logTag="tg-trip" />
     </dialog>
   );
 }
 
-function Buses({ table }: { table: BusTable }) {
+function Buses({ table, onSwap, can }: { table: BusTable; onSwap?: (index: number) => void; can?: boolean }) {
   const booked = table.buses.find((b) => b.booked)?.trip;
   const first = table.buses[0]?.trip?.operator_name;
   return (
@@ -390,6 +496,15 @@ function Buses({ table }: { table: BusTable }) {
           </tbody>
         </table>
       </PixelBox>
+      {onSwap && table.buses.map((b, i) => b.warning && (
+        <PixelBox key={b.trip_id} data-bus-warning="" className="flex flex-col gap-2 p-3">
+          <p className="text-sm">
+            {b.trip ? `${formatTime(b.trip.departure_time)} ${b.trip.operator_name}: ` : ""}{busWarningLine(b.warning, b.date)}
+          </p>
+          {b.booked && <p className="text-sm">You marked it booked, so check your ticket with {b.trip?.operator_name ?? "the bus company"} before you swap.</p>}
+          <PixelButton variant="secondary" className="self-start" aria-disabled={!can || undefined} onClick={() => can && onSwap(i)}>Swap this bus</PixelButton>
+        </PixelBox>
+      ))}
       <p className={PX.meta}>
         Times and fares from the operator&apos;s schedule data{booked ? `, ${formatVerified(booked.last_verified_at).replace(/^Checked/, "last checked")}` : ""}. {booked?.confirm_note ?? ""}
       </p>
@@ -430,26 +545,39 @@ function Budget({ guide }: { guide: Guide }) {
   );
 }
 
-function Todo({ guide, byKey, live, busy, onTick }: {
-  guide: Guide; byKey: ReadonlyMap<string, Mark>; live: boolean; busy?: boolean; onTick?: (key: string, done: boolean) => void;
+function Todo({ guide, byKey, live, busy, onTick, editor }: {
+  guide: Guide; byKey: ReadonlyMap<string, Mark>; live: boolean; busy?: boolean; onTick?: (key: string, done: boolean) => void; editor?: PlanEditor;
 }) {
+  const item = (t: Guide["todo"][number]) => {
+    const done = t.done || byKey.get(todoMark(t))?.value === "done";
+    return (
+      <label className={cx("flex min-h-11 items-start gap-3 text-sm", live && !t.done && "cursor-pointer")}>
+        <input type="checkbox" className="mt-0.5 h-6 w-6 shrink-0" checked={done} disabled={!live || t.done || busy}
+          onChange={(e) => onTick?.(todoMark(t), e.target.checked)} />
+        <span className={cx("break-words", done && "text-muted")}>{t.text}</span>
+      </label>
+    );
+  };
   return (
     <section className="flex flex-col gap-2">
       <h3 className={PX.dataHeading}>To do before the trip</h3>
-      <ul className="flex flex-col gap-1">
-        {guide.todo.map((t) => {
-          const done = t.done || byKey.get(todoMark(t))?.value === "done";
-          return (
-            <li key={t.key}>
-              <label className={cx("flex min-h-11 items-start gap-3 text-sm", live && !t.done && "cursor-pointer")}>
-                <input type="checkbox" className="mt-0.5 h-6 w-6 shrink-0" checked={done} disabled={!live || t.done || busy}
-                  onChange={(e) => onTick?.(todoMark(t), e.target.checked)} />
-                <span className={cx(done && "text-muted")}>{t.text}</span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
+      {editor ? (
+        <TodoEdits editor={editor} guide={guide} show={item} />
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {guide.todo.map((t) => <li key={t.key}>{item(t)}</li>)}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** A panel's heading over its editor, in edit mode. */
+function EditPanel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2 md:max-w-2xl">
+      <h3 className={PX.dataHeading}>{title}</h3>
+      {children}
     </section>
   );
 }
