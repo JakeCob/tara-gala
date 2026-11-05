@@ -766,8 +766,12 @@ def _anywhere(conn, share_slug: str, session_id: UUID, g: guides.Guide, ref: Pla
         time=top.time if top else "", leg=top.leg if top else None, ripple=top.ripple if top else [],
         notes=top.notes if top else [NO_FIT_NOTE], changes=top.changes if top else [], fits=fits,
     )
+    # Two silent fallbacks, counted for the log: a placed row with no pin ranks without a detour, and a booked trip
+    # that's gone leaves its bus row's time as the window
+    no_pin = sum(1 for d in days for r in d.rows if r.place_id and r.pin is None)
     return out, {"place": kind, "at": "anywhere", "leg": top.leg.kind if top and top.leg else "none", "far": is_far,
-                 "ripple": len(out.ripple), "fits": len(fits), **counts}
+                 "ripple": len(out.ripple), "fits": len(fits), **counts, "no_pin": no_pin,
+                 "bus_gone": sum(1 for b in booked if b not in trips)}
 
 
 @router.post("/sessions/{share_slug}/plan/suggest", response_model=Suggestion, dependencies=[Depends(_limited)])
@@ -799,9 +803,10 @@ def suggest_stop(share_slug: str, body: SuggestIn, request: Request, response: R
     with db.get_conn() as conn:
         out, kinds = suggest(conn, share_slug, session_id, g, body.at, body.place, resolved)
     _private(response)
-    line, args = "plan suggest share_slug=%s place=%s at=%s leg=%s far=%s ripple=%d", [share_slug, *list(kinds.values())[:5]]
+    line = "plan suggest share_slug=%s place=%s at=%s leg=%s far=%s ripple=%d"
+    args = [share_slug, kinds["place"], kinds["at"], kinds["leg"], kinds["far"], kinds["ripple"]]
     if "fits" in kinds:  # where does it fit? counts only
-        line += " fits=%d candidates=%d excluded=%d best_day=%s"
-        args += [kinds["fits"], kinds["candidates"], kinds["excluded"], kinds["best_day"] or "none"]
+        line += " fits=%d candidates=%d excluded=%d best_day=%s no_pin=%d bus_gone=%d"
+        args += [kinds["fits"], kinds["candidates"], kinds["excluded"], kinds["best_day"] or "none", kinds["no_pin"], kinds["bus_gone"]]
     logger.info(line, *args)
     return out

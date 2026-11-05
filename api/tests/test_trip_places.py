@@ -558,6 +558,13 @@ def owner_planned(api, dsn, monkeypatch) -> tuple[str, str]:
     return slug, "made-up-owner"
 
 
+def no_pin_rows() -> int:
+    """Rows of the owner's plan file at a spot that data/spots.csv has no pin for."""
+    pins = csv_pins()
+    raw = json.loads((ROOT / "data" / "itineraries" / "baguio-barkada-2026-11-06.json").read_text(encoding="utf-8"))["guide"]
+    return sum(1 for d in raw["days"] for r in d["rows"] if "spot" in (r.get("place") or {}) and pins.get(r["place"]["spot"], (None,))[0] is None)
+
+
 def anywhere(api, slug, place, base=("made-up-owner", 0)):
     return suggest(api, slug, {"anywhere": True}, place, base=base)
 
@@ -602,13 +609,20 @@ def test_bf13_no_free_slot_is_an_empty_list_with_the_note(api, owner_planned, ne
     assert s["notes"] == ["No free slot found. Tap a stop and use Add after."]
 
 
-def test_bf14_the_fit_log_line_has_counts_only(api, owner_planned, net, caplog):  # BF14, E25
+def test_bf14_the_fit_log_line_has_counts_only(api, owner_planned, net, caplog, dsn):  # BF14, E25
     caplog.set_level(logging.INFO, logger="tara_gala.api")
     slug, _ = owner_planned
     anywhere(api, slug, {"link": link_for(net, "F4", *SHOP_PIN, name="Made-up Shop")})
     [line] = [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan suggest ")]
     assert re.fullmatch(rf"plan suggest share_slug={slug} place=link at=anywhere leg=(route|estimate|none) far=False ripple=\d+ "
-                        r"fits=[1-3] candidates=\d+ excluded=\d+ best_day=[1-3]", line), line
-    for leak in ("Made-up", "Shop", "F4", "goo.gl", "16.409", "120.598", "Session", "check-in", "d1-", "d2-", "d3-"):
+                        r"fits=[1-3] candidates=\d+ excluded=\d+ best_day=[1-3] no_pin=(\d+) bus_gone=0", line), line
+    assert line.endswith(f" no_pin={no_pin_rows()} bus_gone=0"), "rows ranked without a pin are counted"
+    _, booked = owner_copy()
+    sql(dsn, "delete from trips where id = %s", booked["getting_there"][0])
+    caplog.clear()
+    anywhere(api, slug, {"link": link_for(net, "F5", *SHOP_PIN)})
+    assert [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan suggest ")][0].endswith(" bus_gone=1"), \
+        "a booked trip that's gone leaves only its bus row's minute blocked: counted"
+    for leak in ("Made-up", "Shop", "F4", "F5", "goo.gl", "16.409", "120.598", "Session", "check-in", "d1-", "d2-", "d3-"):
         assert leak not in caplog.text, leak
 
