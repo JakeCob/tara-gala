@@ -12,7 +12,7 @@ from datetime import date as Date
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, model_validator
 
 from .models import Trip
 from .trip_rows import trip_from_row
@@ -33,6 +33,32 @@ class _M(BaseModel):
 class Place(_M):
     spot_id: UUID | None = None
     terminal_id: UUID | None = None
+    trip_place_id: UUID | None = None  # TG-61: a place this trip added from a Google Maps link (trip_places)
+
+    @model_validator(mode="after")
+    def _one(self):
+        if sum(x is not None for x in (self.spot_id, self.terminal_id, self.trip_place_id)) > 1:
+            raise ValueError("a place names one spot, terminal or trip place")
+        return self
+
+
+class Estimate(_M):
+    """TG-61: how to get to a row's place when no route is on file, from the distance. Walk or taxi only, never a fare."""
+    mode: Literal["walk", "taxi"]
+    minutes: int = Field(ge=1, le=600)
+    km: float = Field(ge=0, le=1000, allow_inf_nan=False)
+
+
+class LegRef(_M):
+    """TG-61: how to get to a row's place from the row before: a last_mile_routes row, or an estimate."""
+    last_mile_route_id: UUID | None = None
+    estimate: Estimate | None = None
+
+    @model_validator(mode="after")
+    def _one(self):
+        if (self.last_mile_route_id is None) == (self.estimate is None):
+            raise ValueError("a leg is a route or an estimate")
+        return self
 
 
 class Condition(_M):
@@ -49,6 +75,7 @@ class Row(_M):
     bus: Literal["outbound", "return"] | None = None
     show_if: Condition | None = None
     hide_if: Condition | None = None
+    leg: LegRef | None = None  # TG-61: set when a stop is added or replaced with a suggestion
 
 
 class Option(_M):
@@ -218,9 +245,20 @@ def trip_ids(g: Guide) -> set[UUID]:
     return {b.trip_id for t in (g.getting_there, g.getting_home) for b in t.buses}
 
 
+def _places(g: Guide) -> list[Place | None]:
+    return [r.place for d in g.days for r in d.rows] + [o.place for d in g.days if d.pick for o in d.pick.options] + [g.lodging]
+
+
 def spot_ids(g: Guide) -> set[UUID]:
-    places = [r.place for d in g.days for r in d.rows] + [o.place for d in g.days if d.pick for o in d.pick.options] + [g.lodging]
-    return {p.spot_id for p in places if p and p.spot_id}
+    return {p.spot_id for p in _places(g) if p and p.spot_id}
+
+
+def trip_place_ids(g: Guide) -> set[UUID]:
+    return {p.trip_place_id for p in _places(g) if p and p.trip_place_id}
+
+
+def leg_ids(g: Guide) -> set[UUID]:
+    return {r.leg.last_mile_route_id for d in g.days for r in d.rows if r.leg and r.leg.last_mile_route_id}
 
 
 def build(g: Guide, trips: dict, spots: dict, terminal_names: dict) -> GuideOut:
