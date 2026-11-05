@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 
 from app import db, maps_link, plan_suggest, sessions, trip_places
 from app.limits import RateLimiter
-from app.logging_setup import RequestLogMiddleware
+from app.logging_setup import RequestLogMiddleware, configure_logging
 from test_maps_link import Net, page, redirect
 
 TRIP = {"name": "Made-up trip", "start_date": "2026-11-06", "return_date": "2026-11-08"}
@@ -47,6 +47,7 @@ def fresh_limits(monkeypatch):
 
 @pytest.fixture()
 def api(dsn):
+    configure_logging({})  # as main.py does at import: the httpx logger at WARNING, so no URL is logged
     app = FastAPI()
     app.add_middleware(RequestLogMiddleware)
     for r in (sessions.router, trip_places.router, plan_suggest.router):
@@ -178,9 +179,23 @@ def test_link_fetches_share_30_an_hour_per_ip(api, net, monkeypatch):  # options
     link = link_for(net, "H1", 16.41234, 120.59321)
     assert add_place(api, slug, link).status_code == 201
     assert add_place(api, slug, link).status_code == 200
-    r = api.post(f"/sessions/{slug}/places", content=b"not json", headers={"content-type": "application/json"})
+    r = api.post(f"/sessions/{slug}/places", json={"lat": 1})
     assert r.status_code == 429 and int(r.headers["retry-after"]) >= 1, "limited ahead of the body's validation"
     assert trip_places.LINK_PER_HOUR == 30 and plan_suggest.SUGGEST_PER_HOUR == 120
+
+
+def test_the_bounds_are_checked_in_python_before_the_insert(api, dsn, net, monkeypatch, caplog):  # review M3
+    caplog.set_level(logging.INFO)
+    slug = new_trip(api)
+    for got in (maps_link.Resolved(16.41, 120.59, None, "http://maps.app.goo.gl/x", "path"),
+                maps_link.Resolved(16.41, 120.59, None, "https://maps.app.goo.gl/" + "x" * 480, "path"),
+                maps_link.Resolved(float("nan"), 120.59, None, "https://maps.app.goo.gl/x", "path"),
+                maps_link.Resolved(91.0, 120.59, None, "https://maps.app.goo.gl/x", "path")):
+        monkeypatch.setattr(maps_link, "resolve", lambda link, got=got: got)
+        r = add_place(api, slug, f"{HOST}/P1")
+        assert (r.status_code, r.json()["detail"]) == (422, "bad_place")
+    assert sql(dsn, "select * from trip_places") == []
+    assert "constraint=" not in caplog.text, "refused in Python: the table's checks never saw it"
 
 
 # ---------------------------------------------------------------- B48: codes and counts only in the logs (review M3)
@@ -200,8 +215,10 @@ def test_failures_log_codes_and_counts_only_tracebacks_included(api, dsn, net, c
     assert (r.status_code, r.json()["detail"]) == (422, "bad_place")
     assert sql(dsn, "select count(*) as n from trip_places")[0]["n"] == 1
 
+    assert logging.getLogger("httpx").level == logging.WARNING  # review nit 5
     text = caplog.text + "".join(caplog.handler.format(rec) for rec in caplog.records)
     assert "trip place add share_slug=%s places=1 existing=False" % slug in text
+    assert caplog.text.count("constraint=") == 1, "only the forced insert reached the table's check"
     assert "trip place rejected share_slug=%s code=bad_place constraint=trip_places_maps_url_check" % slug in text
     for leak in ("Kapihan", "Lihim", "J1", "J2", "J3", "goo.gl", "16.41", "120.59", "Failing row"):
         assert leak not in text, leak
@@ -294,6 +311,8 @@ def test_replace_keeps_the_slot_and_walks_back_to_the_last_place(api, planned): 
     s = suggest(api, slug, {"replace": "d1-04"}, {"spot_id": str(CAFE_ID)}).json()
     assert s["leg"] == {"kind": "estimate", "mode": "walk", "minutes": 5, "km": 0.0}, "from d1-02's cafe, past the placeless lunch"
     assert s["notes"] == [plan_suggest.ESTIMATE_NOTE]
+    s = suggest(api, slug, {"after": "d1-02"}, {"spot_id": str(PARK_ID)}).json()
+    assert s["leg"]["kind"] == "estimate", "the routes to the park start at the terminal, not at the cafe"
 
 
 def test_a_link_with_a_bus_in_the_way(api, planned, net):  # S10, B22, B23
@@ -385,8 +404,8 @@ def test_suggest_is_limited_ahead_of_its_body(api, planned, monkeypatch):  # opt
     monkeypatch.setattr(plan_suggest, "SUGGEST_LIMITER", RateLimiter(1))
     slug, _ = planned
     assert suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)}).status_code == 200
-    r = api.post(f"/sessions/{slug}/plan/suggest", content=b"{", headers={"content-type": "application/json"})
-    assert r.status_code == 429
+    r = api.post(f"/sessions/{slug}/plan/suggest", json={"base": None})
+    assert r.status_code == 429, "limited ahead of the body's validation"
 
 
 def test_a_link_in_suggest_counts_against_the_link_limit(api, planned, net, monkeypatch):  # options.md §5.4

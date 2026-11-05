@@ -369,7 +369,9 @@ def test_only_exact_slug_and_premade_reads_touch_itineraries():
             readers[p.name] = n
     # TG-52 sessions.py: the session's own linked itinerary (a join on its id), and one exact-slug lookup to link one
     # TG-52 PR 3 trip_marks.py: the guide of the trip's own linked itinerary (a join on the session's id)
-    assert readers == {"itineraries.py": 1, "premade.py": 1, "sessions.py": 2, "trip_marks.py": 1}
+    # TG-61 plan_suggest.py: the same, with the trip's own version number (a join on the session's id)
+    assert readers == {"itineraries.py": 1, "plan_suggest.py": 1, "premade.py": 1, "sessions.py": 2, "trip_marks.py": 1}
+    assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_suggest.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "trip_marks.py").read_text(encoding="utf-8")
     assert "from itineraries where share_slug = %s" in (APP / "sessions.py").read_text(encoding="utf-8")
     assert "where model = %s" in (APP / "premade.py").read_text(encoding="utf-8")

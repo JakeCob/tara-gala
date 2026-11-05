@@ -284,20 +284,23 @@ def test_a_consent_or_sign_in_hop_is_unreadable_and_not_requested():  # L15
 
 # ---------------------------------------------------------------- L16 to L20: review M4, one URL object
 
-@pytest.mark.parametrize("link", [
-    "https://maps.app.goo.gl\\@evil.io/x",
-    "https://evil.io#@maps.app.goo.gl/",
-    "https://maps.app.goo.gl%2F@evil.io",
-    "https://[::1]/",
-    "https://[::ffff:169.254.169.254]/maps",
-    "https://maps.app\t.goo.gl/x",
-    "https://maps.app.goo.gl/x\x00y",
-    "https://maps.app.goo.gl/x\x7f",
+@pytest.mark.parametrize("link, reason", [
+    ("https://maps.app.goo.gl\\@evil.io/x", "bad_char"),  # refused before httpx parses it, whatever httpx would make of it
+    ("https://evil.io#@maps.app.goo.gl/", "off_list"),
+    ("https://maps.app.goo.gl%2F@evil.io", "off_list"),
+    ("https://[::1]/", "off_list"),
+    ("https://[::ffff:169.254.169.254]/maps", "off_list"),
+    ("https://maps.app\t.goo.gl/x", "off_list"),  # the tab ends the link: "https://maps.app"
+    ("https://maps.app.goo.gl/x\x00y", "bad_char"),
+    ("https://maps.app.goo.gl/x\x7f", "bad_char"),
+    ("https://maps.app.goo.gl/x\u200by", "bad_char"),  # a zero-width space is a format character, not whitespace
 ])
-def test_review_m4_tricks_are_refused_with_no_request(link):  # L16
+def test_review_m4_tricks_are_refused_with_no_request(link, reason):  # L16
     net = Net()
-    assert refused(link, net).code == "link_not_maps"
+    e = refused(link, net)
+    assert (e.code, e.reason) == ("link_not_maps", reason)
     assert net.asked == []
+    assert str(e) == "" and e.__cause__ is None and e.__suppress_context__ is True
 
 
 @pytest.mark.parametrize("link", ["https://maps.app.goo.gl.:443/x", "HTTPS://MAPS.APP.GOO.GL/x", "https://maps.app.goo.gl:443/x"])
@@ -315,9 +318,12 @@ def test_the_open_redirector_is_never_requested():  # L18, review M4 (stricter: 
 
 
 def test_a_location_with_a_backslash_or_space_is_refused():  # L19
-    for location in ("https://www.google.com\\@evil.io/maps", "https://www.google.com/maps place", "https://www.google.com/maps\tX"):
-        net = Net({SHORT: redirect(location)})
-        assert refused(SHORT, net).code == "link_unreadable", repr(location)
+    for location, reason in (("https://www.google.com\\@evil.io/maps", "bad_char"), ("https://www.google.com/maps place", "bad_char"),
+                             ("https://www.google.com/maps\u200b", "bad_char"),
+                             ("https://www.google.com/maps\tX", "network")):  # httpx refuses this one itself, before us
+        net = Net({SHORT: httpx.Response(302, headers=[(b"location", location.encode())])})  # raw bytes, as a server sends them
+        e = refused(SHORT, net)
+        assert (e.code, e.reason) == ("link_unreadable", reason), repr(location)
         assert net.hosts == ["maps.app.goo.gl"]
 
 
