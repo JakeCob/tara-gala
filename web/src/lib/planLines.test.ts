@@ -12,10 +12,12 @@ const v = (seq: number, source: PlanVersion["source"], changes: ChangeLine[], cr
 const level = (key: string) => ({ "d1-03": "1-3", "d1-05": "1-5" })[key] ?? null;
 
 test("T61-L1 the edit bar's line for each change this phone makes", () => {
-  assert.equal(resultLine([L("New", "Café Yagam")], { kind: "add", after: "d1-03", day: 1 }, level), "Added Café Yagam after Level 1-3.");
+  assert.equal(resultLine([L("New", "Café Yagam at 2:30 PM")], { kind: "add", after: "d1-03", day: 1 }, level), "Added Café Yagam at 2:30 PM, after Level 1-3.", "F13: the text as sent, time included, then a comma");
   assert.equal(resultLine([L("New", "Café Yagam")], { kind: "add", after: null, day: 2 }, level), "Added Café Yagam at the start of World 2.");
   assert.equal(resultLine([L("Out", "Burnham Park walk"), L("In", "Wright Park and The Mansion")], { kind: "replace" }, level), "Burnham Park walk is now Wright Park and The Mansion.");
-  assert.equal(resultLine([L("Later", "Lunch to 1:00 PM")], { kind: "edit", key: "d1-05" }, level), "Changed Level 1-5.");
+  assert.equal(resultLine([L("Later", "Burnham Park to 4:00 PM")], { kind: "edit", key: "d1-05" }, level), "Moved Burnham Park to 4:00 PM.", "F13: a time change says where it went");
+  assert.equal(resultLine([L("Earlier", "Lunch to 12:00 PM")], { kind: "edit", key: "d1-05" }, level), "Moved Lunch to 12:00 PM.");
+  assert.equal(resultLine([L("Changed", "Lunch")], { kind: "edit", key: "d1-05" }, level), "Changed Level 1-5.", "a note or plan text change");
   assert.equal(resultLine([L("Moved", "Burnham Park walk", 2)], { kind: "move", day: 2 }, level), "Moved Burnham Park walk to World 2.");
   assert.equal(resultLine([L("Moved", "Burnham Park walk")], { kind: "nudge", dir: "earlier" }, level), "Moved Burnham Park walk earlier.");
   assert.equal(resultLine([L("Dropped", "Burnham Park walk")], { kind: "remove" }, level), "Removed Burnham Park walk. Undo brings it back.");
@@ -29,7 +31,7 @@ test("T61-L1 the edit bar's line for each change this phone makes", () => {
 
 test("T61-L2 more lines add 'And N more changes.', the server's More counts too, and the first save says the copy was made", () => {
   const lines = [L("New", "Café Yagam"), L("Later", "Check in", 1), L("Later", "Dinner", 1), { word: "More", day: null, text: "and 3 more changes" }];
-  assert.equal(resultLine(lines, { kind: "add", after: "d1-03", day: 1 }, level), "Added Café Yagam after Level 1-3. And 5 more changes.");
+  assert.equal(resultLine(lines, { kind: "add", after: "d1-03", day: 1 }, level), "Added Café Yagam, after Level 1-3. And 5 more changes.");
   assert.equal(resultLine([L("Out", "A"), L("In", "B"), L("Later", "C")], { kind: "replace" }, level), "A is now B. And 1 more change.", "Out and In are one sentence");
   assert.equal(
     resultLine([L("Dropped", "Museum")], { kind: "remove" }, level, { firstCopy: true }),
@@ -39,6 +41,7 @@ test("T61-L2 more lines add 'And N more changes.', the server's More counts too,
 
 test("T61-L3 Changes and other phones' lines use the World, never a level number; a chatbot version says so", () => {
   assert.equal(summaryOf(v(3, "hand", [L("New", "Café Yagam")])), "Added Café Yagam (World 1)");
+  assert.equal(summaryOf(v(3, "hand", [L("New", "Cafe X at 2:30 PM")])), "Added Cafe X at 2:30 PM (World 1)", "F13: never strip the time");
   assert.equal(summaryOf(v(3, "hand", [L("Out", "Museum", 3), L("In", "Park", 3)])), "Museum is now Park (World 3)");
   assert.equal(summaryOf(v(3, "hand", [L("Dropped", "Museum", 3)])), "Removed Museum (World 3)");
   assert.equal(summaryOf(v(3, "hand", [L("Moved", "Museum", 2)])), "Moved Museum (World 2)");
@@ -158,7 +161,7 @@ test("T61-L10 where it fits: each card's five lines, from the server's fit (ux.m
 });
 
 test("T61-L11 after a fit's Apply the bar names the World, since the map may show another day; a route with no minutes leaves them out", () => {
-  assert.equal(resultLine([L("New", "Ghibli Store", 2)], { kind: "add", after: "d1-03", day: 2, world: true }, level), "Added Ghibli Store to World 2, after Level 1-3.");
+  assert.equal(resultLine([L("New", "Ghibli Store at 2:00 PM", 2)], { kind: "add", after: "d1-03", day: 2, world: true }, level), "Added Ghibli Store at 2:00 PM on World 2, after Level 1-3.", "F13");
   assert.equal(legLines({ kind: "route", last_mile_route_id: "lm", mode: "jeep", minutes: null, fare_min_php: 13, fare_max_php: 15, signboard: "Trancoville", last_verified_at: null }).line, "Jeep, Trancoville signboard · ₱13–15");
 });
 

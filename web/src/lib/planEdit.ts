@@ -316,7 +316,7 @@ export function noteSuggestion(g: GuideIn, at: { after: string } | { first_of_da
   const hhmm = toHHMM(Math.ceil(time / 15) * 15);
   return {
     name: plan, lat: null, lng: null, maps_url: null, km_from_baguio: null, far: false, time: hhmm, leg: null, ripple: [], notes: [],
-    changes: [{ word: "New", day, text: `${clockOf(hhmm)} ${plan}`, part: "stop" }],
+    changes: [{ word: "New", day, text: `${plan} at ${clockOf(hhmm)}`, part: "stop" }], // the server's own form
   };
 }
 

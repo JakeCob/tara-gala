@@ -238,7 +238,7 @@ test("T61-W14 a note-only stop is proposed on the phone: an hour after the stop 
   assert.equal(s.time, "15:15", "14:15 plus an hour");
   assert.equal(s.leg, null);
   assert.deepEqual(s.ripple, []);
-  assert.deepEqual(s.changes, [{ word: "New", day: 1, text: "3:15 PM Pasalubong", part: "stop" }]);
+  assert.deepEqual(s.changes, [{ word: "New", day: 1, text: "Pasalubong at 3:15 PM", part: "stop" }], "the server's own form (F13)");
   assert.equal(noteSuggestion(g, { first_of_day: 2 }, "Coffee").time, "08:00", "the start of a day");
   assert.equal(noteSuggestion(g, { after: "d1-04" }, "Late").time, "17:30");
 });

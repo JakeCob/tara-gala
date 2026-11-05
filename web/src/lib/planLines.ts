@@ -51,8 +51,9 @@ export function resultLine(lines: ChangeLine[], done: Done, levelOf: (key: strin
     case "add": {
       const added = lines.find((l) => l.word === "New") ?? first;
       const after = done.after && levelOf(done.after);
-      if (done.world && after) said = `Added ${added?.text ?? ""} to World ${done.day}, after Level ${after}.`;
-      else said = after ? `Added ${added?.text ?? ""} after Level ${after}.` : `Added ${added?.text ?? ""} at the start of World ${done.day}.`;
+      // F13: the server's text as sent, time included
+      if (done.world && after) said = `Added ${added?.text ?? ""} on World ${done.day}, after Level ${after}.`;
+      else said = after ? `Added ${added?.text ?? ""}, after Level ${after}.` : `Added ${added?.text ?? ""} at the start of World ${done.day}.`;
       break;
     }
     case "replace": {
@@ -62,7 +63,8 @@ export function resultLine(lines: ChangeLine[], done: Done, levelOf: (key: strin
       break;
     }
     case "edit":
-      said = `Changed Level ${levelOf(done.key) ?? ""}.`;
+      // F13: a time change says where the stop went; a text change names its level
+      said = first?.word === "Earlier" || first?.word === "Later" ? `Moved ${text}.` : `Changed Level ${levelOf(done.key) ?? ""}.`;
       break;
     case "move":
       said = `Moved ${text} to World ${done.day}.`;

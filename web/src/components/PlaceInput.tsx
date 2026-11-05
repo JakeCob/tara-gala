@@ -288,7 +288,7 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
   // The server's lines describe its own slot and name; the user's are the ones that will be saved
   const lines: ChangeLine[] = s.changes
     .filter((l) => ripple || l.part !== "ripple")
-    .map((l) => (l.part === "stop" && l.word === "New" ? { ...l, text: `${formatTime(time)} ${plan}` } : l));
+    .map((l) => (l.part === "stop" && l.word === "New" ? { ...l, text: `${plan} at ${formatTime(time)}` } : l)); // the server's own form (F13)
 
   async function onApply() {
     if (off) return;
