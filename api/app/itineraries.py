@@ -152,6 +152,21 @@ def get_itinerary(
     return out
 
 
+def guide_out(conn, g: guides.Guide, owner: UUID | None, trips: dict | None = None) -> guides.GuideOut:
+    """A guide with its trips, places and legs filled in. Trip places are read only for `owner`, the trip that owns
+    the copy (review S5). `trips` are TRIP_ROWS_SQL rows already read, by trip id; the rest are read here."""
+    trips = dict(trips or {})
+    ids = list(guides.trip_ids(g) - set(trips))
+    if ids:
+        trips.update({r["trip_id"]: r for r in conn.execute(TRIP_ROWS_SQL, (ids,))})
+    terminal_names = {r["id"]: r["name"] for r in conn.execute("select id, name from terminals where id = any(%s)", (list(guides.terminal_ids(g)),))}
+    trip_places = {r["id"]: r for r in conn.execute(
+        "select id, name, lat, lng, maps_url from trip_places where id = any(%s) and session_id = %s",
+        (list(guides.trip_place_ids(g)), owner),
+    )} if owner else {}
+    return guides.build(g, trips, spots_by_id(conn, guides.spot_ids(g)), terminal_names, trip_places, legs_by_id(conn, guides.leg_ids(g)))
+
+
 def build_out(conn, row) -> ItineraryOut:
     """The answer for one ROW_SQL row: its plan, checked again, with the trips, spots and legs it names. TG-61's plan
     edits build their answer with this too, inside the save's transaction (review M1)."""
@@ -178,15 +193,7 @@ def build_out(conn, row) -> ItineraryOut:
         if g is None:
             logger.warning("itinerary guide unreadable share_slug=%s problems=%d", share_slug, len(problems))
         else:
-            ids = list(guides.trip_ids(g) - set(trips))
-            if ids:
-                trips.update({r["trip_id"]: r for r in conn.execute(TRIP_ROWS_SQL, (ids,))})
-            terminal_names = {r["id"]: r["name"] for r in conn.execute("select id, name from terminals where id = any(%s)", (list(guides.terminal_ids(g)),))}
-            trip_places = {r["id"]: r for r in conn.execute(
-                "select id, name, lat, lng, maps_url from trip_places where id = any(%s) and session_id = %s",
-                (list(guides.trip_place_ids(g)), row["owner"]),
-            )} if row["owner"] else {}
-            the_guide = guides.build(g, trips, spots_by_id(conn, guides.spot_ids(g)), terminal_names, trip_places, legs_by_id(conn, guides.leg_ids(g)))
+            the_guide = guide_out(conn, g, row["owner"], trips)
 
     def bus(leg: BusLeg) -> BusLegOut:
         r = trips.get(leg.trip_id)  # an inactive trip is still built; issues says why

@@ -339,6 +339,40 @@ def _write(conn, session_id: UUID, cur: Current, plan: dict, source: str, change
     return slug, seq
 
 
+@dataclass
+class Prepared:
+    """A new guide that passed every check, as it would be saved."""
+    guide: guides.Guide
+    plan: dict  # the whole plan with it
+    changes: list[ChangeLine]
+    minted: int
+    size: int
+
+
+def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn) -> Prepared:
+    """Everything a save checks, with nothing written: keys, mint, model, bus times, checks, change lines, size.
+    TG-61 PR 2: the chatbot's proposals go through this too, before anyone taps Apply. Raises Refused."""
+    if not _known_keys(guide_in, cur.guide):
+        raise Refused(422, "unknown_key")
+    raw, minted = mint(guide_in, taken(conn, session_id, cur))
+    new, problems = guides.parse_guide(raw)
+    if new is None:
+        raise Refused(422, "bad_guide", problems=len(problems))
+    trips = load_trips(conn, guides.trip_ids(new))
+    bus_times(new, cur.guide, trips)
+    codes = check(conn, session_id, cur.guide, new, trips)
+    if codes:
+        raise Refused(422, codes[0], codes=codes, problems=len(codes))
+    changes = plan_diff.changes(cur.guide, new, names(conn, session_id, cur.guide, new))
+    if not changes:
+        raise Refused(422, "no_change")
+    plan = _stored(cur.row, new.model_dump(mode="json", by_alias=True, exclude_none=True))
+    size = len(json.dumps(plan).encode())
+    if size > MAX_PLAN_BYTES:
+        raise Refused(422, "too_big")
+    return Prepared(guide=new, plan=plan, changes=changes, minted=minted, size=size)
+
+
 def _answer(conn, slug: str, changes: list[ChangeLine]) -> PlanSaved:
     return PlanSaved(itinerary=its.build_out(conn, conn.execute(its.ROW_SQL, (slug,)).fetchone()), changes=changes)
 
@@ -377,29 +411,13 @@ def save_plan(share_slug: str, body: PlanIn, request: Request, response: Respons
         session_id = _session_id(conn, share_slug, lock=True)  # two phones queue here instead of racing
         cur = current(conn, session_id)
         _check_base(cur, body.base, share_slug, "save")
-        if not _known_keys(body.guide, cur.guide):
-            raise Refused(422, "unknown_key")
-        raw, minted = mint(body.guide, taken(conn, session_id, cur))
-        new, problems = guides.parse_guide(raw)
-        if new is None:
-            raise Refused(422, "bad_guide", problems=len(problems))
-        trips = load_trips(conn, guides.trip_ids(new))
-        bus_times(new, cur.guide, trips)
-        codes = check(conn, session_id, cur.guide, new, trips)
-        if codes:
-            raise Refused(422, codes[0], codes=codes, problems=len(codes))
-        changes = plan_diff.changes(cur.guide, new, names(conn, session_id, cur.guide, new))
-        if not changes:
-            raise Refused(422, "no_change")
-        plan = _stored(cur.row, new.model_dump(mode="json", by_alias=True, exclude_none=True))
-        size = len(json.dumps(plan).encode())
-        if size > MAX_PLAN_BYTES:
-            raise Refused(422, "too_big")
-        slug, seq = _write(conn, session_id, cur, plan, body.source, changes)
-        saved = _answer(conn, slug, changes)
+        p = prepare(conn, session_id, cur, body.guide)
+        slug, seq = _write(conn, session_id, cur, p.plan, body.source, p.changes)
+        saved = _answer(conn, slug, p.changes)
         logger.info(
             "plan save share_slug=%s source=%s base_seq=%d seq=%d copied=%s rows=%d todos=%d new_keys=%d bytes=%d",
-            share_slug, body.source, body.base.seq, seq, not cur.copy, sum(len(d.rows) for d in new.days), len(new.todo), minted, size,
+            share_slug, body.source, body.base.seq, seq, not cur.copy, sum(len(d.rows) for d in p.guide.days), len(p.guide.todo),
+            p.minted, p.size,
         )
         return saved
 

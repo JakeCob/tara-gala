@@ -24,6 +24,7 @@ class Flags:
     premade_itineraries: bool = True  # PREMADE_ITINERARIES: pre-made itineraries (TG-24)
     real_map: bool = False  # REAL_MAP: real-map toggle (TG-26, cut)
     plan_editing: bool = False  # PLAN_EDITING: edit a trip's plan, its map modal and trip places (TG-61 PR 1)
+    chatbot_live: bool = False  # CHATBOT_LIVE: the chatbot that proposes plan edits (TG-61 PR 2); needs PLAN_EDITING
 
 
 def parse_flag(name: str, raw: str | None, default: bool) -> bool:

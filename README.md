@@ -235,6 +235,7 @@ Each flag is an environment variable on both sides: the API reads it from `os.en
 | Live AI planner | `PLANNER_LIVE` | `NEXT_PUBLIC_PLANNER_LIVE` | `false` | TG-25 live planner |
 | Pre-made itineraries | `PREMADE_ITINERARIES` | `NEXT_PUBLIC_PREMADE_ITINERARIES` | `true` | TG-24 pre-made itineraries |
 | Real-map toggle | `REAL_MAP` | `NEXT_PUBLIC_REAL_MAP` | `false` | TG-26 real map (cut) |
+| Plan chatbot | `CHATBOT_LIVE` | `NEXT_PUBLIC_CHATBOT_LIVE` | `false` | TG-61 PR 2: the chatbot that proposes plan edits (`POST /sessions/{slug}/plan/chat`, 503 `chat_off` when off). Needs `PLAN_EDITING` and `LLM_API_KEY`. Its own `CHAT_DAILY_SPEND_CAP_USD` (1.00), `CHAT_RATE_LIMIT_PER_HOUR` per trip (20), `CHAT_IP_RATE_LIMIT_PER_HOUR` (60), `CHAT_MAX_TOKENS` (1000) and `CHAT_MAX_ATTEMPTS` (3). `PLANNER_LIVE` stays off |
 | Plan editing | `PLAN_EDITING` | `NEXT_PUBLIC_PLAN_EDITING` | `false` | TG-61 editing a trip's plan: the edit, undo, suggest and place routes (404 when off) and the trip page's edit controls. Turn on the API first |
 | Overworld map | - | `NEXT_PUBLIC_OVERWORLD_MAP` | `true` | TG-22 map on the share page `/i/[slug]`. Web only. Setting `false` shows TG-23's list view instead (the same facts), the escape hatch if the map misbehaves on a phone |
 | Offline service worker | - | `NEXT_PUBLIC_SERVICE_WORKER` | `true` | TG-27 offline caching. Web only. Setting `false` is the kill switch: on the next online load each phone unregisters the worker and deletes its `tg-*` caches, **saved trips and itineraries included** |

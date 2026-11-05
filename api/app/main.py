@@ -19,6 +19,7 @@ from .flags import get_flags
 from .itineraries import router as itineraries_router
 from .last_mile import router as last_mile_router
 from .plan_edit import flag_check as plan_editing
+from .plan_chat import router as plan_chat_router
 from .plan_edit import router as plan_edit_router
 from .plan_suggest import router as plan_suggest_router
 from .planner import router as planner_router
@@ -160,5 +161,6 @@ app.include_router(trip_marks_router)
 app.include_router(trip_people_router)
 app.include_router(trip_invites_router)
 # TG-61 PR 1: editing a trip's plan, behind PLAN_EDITING (404 when it's off). Reads and the new read fields are always on
-for edit_router in (plan_edit_router, plan_suggest_router, trip_places_router):
+# TG-61 PR 2: the chat is inside PLAN_EDITING too, and its own CHATBOT_LIVE gives 503 chat_off
+for edit_router in (plan_edit_router, plan_suggest_router, trip_places_router, plan_chat_router):
     app.include_router(edit_router, dependencies=[Depends(plan_editing)])

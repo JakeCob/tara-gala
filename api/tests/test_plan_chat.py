@@ -427,3 +427,13 @@ def test_the_chat_route_is_behind_both_flags_in_the_route_audit():
     served = {(m, r.path) for r in app.routes for m in (getattr(r, "methods", None) or set())}
     assert ("POST", "/sessions/{share_slug}/plan/chat") in served
     assert re.search(r"chatbot_live", (__import__("pathlib").Path(__file__).parents[1] / "app" / "plan_chat.py").read_text())
+
+
+def test_a_proposal_gets_every_check_a_hand_edit_gets(chat, t, client):  # B40: plan_edit.prepare on every proposal
+    it = plan_of(client, t)
+    home = it["guide"]["getting_home"]["buses"][0]["trip_id"]
+    chat.script(say("Swapped the bus.", [op("swap_bus", table="getting_there", index=0, trip_id=home)]),
+                say("Moved it.", [op("set_row", key="d2-08", time="16:00")]))
+    out = ask(client, t).json()
+    assert out["outcome"] == "proposal" and out["reply"] == "Moved it."
+    assert "wrong_direction" in chat.llm.calls[1]["user"], "a bus going the other way, refused as a hand edit would be"

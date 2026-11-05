@@ -347,6 +347,7 @@ OTHER_ROUTES = {
     ("POST", "/sessions/{share_slug}/plan/undo"),
     ("POST", "/sessions/{share_slug}/plan/suggest"),  # TG-61: builder B's, behind the same flag
     ("POST", "/sessions/{share_slug}/places"),
+    ("POST", "/sessions/{share_slug}/plan/chat"),  # TG-61 PR 2: behind PLAN_EDITING and CHATBOT_LIVE
     ("POST", "/invites/{invite_slug}/answers"),
     ("POST", "/invites/{invite_slug}/attendees/{attendee_id}/photo"),
 }
