@@ -181,7 +181,8 @@ def test_parse_guide_checks_keys_days_and_picks():
     assert "key d1-01: used more than once" in guides.parse_guide(bad)[1]
     bad = copy.deepcopy(guide_dict())
     bad["days"][0]["rows"][0]["key"] = "d2-01"
-    assert any("belongs to another day" in p for p in guides.parse_guide(bad)[1])
+    assert any("belongs to another day" in p for p in guides.parse_guide(bad, keys_follow_days=True)[1]), "the owner's files"
+    assert guides.parse_guide(bad)[1] == [], "TG-61: in the API a key is an id, and it stays when its row moves day"
     bad = copy.deepcopy(guide_dict())
     bad["days"][0]["rows"][0]["time"] = "9am"
     assert guides.parse_guide(bad)[0] is None

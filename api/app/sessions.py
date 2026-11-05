@@ -23,6 +23,8 @@ from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 from . import db, storage
 from .itineraries import SLUG as ITINERARY_SLUG
 from .limits import RateLimiter, client_ip, ip_hash
+from .plan_diff import ChangeLine
+from .plan_validation import MODEL_TRIP_EDIT
 from .wallets import SLUG as WALLET_SLUG
 
 router = APIRouter(tags=["sessions"])
@@ -150,6 +152,30 @@ class AttendeeOut(BaseModel):
     arrived_at: datetime | None  # at the first meet-up
 
 
+class PlanVersionOut(BaseModel):
+    seq: int
+    source: str  # copy, hand, chat or undo
+    changes: list[ChangeLine]
+    created_at: datetime
+
+
+class PlanEditsOut(BaseModel):
+    """TG-61: the trip's copy of its plan: its newest seq, read with itinerary_slug, and the last 5 versions, newest
+    first. The newest one tells other phones the plan just changed."""
+    seq: int
+    versions: list[PlanVersionOut]
+
+
+class TripPlaceOut(BaseModel):
+    """TG-61: a place only this trip has, pinned from a Google Maps link. Never verified."""
+    id: UUID
+    name: str
+    lat: float
+    lng: float
+    maps_url: str
+    created_at: datetime
+
+
 class SessionOut(BaseModel):
     share_slug: str
     name: str
@@ -163,6 +189,8 @@ class SessionOut(BaseModel):
     marks: list[MarkOut]
     attendees: list[AttendeeOut]
     invite_slug: str | None  # the limited invite link (trip_invites.py), null until someone turns it on
+    plan_edits: PlanEditsOut | None = None  # TG-61: null until the first edit
+    places: list[TripPlaceOut] = []  # TG-61: the trip's own places, for the place picker and offline
 
 
 # ---------------------------------------------------------------- database
@@ -193,7 +221,8 @@ def _session_id(conn, share_slug: str, lock: bool = False) -> UUID:
 def _load(conn, session_id: UUID) -> SessionOut:
     s = conn.execute(
         """select s.share_slug, s.name, s.start_date, s.return_date, s.created_at, s.invite_slug,
-                  i.share_slug as itinerary_slug, w.share_slug as wallet_slug, w.name as wallet_name
+                  i.share_slug as itinerary_slug, w.share_slug as wallet_slug, w.name as wallet_name,
+                  (select max(v.seq) from itinerary_versions v where v.itinerary_id = s.itinerary_id and v.session_id = s.id) as plan_seq
            from trip_sessions s
            left join itineraries i on i.id = s.itinerary_id
            left join wallets w on w.id = s.wallet_id
@@ -215,6 +244,16 @@ def _load(conn, session_id: UUID) -> SessionOut:
     attendees = conn.execute(
         "select id, name, rsvp, rsvp_at, arrived_at from session_attendees where session_id = %s order by seq", (session_id,)
     ).fetchall()
+    # TG-61: never the versions' plans (15 KB each on every poll, review nit 4), and none newer than plan_seq
+    versions = conn.execute(
+        """select seq, source, changes, created_at from itinerary_versions
+           where itinerary_id = (select itinerary_id from trip_sessions where id = %s) and session_id = %s and seq <= %s
+           order by seq desc limit 5""",
+        (session_id, session_id, s["plan_seq"]),
+    ).fetchall() if s["plan_seq"] is not None else []
+    places = conn.execute(
+        "select id, name, lat, lng, maps_url, created_at from trip_places where session_id = %s order by created_at, id", (session_id,)
+    ).fetchall()
     return SessionOut(
         share_slug=s["share_slug"],
         name=s["name"],
@@ -228,6 +267,8 @@ def _load(conn, session_id: UUID) -> SessionOut:
         marks=[MarkOut(**m) for m in marks],
         attendees=[AttendeeOut(**a) for a in attendees],
         invite_slug=s["invite_slug"],
+        plan_edits=PlanEditsOut(seq=s["plan_seq"], versions=[PlanVersionOut(**v) for v in versions]) if s["plan_seq"] is not None else None,
+        places=[TripPlaceOut(**p) for p in places],
     )
 
 
@@ -310,7 +351,11 @@ def attach_itinerary(share_slug: str, body: LinkIn, request: Request, response: 
     def change(conn, session_id: UUID) -> None:
         row = None
         if ITINERARY_SLUG.fullmatch(body.share_slug):
-            row = conn.execute("select id from itineraries where share_slug = %s", (body.share_slug,)).fetchone()
+            row = conn.execute(
+                "select id, model, (select v.session_id from itinerary_versions v where v.itinerary_id = itineraries.id and v.seq = 0) as owner"
+                " from itineraries where share_slug = %s", (body.share_slug,)).fetchone()
+        if row is not None and row["model"] == MODEL_TRIP_EDIT and row["owner"] != session_id:
+            row = None  # TG-61: another trip's copy answers like no plan at all (options.md §3.7)
         if row is None:
             logger.info("session itinerary not found share_slug=%s", share_slug)
             raise HTTPException(422, "itinerary_not_found")
@@ -386,7 +431,8 @@ def remove_hotel(share_slug: str, request: Request, response: Response) -> Sessi
 
 @router.delete("/sessions/{share_slug}", status_code=204)
 def delete_session(share_slug: str, body: DeleteIn, request: Request) -> Response:
-    """Deletes the session, its hotel and its files. The itinerary and the wallet stay: they have their own links."""
+    """Deletes the session, its hotel and its files. The wallet and a shared itinerary stay: they have their own links.
+    TG-61 (D4): the trip's own copy of its plan goes too, with its versions and the trip's places."""
     _limit(WRITE_LIMITER, request, "delete")
     with db.get_conn() as conn:
         session_id = _session_id(conn, share_slug, lock=True)
@@ -395,6 +441,11 @@ def delete_session(share_slug: str, body: DeleteIn, request: Request) -> Respons
             logger.info("session delete refused share_slug=%s reason=name_mismatch", share_slug)
             raise HTTPException(422, "name_mismatch")
         paths = [r["storage_path"] for r in conn.execute("select storage_path from session_files where session_id = %s", (session_id,))]
+        places = conn.execute("select count(*) as n from trip_places where session_id = %s", (session_id,)).fetchone()["n"]
+        copies = conn.execute(
+            "delete from itineraries where model = %s and id in (select itinerary_id from itinerary_versions where session_id = %s)",
+            (MODEL_TRIP_EDIT, session_id),
+        ).rowcount
         conn.execute("delete from trip_sessions where id = %s", (session_id,))
     try:
         if paths:
@@ -402,5 +453,5 @@ def delete_session(share_slug: str, body: DeleteIn, request: Request) -> Respons
     except storage.StorageError:
         # The rows are gone, so nothing can reach the bytes; log it so the objects can be swept by hand
         logger.warning("session delete storage cleanup failed share_slug=%s files=%d", share_slug, len(paths))
-    logger.info("session delete share_slug=%s files=%d", share_slug, len(paths))
+    logger.info("session delete share_slug=%s files=%d copies=%d places=%d", share_slug, len(paths), copies, places)
     return Response(status_code=204, headers=NOINDEX)

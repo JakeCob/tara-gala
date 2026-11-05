@@ -29,6 +29,7 @@ ERROR_CODES = frozenset({
 RETURN_BUFFER_MINUTES = 30  # last stop must leave this long before the return bus departs
 BAGUIO = "Baguio"
 MODEL_PREMADE = "premade"  # itineraries.model for hand-made plans; here so the loader needs no FastAPI
+MODEL_TRIP_EDIT = "trip-edit"  # TG-61: a trip's own edited copy of its plan; the nightly loaders never touch it
 
 # Structured outputs may not enforce this pattern; validate_plan stays the authority.
 HHMM = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
@@ -157,11 +158,9 @@ def parse_plan(raw: Mapping[str, Any] | str | bytes) -> tuple[Plan | None, list[
 
 # --- loading -------------------------------------------------------------------------------------
 
-def load_refs(conn, plan: Plan) -> Refs:
-    """The rows the plan references, in three queries. Trips are read from the tables, not the
-    trip_search view, so an inactive trip can be told apart from an unknown one."""
-    trip_ids = [plan.outbound.trip_id, plan.return_.trip_id]
-    stops = [s for day in plan.days for s in day.stops]
+def load_trips(conn, trip_ids) -> dict[UUID, TripRef]:
+    """Trips by id, read from the tables, not the trip_search view, so an inactive trip can be told apart from an
+    unknown one."""
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
@@ -173,9 +172,9 @@ def load_refs(conn, plan: Plan) -> Refs:
             join terminals d on d.id = r.destination_terminal_id
             where t.id = any(%s)
             """,
-            (trip_ids,),
+            (list(trip_ids),),
         )
-        trips = {
+        return {
             r["id"]: TripRef(
                 trip_id=r["id"], is_active=r["is_active"], departure_time=r["departure_time"],
                 travel_minutes=r["travel_minutes"], days_of_week=list(r["days_of_week"]),
@@ -185,6 +184,13 @@ def load_refs(conn, plan: Plan) -> Refs:
             )
             for r in cur.fetchall()
         }
+
+
+def load_refs(conn, plan: Plan) -> Refs:
+    """The rows the plan references, in three queries."""
+    stops = [s for day in plan.days for s in day.stops]
+    trips = load_trips(conn, [plan.outbound.trip_id, plan.return_.trip_id])
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute("select id, slug, name, opening_hours from spots where id = any(%s)", ([s.spot_id for s in stops],))
         spots = {
             r["id"]: SpotRef(spot_id=r["id"], slug=r["slug"], name=r["name"], opening_hours=r["opening_hours"])
@@ -231,25 +237,40 @@ class _Errors:
         return [e for _, e in sorted(self._items, key=lambda item: item[0])]
 
 
+def trip_problems(trip: TripRef | None, d: Date, direction: Literal["outbound", "return"]) -> list[str]:
+    """The codes for a bus that can't be this plan's `direction` bus on date `d`, in check order. TG-61's plan edits
+    use these too (plan_edit.check), for a swapped bus."""
+    if trip is None:
+        return ["unknown_trip"]
+    codes = []
+    if not trip.is_active:
+        codes.append("trip_inactive")
+    if not schedule.runs_on(trip.days_of_week, trip.valid_from, trip.valid_to, d):
+        codes.append("trip_not_running")
+    # Every non-Baguio terminal in the seed is in Metro Manila; this avoids importing main's city list.
+    if direction == "outbound":
+        right_way = trip.destination_city == BAGUIO != trip.origin_city
+    else:
+        right_way = trip.origin_city == BAGUIO != trip.destination_city
+    if not right_way:
+        codes.append("wrong_direction")
+    return codes
+
+
 def _check_trip(errors: _Errors, name: str, leg: BusLeg, trip: TripRef | None, expected_date: Date | None) -> None:
     position = _Errors.OUTBOUND if name == "outbound" else _Errors.RETURN
     path = f"{name}.trip_id"
+    want = "go to Baguio" if name == "outbound" else "leave from Baguio"
+    messages = {
+        "unknown_trip": f"{name} trip {leg.trip_id} does not exist",
+        "trip_inactive": f"{name} trip {leg.trip_id} is no longer active",
+        "trip_not_running": f"{name} trip {leg.trip_id} does not run on {leg.date}",
+        "wrong_direction": f"the {name} trip must {want}",
+    }
+    for code in trip_problems(trip, leg.date, name):
+        errors.add(position, code, path, messages[code])
     if trip is None:
-        errors.add(position, "unknown_trip", path, f"{name} trip {leg.trip_id} does not exist")
         return
-    if not trip.is_active:
-        errors.add(position, "trip_inactive", path, f"{name} trip {leg.trip_id} is no longer active")
-    if not schedule.runs_on(trip.days_of_week, trip.valid_from, trip.valid_to, leg.date):
-        errors.add(position, "trip_not_running", path, f"{name} trip {leg.trip_id} does not run on {leg.date}")
-    # Every non-Baguio terminal in the seed is in Metro Manila; this avoids importing main's city list.
-    if name == "outbound":
-        right_way = trip.destination_city == BAGUIO != trip.origin_city
-        want = "go to Baguio"
-    else:
-        right_way = trip.origin_city == BAGUIO != trip.destination_city
-        want = "leave from Baguio"
-    if not right_way:
-        errors.add(position, "wrong_direction", path, f"the {name} trip must {want}")
     if expected_date is not None and leg.date != expected_date:
         errors.add(position, "wrong_date", f"{name}.date", f"the {name} date must be {expected_date}, not {leg.date}")
 

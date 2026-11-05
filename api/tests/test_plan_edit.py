@@ -367,7 +367,7 @@ def test_undo_writes_the_version_before_as_a_new_one(t, client, barkada):  # B11
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["itinerary"]["seq"] == 6
-    v = {x["seq"]: x for x in rows(barkada, "select seq, source, plan, changes from itinerary_versions v join itineraries i on i.id = v.itinerary_id"
+    v = {x["seq"]: x for x in rows(barkada, "select v.seq, v.source, v.plan, v.changes from itinerary_versions v join itineraries i on i.id = v.itinerary_id"
                                             " where i.share_slug = %s", saved[0]["itinerary"]["share_slug"])}
     assert v[6]["plan"] == v[4]["plan"] and v[6]["source"] == "undo"
     assert out["changes"] == v[6]["changes"] == [{"word": "Earlier", "day": 2, "text": row(saved[-1]["itinerary"]["guide"], "d2-08")["plan"] + " to 3:40 PM"}]
