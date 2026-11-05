@@ -169,8 +169,7 @@ export function setRow(g: GuideIn, key: string, parts: { time?: string; plan?: s
 export function replacePlace(g: GuideIn, key: string, to: { place: PlaceIn | null; plan: string; leg?: LegIn }): GuideIn {
   const w = where(g, key);
   if (!w) return g;
-  const { place: _place, leg: _leg, ...rest } = w.row;
-  const row: RowIn = some({ ...rest, plan: to.plan, place: to.place ?? undefined, leg: to.leg });
+  const row: RowIn = some({ ...w.row, plan: to.plan, place: to.place ?? undefined, leg: to.leg });
   return withRows(g, w.d, g.days[w.d].rows.map((r) => (r.key === key ? row : r)));
 }
 
