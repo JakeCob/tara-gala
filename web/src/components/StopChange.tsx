@@ -13,7 +13,7 @@ import { levelLabel, removeConfirm } from "@/lib/planLines";
 import { type SuggestIn, type TripFile, planFailureMessage } from "@/lib/trip";
 import BusSwap, { type BusAt, busAt, swapTitle } from "./BusSwap";
 import FitPlace, { type FitState, type Slot } from "./FitPlace";
-import { PlanProblem } from "./PlanBits";
+import { PlanProblem, SaidText } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import { type Chosen, FindPlace, Proposal, linkPlace } from "./PlaceInput";
 
@@ -337,7 +337,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
             <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={off || undefined} onClick={() => onRecheck(step)}>
               {step.mode === "fit" ? "Find where it fits again" : "Check my change again"}
             </PixelButton>
-            <p role="status" className="text-sm empty:sr-only">{off ? editor.status : ""}</p>
+            <p role="status" className="text-sm empty:sr-only">{off ? <SaidText said={editor.status} /> : ""}</p>
           </>
         )
       )}

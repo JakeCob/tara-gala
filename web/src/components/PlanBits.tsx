@@ -5,7 +5,7 @@
 import { useEffect, useRef } from "react";
 import { PX, PixelBox } from "@/components/pixel";
 import type { LegOut } from "@/lib/guide";
-import { type ChangeLine, changeRows, legLines } from "@/lib/planLines";
+import { type ChangeLine, type Said, changeRows, legLines, lineParts } from "@/lib/planLines";
 
 /** A failed step, under its control. It brings itself into view: a long dialog may have it below the fold (TG-53). */
 export function PlanProblem({ text }: { text: string }) {
@@ -20,19 +20,37 @@ export function PlanProblem({ text }: { text: string }) {
   );
 }
 
-/** What changes (ux.md §4.4): a bold word, the World, the text. Never colour alone. */
+/** One change line, as everywhere (F13 FINAL): the word in bold, then " · World N · <text>". Never colour alone. */
+export function LineText({ line }: { line: ChangeLine }) {
+  const p = lineParts(line);
+  return (
+    <>
+      {p.word && <span className="font-bold">{p.word}</span>}
+      {p.rest}
+    </>
+  );
+}
+
+/** A status: a lead, a change line and its tail, or a plain sentence such as "Saving...". */
+export function SaidText({ said }: { said: Said | string }) {
+  if (typeof said === "string") return <>{said}</>;
+  return (
+    <>
+      {said.lead}
+      {said.line && <LineText line={said.line} />}
+      {said.tail}
+    </>
+  );
+}
+
+/** What changes (ux.md §4.4), in the same display. */
 export function ChangeList({ lines }: { lines: ChangeLine[] }) {
   return (
     <ul className="flex flex-col gap-1 text-sm">
       {changeRows(lines).map((l, i) => (
         <li key={i} className="break-words">
-          {l.word ? (
-            <>
-              <span className="font-bold">{l.word}</span> · {l.text}
-            </>
-          ) : (
-            l.text
-          )}
+          {l.word && <span className="font-bold">{l.word}</span>}
+          {l.rest}
         </li>
       ))}
     </ul>

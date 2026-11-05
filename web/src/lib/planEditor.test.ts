@@ -71,7 +71,12 @@ test("T61-W11g the edit bar stays in view, and every result has a live status li
   assert.match(bar, /className="sticky top-0 z-20 /);
   assert.match(bar, /<p role="status" aria-live="polite"/);
   assert.match(bar, /aria-expanded=\{open\}/, "Changes is a disclosure");
-  assert.match(view(), /<p role="status" aria-live="polite" className="text-sm empty:sr-only">\{otherLine\}<\/p>/, "the plan just changed line");
+  assert.match(view(), /<p role="status" aria-live="polite" className="text-sm empty:sr-only"><SaidText said=\{otherLine\} \/><\/p>/, "the plan just changed line");
+  // F13 FINAL: one display for a change line, the word in bold; the server's text is never put inside a sentence
+  assert.match(bar, /<SaidText said=\{status\} \/>/);
+  assert.match(bar, /<LineText line=\{r\.line\} \/>/, "Changes uses it too");
+  assert.match(read("src/components/PlanBits.tsx"), /\{p\.word && <span className="font-bold">\{p\.word\}<\/span>\}/);
+  assert.doesNotMatch(view(), /resultLine|levelLabel\(g/, "no level numbers in the bar");
   assert.match(read("src/components/StopChange.tsx"), /<p role="status" aria-live="polite"/, "the Move step keeps its own line (ux.md §3.3)");
 });
 

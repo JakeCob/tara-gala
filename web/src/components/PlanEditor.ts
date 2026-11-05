@@ -4,7 +4,7 @@
 import type { ReactNode } from "react";
 import type { Guide } from "@/lib/guide";
 import type { GuideIn, SpotLite, Suggestion } from "@/lib/planEdit";
-import type { Done, PlanEdits } from "@/lib/planLines";
+import type { Done, PlanEdits, Said } from "@/lib/planLines";
 import type { Answer, SuggestIn, TripPlace } from "@/lib/trip";
 
 /** The level to focus once a change is on screen, and its World (a move can take it to another one). */
@@ -20,7 +20,7 @@ export type PlanEditor = {
   /** A plan write is out: ticks wait too, but only for this (options.md §3.10) */
   writing: boolean;
   /** The edit bar's line. A dialog that stays open after a save repeats it (ux.md §3.3) */
-  status: string;
+  status: Said | string;
   places: TripPlace[];
   spots: SpotLite[] | null;
   wantSpots: () => void;

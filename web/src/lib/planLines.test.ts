@@ -3,77 +3,63 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  type ChangeLine, type PlanVersion, busNotice, busWarningLine, changeRows, copyLine, farLine, historyLine, justChanged, legLines, removeConfirm, resultLine,
-  summaryOf, undoConfirm, undoLabel,
+  type ChangeLine, type PlanVersion, type Said, barSaid, busNotice, busWarningLine, changeRows, copyLine, farLine, historyRow, justChanged, legLines, lineParts,
+  linePlain, removeConfirm, saidPlain, undoConfirm, undoLabel,
 } from "./planLines.ts";
 
 const L = (word: string, text: string, day: number | null = 1): ChangeLine => ({ word, day, text });
 const v = (seq: number, source: PlanVersion["source"], changes: ChangeLine[], created_at = "2026-11-09T07:12:00Z"): PlanVersion => ({ seq, source, changes, created_at });
-const level = (key: string) => ({ "d1-03": "1-3", "d1-05": "1-5" })[key] ?? null;
 
-test("T61-L1 the edit bar's line for each change this phone makes", () => {
-  assert.equal(resultLine([L("New", "Café Yagam at 2:30 PM")], { kind: "add", after: "d1-03", day: 1 }, level), "Added Café Yagam at 2:30 PM, after Level 1-3.", "F13: the text as sent, time included, then a comma");
-  assert.equal(resultLine([L("New", "Café Yagam")], { kind: "add", after: null, day: 2 }, level), "Added Café Yagam at the start of World 2.");
-  assert.equal(resultLine([L("Out", "Burnham Park walk"), L("In", "Wright Park and The Mansion")], { kind: "replace" }, level), "Burnham Park walk is now Wright Park and The Mansion.");
-  assert.equal(resultLine([L("Later", "Burnham Park to 4:00 PM")], { kind: "edit", key: "d1-05" }, level), "Moved Burnham Park to 4:00 PM.", "F13: a time change says where it went");
-  assert.equal(resultLine([L("Earlier", "Lunch to 12:00 PM")], { kind: "edit", key: "d1-05" }, level), "Moved Lunch to 12:00 PM.");
-  assert.equal(resultLine([L("Changed", "Lunch")], { kind: "edit", key: "d1-05" }, level), "Changed Level 1-5.", "a note or plan text change");
-  assert.equal(resultLine([L("Moved", "Burnham Park walk", 2)], { kind: "move", day: 2 }, level), "Moved Burnham Park walk to World 2.");
-  assert.equal(resultLine([L("Moved", "Burnham Park walk")], { kind: "nudge", dir: "earlier" }, level), "Moved Burnham Park walk earlier.");
-  assert.equal(resultLine([L("Dropped", "Burnham Park walk")], { kind: "remove" }, level), "Removed Burnham Park walk. Undo brings it back.");
-  assert.equal(resultLine([L("Bus", "Home: Victory Liner 11:00 AM", null)], { kind: "bus", from: "10:15", to: "11:00" }, level), "Swapped the 10:15 AM bus for the 11:00 AM.");
-  assert.equal(resultLine([L("Bus", "x", null)], { kind: "bus", from: null, to: "11:00" }, level), "Swapped the bus for the 11:00 AM.", "the old bus is gone from the schedule");
-  assert.equal(resultLine([L("Budget", "Food", null)], { kind: "list", what: "budget" }, level), "Changed the budget.");
-  assert.equal(resultLine([L("To-do", "Bring jackets", null)], { kind: "list", what: "todo" }, level), "Changed the to-do list.");
-  assert.equal(resultLine([L("Sources", "Map", null)], { kind: "list", what: "sources" }, level), "Changed the sources.");
-  assert.equal(resultLine([L("New", "x")], { kind: "chat" }, level), "Applied the chatbot's change.");
+// F13 FINAL (tg-ux, ux.md §3.1): the server's text is never put inside a sentence. One display everywhere: the bold word,
+// " · World N" when there's a day, then " · <text>" as sent.
+const plain = (s: Said | string) => saidPlain(s);
+
+test("T61-L1 one display for a change line: the word, its World, the server's text verbatim; More plain, Copied as a phrase", () => {
+  assert.deepEqual(lineParts(L("New", "Café Yagam at 3:00 PM")), { word: "New", rest: " · World 1 · Café Yagam at 3:00 PM" });
+  assert.deepEqual(lineParts(L("Bus", "Home: Victory Liner 4:10 PM", null)), { word: "Bus", rest: " · Home: Victory Liner 4:10 PM" }, "no day, no World");
+  assert.deepEqual(lineParts({ word: "More", day: null, text: "and 3 more changes" }), { word: null, rest: "and 3 more changes" });
+  assert.deepEqual(lineParts({ word: "Copied", day: null, text: "the plan" }), { word: null, rest: "Copied the plan" });
+  assert.equal(linePlain(L("Later", "Burnham Park to 4:00 PM", 3)), "Later · World 3 · Burnham Park to 4:00 PM", "the time is never stripped");
+  assert.deepEqual(changeRows([L("New", "Cafe at 3:00 PM"), { word: "More", day: null, text: "and 3 more changes" }]), [
+    { word: "New", rest: " · World 1 · Cafe at 3:00 PM" }, { word: null, rest: "and 3 more changes" },
+  ], "proposals use the same display");
 });
 
-test("T61-L2 more lines add 'And N more changes.', the server's More counts too, and the first save says the copy was made", () => {
-  const lines = [L("New", "Café Yagam"), L("Later", "Check in", 1), L("Later", "Dinner", 1), { word: "More", day: null, text: "and 3 more changes" }];
-  assert.equal(resultLine(lines, { kind: "add", after: "d1-03", day: 1 }, level), "Added Café Yagam, after Level 1-3. And 5 more changes.");
-  assert.equal(resultLine([L("Out", "A"), L("In", "B"), L("Later", "C")], { kind: "replace" }, level), "A is now B. And 1 more change.", "Out and In are one sentence");
+test("T61-L2 the bar: a lead for what happened, then the first line; more lines are counted, a removal says Undo brings it back", () => {
+  assert.equal(plain(barSaid([L("New", "Café Yagam at 3:00 PM")], "save")), "Saved: New · World 1 · Café Yagam at 3:00 PM.");
+  assert.equal(plain(barSaid([L("Dropped", "Museum", 3)], "save")), "Saved: Dropped · World 3 · Museum. Undo brings it back.");
+  assert.equal(plain(barSaid([L("Dropped", "Cafe")], "undo")), "Undid: Dropped · World 1 · Cafe. Undo brings it back.");
+  assert.equal(plain(barSaid([L("New", "Cafe at 3:00 PM")], "redo")), "Put back: New · World 1 · Cafe at 3:00 PM.");
+  assert.equal(plain(barSaid([L("New", "Cafe at 3:00 PM")], "chat")), "Applied the chatbot's change: New · World 1 · Cafe at 3:00 PM.");
+  assert.equal(plain(barSaid([L("New", "Cafe"), L("Later", "Lunch to 1:00 PM")], "save")), "Saved: New · World 1 · Cafe. And 1 more change.");
+  const lines = [L("New", "Café Yagam"), L("Later", "Check in", 1), L("Later", "Dinner", 1), { word: "More", day: null, text: "and 5 more changes" }];
+  assert.equal(plain(barSaid(lines, "save")), "Saved: New · World 1 · Café Yagam. And 7 more changes.", "the lines after the first, plus More's number");
   assert.equal(
-    resultLine([L("Dropped", "Museum")], { kind: "remove" }, level, { firstCopy: true }),
-    "Removed Museum. Undo brings it back. This trip now has its own copy of the plan. The shared plan's link doesn't change.",
+    plain(barSaid([L("Dropped", "Museum")], "save", { firstCopy: true })),
+    "Saved: Dropped · World 1 · Museum. Undo brings it back. This trip now has its own copy of the plan. The shared plan's link doesn't change.",
   );
+  const said = barSaid([L("New", "Cafe")], "save");
+  assert.deepEqual(said, { lead: "Saved: ", line: L("New", "Cafe"), tail: "." }, "structured, so the word can be bold");
+  assert.equal(plain("Saving..."), "Saving...", "a plain status stays as it is");
 });
 
-test("T61-L3 Changes and other phones' lines use the World, never a level number; a chatbot version says so", () => {
-  assert.equal(summaryOf(v(3, "hand", [L("New", "Café Yagam")])), "Added Café Yagam (World 1)");
-  assert.equal(summaryOf(v(3, "hand", [L("New", "Cafe X at 2:30 PM")])), "Added Cafe X at 2:30 PM (World 1)", "F13: never strip the time");
-  assert.equal(summaryOf(v(3, "hand", [L("Out", "Museum", 3), L("In", "Park", 3)])), "Museum is now Park (World 3)");
-  assert.equal(summaryOf(v(3, "hand", [L("Dropped", "Museum", 3)])), "Removed Museum (World 3)");
-  assert.equal(summaryOf(v(3, "hand", [L("Moved", "Museum", 2)])), "Moved Museum (World 2)");
-  assert.equal(summaryOf(v(3, "hand", [L("Later", "Burnham Park to 4:00 PM", 3)])), "Moved Burnham Park to 4:00 PM (World 3)");
-  assert.equal(summaryOf(v(3, "hand", [L("Changed", "Lunch", 1)])), "Changed Lunch (World 1)");
-  assert.equal(summaryOf(v(3, "hand", [L("Bus", "Home: Victory Liner 4:10 PM", null)])), "Swapped a bus: Home: Victory Liner 4:10 PM");
-  assert.equal(summaryOf(v(3, "hand", [L("Budget", "Food", null)])), "Changed the budget");
-  assert.equal(summaryOf(v(0, "copy", [{ word: "Copied", day: null, text: "the plan" }])), "Copied the plan");
-  assert.equal(summaryOf(v(4, "chat", [L("New", "Cafe")])), "Chatbot: Added Cafe (World 1)");
-  assert.equal(summaryOf(v(5, "undo", [L("Dropped", "Cafe")])), "Removed Cafe (World 1)", "an undo's lines are the diff it makes");
-  assert.equal(historyLine(v(3, "hand", [L("New", "Café Yagam")]), "2026-11-09"), "3:12 PM · Added Café Yagam (World 1)", "today: the Manila time");
-  assert.equal(historyLine(v(3, "hand", [L("New", "Café Yagam")]), "2026-11-10"), "Nov 9 · Added Café Yagam (World 1)", "before today: the date");
-  assert.equal(justChanged(v(3, "hand", [L("New", "Café Yagam")])), "The plan just changed: Added Café Yagam (World 1).");
+test("T61-L3 Changes, the plan just changed line and their times: no level numbers, the same display", () => {
+  assert.deepEqual(historyRow(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]), "2026-11-09"), { at: "3:12 PM", lead: "", line: L("New", "Café Yagam at 3:00 PM") });
+  assert.equal(historyRow(v(3, "hand", [L("New", "x")]), "2026-11-10").at, "Nov 9", "before today: the date");
+  assert.equal(historyRow(v(4, "chat", [L("New", "Cafe")]), "2026-11-09").lead, "Chatbot: ");
+  assert.deepEqual(historyRow(v(0, "copy", [{ word: "Copied", day: null, text: "the plan" }]), "2026-11-09").line, { word: "Copied", day: null, text: "the plan" });
+  assert.equal(plain(justChanged(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]))), "The plan just changed: New · World 1 · Café Yagam at 3:00 PM.");
 });
 
-test("T61-L4 What changes: a bold word, the World, the text; the server's More is a plain line", () => {
-  assert.deepEqual(changeRows([L("New", "3:00 PM Café Yagam"), L("Bus", "Home: 4:10 PM", null), { word: "More", day: null, text: "and 3 more changes" }]), [
-    { word: "New", text: "World 1, 3:00 PM Café Yagam" },
-    { word: "Bus", text: "Home: 4:10 PM" },
-    { word: null, text: "and 3 more changes" },
-  ]);
-});
-
-test("T61-L5 Undo becomes Redo after an undo; it asks first when the change may be another phone's", () => {
+test("T61-L5 Undo becomes Redo after an undo; it asks first when the change may be another phone's, with the line as shown", () => {
   const mine = new Map([[3, Date.parse("2026-11-09T07:12:00Z")]]);
   const edits = (versions: PlanVersion[]) => ({ seq: versions[0].seq, versions });
   assert.equal(undoLabel(null), "Undo");
   assert.equal(undoLabel(edits([v(4, "undo", [L("Dropped", "Cafe")])])), "Redo");
   assert.equal(undoLabel(edits([v(3, "hand", [L("New", "Cafe")])])), "Undo");
-  const newest = edits([v(3, "hand", [L("New", "Café Yagam")])]);
+  const newest = edits([v(3, "hand", [L("New", "Café Yagam at 3:00 PM")])]);
   assert.equal(undoConfirm(newest, mine, Date.parse("2026-11-09T07:15:00Z")), null, "this phone's own change, 3 minutes ago");
-  assert.equal(undoConfirm(newest, mine, Date.parse("2026-11-09T07:30:00Z")), 'Undo the last change? "Added Café Yagam (World 1)", at 3:12 PM, maybe from another phone.', "over 10 minutes");
+  assert.equal(undoConfirm(newest, mine, Date.parse("2026-11-09T07:30:00Z")), "Undo the last change? New · World 1 · Café Yagam at 3:00 PM. It was saved at 3:12 PM, maybe from another phone.");
   assert.equal(undoConfirm(newest, new Map(), Date.parse("2026-11-09T07:13:00Z")) !== null, true, "another phone's");
 });
 
@@ -160,8 +146,8 @@ test("T61-L10 where it fits: each card's five lines, from the server's fit (ux.m
   assert.equal(NO_FIT, "No free slot for it on this plan. Choose the day yourself, and the later stops can move to make room.");
 });
 
-test("T61-L11 after a fit's Apply the bar names the World, since the map may show another day; a route with no minutes leaves them out", () => {
-  assert.equal(resultLine([L("New", "Ghibli Store at 2:00 PM", 2)], { kind: "add", after: "d1-03", day: 2, world: true }, level), "Added Ghibli Store at 2:00 PM on World 2, after Level 1-3.", "F13");
+test("T61-L11 after a fit's Apply the line names the World, since the map may show another day; a route with no minutes leaves them out", () => {
+  assert.equal(saidPlain(barSaid([L("New", "Ghibli Store at 2:00 PM", 2)], "save")), "Saved: New · World 2 · Ghibli Store at 2:00 PM.", "F13 FINAL: the line names the World");
   assert.equal(legLines({ kind: "route", last_mile_route_id: "lm", mode: "jeep", minutes: null, fare_min_php: 13, fare_max_php: 15, signboard: "Trancoville", last_verified_at: null }).line, "Jeep, Trancoville signboard · ₱13–15");
 });
 

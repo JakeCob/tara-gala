@@ -6,13 +6,14 @@ import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx }
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
 import { flags } from "@/lib/flags";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
-import { type Done, type PlanVersion, copyLine, justChanged, levelLabel, resultLine, undoConfirm, undoLabel } from "@/lib/planLines";
+import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, undoConfirm, undoLabel } from "@/lib/planLines";
 import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "@/lib/planState";
 import {
   type Answer, type Hotel, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
   hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, planOutcome, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
+import { SaidText } from "./PlanBits";
 import PlanEditBar from "./PlanEditBar";
 import type { PlanEditor, SaveOutcome } from "./PlanEditor";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
@@ -160,8 +161,8 @@ export default function TripView({ slug }: { slug: string }) {
   const [editing, setEditing] = useState(false);
   const [planWriting, setPlanWriting] = useState(false);
   const writingPlan = useRef(false); // set in the handler, so a second tap in the same tick sees it
-  const [planSaid, setPlanSaid] = useState("");
-  const [otherLine, setOtherLine] = useState("");
+  const [planSaid, setPlanSaid] = useState<Said | string>("");
+  const [otherLine, setOtherLine] = useState<Said | string>("");
   const clashWait = useRef<"edit" | "undo" | null>(null);
   const mine = useRef(new Map<number, number>()); // this phone's own versions, and when: Undo asks first otherwise
   const [spots, setSpots] = useState<SpotLite[] | null>(null);
@@ -282,7 +283,9 @@ export default function TripView({ slug }: { slug: string }) {
     setLoad((prev) => (prev.state === "ready" ? { state: "ready", trip: afterPlanSaved(prev.trip, saved, source, new Date().toISOString()) } : prev));
     setShown((prev) => (acceptPlan(prev, next, saved.itinerary.share_slug) ? next : prev));
     const g = next.guide;
-    setPlanSaid(resultLine(saved.changes, done, (k) => (g ? levelLabel(g, t.marks, k) : null), { firstCopy: s.seq === null }));
+    // F13 FINAL: a lead for what happened, then the server's first line as sent; no level numbers
+    const how = done.kind === "undo" ? (done.redo ? "redo" : "undo") : done.kind === "chat" ? "chat" : "save";
+    setPlanSaid(barSaid(saved.changes, how, { firstCopy: s.seq === null }));
     setReloads((n) => n + 1); // the session's own answer, so the worker keeps the new plan's link
     const key = anchor && g ? focusAfter(s.guide, g, anchor) : null;
     const day = key && g?.days.find((d) => d.rows.some((r) => r.key === key))?.day;
@@ -308,15 +311,15 @@ export default function TripView({ slug }: { slug: string }) {
   const slot = mapSlot(trip.itinerary_slug, shown ? { plan: shown.slug, guide: shown.guide } : planMiss ? { plan: planMiss, guide: null } : null);
   const theGuide = slot === "frame" ? null : slot;
   const stale = !!shown && !synced && planMiss === trip.itinerary_slug; // review M2: the newer plan didn't come, or came back older
-  const barSaid = !online
-    ? planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
+  const barStatus = !online
+    ? typeof planSaid === "string" && planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
     : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : !synced && !planWriting && shown ? "Updating the map..." : planSaid;
   const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {
     editing,
     can: canEdit(shown, trip, online, planWriting),
     online,
     writing: planWriting,
-    status: barSaid,
+    status: barStatus,
     places: trip.places ?? [],
     spots,
     wantSpots,
@@ -365,14 +368,14 @@ export default function TripView({ slug }: { slug: string }) {
     top: (addPlace) => (
       <>
         {editing && (
-          <PlanEditBar edits={trip.plan_edits ?? null} status={barSaid} can={canEdit(shown, trip, online, planWriting)} online={online} stale={stale} today={manilaToday()}
+          <PlanEditBar edits={trip.plan_edits ?? null} status={barStatus} can={canEdit(shown, trip, online, planWriting)} online={online} stale={stale} today={manilaToday()}
             onAddPlace={addPlace} onUndo={() => void onUndo()} onReload={() => setReloads((n) => n + 1)}
             onDone={() => {
               console.info("[tg-trip] plan edit mode off");
               setEditing(false);
             }} />
         )}
-        <p role="status" aria-live="polite" className="text-sm empty:sr-only">{otherLine}</p>
+        <p role="status" aria-live="polite" className="text-sm empty:sr-only"><SaidText said={otherLine} /></p>
       </>
     ),
   } : undefined;

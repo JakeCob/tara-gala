@@ -24,121 +24,67 @@ export type Done =
   | { kind: "undo"; redo: boolean; undone: PlanVersion | null };
 
 const MINE_FOR_MS = 10 * 60_000; // ux.md §3.2: Undo asks first after this, or for another phone's change
-const LISTS = { budget: "Changed the budget.", todo: "Changed the to-do list.", sources: "Changed the sources.", pick: "Changed the choices." } as const;
 
 const manila = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Manila", ...opts });
 const clock = (iso: string) => manila(iso, { hour: "numeric", minute: "2-digit" });
 const dayOf = (iso: string) => manila(iso, { month: "short", day: "numeric" });
 const manilaDate = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-const world = (l: ChangeLine) => (l.day === null ? "" : ` (World ${l.day})`);
 
-/** How many changes a version holds past its first sentence: the lines after it, and the server's own "and N more". */
-function moreThan(lines: ChangeLine[], used: number): number {
+/** The bar's line: a lead for what happened, then the first change line, then its tails. Structured, so the line's word
+ * can be bold (F13 FINAL, ux.md §3.1). */
+export type Said = { lead: string; line: ChangeLine | null; tail: string };
+
+/** One display everywhere (F13 FINAL): the word in bold, " · World N" when there's a day, then " · <text>" verbatim. The
+ * server's text is never put inside a sentence. More is a plain line, and version 0 reads "Copied the plan". */
+export function lineParts(l: ChangeLine): { word: string | null; rest: string } {
+  if (l.word === "More") return { word: null, rest: l.text };
+  if (l.word === "Copied") return { word: null, rest: `Copied ${l.text}` };
+  return { word: l.word, rest: `${l.day === null ? "" : ` · World ${l.day}`} · ${l.text}` };
+}
+
+/** The same line as plain text, for a confirm (which can't be bold) and for tests. */
+export function linePlain(l: ChangeLine): string {
+  const p = lineParts(l);
+  return `${p.word ?? ""}${p.rest}`;
+}
+
+/** A status as plain text: a Said, or a plain line like "Saving...". */
+export const saidPlain = (s: Said | string) => (typeof s === "string" ? s : `${s.lead}${s.line ? linePlain(s.line) : ""}${s.tail}`);
+
+/** What changes, in a proposal: the same display. */
+export const changeRows = (lines: ChangeLine[]) => lines.map(lineParts);
+
+const firstOf = (lines: ChangeLine[]) => lines.find((l) => l.word !== "More") ?? null;
+
+/** How many changes a version holds past its first line: the lines after it, not counting More, plus More's own number. */
+function moreThan(lines: ChangeLine[]): number {
   const more = lines.find((l) => l.word === "More");
-  const counted = lines.filter((l) => l.word !== "More").length - used;
-  return Math.max(0, counted) + (more ? Number(more.text.match(/\d+/)?.[0] ?? 0) : 0);
+  return Math.max(0, lines.filter((l) => l.word !== "More").length - 1) + (more ? Number(more.text.match(/\d+/)?.[0] ?? 0) : 0);
 }
-const andMore = (n: number) => (n ? ` And ${n} more change${n === 1 ? "" : "s"}.` : "");
-const pair = (lines: ChangeLine[]) => ({ out: lines.find((l) => l.word === "Out"), in: lines.find((l) => l.word === "In") });
+const LEADS = { save: "Saved: ", undo: "Undid: ", redo: "Put back: ", chat: "Applied the chatbot's change: " } as const;
+export type SaidHow = keyof typeof LEADS;
 
-/** The edit bar's line after this phone's own change (ux.md §3.1), with this phone's level numbers. */
-export function resultLine(lines: ChangeLine[], done: Done, levelOf: (key: string) => string | null, opts: { firstCopy?: boolean } = {}): string {
-  const first = lines.find((l) => l.word !== "More");
-  const text = first?.text ?? "";
-  let said: string;
-  let used = 1;
-  switch (done.kind) {
-    case "add": {
-      const added = lines.find((l) => l.word === "New") ?? first;
-      const after = done.after && levelOf(done.after);
-      // F13: the server's text as sent, time included
-      if (done.world && after) said = `Added ${added?.text ?? ""} on World ${done.day}, after Level ${after}.`;
-      else said = after ? `Added ${added?.text ?? ""}, after Level ${after}.` : `Added ${added?.text ?? ""} at the start of World ${done.day}.`;
-      break;
-    }
-    case "replace": {
-      const p = pair(lines);
-      said = `${p.out?.text ?? ""} is now ${p.in?.text ?? text}.`;
-      used = p.out && p.in ? 2 : 1;
-      break;
-    }
-    case "edit":
-      // F13: a time change says where the stop went; a text change names its level
-      said = first?.word === "Earlier" || first?.word === "Later" ? `Moved ${text}.` : `Changed Level ${levelOf(done.key) ?? ""}.`;
-      break;
-    case "move":
-      said = `Moved ${text} to World ${done.day}.`;
-      break;
-    case "nudge":
-      said = `Moved ${text} ${done.dir}.`;
-      break;
-    case "remove":
-      said = `Removed ${text}. Undo brings it back.`;
-      break;
-    case "bus":
-      said = done.from ? `Swapped the ${formatTime(done.from)} bus for the ${formatTime(done.to)}.` : `Swapped the bus for the ${formatTime(done.to)}.`;
-      break;
-    case "list":
-      said = LISTS[done.what];
-      break;
-    case "chat":
-      return "Applied the chatbot's change.";
-    case "undo":
-      return `${done.redo ? "Put back" : "Undid"}: ${done.undone ? summaryOf(done.undone) : "the last change"}.`;
-  }
-  const copy = opts.firstCopy ? " This trip now has its own copy of the plan. The shared plan's link doesn't change." : "";
-  return said + andMore(moreThan(lines, used)) + copy;
+/** The edit bar after this phone's change. No level numbers: positions move after later changes. */
+export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: boolean } = {}): Said {
+  const first = firstOf(lines);
+  const n = moreThan(lines);
+  const tail = [
+    ".",
+    n ? ` And ${n} more change${n === 1 ? "" : "s"}.` : "",
+    first?.word === "Dropped" ? " Undo brings it back." : "",
+    opts.firstCopy ? " This trip now has its own copy of the plan. The shared plan's link doesn't change." : "",
+  ].join("");
+  return { lead: LEADS[how], line: first, tail };
 }
 
-/** A version in a few words, with its World and no level number: positions move after later changes (ux.md §3.1). */
-export function summaryOf(v: PlanVersion): string {
-  const l = v.changes.find((c) => c.word !== "More");
-  const said = ((): string => {
-    if (!l) return "Changed the plan";
-    switch (l.word) {
-      case "New":
-        return `Added ${l.text}${world(l)}`;
-      case "Out":
-      case "In": {
-        const p = pair(v.changes);
-        return `${p.out?.text ?? ""} is now ${p.in?.text ?? ""}${world(l)}`;
-      }
-      case "Moved":
-      case "Earlier":
-      case "Later":
-        return `Moved ${l.text}${world(l)}`;
-      case "Dropped":
-        return `Removed ${l.text}${world(l)}`;
-      case "Bus":
-        return `Swapped a bus: ${l.text}`;
-      case "Budget":
-        return "Changed the budget";
-      case "To-do":
-        return "Changed the to-do list";
-      case "Sources":
-        return "Changed the sources";
-      case "Copied":
-        return "Copied the plan";
-      default:
-        return `Changed ${l.text}${world(l)}`;
-    }
-  })();
-  return v.source === "chat" ? `Chatbot: ${said}` : said;
-}
-
-/** A line in Changes: the Manila time today, the date before that. */
-export function historyLine(v: PlanVersion, today: string): string {
-  return `${manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at)} · ${summaryOf(v)}`;
+/** A row in Changes: when, then the version's first line. A chatbot version says so. */
+export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null } {
+  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead: v.source === "chat" ? "Chatbot: " : "", line: firstOf(v.changes) };
 }
 
 /** Another phone's change, above the World tabs (ux.md §6). */
-export function justChanged(v: PlanVersion): string {
-  return `The plan just changed: ${summaryOf(v)}.`;
-}
-
-/** What changes, in a proposal: a bold word, the World, the text. The server's More is a plain line. */
-export function changeRows(lines: ChangeLine[]): { word: string | null; text: string }[] {
-  return lines.map((l) => (l.word === "More" ? { word: null, text: l.text } : { word: l.word, text: l.day === null ? l.text : `World ${l.day}, ${l.text}` }));
+export function justChanged(v: PlanVersion): Said {
+  return { lead: "The plan just changed: ", line: firstOf(v.changes), tail: "." };
 }
 
 /** Undo's honest name: right after an undo, the next tap puts the change back. */
@@ -152,7 +98,8 @@ export function undoConfirm(edits: PlanEdits | null | undefined, mine: ReadonlyM
   if (!v) return null;
   const at = mine.get(v.seq);
   if (at !== undefined && now - at <= MINE_FOR_MS) return null;
-  return `Undo the last change? "${summaryOf(v)}", at ${clock(v.created_at)}, maybe from another phone.`;
+  const first = firstOf(v.changes);
+  return `Undo the last change? ${first ? linePlain(first) : "The newest change"}. It was saved at ${clock(v.created_at)}, maybe from another phone.`;
 }
 
 /** Under the guide's summary once the trip has its own copy (ux.md §2). */
