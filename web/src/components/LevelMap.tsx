@@ -13,7 +13,7 @@ import {
 } from "@/lib/levelMap";
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
-import { busNotice, busWarningLine } from "@/lib/planLines";
+import { busChangedLine, busNotice, busWarningLine } from "@/lib/planLines";
 import { type TripFile, fetchFile } from "@/lib/trip";
 import { fnv1a, usableWidth } from "@/lib/world";
 import BusSwap, { type BusAt, swapTitle } from "./BusSwap";
@@ -409,6 +409,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
           </PixelButton>
         </div>
         <p className="text-lg font-bold">{r.plan}</p>
+        {r.bus && change && busChangedLine(change.editor.edits, r.plan) && <p className={PX.meta}>{busChangedLine(change.editor.edits, r.plan)}</p>}
         {r.note && <p className="text-sm">{r.note}</p>}
         {r.place?.name && r.place.kind === "trip_place" ? (
           // TG-61: a place the group pinned from a link; never "verified" (ux.md §5)

@@ -87,7 +87,6 @@ test("T61-L8 far, removal and bus lines", () => {
   assert.equal(farLine(243), "This is about 240 km from Baguio. Add it anyway?");
   assert.equal(farLine(26.4), "This is about 26 km from Baguio. Add it anyway?");
   assert.equal(removeConfirm("Burnham Park walk", 1, true, 2), "Remove Burnham Park walk from World 1? Its tick and 2 photos are hidden, not deleted. Undo brings them back.");
-  assert.equal(removeConfirm("Museum", 3, false, 1), "Remove Museum from World 3? Its photo is hidden, not deleted. Undo brings it back.");
   assert.equal(removeConfirm("Museum", 3, true, 0), "Remove Museum from World 3? Its tick is hidden, not deleted. Undo brings it back.");
   assert.equal(removeConfirm("Museum", 3, false, 0), "Remove Museum from World 3? Undo brings it back.");
   assert.equal(busWarningLine("retired", "2026-11-06"), "This bus isn't on the schedule any more.");
@@ -159,4 +158,47 @@ test("T61-L12 where a link's pin came from (round 5): the link, the address (che
   assert.deepEqual(pinLine({ pin_source: "typed", lat: 16.4, lng: 120.6, km_from_baguio: 2 }), { lead: "Pin you pasted, about 2 km from Baguio.", link: null, href: null, rest: "" });
   assert.deepEqual(pinLine({ pin_source: "link", lat: 16.4, lng: 120.6, km_from_baguio: 3 }), { lead: "Pinned from your link, about 3 km from Baguio.", link: null, href: null, rest: "" });
   assert.equal(pinLine({ pin_source: null, lat: null, lng: null, km_from_baguio: null }), null, "a spot or trip place: nothing to say");
+});
+
+// ---------------------------------------------------------------- tg-build7's e2e findings on a38d093 (W-1 to W-9)
+
+test("T61-L13 (e2e W-5) the remove confirm counts a single photo: 'tick and 1 photo'", () => {
+  assert.equal(removeConfirm("Museum", 3, true, 1), "Remove Museum from World 3? Its tick and 1 photo are hidden, not deleted. Undo brings them back.");
+  assert.equal(removeConfirm("Museum", 3, false, 1), "Remove Museum from World 3? Its 1 photo is hidden, not deleted. Undo brings it back.");
+  assert.equal(removeConfirm("Museum", 3, true, 2), "Remove Museum from World 3? Its tick and 2 photos are hidden, not deleted. Undo brings them back.");
+});
+
+test("T61-L14 (e2e W-6) a redo is saved as an undo too: an odd run of undos reads Redo, an even run reads Undo", () => {
+  const e = (...sources: PlanVersion["source"][]) => ({ seq: 9, versions: sources.map((source, i) => v(9 - i, source, [L("New", "x")])) });
+  assert.equal(undoLabel(e("undo", "hand")), "Redo", "after an undo");
+  assert.equal(undoLabel(e("undo", "undo", "hand")), "Undo", "after a redo: the next tap undoes the change again");
+  assert.equal(undoLabel(e("undo", "undo", "undo", "hand")), "Redo");
+  assert.equal(undoLabel(e("hand", "undo", "hand")), "Undo");
+});
+
+test("T61-L15 (e2e W-1) another phone's version is announced, the first copy included, but not the plan the page opens with", async () => {
+  const { newerPlan } = await import("./planLines.ts");
+  assert.equal(newerPlan(undefined, { slug: "c", seq: 3 }), false, "the first plan on screen is no news");
+  assert.equal(newerPlan({ slug: "shared", seq: null }, { slug: "c", seq: 1 }), true, "the first copy, from another phone");
+  assert.equal(newerPlan({ slug: "c", seq: 3 }, { slug: "c", seq: 4 }), true);
+  assert.equal(newerPlan({ slug: "c", seq: 4 }, { slug: "c", seq: 4 }), false);
+  assert.equal(newerPlan({ slug: "c", seq: 4 }, { slug: "shared", seq: null }), false, "a plan with no version is never news");
+});
+
+test("T61-L16 (e2e W-8) the swap names the towns, as ux §7 does: Cubao, not Victory Liner Cubao", async () => {
+  const { town } = await import("./planLines.ts");
+  assert.equal(town("Victory Liner Cubao", "Victory Liner"), "Cubao");
+  assert.equal(town("Victory Liner Baguio", "Victory Liner"), "Baguio");
+  assert.equal(town("Genesis Pasay", "Genesis/Joy Bus"), "Genesis Pasay", "no prefix to drop: the name as it is");
+});
+
+test("T61-L17 (e2e W-9) after a swap the booked bus row says to check its note, until that row changes again", async () => {
+  const { busChangedLine } = await import("./planLines.ts");
+  const at = (seq: number, changes: ChangeLine[], created_at: string) => v(seq, "hand", changes, created_at);
+  const swap = at(4, [{ word: "Bus", day: null, text: "Home: Victory Liner 11:00 AM" }], "2026-11-05T07:12:00Z");
+  assert.equal(busChangedLine({ seq: 4, versions: [swap] }, "Bus leaves"), "The bus changed on Nov 5. Check this note.");
+  const edited = at(5, [{ word: "Changed", day: 1, text: "Bus leaves" }], "2026-11-05T08:00:00Z");
+  assert.equal(busChangedLine({ seq: 5, versions: [edited, swap] }, "Bus leaves"), null, "the row was changed after the swap");
+  assert.equal(busChangedLine({ seq: 5, versions: [at(5, [L("New", "Cafe")], "2026-11-05T08:00:00Z"), swap] }, "Bus leaves"), "The bus changed on Nov 5. Check this note.", "another row's change doesn't count");
+  assert.equal(busChangedLine(null, "Bus leaves"), null);
 });

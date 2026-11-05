@@ -89,7 +89,11 @@ export function justChanged(v: PlanVersion): Said {
 
 /** Undo's honest name: right after an undo, the next tap puts the change back. */
 export function undoLabel(edits: PlanEdits | null | undefined): "Undo" | "Redo" {
-  return edits?.versions[0]?.source === "undo" ? "Redo" : "Undo";
+  // e2e W-6: a redo is saved as an undo too, so count the run: an odd run of undos reads Redo, an even one Undo
+  const versions = edits?.versions ?? [];
+  let run = 0;
+  while (run < versions.length && versions[run].source === "undo") run++;
+  return run % 2 === 1 ? "Redo" : "Undo";
 }
 
 /** The confirm before undoing a change that may be another phone's, or this phone's from a while ago. Null: no confirm. */
@@ -134,7 +138,7 @@ export function farLine(km: number): string {
 
 /** The confirm before a stop is removed (ux.md §4.7): its tick and photos are hidden, not deleted. */
 export function removeConfirm(plan: string, world: number, ticked: boolean, photos: number): string {
-  const parts = [ticked ? "tick" : "", photos === 1 ? "photo" : photos > 1 ? `${photos} photos` : ""].filter(Boolean);
+  const parts = [ticked ? "tick" : "", photos === 1 ? "1 photo" : photos > 1 ? `${photos} photos` : ""].filter(Boolean); // e2e W-5: always counted
   const ask = `Remove ${plan} from World ${world}?`;
   if (!parts.length) return `${ask} Undo brings it back.`;
   const many = parts.length > 1 || photos > 1;
@@ -229,4 +233,28 @@ export function pinLine(s: { pin_source?: "link" | "address" | "typed" | null; l
     return { lead: "Pin from the address, ", link: "check it on Google Maps", href: `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`, rest: "" };
   }
   return { lead: s.pin_source === "typed" ? `Pin you pasted${km}.` : `Pinned from your link${km}.`, link: null, href: null, rest: "" };
+}
+
+// ---------------------------------------------------------------- tg-build7's e2e findings (W-1, W-8, W-9)
+
+/** e2e W-1: a plan on screen that's newer than the last one, so another phone's change is said. The first plan the page
+ * opens with is no news; the first copy after a shared plan (a null seq) is. */
+export function newerPlan(before: { slug: string; seq: number | null } | undefined, now: { slug: string; seq: number | null }): boolean {
+  if (!before || now.seq === null) return false;
+  return before.slug !== now.slug ? before.seq === null || now.seq > before.seq : now.seq > (before.seq ?? -1);
+}
+
+/** e2e W-8: a terminal's town, as ux §7 names it ("Cubao"): the name without its operator's, when it starts with it. */
+export function town(terminal: string, operator: string): string {
+  return terminal.startsWith(`${operator} `) ? terminal.slice(operator.length + 1) : terminal;
+}
+
+/** e2e W-9 (ux §7): after a swap, the booked bus row's note may name the old bus. Said until a later version changes that
+ * row (a line with its plan text). Read from the last five versions, so it ends once the swap scrolls out of them. */
+export function busChangedLine(edits: PlanEdits | null | undefined, rowPlan: string): string | null {
+  const versions = edits?.versions ?? [];
+  const swap = versions.findIndex((v) => v.changes.some((l) => l.word === "Bus"));
+  if (swap < 0) return null;
+  if (versions.slice(0, swap).some((v) => v.changes.some((l) => l.word !== "More" && l.text === rowPlan))) return null;
+  return `The bus changed on ${dayOf(versions[swap].created_at)}. Check this note.`;
 }

@@ -7,7 +7,7 @@ import { PX, PixelButton } from "@/components/pixel";
 import { type Trip, formatClass, formatTime, searchTrips } from "@/lib/api";
 import type { BusRow, Guide } from "@/lib/guide";
 import { swapBus } from "@/lib/planEdit";
-import { type ChangeLine, busWarningLine } from "@/lib/planLines";
+import { type ChangeLine, busWarningLine, town } from "@/lib/planLines";
 import { datesLine } from "@/lib/trip";
 import { ChangeList, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
@@ -60,8 +60,9 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
 
   if (!bus) return null;
   const old = bus.trip;
-  const from = old?.origin_name ?? (up ? "Metro Manila" : "Baguio");
-  const to = old?.destination_name ?? (up ? "Baguio" : "Metro Manila");
+  // e2e W-8: the towns, as ux §7 names them ("from Cubao to Baguio"), not the terminals
+  const from = old ? town(old.origin_name, old.operator_name) : up ? "Metro Manila" : "Baguio";
+  const to = old ? town(old.destination_name, old.operator_name) : up ? "Baguio" : "Metro Manila";
   const day = datesLine(date, date);
   const others = (list ?? []).filter((t) => t.trip_id !== bus.trip_id);
   const off = !editor.can || applying;

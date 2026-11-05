@@ -36,7 +36,9 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
 }) {
   const [text, setText] = useState(startText ?? "");
   const [searched, setSearched] = useState<string | null>(null);
-  const [found, setFound] = useState<Found[]>([]);
+  // e2e W-2: worked out on every render, so a search made before /spots arrives fills in when it does
+  const found: Found[] = searched === null ? [] : findPlaces(searched, editor.spots ?? [], editor.places);
+  const spotsLoading = editor.spots === null;
   const [finding, setFinding] = useState(false);
   const [problem, setProblem] = useState("");
   const [pinned, setPinned] = useState<{ link: string; pin: string | null; suggestion: Suggestion } | null>(null);
@@ -63,7 +65,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
     if (!typed) return setProblem("Paste a Google Maps link, or type a place or store name.");
     if (!isLink(typed)) {
       setSearched(typed);
-      setFound(findPlaces(typed, editor.spots ?? [], editor.places));
+      if (spotsLoading) editor.wantSpots(); // a failed fetch tries again
       console.info("[tg-trip] plan find kind=name spots=%s", editor.spots ? "yes" : "no");
       return;
     }
@@ -165,6 +167,8 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
               </PixelChoice>
             ))}
           </fieldset>
+        ) : spotsLoading ? (
+          <p role="status" className="text-sm">Finding places on Tara Gala...</p>
         ) : (
           <p className="text-sm">No place called &ldquo;{searched}&rdquo; on Tara Gala yet. Paste its Google Maps link to pin it, or add it as a note with no pin.</p>
         )

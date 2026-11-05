@@ -6,7 +6,7 @@ import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx }
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
 import { flags } from "@/lib/flags";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
-import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, undoConfirm, undoLabel } from "@/lib/planLines";
+import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
 import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "@/lib/planState";
 import {
   type Answer, type Hotel, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
@@ -92,6 +92,14 @@ export default function TripView({ slug }: { slug: string }) {
         keepFilesOffline(r.trip, keptFiles.current);
       }
       setLoad((prev) => afterGet(prev, r, slug, overtaken));
+      // e2e W-4: after a save whose answer was lost, only a live answer that left after it says what the server has
+      const lost = lostRef.current;
+      if (lost && left >= lost.at) {
+        const fresh = r.ok && !r.savedAt;
+        console.info("[tg-trip] plan lost answer recovered=%s", fresh ? "yes" : "no");
+        lostRef.current = fresh ? null : { ...lost, failed: true };
+        setLost(lostRef.current);
+      }
     });
     return () => {
       live = false;
@@ -164,6 +172,16 @@ export default function TripView({ slug }: { slug: string }) {
   const [planSaid, setPlanSaid] = useState<Said | string>("");
   const [otherLine, setOtherLine] = useState<Said | string>("");
   const clashWait = useRef<"edit" | "undo" | null>(null);
+  // e2e W-4 (ux §3.3): a save whose answer was lost may have landed. Editing waits until a live session answer says
+  const [lost, setLost] = useState<{ at: number; failed: boolean } | null>(null);
+  const lostRef = useRef<{ at: number; failed: boolean } | null>(null);
+  const [changesOpen, setChangesOpen] = useState(false);
+  // A 409 names the newer plan: editing waits until it's on screen, not only until the session's refetch says so
+  const [clashAt, setClashAt] = useState<PlanBase | null>(null);
+  const clashAtRef = useRef<PlanBase | null>(null);
+  // Only while the trip is still on that plan: if it moved to another one, there's nothing to wait for
+  const behind = (s: Shown | null, at: PlanBase | null, tripPlan: string | null | undefined) =>
+    !!at && tripPlan === at.itinerary_slug && !(s?.slug === at.itinerary_slug && (s.seq ?? 0) >= at.seq);
   const mine = useRef(new Map<number, number>()); // this phone's own versions, and when: Undo asks first otherwise
   const [spots, setSpots] = useState<SpotLite[] | null>(null);
   const spotsAsked = useRef(false);
@@ -178,24 +196,29 @@ export default function TripView({ slug }: { slug: string }) {
   }, []);
 
   // A newer plan landed: after a clash, say what changed; from another phone, say so above the tabs (ux.md §6)
-  const lastSeq = useRef<number | null>(null);
+  const lastPlan = useRef<{ slug: string; seq: number | null } | undefined>(undefined); // the last plan on screen in step
   const trip0 = load.state === "ready" ? load.trip : null;
   const synced = !!trip0 && inStep(shown, trip0);
   useEffect(() => {
-    const seq = shown?.seq ?? null;
-    const before = lastSeq.current;
-    lastSeq.current = seq;
-    if (!synced || seq === null) return;
-    const v = trip0?.plan_edits?.versions.find((x) => x.seq === seq);
-    if (clashWait.current) {
+    if (!shown || !synced) return;
+    const now = { slug: shown.slug, seq: shown.seq };
+    const before = lastPlan.current;
+    lastPlan.current = now;
+    const seq = now.seq;
+    const v = seq === null ? undefined : trip0?.plan_edits?.versions.find((x) => x.seq === seq);
+    if (clashWait.current && seq !== null) {
       console.info("[tg-trip] plan caught up after clash seq=%d", seq);
-      setPlanSaid(clashWait.current === "undo" ? "Someone just changed the plan, so there's a newer change to undo." : v ? justChanged(v) : "");
+      if (clashWait.current === "undo") {
+        setPlanSaid("Someone just changed the plan, so there's a newer change to undo.");
+        setChangesOpen(true); // e2e W-3: with Changes opened (ux §6)
+      } else setPlanSaid(v ? justChanged(v) : "");
       clashWait.current = null;
-    } else if (before !== null && seq > before && v && !mine.current.has(seq)) {
+    } else if (seq !== null && newerPlan(before, now) && v && !mine.current.has(seq)) {
+      // e2e W-1: the first copy from another phone counts too
       console.info("[tg-trip] plan other phone seq=%d", seq);
       setOtherLine(justChanged(v));
     }
-  }, [shown?.seq, synced, trip0]);
+  }, [shown, synced, trip0]);
 
   // TG-57: a first open's GETs go past the service worker: ask again once it's here, so the next open has its copies.
   // Only the worker needs these answers, so the GET the screen is waiting on carries on
@@ -250,7 +273,7 @@ export default function TripView({ slug }: { slug: string }) {
   async function planWrite(action: string, run: (base: PlanBase, stored: GuideIn) => Promise<Answer<PlanSaved>> | null, done: Done, anchor: string | null, source: PlanVersion["source"]): Promise<SaveOutcome> {
     const s = shownRef.current;
     const t = tripRef.current;
-    if (writingPlan.current || !s?.guide || !t || !canEdit(s, t, navigator.onLine, false)) {
+    if (writingPlan.current || !s?.guide || !t || !canEdit(s, t, navigator.onLine, !!lostRef.current || behind(s, clashAtRef.current, t?.itinerary_slug))) {
       console.info("[tg-trip] plan %s ignored", action);
       return IGNORED;
     }
@@ -269,9 +292,19 @@ export default function TripView({ slug }: { slug: string }) {
     console.info("[tg-trip] plan %s ok=%s base_seq=%d seq=%s", action, planOutcome(r), base.seq, r.ok ? (r.body.itinerary.seq ?? "none") : "-");
     if (!r.ok) {
       const message = planFailureMessage(r);
-      if (r.why === "clash") clashWait.current = source === "undo" ? "undo" : "edit";
+      if (r.why === "clash") {
+        clashWait.current = source === "undo" ? "undo" : "edit";
+        clashAtRef.current = r.clash ?? null;
+        setClashAt(clashAtRef.current);
+      }
       if (r.why === "clash" || r.why === "offline" || r.why === "server") setReloads((n) => n + 1); // the newer plan, or an answer that may have been lost
-      setPlanSaid(r.why === "clash" ? "Updating the map..." : r.why === "offline" ? "Editing needs signal. Your last change wasn't saved." : message);
+      // e2e W-4: online, a request that got no answer may have landed: wait for the server's word (ux §3.3)
+      const lostAnswer = r.why === "offline" && navigator.onLine;
+      if (lostAnswer) {
+        lostRef.current = { at: Date.now(), failed: false };
+        setLost(lostRef.current);
+      }
+      setPlanSaid(r.why === "clash" || lostAnswer ? "Updating the map..." : r.why === "offline" ? "Editing needs signal. Your last change wasn't saved." : message);
       return { ok: false, message, clash: r.why === "clash" };
     }
     const saved = r.body;
@@ -310,13 +343,16 @@ export default function TripView({ slug }: { slug: string }) {
   const onFail = (text: string) => setNotice({ text, error: true });
   const slot = mapSlot(trip.itinerary_slug, shown ? { plan: shown.slug, guide: shown.guide } : planMiss ? { plan: planMiss, guide: null } : null);
   const theGuide = slot === "frame" ? null : slot;
-  const stale = !!shown && !synced && planMiss === trip.itinerary_slug; // review M2: the newer plan didn't come, or came back older
+  // review M2: the newer plan didn't come, or came back older; e2e W-4: or the answer to a save was lost and still is
+  const stale = (!!shown && !synced && planMiss === trip.itinerary_slug) || !!lost?.failed;
+  const waiting = !!lost || behind(shown, clashAt, trip.itinerary_slug);
+  const editable = canEdit(shown, trip, online, planWriting || waiting);
   const barStatus = !online
     ? typeof planSaid === "string" && planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
-    : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : !synced && !planWriting && shown ? "Updating the map..." : planSaid;
+    : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : (!synced && !planWriting && shown) || waiting ? "Updating the map..." : planSaid;
   const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {
     editing,
-    can: canEdit(shown, trip, online, planWriting),
+    can: editable,
     online,
     writing: planWriting,
     status: barStatus,
@@ -368,7 +404,7 @@ export default function TripView({ slug }: { slug: string }) {
     top: (addPlace) => (
       <>
         {editing && (
-          <PlanEditBar edits={trip.plan_edits ?? null} status={barStatus} can={canEdit(shown, trip, online, planWriting)} online={online} stale={stale} today={manilaToday()}
+          <PlanEditBar edits={trip.plan_edits ?? null} status={barStatus} can={editable} changesOpen={changesOpen} onChanges={() => setChangesOpen((o) => !o)} online={online} stale={stale} today={manilaToday()}
             onAddPlace={addPlace} onUndo={() => void onUndo()} onReload={() => setReloads((n) => n + 1)}
             onDone={() => {
               console.info("[tg-trip] plan edit mode off");

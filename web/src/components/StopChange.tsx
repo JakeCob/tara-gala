@@ -9,7 +9,7 @@ import { formatTime } from "@/lib/api";
 import { type Guide, type GuideRow, type Mark, marksByKey, rowMark, rowShows } from "@/lib/guide";
 import type { Level } from "@/lib/levelMap";
 import { type At, type PlaceIn, type RowIn, type Suggestion, noteSuggestion, nudgeRow, removeRow, setRow, toStored } from "@/lib/planEdit";
-import { levelLabel, removeConfirm } from "@/lib/planLines";
+import { busChangedLine, levelLabel, removeConfirm } from "@/lib/planLines";
 import { type SuggestIn, type TripFile, planFailureMessage } from "@/lib/trip";
 import BusSwap, { type BusAt, busAt, swapTitle } from "./BusSwap";
 import FitPlace, { type FitState, type Slot } from "./FitPlace";
@@ -254,6 +254,8 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
       {step.k === "menu" && row && (
         <>
           <p className="text-lg font-bold break-words">{row.plan}</p>
+          {/* e2e W-9: in edit mode too, the swapped bus's row says to check its note (ux §7) */}
+          {row.bus && busChangedLine(editor.edits, row.plan) && <p className={PX.meta}>{busChangedLine(editor.edits, row.plan)}</p>}
           {row.note && <p className="text-sm break-words">{row.note}</p>}
           {row.place?.name && <p className="text-sm font-semibold break-words">{row.place.name}</p>}
           {(row.show_if || row.hide_if) && (

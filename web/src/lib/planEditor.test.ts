@@ -21,8 +21,10 @@ test("T61-W11b every edit control checks for signal: Edit the plan, Change this 
   assert.match(v, /const online = useSyncExternalStore\(subscribeOnline, \(\) => navigator\.onLine, \(\) => true\);/);
   assert.match(v, /aria-disabled=\{!online \|\| undefined\}/, "Edit the plan");
   assert.match(v, /Editing needs signal\. You can still tick stops\./);
-  assert.match(v, /can: canEdit\(shown, trip, online, planWriting\)/);
-  assert.match(v, /!canEdit\(s, t, navigator\.onLine, false\)/, "and again when the save goes");
+  assert.match(v, /const waiting = !!lost \|\| behind\(shown, clashAt, trip\.itinerary_slug\);/, "a lost answer, or a 409's newer plan not on screen yet");
+  assert.match(v, /const editable = canEdit\(shown, trip, online, planWriting \|\| waiting\);/);
+  assert.match(v, /can: editable,/);
+  assert.match(v, /!canEdit\(s, t, navigator\.onLine, !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)/, "and again when the save goes");
   assert.match(read("src/components/LevelMap.tsx"), /\{change && change\.editor\.online && \(/, "Change this stop is left out offline (ux.md §4.1)");
 });
 
@@ -36,7 +38,7 @@ test("T61-W11c the trip page fetches the plan again when another phone's version
 test("T61-W11d a tap while a plan write is out is ignored, not queued; ticks wait only for that write", () => {
   const v = view();
   const write = v.slice(v.indexOf("async function planWrite("), v.indexOf("async function onUndo("));
-  assert.match(write, /if \(writingPlan\.current \|\| !s\?\.guide \|\| !t \|\| !canEdit\(s, t, navigator\.onLine, false\)\) \{\s+console\.info\("\[tg-trip\] plan %s ignored", action\);\s+return IGNORED;/);
+  assert.match(write, /if \(writingPlan\.current \|\| !s\?\.guide \|\| !t \|\| !canEdit\(s, t, navigator\.onLine, !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)\) \{\s+console\.info\("\[tg-trip\] plan %s ignored", action\);\s+return IGNORED;/);
   assert.ok(write.indexOf("writingPlan.current = true;") < write.indexOf("const r = await req;"));
   assert.match(v, /busy=\{busy \|\| planWriting\}/, "ticks, Mark done! and the to-do boxes wait while a plan write is out");
   for (const file of ["src/components/StopChange.tsx", "src/components/PlaceInput.tsx", "src/components/BusSwap.tsx", "src/components/PlanTextEditors.tsx"]) {
@@ -130,4 +132,17 @@ test("T61-W11k round 5: need_pin is the next step, not an error; the pin goes up
   assert.doesNotMatch(place + read("src/lib/trip.ts"), /link_no_pin/, "retired in round 5");
   for (const file of ["src/components/StopChange.tsx", "src/components/FitPlace.tsx"]) assert.match(read(file), /linkPlace\(chosen\)/, `${file}: a recheck keeps the pin`);
   assert.match(view(), /addPlace: \(link, name, pin\) => tripApi\.addPlace\(slug, pin \? \{ link, name, pin \} : \{ link, name \}\)/);
+});
+
+test("T61-W11l tg-build7's e2e findings: W-2 the search waits for the spots, W-3 Changes opens, W-4 a lost answer is recovered", () => {
+  const place = read("src/components/PlaceInput.tsx");
+  assert.match(place, /const found: Found\[\] = searched === null \? \[\] : findPlaces\(searched, editor\.spots \?\? \[\], editor\.places\);/, "W-2: worked out on every render");
+  assert.match(place, /spotsLoading \? \(\s+<p role="status" className="text-sm">Finding places on Tara Gala\.\.\.<\/p>/, "W-2: never 'No place called' while loading");
+  const v = view();
+  assert.match(v, /setChangesOpen\(true\); \/\/ e2e W-3/);
+  assert.match(v, /const lostAnswer = r\.why === "offline" && navigator\.onLine;/, "W-4: online, an unanswered save may have landed");
+  assert.match(v, /canEdit\(s, t, navigator\.onLine, !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)/, "W-4: editing waits for the server's word");
+  assert.match(v, /clashAtRef\.current = r\.clash \?\? null;/, "a 409 names the newer plan, and editing waits for it");
+  assert.match(v, /const stale = \(!!shown && !synced && planMiss === trip\.itinerary_slug\) \|\| !!lost\?\.failed;/);
+  assert.match(v, /newerPlan\(before, now\)/, "W-1: the first copy from another phone is news too");
 });
