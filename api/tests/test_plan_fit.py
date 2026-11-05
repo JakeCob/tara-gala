@@ -123,12 +123,10 @@ def test_bf3_the_tap_flows_ripple_walls_on_the_check_in_row_too():  # B53
 # ---------------------------------------------------------------- BF4: bedtime
 
 def test_bf4_the_last_row_of_a_day_at_the_lodging_is_never_an_anchor():  # B54
-    days = [day(1, row("d1-01", "09:00", at(0.05)), row("d1-02", "13:00", LODGE, lodging=True, plan="Rest"), bed("d1-03", "20:00"))]
-    got = {f.after for f in fits(days, at(0.0005))}
-    assert "d1-03" not in got
-    assert "d1-02" in got, "a lodging row mid-day is ordinary"
-    days = [day(1, row("d1-01", "09:00", at(0.05)), row("d1-02", "20:00", at(0.0005), plan="Night market"))]
-    assert "d1-02" in {f.after for f in fits(days, at(0.0005))}, "the last row is an anchor when it isn't at the lodging"
+    days = [day(1, row("d1-01", "13:00", LODGE, lodging=True, plan="Rest"), bed("d1-02", "20:00"))]
+    assert where(fits(days, at(0.0005))) == [(1, "d1-01")], "a lodging row mid-day is ordinary; bedtime isn't an anchor"
+    days = [day(1, row("d1-01", "20:00", at(0.0005), plan="Night market"))]
+    assert where(fits(days, at(0.0005))) == [(1, "d1-01")], "the last row is an anchor when it isn't at the lodging"
 
 
 # ---------------------------------------------------------------- BF5: the pick
