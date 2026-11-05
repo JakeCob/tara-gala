@@ -95,6 +95,9 @@ test("T61-P16 the states keep the composer: busy, cap, off, no signal, no fit, a
   const src = chat();
   assert.match(src, /chatFailureLines\(/);
   assert.match(src, /\{NO_FIT\}|NO_FIT/);
+  // the API's no_fit reply is the NO_FIT sentence itself: shown once, in the alert box, never as the reply plus the box
+  assert.match(src, /\{e\.noFit \? <ChatAlert lines=\{\[e\.text \|\| NO_FIT\]\} \/> : <p [^>]*>\{e\.text\}<\/p>\}/);
+  assert.equal(src.match(/tone="alertText"/g)?.length, 1, "one alert box for every chat state (palette W1 registers it)");
   assert.match(src, /APPLY_CLASH/);
   assert.match(src, />\s*Ask again\s*</);
   assert.match(src, /aria-disabled=\{!online \|\| sending \|\| undefined\}>\s*\{sending \? "Sending\.\.\." : "Send"\}/, "Send waits offline and while a message is out");

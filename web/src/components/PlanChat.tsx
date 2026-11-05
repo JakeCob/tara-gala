@@ -14,6 +14,15 @@ import { planFailureMessage } from "@/lib/trip";
 import { ChangeList, SaidText } from "./PlanBits";
 import type { ChatTools, PlanEditor } from "./PlanEditor";
 
+/** The chat's one alert box (ux.md §10: each state in an alertText box in the log): limits, no signal, no fit, a clash */
+function ChatAlert({ lines }: { lines: string[] }) {
+  return (
+    <PixelBox tone="alertText" className="flex flex-col gap-1 p-3 text-sm">
+      {lines.map((line, j) => <p key={j}>{line}</p>)}
+    </PixelBox>
+  );
+}
+
 export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   editor: PlanEditor;
   chat: ChatTools;
@@ -154,9 +163,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
                 <p key={i} className="pixel-frame self-end max-w-[85%] bg-card px-3 py-2 text-sm break-words whitespace-pre-line">{e.text}</p>
               ) : e.kind === "alert" ? (
                 <div key={i} className="flex flex-col gap-2">
-                  <PixelBox tone="alertText" className="flex flex-col gap-1 p-3 text-sm">
-                    {e.text.split("\n").map((t, j) => <p key={j}>{t}</p>)}
-                  </PixelBox>
+                  <ChatAlert lines={e.text.split("\n")} />
                   {e.again && i === log.length - 1 && lastAsked && (
                     <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!online || sending || undefined}
                       onClick={() => void send(lastAsked, true)}>
@@ -167,12 +174,8 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
               ) : (
                 <div key={i} className="flex flex-col gap-2 self-start">
                   <p className={PX.meta}>Chatbot</p>
-                  <p className="text-sm break-words whitespace-pre-line">{e.text}</p>
-                  {e.noFit && (
-                    <PixelBox tone="alertText" className="p-3 text-sm">
-                      <p>{NO_FIT}</p>
-                    </PixelBox>
-                  )}
+                  {/* no_fit's reply is the fixed NO_FIT sentence (the API's contract): said once, as the state it is */}
+                  {e.noFit ? <ChatAlert lines={[e.text || NO_FIT]} /> : <p className="text-sm break-words whitespace-pre-line">{e.text}</p>}
                   {e.needLink && (
                     <>
                       <p className="text-sm break-words">{needLinkLine(e.needLink.name)}</p>
@@ -211,11 +214,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
               ),
             )}
             {sending && <p className={PX.meta}>{THINKING}</p>}
-            {!online && (
-              <PixelBox tone="alertText" className="p-3 text-sm">
-                <p>{chatFailureLines({ why: "offline" })}</p>
-              </PixelBox>
-            )}
+            {!online && <ChatAlert lines={chatFailureLines({ why: "offline" }) ?? []} />}
           </div>
           {/* ux.md §3.3: the edit bar is under this dialog's backdrop, so a chat Apply's waiting lines show here */}
           <p role="status" aria-live="polite" className={cx(PX.meta, "empty:sr-only")}>{waiting ? <SaidText said={editor.status} /> : ""}</p>
