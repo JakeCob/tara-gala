@@ -13,16 +13,17 @@ Logs carry the trip slug, codes and counts, never a name, a link or a pin.
 
 import logging
 import math
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from . import db, maps_link, plan_suggest, sessions  # modules, not names: plan_suggest reads this one's limiter and places too
 from .limits import RateLimiter
-from .sessions import TripPlaceOut, _limit, _private, _session_id  # one TripPlaceOut, as SessionOut.places
+from .sessions import NOINDEX, TripPlaceOut, _limit, _private, _session_id  # one TripPlaceOut, as SessionOut.places
 
 router = APIRouter(tags=["trip-places"])
 logger = logging.getLogger("tara_gala.api")
@@ -38,11 +39,17 @@ Link = Annotated[str, StringConstraints(min_length=1, max_length=maps_link.MAX_T
 
 
 class PlaceIn(BaseModel):
-    """No lat or lng: the server reads the pin from the link itself."""
+    """No lat or lng: the server reads the pin from the link itself. When it can't (need_pin, owner round 5), the
+    group pastes the pin as text next to the link, and the server reads that."""
 
     model_config = ConfigDict(extra="forbid")
     link: Link
     name: PlaceName
+    pin: Annotated[str, StringConstraints(max_length=maps_link.MAX_PIN_TEXT)] | None = None  # "16.4138, 120.5964"
+
+
+class AddedPlaceOut(TripPlaceOut):
+    pin_source: Literal["link", "address", "typed"]  # "address": show "Pin from the address, check it on Google Maps"
 
 
 _COLUMNS = "id, name, lat, lng, maps_url, created_at"
@@ -102,15 +109,23 @@ def _insert(share_slug: str, name: str, got: maps_link.Resolved) -> tuple[TripPl
     return TripPlaceOut(**row), False, len(places) + 1
 
 
-@router.post("/sessions/{share_slug}/places", status_code=201, response_model=TripPlaceOut, dependencies=[Depends(_link_limited)])
-def add_place(share_slug: str, body: PlaceIn, request: Request, response: Response) -> TripPlaceOut:
-    """201 with the new place, or 200 with the trip's own match. The link is read before the trip is locked."""
+def need_pin(e: maps_link.LinkError) -> JSONResponse:
+    """need_pin's flat answer, with the link's own name for the Name field (owner round 5). Also used by suggest."""
+    return JSONResponse({"detail": "need_pin", "name": e.name}, status_code=422, headers={"Cache-Control": "private, no-cache", **NOINDEX})
+
+
+@router.post("/sessions/{share_slug}/places", status_code=201, response_model=AddedPlaceOut, dependencies=[Depends(_link_limited)])
+def add_place(share_slug: str, body: PlaceIn, request: Request, response: Response):
+    """201 with the new place, or 200 with the trip's own match. The link is read before the trip is locked. With a
+    pasted pin, nothing is fetched. 422 need_pin when neither the link nor its address gives a pin."""
     _limit(sessions.WRITE_LIMITER, request, "place-add")
     _exists(share_slug)  # 404 before anything is fetched
     try:
-        got = maps_link.resolve(body.link)
+        got = maps_link.typed(body.link, body.pin) if body.pin is not None else maps_link.resolve(body.link)
     except maps_link.LinkError as e:
         logger.info("trip place refused share_slug=%s code=%s", share_slug, e.code)
+        if e.code == "need_pin":
+            return need_pin(e)
         raise HTTPException(422, e.code) from None
     if not _bounded(body.name, got):
         logger.warning("trip place refused share_slug=%s code=bad_place", share_slug)
@@ -119,5 +134,5 @@ def add_place(share_slug: str, body: PlaceIn, request: Request, response: Respon
     _private(response)
     if existing:
         response.status_code = 200
-    logger.info("trip place add share_slug=%s places=%d existing=%s", share_slug, count, existing)
-    return place
+    logger.info("trip place add share_slug=%s places=%d existing=%s pin=%s", share_slug, count, existing, got.pin_source)
+    return AddedPlaceOut(**place.model_dump(), pin_source=got.pin_source)

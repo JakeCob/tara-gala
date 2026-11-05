@@ -21,7 +21,7 @@ from psycopg.types.json import Jsonb
 from app import db, maps_link, plan_suggest, sessions, trip_places
 from app.limits import RateLimiter
 from app.logging_setup import RequestLogMiddleware, configure_logging
-from test_maps_link import Net, page, redirect
+from test_maps_link import Net, redirect
 
 TRIP = {"name": "Made-up trip", "start_date": "2026-11-06", "return_date": "2026-11-08"}
 HOST = "https://maps.app.goo.gl"
@@ -33,6 +33,7 @@ def net(monkeypatch) -> Net:
     """Every link fetch goes here. Tests add answers to net.table."""
     n = Net()
     monkeypatch.setattr(maps_link, "make_client", n.client)
+    monkeypatch.setattr(maps_link.time, "sleep", lambda s: None)  # the geocoder's one-a-second wait, on the real clock
     maps_link.clear_cache()
     yield n
     maps_link.clear_cache()
@@ -93,8 +94,8 @@ def test_a_place_is_pinned_from_the_link_on_the_server(api, dsn, net):  # T1, B3
     r = add_place(api, slug, f"Kapihan sa Ulap\n{link}?g_st=ic", name="  Kapihan sa Ulap  ")
     assert r.status_code == 201, r.text
     p = r.json()
-    assert set(p) == {"id", "name", "lat", "lng", "maps_url", "created_at"}
-    assert (p["name"], p["lat"], p["lng"], p["maps_url"]) == ("Kapihan sa Ulap", 16.41234, 120.59321, link)
+    assert set(p) == {"id", "name", "lat", "lng", "maps_url", "created_at", "pin_source"}
+    assert (p["name"], p["lat"], p["lng"], p["maps_url"], p["pin_source"]) == ("Kapihan sa Ulap", 16.41234, 120.59321, link, "link")
     assert r.headers["cache-control"] == "private, no-cache"
     stored = sql(dsn, "select s.share_slug, p.name, p.lat, p.lng, p.maps_url from trip_places p join trip_sessions s on s.id = p.session_id")
     assert stored == [{"share_slug": slug, "name": "Kapihan sa Ulap", "lat": 16.41234, "lng": 120.59321, "maps_url": link}]
@@ -147,13 +148,13 @@ def test_link_problems_are_codes_and_store_nothing(api, dsn, net):  # T5, B28, B
     slug = new_trip(api)
     assert add_place(api, slug, "https://evil.io/maps/place/x").json()["detail"] == "link_not_maps"
     net.table[f"{HOST}/E1"] = redirect("https://www.google.com/maps/place/Kapihan/")
-    net.table["https://www.google.com/maps/place/Kapihan/"] = page("<html></html>")
-    assert add_place(api, slug, f"{HOST}/E1").json()["detail"] == "link_no_pin"
+    r = add_place(api, slug, f"{HOST}/E1")
+    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": "Kapihan"}), "geocoded, and nothing found"
     net.table[f"{HOST}/E2"] = redirect("https://evil.io/x")
     r = add_place(api, slug, f"{HOST}/E2")
     assert (r.status_code, r.json()["detail"]) == (422, "link_unreadable")
     assert sql(dsn, "select * from trip_places") == []
-    assert [httpx.URL(u).host for u in net.asked] == ["maps.app.goo.gl", "www.google.com", "maps.app.goo.gl"]
+    assert [httpx.URL(u).host for u in net.asked] == ["maps.app.goo.gl", "nominatim.openstreetmap.org", "maps.app.goo.gl"]
 
 
 def test_an_unknown_trip_is_404_before_any_fetch(api, net):  # T10
@@ -285,7 +286,7 @@ def suggest(api, slug, at, place, base=("made-up-plan", 0)):
     return api.post(f"/sessions/{slug}/plan/suggest", json={"base": {"itinerary_slug": base[0], "seq": base[1]}, "at": at, "place": place})
 
 
-SUGGESTION_KEYS = {"name", "lat", "lng", "maps_url", "km_from_baguio", "far", "time", "leg", "ripple", "notes", "changes"}
+SUGGESTION_KEYS = {"name", "lat", "lng", "maps_url", "km_from_baguio", "far", "time", "leg", "ripple", "notes", "changes", "pin_source"}
 
 
 def test_after_a_stop_with_a_route_on_file(api, planned):  # S11, S4, B21
@@ -475,3 +476,78 @@ def test_apply_after_suggest_reads_the_link_once(api, planned, net):  # T8
     p = add_place(api, slug, link, name=s["name"]).json()
     assert (p["lat"], p["lng"], p["maps_url"]) == (s["lat"], s["lng"], s["maps_url"])
     assert net.asked == [link], "the Apply's POST /places reads the cache"
+
+
+# ---------------------------------------------------------------- N: owner round 5, links with no pin
+
+ADDRESS = "Unit 2, Made-up Bakery, Made-up St, Baguio, 2600 Benguet"
+
+
+def no_pin_link(net: Net, code: str, found: list | None = None) -> str:
+    """A synthetic short link to an address with no pin; the stand-in Nominatim finds `found` for the whole address."""
+    url = f"{HOST}/{code}"
+    net.table[url] = redirect("https://www.google.com/maps/place/" + ADDRESS.replace(" ", "+") + "/data=!4m2!3m1!1s0x0:0x1")
+    if found is not None:
+        net.geo[ADDRESS] = found
+    return url
+
+
+def test_a_place_from_an_address(api, dsn, net):  # N14
+    slug = new_trip(api)
+    r = add_place(api, slug, no_pin_link(net, "U1", [{"lat": "16.4101", "lon": "120.5999"}]), name="Made-up Bakery")
+    assert r.status_code == 201, r.text
+    assert (r.json()["lat"], r.json()["lng"], r.json()["pin_source"]) == (16.4101, 120.5999, "address")
+    assert sql(dsn, "select lat, lng from trip_places") == [{"lat": 16.4101, "lng": 120.5999}]
+
+
+def test_need_pin_then_a_typed_pin(api, dsn, net):  # N15
+    slug = new_trip(api)
+    link = no_pin_link(net, "U2")
+    r = add_place(api, slug, link, name="Made-up Bakery")
+    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": ADDRESS[:80]})
+    net.asked.clear()
+    r = add_place(api, slug, link, name="Made-up Bakery", pin="16.4138, 120.5964")
+    assert r.status_code == 201, r.text
+    assert (r.json()["lat"], r.json()["lng"], r.json()["pin_source"], r.json()["maps_url"]) == (16.4138, 120.5964, "typed", link)
+    assert net.asked == [], "a typed pin costs no request"
+    for bad in ("16.4", "0, 0", "91, 120"):
+        r = add_place(api, slug, link, name="Made-up Bakery", pin=bad)
+        assert (r.status_code, r.json()["detail"]) == (422, "bad_pin"), bad
+    assert add_place(api, slug, link, name="Made-up Bakery", pin="1" * 61).status_code == 422, "at most 60 characters"
+    assert api.post(f"/sessions/{slug}/places", json={"name": "Made-up Bakery", "pin": "16.4138, 120.5964"}).status_code == 422, \
+        "a pin goes with its link"
+    assert len(sql(dsn, "select id from trip_places")) == 1
+
+
+def test_suggest_says_where_the_pin_came_from(api, planned, net):  # N16
+    slug, _ = planned
+    s = suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)}).json()
+    assert s["pin_source"] is None, "a spot's pin is ours"
+    s = suggest(api, slug, {"after": "d2-01"}, {"link": link_for(net, "V1", 16.4100, 120.5960)}).json()
+    assert s["pin_source"] == "link"
+    link = no_pin_link(net, "V2", [{"lat": "16.4101", "lon": "120.5999"}])
+    s = suggest(api, slug, {"after": "d2-01"}, {"link": link}).json()
+    assert (s["pin_source"], s["lat"], s["name"]) == ("address", 16.4101, ADDRESS)
+    net.geo.clear()
+    maps_link.clear_cache()
+    r = suggest(api, slug, {"after": "d2-01"}, {"link": link})
+    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": ADDRESS})
+    net.asked.clear()
+    r = suggest(api, slug, {"after": "d2-01"}, {"link": link, "pin": "16.4138, 120.5964"})
+    assert (r.status_code, r.json()["pin_source"], r.json()["lat"], r.json()["maps_url"]) == (200, "typed", 16.4138, link)
+    assert net.asked == []
+    assert suggest(api, slug, {"after": "d2-01"}, {"link": link, "pin": "nope"}).json()["detail"] == "bad_pin"
+    assert suggest(api, slug, {"after": "d2-01"}, {"spot_id": str(PARK_ID), "pin": "16.4, 120.5"}).status_code == 422
+
+
+def test_no_pin_logs_carry_no_address_or_pin(api, planned, net, caplog):  # N17
+    caplog.set_level(logging.INFO)
+    slug, _ = planned
+    add_place(api, slug, no_pin_link(net, "W1"), name="Made-up Bakery")
+    add_place(api, slug, no_pin_link(net, "W1"), name="Made-up Bakery", pin="16.4138, 120.5964")
+    add_place(api, slug, no_pin_link(net, "W1"), name="Made-up Bakery", pin="nope")
+    assert f"trip place refused share_slug={slug} code=need_pin" in caplog.text
+    assert f"trip place refused share_slug={slug} code=bad_pin" in caplog.text
+    assert f"trip place add share_slug={slug} places=1 existing=False pin=typed" in caplog.text
+    for leak in ("Made-up", "Bakery", "Unit 2", "Benguet", "16.41", "120.59", "W1", "goo.gl", "nominatim"):
+        assert leak not in caplog.text, leak
