@@ -1,0 +1,9 @@
+{
+  "_note": "SYNTHETIC, made up for TG-61 before the owner's six real links arrive (plan.md §4 task 0). A dropped pin with no Google listing, so no name.",
+  "link": "https://maps.app.goo.gl/Er4SyntheticC3",
+  "hops": [
+    {"url": "https://maps.app.goo.gl/Er4SyntheticC3", "status": 302, "location": "https://www.google.com/maps/search/16.40555,+120.60111?entry=tts"}
+  ],
+  "expect": {"outcome": "ok", "lat": 16.40555, "lng": 120.60111, "name": null, "pin": "path",
+             "maps_url": "https://maps.app.goo.gl/Er4SyntheticC3"}
+}

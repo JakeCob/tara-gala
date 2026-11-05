@@ -1,0 +1,13 @@
+{
+  "_note": "SYNTHETIC, made up for TG-61 before the owner's six real links arrive (plan.md §4 task 0). Not a real place, link or chain.",
+  "link": "https://maps.app.goo.gl/Qw2SyntheticB2",
+  "hops": [
+    {"url": "https://maps.app.goo.gl/Qw2SyntheticB2", "status": 301, "location": "http://maps.google.com/maps?q=Panaderia+Synthetica+(made+up)&ftid=0x0:0x1"},
+    {"url": "https://maps.google.com/maps?q=Panaderia+Synthetica+(made+up)&ftid=0x0:0x1", "status": 302,
+     "location": "https://www.google.com/maps/place/Panaderia+Synthetica+(made+up)/data=!4m2!3m1!1s0x0:0x1?shorturl=1"},
+    {"url": "https://www.google.com/maps/place/Panaderia+Synthetica+(made+up)/data=!4m2!3m1!1s0x0:0x1?shorturl=1", "status": 200,
+     "html": "<html><head><meta content=\"https://maps.google.com/maps/api/staticmap?center=16.4178%2C120.5987&amp;zoom=15&amp;size=256x256\" property=\"og:image\"></head></html>"}
+  ],
+  "expect": {"outcome": "ok", "lat": 16.4178, "lng": 120.5987, "name": "Panaderia Synthetica (made up)", "pin": "page",
+             "maps_url": "https://maps.app.goo.gl/Qw2SyntheticB2"}
+}

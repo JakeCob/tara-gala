@@ -1,0 +1,7 @@
+{
+  "_note": "SYNTHETIC, made up for TG-61 before the owner's six real links arrive (plan.md §4 task 0). A long link copied from a desktop browser: parsed with no request.",
+  "link": "https://www.google.com/maps/place/Bahay+Kubo+Synthetic+(made+up)/@16.4022,120.5960,15z/data=!4m6!3m5!1s0x0:0x2!8m2!3d16.40321!4d120.59876!16s%2Fg%2F11synthetic2?entry=ttu",
+  "hops": [],
+  "expect": {"outcome": "ok", "lat": 16.40321, "lng": 120.59876, "name": "Bahay Kubo Synthetic (made up)", "pin": "path",
+             "maps_url": "https://www.google.com/maps/place/Bahay+Kubo+Synthetic+(made+up)/@16.4022,120.5960,15z/data=!4m6!3m5!1s0x0:0x2!8m2!3d16.40321!4d120.59876!16s%2Fg%2F11synthetic2"}
+}

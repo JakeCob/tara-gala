@@ -1,0 +1,8 @@
+{
+  "_note": "SYNTHETIC, made up for TG-61 (plan.md §4 task 0). The consent page some regions get: refused before it's requested.",
+  "link": "https://maps.app.goo.gl/Ui6SyntheticE5",
+  "hops": [
+    {"url": "https://maps.app.goo.gl/Ui6SyntheticE5", "status": 302, "location": "https://consent.google.com/ml?continue=https://www.google.com/maps/place/x&gl=PH"}
+  ],
+  "expect": {"outcome": "link_unreadable"}
+}

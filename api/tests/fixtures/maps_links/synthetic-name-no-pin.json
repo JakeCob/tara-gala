@@ -1,0 +1,9 @@
+{
+  "_note": "SYNTHETIC, made up for TG-61 (plan.md §4 task 0). A name and no pin anywhere, so link_no_pin (B30).",
+  "link": "https://maps.app.goo.gl/Ty5SyntheticD4",
+  "hops": [
+    {"url": "https://maps.app.goo.gl/Ty5SyntheticD4", "status": 302, "location": "https://www.google.com/maps/place/Tindahan+Synthetic+(made+up)/"},
+    {"url": "https://www.google.com/maps/place/Tindahan+Synthetic+(made+up)/", "status": 200, "html": "<html><head><title>Google Maps</title></head></html>"}
+  ],
+  "expect": {"outcome": "link_no_pin"}
+}
