@@ -187,6 +187,8 @@ def test_a_name_in_q_is_read_and_the_pin_still_needed():  # L15, N2
     "https://www.google.com/maps/@nan,120.5,17z",
     "https://www.google.com/maps/data=!3dinf!4d120.5",
     "https://www.google.com/maps/data=!3d0!4d0",
+    "https://www.google.com/maps/place/0,0/",
+    "https://www.google.com/maps/place/16.4,181/",
 ])
 def test_a_pin_must_be_finite_in_range_and_not_zero_zero(url):  # L18
     net = Net()
@@ -247,8 +249,8 @@ def test_http_is_upgraded_for_listed_hosts_only():  # L28
     net = Net({SHORT: redirect(PLACE)})
     assert resolve(SHORT.replace("https:", "http:"), net).lat == 16.41234
     assert net.asked == [SHORT], "requested over https"
-    net = Net({SHORT: redirect("http://www.google.com/maps/@16.4123,120.5932,17z")})
-    assert resolve(SHORT, net).pin == "center", "a hop to http on a listed host is upgraded too"
+    net = Net({SHORT: redirect("http://www.google.com/maps?q=16.4123,120.5932")})
+    assert resolve(SHORT, net).pin == "query", "a hop to http on a listed host is upgraded too"
     assert refused("http://evil.io/maps", Net()).code == "link_not_maps"
 
 

@@ -263,10 +263,13 @@ class PlaceRefIn(_In):
     spot_id: UUID | None = None
     trip_place_id: UUID | None = None
     link: Annotated[str, StringConstraints(min_length=1, max_length=maps_link.MAX_TEXT)] | None = None
+    pin: Annotated[str, StringConstraints(max_length=maps_link.MAX_PIN_TEXT)] | None = None  # pasted after need_pin
 
     @model_validator(mode="after")
     def one(self) -> "PlaceRefIn":
         _one(self, ("spot_id", "trip_place_id", "link"))
+        if self.pin is not None and self.link is None:
+            raise ValueError("a pin goes with its link")
         return self
 
 
@@ -317,6 +320,7 @@ class Suggestion(BaseModel):
     ripple: list[dict[str, str | bool]]  # {key, time} or {key, drop: true}
     notes: list[str]
     changes: list[SuggestLine]
+    pin_source: Literal["link", "address", "typed"] | None  # a link's; None for a spot or a trip place (owner round 5)
 
 
 def _limited(request: Request) -> None:
@@ -439,7 +443,7 @@ def suggest(conn, share_slug: str, session_id: UUID, g: guides.Guide, at: AtIn, 
     out = Suggestion(
         name=name, lat=pin[0] if pin else None, lng=pin[1] if pin else None, maps_url=link,
         km_from_baguio=about_km(km) if km is not None else None, far=km is not None and far(km),
-        time=hhmm(time), leg=leg, ripple=moves, notes=notes + ripple_notes,
+        time=hhmm(time), leg=leg, ripple=moves, notes=notes + ripple_notes, pin_source=resolved.pin_source if resolved else None,
         changes=change_lines(day.day, at_kind, name, time, stops[idx] if at.replace else None, moves, {s.key: s for s in stops}),
     )
     return out, {"place": kind, "at": at_kind, "leg": leg["kind"] if leg else "none", "far": out.far, "ripple": len(moves)}
@@ -466,10 +470,16 @@ def suggest_stop(share_slug: str, body: SuggestIn, request: Request, response: R
 
     resolved = None
     if body.place.link is not None:  # read before the second connection, so no connection waits on Google
-        _limit(trip_places.LINK_LIMITER, request, "suggest-link")
         try:
-            resolved = maps_link.resolve(body.place.link)
+            if body.place.pin is not None:  # pasted after need_pin: nothing is fetched
+                resolved = maps_link.typed(body.place.link, body.place.pin)
+            else:
+                _limit(trip_places.LINK_LIMITER, request, "suggest-link")
+                resolved = maps_link.resolve(body.place.link)
         except maps_link.LinkError as e:
+            if e.code == "need_pin":
+                logger.info("plan suggest refused share_slug=%s reason=need_pin", share_slug)
+                return trip_places.need_pin(e)
             raise _refuse(share_slug, e.code) from None
     with db.get_conn() as conn:
         out, kinds = suggest(conn, share_slug, session_id, g, body.at, body.place, resolved)
