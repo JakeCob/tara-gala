@@ -7,8 +7,12 @@ Builder A wires these routers into main.py behind PLAN_EDITING (plan.md §6), so
 their own, with the same request-log middleware.
 """
 
+import csv
+import json
 import logging
+import re
 import uuid
+from datetime import datetime
 
 import httpx
 import psycopg
@@ -19,9 +23,10 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from app import db, maps_link, plan_suggest, sessions, trip_places
-from app.limits import RateLimiter
+from app.limits import MANILA_TZ, RateLimiter
 from app.logging_setup import RequestLogMiddleware, configure_logging
-from test_maps_link import Net, redirect
+from conftest import ROOT
+from test_maps_link import Net, page, redirect
 
 TRIP = {"name": "Made-up trip", "start_date": "2026-11-06", "return_date": "2026-11-08"}
 HOST = "https://maps.app.goo.gl"
@@ -286,7 +291,7 @@ def suggest(api, slug, at, place, base=("made-up-plan", 0)):
     return api.post(f"/sessions/{slug}/plan/suggest", json={"base": {"itinerary_slug": base[0], "seq": base[1]}, "at": at, "place": place})
 
 
-SUGGESTION_KEYS = {"name", "lat", "lng", "maps_url", "km_from_baguio", "far", "time", "leg", "ripple", "notes", "changes", "pin_source"}
+SUGGESTION_KEYS = {"name", "lat", "lng", "maps_url", "km_from_baguio", "far", "time", "leg", "ripple", "notes", "changes", "pin_source", "fits"}
 
 
 def test_after_a_stop_with_a_route_on_file(api, planned):  # S11, S4, B21
@@ -301,6 +306,7 @@ def test_after_a_stop_with_a_route_on_file(api, planned):  # S11, S4, B21
     assert s["time"] == "07:15", "6:00 plus an hour there plus 12 min on the jeep, up to the quarter hour"
     assert s["ripple"] == [] and s["notes"] == []
     assert s["changes"] == [{"word": "New", "day": 1, "text": "Made-up Park at 7:15 AM", "part": "stop"}]
+    assert s["fits"] is None, "only {anywhere: true} ranks the slots (options.md §5.5)"
     assert s["km_from_baguio"] == plan_suggest.about_km(plan_suggest.haversine_km(LODGE_PIN, PARK_PIN))
     assert r.headers["cache-control"] == "private, no-cache"
 
@@ -551,3 +557,149 @@ def test_no_pin_logs_carry_no_address_or_pin(api, planned, net, caplog):  # N17
     assert f"trip place add share_slug={slug} places=1 existing=False pin=typed" in caplog.text
     for leak in ("Made-up", "Bakery", "Unit 2", "Benguet", "16.41", "120.59", "W1", "goo.gl", "nominatim"):
         assert leak not in caplog.text, leak
+
+
+# ---------------------------------------------------------------- BF13 and BF14: where does it fit? (options.md §5.5)
+
+NS = uuid.UUID("00000000-0000-4000-8000-000000000061")  # tg61_fixture.py's: made-up ids for the plan file's natural keys
+SHOP_PIN = (16.4095, 120.5985)  # made up for this test, near Session Road; never stored data
+OUT_WINDOW, HOME_WINDOW = (10 * 60 + 15, 14 * 60 + 15), (16 * 60 + 15 - 30, 24 * 60)  # days 1 and 3
+
+
+def fake(kind: str, key: str) -> uuid.UUID:
+    return uuid.uuid5(NS, f"{kind}:{key}")
+
+
+def owner_copy() -> tuple[dict, dict]:
+    """The owner's plan file's guide with made-up ids, as tg61_fixture.py makes it, and its booked trips' refs."""
+    raw = json.loads((ROOT / "data" / "itineraries" / "baguio-barkada-2026-11-06.json").read_text(encoding="utf-8"))["guide"]
+    g = json.loads(json.dumps(raw))
+
+    def place(p):
+        if not p:
+            return p
+        return {"spot_id": str(fake("spot", p["spot"]))} if "spot" in p else {"terminal_id": str(fake("terminal", p["terminal"]))}
+
+    g["lodging"] = place(g.get("lodging"))
+    for d in g["days"]:
+        for r in d["rows"]:
+            if "place" in r:
+                r["place"] = place(r["place"])
+        for o in (d.get("pick") or {}).get("options", []):
+            if "place" in o:
+                o["place"] = place(o["place"])
+    booked = {}
+    for table in ("getting_there", "getting_home"):
+        for b in g[table]["buses"]:
+            ref = b.pop("trip")
+            b["trip_id"], b["date"] = str(fake("trip", json.dumps(ref, sort_keys=True))), ref["date"]
+            if b.get("booked"):
+                booked[table] = (b["trip_id"], ref)
+    return g, booked
+
+
+def csv_pins() -> dict[str, tuple]:
+    lines = [ln for ln in (ROOT / "data" / "spots.csv").read_text(encoding="utf-8").splitlines() if not ln.startswith("#")]
+    return {r["slug"]: (float(r["lat"]) if r["lat"] else None, float(r["lng"]) if r["lng"] else None) for r in csv.DictReader(lines)}
+
+
+@pytest.fixture()
+def owner_planned(api, dsn, monkeypatch) -> tuple[str, str]:
+    """A trip on a copy of the owner's plan file: made-up ids, spot names and terminals; the spots' pins from
+    data/spots.csv. The clock is before the trip, so no slot is in the past. Never the owner's real trip."""
+    monkeypatch.setattr(plan_suggest, "_manila_now", lambda: datetime(2026, 11, 1, 8, 0, tzinfo=MANILA_TZ))
+    g, booked = owner_copy()
+    pins = csv_pins()
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        for slug, pin in (("vl-cubao", (14.6197, 121.0531)), ("vl-baguio", (16.4105, 120.5968))):
+            conn.execute("insert into terminals (id, slug, name, city, lat, lng) values (%s, %s, 'Made-up Terminal', 'Made-up', %s, %s)",
+                         (fake("terminal", slug), f"made-up-{slug}", *pin))
+        slugs = {r["place"]["spot"] for d in json.loads((ROOT / "data" / "itineraries" / "baguio-barkada-2026-11-06.json").read_text())["guide"]["days"]
+                 for r in d["rows"] if "spot" in (r.get("place") or {})}
+        for i, slug in enumerate(sorted(slugs)):
+            conn.execute("insert into spots (id, slug, name, lat, lng) values (%s, %s, %s, %s, %s)",
+                         (fake("spot", slug), f"made-up-spot-{i}", f"Made-up Spot {i}", *pins.get(slug, (None, None))))
+        op = conn.execute("select id from operators where slug = 'victory-liner'").fetchone()[0]
+        for table, (trip_id, ref) in booked.items():
+            route = conn.execute("""insert into routes (operator_id, origin_terminal_id, destination_terminal_id, class, travel_minutes)
+                                    values (%s, %s, %s, %s, 240) returning id""",
+                                 (op, fake("terminal", ref["origin"]), fake("terminal", ref["destination"]), ref["class"])).fetchone()[0]
+            conn.execute("insert into trips (id, route_id, departure_time, source) values (%s, %s, %s, 'manual')", (trip_id, route, ref["departure"]))
+        plan = {"outbound": {"trip_id": booked["getting_there"][0], "date": "2026-11-06"},
+                "return": {"trip_id": booked["getting_home"][0], "date": "2026-11-08"}, "days": [], "guide": g}
+        conn.execute("insert into itineraries (share_slug, trip_date, return_date, party, plan, model) values ('made-up-owner', '2026-11-06', '2026-11-08', '[]', %s, 'premade')",
+                     (Jsonb(plan),))
+    slug = new_trip(api)
+    assert api.put(f"/sessions/{slug}/itinerary", json={"share_slug": "made-up-owner"}).status_code == 200
+    return slug, "made-up-owner"
+
+
+def no_pin_rows() -> int:
+    """Rows of the owner's plan file at a spot that data/spots.csv has no pin for."""
+    pins = csv_pins()
+    raw = json.loads((ROOT / "data" / "itineraries" / "baguio-barkada-2026-11-06.json").read_text(encoding="utf-8"))["guide"]
+    return sum(1 for d in raw["days"] for r in d["rows"] if "spot" in (r.get("place") or {}) and pins.get(r["place"]["spot"], (None,))[0] is None)
+
+
+def anywhere(api, slug, place, base=("made-up-owner", 0)):
+    return suggest(api, slug, {"anywhere": True}, place, base=base)
+
+
+def test_bf13_anywhere_gives_up_to_three_fits_and_keeps_the_rules(api, owner_planned, net):  # BF13, B51 to B54
+    slug, plan_slug = owner_planned
+    shop = link_for(net, "F1", *SHOP_PIN, name="Made-up Shop")
+    r = anywhere(api, slug, {"link": shop})
+    assert r.status_code == 200, r.text
+    s = r.json()
+    assert set(s) == SUGGESTION_KEYS and 1 <= len(s["fits"]) <= 3
+    assert s["pin_source"] == "link", "anywhere says where the pin came from, as the tap flow does (manager merge)"
+    top = s["fits"][0]
+    assert {k: s[k] for k in ("time", "leg", "ripple", "notes", "changes")} == {k: top[k] for k in ("time", "leg", "ripple", "notes", "changes")}
+    assert set(top) == {"day", "after", "time", "leg", "ripple", "notes", "changes", "condition", "reason"}
+    for f in s["fits"]:
+        start = plan_suggest.minutes(f["time"])
+        for day, (a, b) in ((1, OUT_WINDOW), (3, HOME_WINDOW)):
+            assert f["day"] != day or not (start < b and start + 60 > a), f
+        assert f["after"] not in ("d1-07", "d2-09", "d1-01", "d1-02", "d3-10"), f
+        assert "d1-04" not in {m["key"] for m in f["ripple"]}, f
+    assert len({f["day"] for f in s["fits"]}) == len(s["fits"]), "one a day while other days have room"
+    for at in ({"after": "d1-05"}, {"replace": "d1-05"}, {"first_of_day": 2}):
+        assert suggest(api, slug, at, {"link": shop}, base=(plan_slug, 0)).json()["fits"] is None, at
+    for at in ({"after": "d1-05", "anywhere": True}, {"anywhere": False}, {"anywhere": None}):
+        assert suggest(api, slug, at, {"link": shop}, base=(plan_slug, 0)).status_code == 422, at
+    r = anywhere(api, slug, {"link": shop}, base=(plan_slug, 3))
+    assert r.status_code == 409 and r.json() == {"detail": "plan_changed", "itinerary_slug": plan_slug, "seq": 0}
+
+
+def test_bf13_the_tap_flow_never_moves_the_check_in_row(api, owner_planned, net):  # B53
+    slug, _ = owner_planned
+    s = suggest(api, slug, {"after": "d1-03"}, {"link": link_for(net, "F2", *SHOP_PIN)}, base=("made-up-owner", 0)).json()
+    assert "d1-04" not in {m["key"] for m in s["ripple"]}
+    assert "The 3:00 PM check-in can't move." in s["notes"]
+
+
+def test_bf13_no_free_slot_is_an_empty_list_with_the_note(api, owner_planned, net, monkeypatch):  # B56
+    slug, _ = owner_planned
+    monkeypatch.setattr(plan_suggest, "_manila_now", lambda: datetime(2026, 11, 8, 15, 0, tzinfo=MANILA_TZ))
+    s = anywhere(api, slug, {"link": link_for(net, "F3", *SHOP_PIN)}).json()
+    assert (s["fits"], s["time"], s["leg"], s["ripple"], s["changes"]) == ([], "", None, [], [])
+    assert s["notes"] == ["No free slot found. Tap a stop and use Add after."]
+
+
+def test_bf14_the_fit_log_line_has_counts_only(api, owner_planned, net, caplog, dsn):  # BF14, E25
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    slug, _ = owner_planned
+    anywhere(api, slug, {"link": link_for(net, "F4", *SHOP_PIN, name="Made-up Shop")})
+    [line] = [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan suggest ")]
+    assert re.fullmatch(rf"plan suggest share_slug={slug} place=link at=anywhere leg=(route|estimate|none) far=False ripple=\d+ "
+                        r"fits=[1-3] candidates=\d+ excluded=\d+ best_day=[1-3] no_pin=(\d+) bus_gone=0", line), line
+    assert line.endswith(f" no_pin={no_pin_rows()} bus_gone=0"), "rows ranked without a pin are counted"
+    _, booked = owner_copy()
+    sql(dsn, "delete from trips where id = %s", booked["getting_there"][0])
+    caplog.clear()
+    anywhere(api, slug, {"link": link_for(net, "F5", *SHOP_PIN)})
+    assert [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan suggest ")][0].endswith(" bus_gone=1"), \
+        "a booked trip that's gone leaves only its bus row's minute blocked: counted"
+    for leak in ("Made-up", "Shop", "F4", "F5", "goo.gl", "16.409", "120.598", "Session", "check-in", "d1-", "d2-", "d3-"):
+        assert leak not in caplog.text, leak
+
