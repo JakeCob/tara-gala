@@ -95,7 +95,8 @@ def _insert(share_slug: str, name: str, got: maps_link.Resolved) -> tuple[TripPl
         session_id = _session_id(conn, share_slug, lock=True)  # held until commit, so two adds can't pass the cap
         places = load_places(conn, session_id)
         for p in places:
-            if p.name.casefold() == name.casefold() and plan_suggest.haversine_km((p.lat, p.lng), (got.lat, got.lng)) * 1000 <= SAME_PLACE_M:
+            metres = plan_suggest.haversine_km((p.lat, p.lng), (got.lat, got.lng)) * 1000
+            if p.name.casefold() == name.casefold() and metres <= SAME_PLACE_M:
                 return p, True, len(places)
         if len(places) >= MAX_PLACES:
             logger.warning("trip place refused share_slug=%s code=too_many_places places=%d", share_slug, len(places))

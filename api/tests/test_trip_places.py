@@ -1,6 +1,7 @@
-"""TG-61 builder B's routes: POST /sessions/{slug}/places (trip-only places from a Google Maps link, B31, B48) and
-S10, POST /sessions/{slug}/plan/suggest (options.md §5), on a throwaway trip with made-up spots, a made-up plan and
-synthetic links. No test reaches Google: maps_link.make_client is swapped for a MockTransport.
+"""TG-61 builder B's routes: T1 to T9, POST /sessions/{slug}/places (trip-only places from a Google Maps link), and
+S7, S9 and S11 to S13, POST /sessions/{slug}/plan/suggest (options.md §5). The IDs are test-plan.md §3.3 and §3.4's;
+T10 on are cases it doesn't number. Everything runs on a throwaway trip with made-up spots, a made-up plan and synthetic
+links. No test reaches Google: maps_link.make_client is swapped for a MockTransport.
 
 Builder A wires these routers into main.py behind PLAN_EDITING (plan.md §6), so the tests mount them on an app of
 their own, with the same request-log middleware.
@@ -83,9 +84,9 @@ def add_place(api, slug, link, name="Kapihan sa Ulap", **extra):
     return api.post(f"/sessions/{slug}/places", json={"link": link, "name": name, **extra})
 
 
-# ---------------------------------------------------------------- trip places (B31)
+# ---------------------------------------------------------------- trip places (T)
 
-def test_a_place_is_pinned_from_the_link_on_the_server(api, dsn, net):  # B31
+def test_a_place_is_pinned_from_the_link_on_the_server(api, dsn, net):  # T1, B31
     slug = new_trip(api)
     link = link_for(net, "A1", 16.41234, 120.59321)
     net.table[f"{link}?g_st=ic"] = net.table[link]
@@ -100,7 +101,7 @@ def test_a_place_is_pinned_from_the_link_on_the_server(api, dsn, net):  # B31
     assert net.asked == [f"{link}?g_st=ic"]
 
 
-def test_the_phone_cannot_send_a_pin(api, dsn, net):  # B31
+def test_the_phone_cannot_send_a_pin(api, dsn, net):  # T1, B31
     slug = new_trip(api)
     link = link_for(net, "A2", 16.41234, 120.59321)
     r = add_place(api, slug, link, lat=1.0, lng=2.0)
@@ -108,18 +109,20 @@ def test_the_phone_cannot_send_a_pin(api, dsn, net):  # B31
     assert sql(dsn, "select * from trip_places") == [] and net.asked == []
 
 
-def test_the_same_place_twice_is_the_same_row(api, dsn, net):  # B31
+def test_the_same_place_twice_is_the_same_row(api, dsn, net):  # T3, B31
     slug = new_trip(api)
-    first = add_place(api, slug, link_for(net, "B1", 16.41234, 120.59321)).json()
-    again = add_place(api, slug, link_for(net, "B2", 16.41244, 120.59321), name="KAPIHAN SA ULAP")  # about 11 m away
+    here, near, past = (16.41234, 120.59321), (16.41256, 120.59321), (16.41258, 120.59321)
+    assert 0.024 < plan_suggest.haversine_km(here, near) < 0.025 < plan_suggest.haversine_km(here, past) < 0.027
+    first = add_place(api, slug, link_for(net, "B1", *here)).json()
+    again = add_place(api, slug, link_for(net, "B2", *near), name="KAPIHAN SA ULAP")  # 24.5 m away
     assert again.status_code == 200 and again.json()["id"] == first["id"]
-    other_name = add_place(api, slug, link_for(net, "B3", 16.41234, 120.59321), name="Another cafe")
-    far_off = add_place(api, slug, link_for(net, "B4", 16.41334, 120.59321))  # about 110 m away
+    other_name = add_place(api, slug, link_for(net, "B3", *here), name="Another cafe")
+    far_off = add_place(api, slug, link_for(net, "B4", *past))  # 26.7 m away
     assert other_name.status_code == 201 and far_off.status_code == 201
     assert len(sql(dsn, "select id from trip_places")) == 3
 
 
-def test_a_trip_holds_100_places(api, dsn, net):  # B31
+def test_a_trip_holds_100_places(api, dsn, net):  # T4, B31
     slug = new_trip(api)
     sid = sql(dsn, "select id from trip_sessions where share_slug = %s", slug)[0]["id"]
     with psycopg.connect(dsn, autocommit=True) as conn:
@@ -134,13 +137,13 @@ def test_a_trip_holds_100_places(api, dsn, net):  # B31
 
 
 @pytest.mark.parametrize("name", ["", "   ", "x" * 81, "Tab\there", "New\nline", "nul\x00"])
-def test_the_name_is_1_to_80_printable_letters(api, dsn, net, name):  # B31
+def test_the_name_is_1_to_80_printable_letters(api, dsn, net, name):  # T2, B31
     slug = new_trip(api)
     assert add_place(api, slug, link_for(net, "D1", 16.41234, 120.59321), name=name).status_code == 422
     assert net.asked == [] and sql(dsn, "select * from trip_places") == []
 
 
-def test_link_problems_are_codes_and_store_nothing(api, dsn, net):  # B28, B30
+def test_link_problems_are_codes_and_store_nothing(api, dsn, net):  # T5, B28, B30
     slug = new_trip(api)
     assert add_place(api, slug, "https://evil.io/maps/place/x").json()["detail"] == "link_not_maps"
     net.table[f"{HOST}/E1"] = redirect("https://www.google.com/maps/place/Kapihan/")
@@ -153,14 +156,15 @@ def test_link_problems_are_codes_and_store_nothing(api, dsn, net):  # B28, B30
     assert [httpx.URL(u).host for u in net.asked] == ["maps.app.goo.gl", "www.google.com", "maps.app.goo.gl"]
 
 
-def test_an_unknown_trip_is_404_before_any_fetch(api, net):
+def test_an_unknown_trip_is_404_before_any_fetch(api, net):  # T10
     link = link_for(net, "F1", 16.41234, 120.59321)
     assert add_place(api, "0" * 32, link).status_code == 404
     assert add_place(api, "not-a-slug", link).status_code == 404
     assert net.asked == []
 
 
-def test_places_belong_to_their_trip(api, dsn, net):  # B32, review S5
+def test_places_belong_to_their_trip(api, dsn, net):  # T6, B32, review S5
+    """The helpers builder A's SessionOut.places and guide build read through. The routes' own answers are A's E30."""
     a, b = new_trip(api), new_trip(api)
     pid = add_place(api, a, link_for(net, "G1", 16.41234, 120.59321)).json()["id"]
     ids = {r["share_slug"]: r["id"] for r in sql(dsn, "select share_slug, id from trip_sessions")}
@@ -173,7 +177,7 @@ def test_places_belong_to_their_trip(api, dsn, net):  # B32, review S5
     assert sql(dsn, "select * from trip_places") == [], "deleted with the trip"
 
 
-def test_link_fetches_share_30_an_hour_per_ip(api, net, monkeypatch):  # options.md §5.4
+def test_link_fetches_share_30_an_hour_per_ip(api, net, monkeypatch):  # S13, options.md §5.4
     monkeypatch.setattr(trip_places, "LINK_LIMITER", RateLimiter(2))
     slug = new_trip(api)
     link = link_for(net, "H1", 16.41234, 120.59321)
@@ -184,7 +188,7 @@ def test_link_fetches_share_30_an_hour_per_ip(api, net, monkeypatch):  # options
     assert trip_places.LINK_PER_HOUR == 30 and plan_suggest.SUGGEST_PER_HOUR == 120
 
 
-def test_the_bounds_are_checked_in_python_before_the_insert(api, dsn, net, monkeypatch, caplog):  # review M3
+def test_the_bounds_are_checked_in_python_before_the_insert(api, dsn, net, monkeypatch, caplog):  # T2, review M3
     caplog.set_level(logging.INFO)
     slug = new_trip(api)
     for got in (maps_link.Resolved(16.41, 120.59, None, "http://maps.app.goo.gl/x", "path"),
@@ -198,9 +202,9 @@ def test_the_bounds_are_checked_in_python_before_the_insert(api, dsn, net, monke
     assert "constraint=" not in caplog.text, "refused in Python: the table's checks never saw it"
 
 
-# ---------------------------------------------------------------- B48: codes and counts only in the logs (review M3)
+# ---------------------------------------------------------------- T7, T9: codes and counts only in the logs (review M3)
 
-def test_failures_log_codes_and_counts_only_tracebacks_included(api, dsn, net, caplog, monkeypatch):  # B48
+def test_failures_log_codes_and_counts_only_tracebacks_included(api, dsn, net, caplog, monkeypatch):  # T7, T9, B48
     caplog.set_level(logging.INFO)
     slug = new_trip(api)
     ok = link_for(net, "J1", 16.41234, 120.59321)
@@ -224,7 +228,7 @@ def test_failures_log_codes_and_counts_only_tracebacks_included(api, dsn, net, c
         assert leak not in text, leak
 
 
-# ---------------------------------------------------------------- S10: the suggest route
+# ---------------------------------------------------------------- S7, S9, S11 to S13: the suggest route
 
 PARK_ID, CAFE_ID, LODGE_ID, BARE_ID, TERMINAL_ID, ROUTE_ID = (uuid.uuid4() for _ in range(6))
 
@@ -284,7 +288,7 @@ def suggest(api, slug, at, place, base=("made-up-plan", 0)):
 SUGGESTION_KEYS = {"name", "lat", "lng", "maps_url", "km_from_baguio", "far", "time", "leg", "ripple", "notes", "changes"}
 
 
-def test_after_a_stop_with_a_route_on_file(api, planned):  # S10, B21
+def test_after_a_stop_with_a_route_on_file(api, planned):  # S11, S4, B21
     slug, _ = planned
     r = suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)})
     assert r.status_code == 200, r.text
@@ -300,7 +304,7 @@ def test_after_a_stop_with_a_route_on_file(api, planned):  # S10, B21
     assert r.headers["cache-control"] == "private, no-cache"
 
 
-def test_replace_keeps_the_slot_and_walks_back_to_the_last_place(api, planned):  # S10, B21
+def test_replace_keeps_the_slot_and_walks_back_to_the_last_place(api, planned):  # S11, S5, B21
     slug, _ = planned
     s = suggest(api, slug, {"replace": "d1-04"}, {"spot_id": str(BARE_ID)}).json()
     assert s["time"] == "15:00" and s["ripple"] == [], "Replace keeps its time slot"
@@ -315,7 +319,7 @@ def test_replace_keeps_the_slot_and_walks_back_to_the_last_place(api, planned): 
     assert s["leg"]["kind"] == "estimate", "the routes to the park start at the terminal, not at the cafe"
 
 
-def test_a_link_with_a_bus_in_the_way(api, planned, net):  # S10, B22, B23
+def test_a_link_with_a_bus_in_the_way(api, planned, net):  # S11, S6, B22, B23
     slug, _ = planned
     link = link_for(net, "K1", 16.4100, 120.5960)  # about 110 m from the made-up cafe
     s = suggest(api, slug, {"after": "d2-01"}, {"link": link}).json()
@@ -330,7 +334,7 @@ def test_a_link_with_a_bus_in_the_way(api, planned, net):  # S10, B22, B23
     assert net.asked == [link], "the second read comes from the cache"
 
 
-def test_far_away_is_flagged_and_rounded(api, planned, net):  # S10, B24
+def test_far_away_is_flagged_and_rounded(api, planned, net):  # S9, S10, B24
     slug, _ = planned
     s = suggest(api, slug, {"after": "d1-04"}, {"link": link_for(net, "K2", 15.0, 120.6, name="Roadside stop")}).json()
     km = plan_suggest.haversine_km(LODGE_PIN, (15.0, 120.6))
@@ -338,7 +342,7 @@ def test_far_away_is_flagged_and_rounded(api, planned, net):  # S10, B24
     assert s["leg"] is None and s["notes"] == [plan_suggest.NO_LEG_NOTE], "past 600 minutes there's no estimate"
 
 
-def test_first_of_the_day_and_a_trip_place(api, planned, net):  # S10
+def test_first_of_the_day_and_a_trip_place(api, planned, net):  # S11, S5
     slug, _ = planned
     s = suggest(api, slug, {"first_of_day": 2}, {"spot_id": str(PARK_ID)}).json()
     assert (s["time"], s["leg"], s["ripple"], s["notes"]) == ("12:45", None, [], [])
@@ -348,7 +352,7 @@ def test_first_of_the_day_and_a_trip_place(api, planned, net):  # S10
     assert s["leg"]["kind"] == "estimate" and s["time"] == "10:15"
 
 
-def test_refusals(api, planned, dsn, net):  # S10, B16
+def test_refusals(api, planned, dsn, net):  # S12, B16
     slug, _ = planned
     other = new_trip(api)
     theirs = add_place(api, other, link_for(net, "L1", 16.4110, 120.5950)).json()["id"]
@@ -369,7 +373,7 @@ def test_refusals(api, planned, dsn, net):  # S10, B16
     assert suggest(api, "0" * 32, {"after": "d1-01"}, {"spot_id": str(PARK_ID)}).status_code == 404
 
 
-def test_a_stale_base_is_the_clash(api, planned, dsn):  # S10, B3
+def test_a_stale_base_is_the_clash(api, planned, dsn):  # S12, B3
     slug, plan_slug = planned
     r = suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)}, base=(plan_slug, 2))
     assert r.status_code == 409 and r.json() == {"detail": "plan_changed", "itinerary_slug": plan_slug, "seq": 0}
@@ -388,7 +392,7 @@ def test_a_stale_base_is_the_clash(api, planned, dsn):  # S10, B3
     assert r.status_code == 409 and r.json() == {"detail": "plan_changed", "itinerary_slug": "c" * 32, "seq": 1}
 
 
-def test_suggest_logs_kinds_and_counts_only(api, planned, net, caplog):  # S10, plan.md §8
+def test_suggest_logs_kinds_and_counts_only(api, planned, net, caplog):  # T11, plan.md §8
     caplog.set_level(logging.INFO, logger="tara_gala.api")
     slug, _ = planned
     suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)})
@@ -400,7 +404,7 @@ def test_suggest_logs_kinds_and_counts_only(api, planned, net, caplog):  # S10, 
         assert leak not in caplog.text, leak
 
 
-def test_suggest_is_limited_ahead_of_its_body(api, planned, monkeypatch):  # options.md §5.4
+def test_suggest_is_limited_ahead_of_its_body(api, planned, monkeypatch):  # S13, options.md §5.4
     monkeypatch.setattr(plan_suggest, "SUGGEST_LIMITER", RateLimiter(1))
     slug, _ = planned
     assert suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)}).status_code == 200
@@ -408,7 +412,7 @@ def test_suggest_is_limited_ahead_of_its_body(api, planned, monkeypatch):  # opt
     assert r.status_code == 429, "limited ahead of the body's validation"
 
 
-def test_a_link_in_suggest_counts_against_the_link_limit(api, planned, net, monkeypatch):  # options.md §5.4
+def test_a_link_in_suggest_counts_against_the_link_limit(api, planned, net, monkeypatch):  # S13, options.md §5.4
     monkeypatch.setattr(trip_places, "LINK_LIMITER", RateLimiter(1))
     slug, _ = planned
     link = link_for(net, "N1", 16.4100, 120.5960)
@@ -416,3 +420,58 @@ def test_a_link_in_suggest_counts_against_the_link_limit(api, planned, net, monk
     assert suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)}).status_code == 200, "a spot costs no fetch"
     assert suggest(api, slug, {"after": "d2-01"}, {"link": link}).status_code == 429
     assert add_place(api, slug, link).status_code == 429, "suggest and places share it"
+
+
+TABLES = ("trip_sessions", "itineraries", "itinerary_versions", "trip_places", "spots", "terminals", "last_mile_routes",
+          "session_marks", "session_files")
+
+
+def counts(dsn) -> dict:
+    return {t: sql(dsn, f"select count(*) as n from {t}")[0]["n"] for t in TABLES}
+
+
+def test_suggest_writes_nothing_and_reads_a_long_link_with_no_request(api, planned, dsn, net):  # S11
+    slug, _ = planned
+    pid = add_place(api, slug, link_for(net, "Q1", 16.4110, 120.5950)).json()["id"]
+    net.asked.clear()
+    before = counts(dsn)
+    long_link = "https://www.google.com/maps/place/Bahay+Kubo/@16.41,120.59,17z/data=!3d16.4105!4d120.5952?entry=ttu"
+    for place in ({"spot_id": str(PARK_ID)}, {"trip_place_id": pid}, {"link": long_link}):
+        r = suggest(api, slug, {"after": "d1-02"}, place)
+        assert r.status_code == 200, r.text
+        assert set(r.json()) == SUGGESTION_KEYS
+    assert suggest(api, slug, {"after": "d1-02"}, {"link": long_link}).json()["maps_url"] == long_link.split("?")[0]
+    assert counts(dsn) == before, "nothing is written"
+    assert net.asked == [], "a long link costs no request"
+
+
+def test_a_spots_visit_minutes_is_its_stay(api, planned, dsn):  # S7
+    slug, _ = planned
+    s = suggest(api, slug, {"after": "d1-02"}, {"spot_id": str(PARK_ID)}).json()
+    assert s["leg"] == {"kind": "estimate", "mode": "walk", "minutes": 20, "km": 1.1}
+    assert s["time"] == "10:30", "the cafe's stay is 60 when visit_minutes is null: 9:00 + 60 + 20 min, up to 10:30"
+    sql(dsn, "update spots set visit_minutes = 90 where id = %s", CAFE_ID)
+    s = suggest(api, slug, {"after": "d1-02"}, {"spot_id": str(PARK_ID)}).json()
+    assert s["time"] == "11:00", "90 min at the cafe: 9:00 + 90 + 20, up to 11:00"
+    s = suggest(api, slug, {"after": "d1-03"}, {"spot_id": str(PARK_ID)}).json()
+    assert s["time"] == "13:30" and s["leg"]["minutes"] == 20, "lunch has no place: 60 there, and the leg is from the cafe"
+
+
+def test_the_distance_is_from_the_lodging_or_session_road(api, planned, dsn, net):  # S9
+    slug, _ = planned
+    pin = (16.4300, 120.6100)
+    link = link_for(net, "R1", *pin)
+    s = suggest(api, slug, {"after": "d1-04"}, {"link": link}).json()
+    assert s["km_from_baguio"] == plan_suggest.about_km(plan_suggest.haversine_km(LODGE_PIN, pin)) == 3
+    sql(dsn, "update spots set lat = null, lng = null where id = %s", LODGE_ID)
+    s = suggest(api, slug, {"after": "d1-04"}, {"link": link}).json()
+    assert s["km_from_baguio"] == plan_suggest.about_km(plan_suggest.haversine_km(plan_suggest.BAGUIO_CENTRE, pin)) == 2
+
+
+def test_apply_after_suggest_reads_the_link_once(api, planned, net):  # T8
+    slug, _ = planned
+    link = link_for(net, "S1", 16.4100, 120.5960)
+    s = suggest(api, slug, {"after": "d2-01"}, {"link": link}).json()
+    p = add_place(api, slug, link, name=s["name"]).json()
+    assert (p["lat"], p["lng"], p["maps_url"]) == (s["lat"], s["lng"], s["maps_url"])
+    assert net.asked == [link], "the Apply's POST /places reads the cache"

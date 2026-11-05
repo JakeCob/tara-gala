@@ -8,13 +8,14 @@ The allow-list is the only guard against the server being pointed at an internal
   parses a URL a second way. Raw input with a backslash, whitespace, or a Unicode control or format character (a
   zero-width space, say) is refused first.
 
-Long links are read with no request. Short links are followed by hand: at most 5 redirects, 4 s a read, 8 s in all on
-an injectable clock (review S10). A body is read only on the last hop, only when no URL had a pin, and only up to
+Long links are read with no request. Short links are followed by hand: at most 5 requests, 4 s a read, 8 s in all on
+an injectable clock (review S10). A body is read only on the last hop, only when no URL had a pin, and only its first
 512 KB, for the static map's centre=lat%2Clng (the og:image). A resolved short link is kept 15 minutes, so the Apply
 that follows Suggest doesn't fetch it again.
 
-LinkError has no message and is raised from None: httpx's own messages carry the URL (review M3). Logs carry the
-outcome, counts and kinds only, never the link, a host's path, a name or a pin.
+LinkError's only text is its code, and it's raised outside any except, so it has no cause or context: httpx's own
+messages carry the URL (review M3). Logs carry the outcome, counts and kinds only, never the link, a host's path, a
+name or a pin.
 """
 
 import logging
@@ -55,10 +56,10 @@ _PAGE = re.compile(rb"(?:center|markers)=" + _NUM.encode() + rb"(?:%2C|,)" + _NU
 
 
 class LinkError(Exception):
-    """`code` is the answer's detail; `reason` is for the log. No message, so a traceback carries no URL."""
+    """`code` is the answer's detail and the only text; `reason` is for the log. A traceback carries no URL."""
 
     def __init__(self, code: str, reason: str):
-        super().__init__()
+        super().__init__(code)
         self.code = code  # link_not_maps | link_no_pin | link_unreadable
         self.reason = reason
 
@@ -93,13 +94,17 @@ def _upgrade(u: httpx.URL) -> httpx.URL:
 
 
 def extract_url(text: str) -> httpx.URL:
-    """The first link in the pasted text ("Name\\nhttps://maps.app.goo.gl/..."), as an httpx.URL, or LinkError."""
+    """The first link in the pasted text, as an httpx.URL, or LinkError. A share sheet gives "Name\\nhttps://...", and a
+    one-line field drops the newline, so the link may be glued to the name (test-plan F3): it starts at the first
+    http:// or https:// anywhere, and runs to the next whitespace. Anything else odd in it is refused by _url."""
     if len(text) > MAX_TEXT:
         raise LinkError("link_not_maps", "too_long")
-    for token in text.split():  # a link runs to the next whitespace; anything else odd in it is refused below
-        if token.lower().startswith(("https://", "http://")):
-            return _url(token, "link_not_maps")
-    raise LinkError("link_not_maps", "no_link")
+    lower = text.lower()
+    starts = [i for i in (lower.find("https://"), lower.find("http://")) if i >= 0]
+    if not starts:
+        raise LinkError("link_not_maps", "no_link")
+    rest = text[min(starts):]
+    return _url(rest.split(maxsplit=1)[0], "link_not_maps")
 
 
 def _bad(raw: str) -> bool:
@@ -249,20 +254,22 @@ class _Trace:
     """What the log line says about one resolve."""
 
     def __init__(self):
-        self.hops = 0
+        self.hops = 0  # redirects followed
+        self.requests = 0
         self.final = "short"
         self.pin = "none"
         self.name = False
 
 
 def _read(response: httpx.Response, deadline: float, clock: Callable[[], float]) -> bytes:
+    """At most the first 512 KB: the static map is in the page's head, and nothing past the cut is read."""
     body = bytearray()
     for chunk in response.iter_bytes():
         body += chunk
         if clock() > deadline:
             raise LinkError("link_unreadable", "deadline")
-        if len(body) > MAX_BODY:
-            raise LinkError("link_unreadable", "too_big")
+        if len(body) >= MAX_BODY:
+            return bytes(body[:MAX_BODY])
     return bytes(body)
 
 
@@ -272,6 +279,9 @@ def _follow(client: httpx.Client, u: httpx.URL, clock: Callable[[], float], t: _
     while True:
         if clock() > deadline:
             raise LinkError("link_unreadable", "deadline")
+        if t.requests == MAX_HOPS:
+            raise LinkError("link_unreadable", "too_many_hops")
+        t.requests += 1
         with client.stream("GET", u, follow_redirects=False, timeout=httpx.Timeout(HOP_TIMEOUT_S)) as r:
             if r.status_code not in REDIRECTS:
                 if r.status_code != 200:
@@ -285,8 +295,6 @@ def _follow(client: httpx.Client, u: httpx.URL, clock: Callable[[], float], t: _
             location = r.headers.get("location")
         if not location:
             raise LinkError("link_unreadable", "no_location")
-        if t.hops == MAX_HOPS:
-            raise LinkError("link_unreadable", "too_many_hops")
         t.hops += 1
         if _bad(location):
             raise LinkError("link_unreadable", "bad_char")
@@ -307,6 +315,7 @@ def resolve(link: str, client: httpx.Client | None = None, clock: Callable[[], f
     start = clock()
     t = _Trace()
     outcome, reason, cache = "ok", None, "no"
+    failed: tuple[str, str] | None = None
     try:
         given = extract_url(link)
         if not allowed(given):
@@ -336,15 +345,14 @@ def resolve(link: str, client: httpx.Client | None = None, clock: Callable[[], f
             _keep(key, start, result)
         return result
     except LinkError as e:
-        outcome, reason = e.code.removeprefix("link_"), e.reason
-        raise LinkError(e.code, e.reason) from None
+        failed = (e.code, e.reason)
     except httpx.TimeoutException:
-        outcome, reason = "unreadable", "timeout"
-        raise LinkError("link_unreadable", "timeout") from None
+        failed = ("link_unreadable", "timeout")
     except (httpx.HTTPError, httpx.InvalidURL, httpx.StreamError, ValueError):
-        outcome, reason = "unreadable", "network"
-        raise LinkError("link_unreadable", "network") from None
+        failed = ("link_unreadable", "network")  # httpx's message carries the URL, so it goes no further
     finally:
+        if failed:
+            outcome, reason = failed[0].removeprefix("link_"), failed[1]
         line = (
             "maps link resolve outcome=%s hops=%d final=%s ms=%d pin=%s name=%s cache=%s"
             + (" reason=%s" if reason else "")
@@ -353,3 +361,4 @@ def resolve(link: str, client: httpx.Client | None = None, clock: Callable[[], f
         if reason:
             args.append(reason)
         logger.log(logging.WARNING if outcome == "unreadable" else logging.INFO, line, *args)
+    raise LinkError(*failed) from None  # outside every except: no __cause__ and no __context__ (review M3)

@@ -1,5 +1,6 @@
-"""TG-61 S1 to S9: the suggestion's pure parts (api/app/plan_suggest.py, options.md §5). S10, the route, is in
-test_trip_places.py, next to the trip places it reads. No database here.
+"""TG-61 S1 to S10: the suggestion's pure parts (api/app/plan_suggest.py, options.md §5). The IDs are test-plan.md
+§3.3's; S14 on are cases it doesn't number. S7, S9 and S11 to S13 need the database and are in test_trip_places.py, next to
+the trip places the route reads. No database here.
 """
 
 import math
@@ -24,8 +25,8 @@ def test_haversine_against_known_pairs():  # S1
     assert math.isclose(ps.haversine_km((0.0, 0.0), (0.0, 1.0)), 111.195, abs_tol=0.01), "one degree on the equator, R = 6371 km"
     assert math.isclose(ps.haversine_km((48.8566, 2.3522), (51.5074, -0.1278)), 343.5, abs_tol=0.5), "Paris to London"
     assert ps.haversine_km((16.41, 120.59), (16.41, 120.59)) == 0
-    burnham, session_road = (16.408010, 120.595985), (16.409260, 120.598831)
-    assert 0.3 < ps.haversine_km(burnham, session_road) < 0.4
+    burnham, session_road = (16.408010, 120.595985), (16.409260, 120.598831)  # data/spots.csv's pins
+    assert math.isclose(ps.haversine_km(burnham, session_road), 0.334, abs_tol=0.01), "0.139 km north, 0.304 km east"
 
 
 # ---------------------------------------------------------------- S2: walk and taxi (owner D1)
@@ -93,7 +94,7 @@ def test_the_slot_first_of_the_day():  # S5
     assert ps.slot_first(stop("d2-01", "00:30"), 60) == 0
 
 
-# ---------------------------------------------------------------- S6 to S8: the ripple
+# ---------------------------------------------------------------- S6: the ripple
 
 def test_no_ripple_when_it_fits():  # S6
     assert ps.ripple([stop("d1-05", "17:00")], t("16:00")) == ([], [])
@@ -114,7 +115,7 @@ def test_a_tight_day_carries_the_shift_but_never_grows_it():  # S6
     assert [s["time"] for s in shifts] == ["15:20", "15:50", "16:20"], "rows 30 min apart keep their spacing, shifted by 20"
 
 
-def test_a_bus_row_never_moves_and_the_last_stops_before_it_are_dropped():  # S7, B23
+def test_a_bus_row_never_moves_and_the_last_stops_before_it_are_dropped():  # S6, B23
     after = [stop("d3-08", "14:00", plan="Pasalubong"), stop("d3-09", "15:00", plan="Snack"), stop("d3-10", "16:15", bus=True, plan="Bus home")]
     shifts, notes = ps.ripple(after, t("15:00"))  # 60 min over: d3-08 to 15:00, d3-09 to 16:00, which runs into the 4:15 PM bus
     assert {"key": "d3-10", "drop": True} not in shifts and all(s["key"] != "d3-10" for s in shifts), "the bus row is never touched"
@@ -122,7 +123,7 @@ def test_a_bus_row_never_moves_and_the_last_stops_before_it_are_dropped():  # S7
     assert notes == ["The 4:15 PM bus can't move."]
 
 
-def test_when_nothing_fits_before_the_bus_every_movable_row_is_dropped():  # S7
+def test_when_nothing_fits_before_the_bus_every_movable_row_is_dropped():  # S6
     after = [stop("d3-08", "14:00"), stop("d3-09", "14:30"), stop("d3-10", "15:00", bus=True)]
     shifts, notes = ps.ripple(after, t("16:00"))
     assert shifts == [{"key": "d3-08", "drop": True}, {"key": "d3-09", "drop": True}]
@@ -130,23 +131,23 @@ def test_when_nothing_fits_before_the_bus_every_movable_row_is_dropped():  # S7
     assert ps.ripple([stop("d3-10", "15:00", bus=True)], t("16:00")) == ([], ["The 3:00 PM bus can't move."])
 
 
-def test_the_ripple_stops_at_a_bus_row_and_never_reaches_past_it():  # S7
+def test_the_ripple_stops_at_a_bus_row_and_never_reaches_past_it():  # S6
     after = [stop("d1-02", "08:00", bus=True), stop("d1-03", "08:30")]
     shifts, notes = ps.ripple(after, t("07:00"))
     assert (shifts, notes) == ([], []), "fits before the bus; the rows after it are another part of the day"
 
 
-def test_the_day_never_runs_past_23_00():  # S8, B23
+def test_the_day_never_runs_past_23_00():  # S6, B23
     after = [stop("d1-07", "21:00", plan="Night market"), stop("d1-08", "22:00", plan="Ukay"), stop("d1-09", "22:15", plan="Late snack")]
     shifts, notes = ps.ripple(after, t("22:00"))  # 60 over: 22:00, 23:00, and 23:15 is past 23:00
     assert shifts == [{"key": "d1-07", "time": "22:00"}, {"key": "d1-08", "time": "23:00"}, {"key": "d1-09", "drop": True}]
     assert notes == ["The day can't run past 11:00 PM."]
 
 
-# ---------------------------------------------------------------- S9: far, and the change lines
+# ---------------------------------------------------------------- S10: far, and S8: the change lines
 
-def test_far_is_over_25_km_and_the_distance_is_rounded():  # S9, B24
-    assert ps.far(26) and not ps.far(25) and not ps.far(3)
+def test_far_is_over_25_km_and_the_distance_is_rounded():  # S10, B24
+    assert ps.far(25.1) and ps.far(26) and not ps.far(25) and not ps.far(3)
     assert ps.about_km(240.4) == 240 and ps.about_km(123) == 120 and ps.about_km(125) == 130, "to 10 km over 100 km"
     assert ps.about_km(87.4) == 87 and ps.about_km(99.6) == 100 and ps.about_km(0.4) == 0
     manila = (14.6091, 121.0223)
@@ -154,7 +155,7 @@ def test_far_is_over_25_km_and_the_distance_is_rounded():  # S9, B24
     assert 190 < km < 220 and ps.far(km)
 
 
-def test_the_change_lines_name_the_stop_and_the_rows_it_moves():  # S9
+def test_the_change_lines_name_the_stop_and_the_rows_it_moves():  # S8
     rows = {"d1-04": stop("d1-04", "13:00", plan="Lunch at the market"), "d1-05": stop("d1-05", "15:00", plan="Burnham Park"),
             "d1-06": stop("d1-06", "16:00", plan="Session Road")}
     lines = ps.change_lines(1, "after", "Kapihan sa Ulap", t("14:15"), rows["d1-04"], [{"key": "d1-05", "time": "15:30"}, {"key": "d1-06", "drop": True}], rows)
@@ -163,12 +164,13 @@ def test_the_change_lines_name_the_stop_and_the_rows_it_moves():  # S9
         {"word": "Later", "day": 1, "text": "Burnham Park to 3:30 PM", "part": "ripple"},
         {"word": "Dropped", "day": 1, "text": "Session Road", "part": "ripple"},
     ]
+    assert [l for l in lines if l["part"] != "ripple"] == lines[:1], "leaving the ripple out leaves the stop's own line"
     lines = ps.change_lines(2, "replace", None, t("09:00"), rows["d1-04"], [], rows)
     assert lines == [{"word": "Out", "day": 2, "text": "Lunch at the market", "part": "stop"},
                      {"word": "In", "day": 2, "text": "New stop at 9:00 AM", "part": "stop"}]
 
 
-def test_more_than_three_ripple_lines_end_with_more():  # S9, options §3.5
+def test_more_than_three_ripple_lines_end_with_more():  # S14, options §3.5
     rows = {f"d1-0{i}": stop(f"d1-0{i}", f"1{i}:00", plan=f"Stop {i}") for i in range(1, 7)}
     ripple = [{"key": k, "time": "23:00"} for k in rows]
     lines = ps.change_lines(1, "after", "X" * 80, t("12:00"), None, ripple, rows)
@@ -180,7 +182,7 @@ def test_more_than_three_ripple_lines_end_with_more():  # S9, options §3.5
     assert all(len(l["text"]) <= 120 for l in long)
 
 
-def test_times_read_as_the_app_writes_them():
+def test_times_read_as_the_app_writes_them():  # S15
     assert [ps.clock12(t(x)) for x in ("00:05", "09:00", "12:00", "12:30", "16:15", "23:45")] == \
         ["12:05 AM", "9:00 AM", "12:00 PM", "12:30 PM", "4:15 PM", "11:45 PM"]
     assert ps.hhmm(t("07:05")) == "07:05" and ps.minutes("23:59") == 1439
