@@ -11,6 +11,7 @@ const ENV_KEYS: Record<keyof Flags, string> = {
   serviceWorker: "NEXT_PUBLIC_SERVICE_WORKER",
   overworldMap: "NEXT_PUBLIC_OVERWORLD_MAP",
   planEditing: "NEXT_PUBLIC_PLAN_EDITING",
+  chatbotLive: "NEXT_PUBLIC_CHATBOT_LIVE",
 };
 
 // [raw, fallback, expected]. Keep identical to CASES in api/tests/test_flags.py.
