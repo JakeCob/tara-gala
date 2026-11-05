@@ -263,7 +263,9 @@ async function ask<T>(path: string, init: { method: Method; body: unknown }): Pr
   const body = await res.json().catch(() => null);
   const detail = typeof body?.detail === "string" ? body.detail : undefined;
   if (res.status === 409 && detail === "plan_changed") {
-    return { ok: false, why: "clash", detail, clash: { itinerary_slug: String(body.itinerary_slug), seq: Number(body.seq) } };
+    // The API's unique-key race answers with no slug or seq: then the clash names no plan, rather than a made-up one
+    const named = typeof body?.itinerary_slug === "string" && Number.isInteger(body?.seq);
+    return named ? { ok: false, why: "clash", detail, clash: { itinerary_slug: body.itinerary_slug, seq: body.seq } } : { ok: false, why: "clash", detail };
   }
   if (detail === "need_pin") return { ok: false, why: "rejected", detail, name: typeof body?.name === "string" ? body.name : null };
   return { ok: false, why: "rejected", detail };

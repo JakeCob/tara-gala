@@ -88,7 +88,12 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const band = snake ? undefined : BAND_PX;
   const chosen = day.pick ? byKey.get(pickMark(day.pick.key))?.value : undefined;
   const photosAt = (key: string | null) => photos?.files.filter((f) => f.kind === "photo" && f.row_key === key) ?? [];
-  const current = open && list.find((l) => l.row.key === open.key); // stays fresh as ticks land
+  // Stays fresh as ticks land. W-10: if another phone removes the open stop (or moves it to another World), its dialog
+  // stays, with the stop as it was last seen, so a change in progress can say what happened (ux §6)
+  const [kept, setKept] = useState<Level | null>(null);
+  const found = open && list.find((l) => l.row.key === open.key);
+  if (found && kept?.row !== found.row) setKept(found);
+  const current = found || (open && kept?.row.key === open.key ? kept : undefined);
   const next = marks ? nextLevel(list) : null;
   const atStart = !!marks && !list.some((l) => l.done); // no ticks in this world yet: the group waits at START
 

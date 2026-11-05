@@ -146,3 +146,13 @@ test("T61-W11l tg-build7's e2e findings: W-2 the search waits for the spots, W-3
   assert.match(v, /const stale = \(!!shown && !synced && planMiss === trip\.itinerary_slug\) \|\| !!lost\?\.failed;/);
   assert.match(v, /newerPlan\(before, now\)/, "W-1: the first copy from another phone is news too");
 });
+
+test("T61-W11m tg-build7's W-10 and W-11: the dialog outlives its removed stop; nothing is live before the newer plan is on screen", () => {
+  const map = read("src/components/LevelMap.tsx");
+  assert.match(map, /const found = open && list\.find\(\(l\) => l\.row\.key === open\.key\);/);
+  assert.match(map, /if \(found && kept\?\.row !== found\.row\) setKept\(found\);/, "the open stop is kept as it was last seen");
+  assert.match(map, /const current = found \|\| \(open && kept\?\.row\.key === open\.key \? kept : undefined\);/, "W-10: removed by another phone, its dialog stays to say so");
+  const v = view();
+  assert.match(v, /useLayoutEffect\(\(\) => \{\s+shownRef\.current = shown;/, "W-11: the plan a tap reads is the one painted");
+  assert.match(v, /if \(!r\.clash\) \{[\s\S]{0,200}lostRef\.current = \{ at: Date\.now\(\), failed: false \};/, "a 409 that names no plan waits for the session's word");
+});

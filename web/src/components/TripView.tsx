@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
@@ -128,7 +128,8 @@ export default function TripView({ slug }: { slug: string }) {
   const shownRef = useRef<Shown | null>(null);
   const sessionSlug = useRef<string | null>(null);
   const tripRef = useRef<Trip | null>(null);
-  useEffect(() => {
+  // W-11: before paint, so a tap always reads the plan that's on screen
+  useLayoutEffect(() => {
     shownRef.current = shown;
   }, [shown]);
   useEffect(() => {
@@ -296,6 +297,11 @@ export default function TripView({ slug }: { slug: string }) {
         clashWait.current = source === "undo" ? "undo" : "edit";
         clashAtRef.current = r.clash ?? null;
         setClashAt(clashAtRef.current);
+        if (!r.clash) {
+          // A 409 that names no plan: wait for the session's own word, as after a lost answer
+          lostRef.current = { at: Date.now(), failed: false };
+          setLost(lostRef.current);
+        }
       }
       if (r.why === "clash" || r.why === "offline" || r.why === "server") setReloads((n) => n + 1); // the newer plan, or an answer that may have been lost
       // e2e W-4: online, a request that got no answer may have landed: wait for the server's word (ux §3.3)

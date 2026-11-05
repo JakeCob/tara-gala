@@ -310,3 +310,8 @@ test("T61-W9c need_pin brings the link's name, so the pin step can fill it in; a
   assert.equal(planOutcome(bad as never), "bad_pin");
   assert.equal(planOutcome({ ok: false, why: "rejected", detail: "link_no_pin" }), "other", "retired in round 5");
 });
+
+test("T61-W9d a 409 plan_changed with no slug or seq (the API's unique-key race) is a clash with nothing made up", async () => {
+  answer(409, { detail: "plan_changed" });
+  assert.deepEqual(await tripApi.savePlan(TRIP, { itinerary_slug: "c0ffee", seq: 4 }, base(), "hand"), { ok: false, why: "clash", detail: "plan_changed" });
+});
