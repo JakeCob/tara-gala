@@ -11,7 +11,7 @@ import {
   addEntry, chatFailureLines, chatStorage, clearLog, loadLog, needLinkLine, saveLog, settle,
 } from "@/lib/chat";
 import { planFailureMessage } from "@/lib/trip";
-import { ChangeList } from "./PlanBits";
+import { ChangeList, SaidText } from "./PlanBits";
 import type { ChatTools, PlanEditor } from "./PlanEditor";
 
 export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
@@ -218,7 +218,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
             )}
           </div>
           {/* ux.md §3.3: the edit bar is under this dialog's backdrop, so a chat Apply's waiting lines show here */}
-          <p role="status" aria-live="polite" className={cx(PX.meta, "empty:sr-only")}>{waiting ? editor.status : ""}</p>
+          <p role="status" aria-live="polite" className={cx(PX.meta, "empty:sr-only")}>{waiting ? <SaidText said={editor.status} /> : ""}</p>
           <div ref={end} />
         </div>
 
