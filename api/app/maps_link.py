@@ -67,17 +67,24 @@ _NUM = r"(-?\d{1,3}(?:\.\d+)?)"
 _PAIR = re.compile(rf"^\s*{_NUM}\s*,\s*{_NUM}\s*$")
 _BANG = re.compile(rf"!3d{_NUM}!4d{_NUM}")
 _AT = re.compile(rf"^@{_NUM},{_NUM}(?:,|$)")
+_UNIT = re.compile(  # a whole comma part that says where in a building, not what the place is called (F10)
+    r"(?:ground|upper ground|lower ground|mezzanine|basement|\d+(?:st|nd|rd|th)?)\s+(?:floor|flr|fl)\.?"
+    r"|\d+/?f|[ul]?g/?f|mezzanine|basement(?:\s+\d+)?"
+    r"|(?:unit|stall|level|lvl|floor|flr|room|rm|suite|ste|booth|kiosk|shop)\s+(?:[a-z]?-?\d+[a-z]?|[a-z])",
+    re.IGNORECASE,
+)
 
 
 class LinkError(Exception):
-    """`code` is the answer's detail and the only text; `reason` is for the log; `name`, the link's own name, is only
-    for need_pin's answer. A traceback carries no URL."""
+    """`code` is the answer's detail and the only text; `reason` is for the log; `name` and `address`, read from the
+    link, are only for need_pin's answer. A traceback carries no URL."""
 
-    def __init__(self, code: str, reason: str, name: str | None = None):
+    def __init__(self, code: str, reason: str, name: str | None = None, address: str | None = None):
         super().__init__(code)
         self.code = code  # link_not_maps | link_unreadable | need_pin | bad_pin
         self.reason = reason
         self.name = name
+        self.address = address
 
 
 @dataclass(frozen=True)
@@ -96,6 +103,7 @@ class Resolved:
     name: str | None  # None when the link has none: the group types it
     maps_url: str  # the link as given, cleaned (no query); or a search URL built from the pin
     pin: str  # path | query | center (from the URL) | address (geocoded) | typed (pasted by the group)
+    address: str | None = None  # the link's whole place segment, decoded; the name is its short form
 
     @property
     def pin_source(self) -> str:
@@ -169,17 +177,22 @@ def _pair(text: str | None) -> tuple[float, float] | None:
     return _coords(*m.groups()) if m else None
 
 
+def _one_line(raw: str) -> str:
+    return " ".join("".join(ch for ch in raw if ch.isprintable()).split())
+
+
 def _name(raw: str) -> str | None:
-    """Printable, one line, at most 80 letters: cut at a comma when an address runs over, else at 80."""
-    name = " ".join("".join(ch for ch in raw if ch.isprintable()).split())
-    while len(name) > MAX_NAME and ", " in name:
-        name = name.rsplit(", ", 1)[0]
-    return name[:MAX_NAME].strip() or None
+    """The first comma part that isn't a floor or unit (F10): "Ground Floor, Neko-ya Novelty Shop, ..." gives the shop.
+    Over 80 letters it's None, never cut, and the group types the name."""
+    for part in _one_line(raw).split(","):
+        part = part.strip()
+        if part and not _UNIT.fullmatch(part):
+            return part if len(part) <= MAX_NAME else None
+    return None
 
 
 def _address(raw: str) -> str | None:
-    text = " ".join("".join(ch for ch in raw if ch.isprintable()).split())
-    return text[:300] or None
+    return _one_line(raw)[:300] or None
 
 
 def parse(u: httpx.URL) -> Parsed:
@@ -453,7 +466,7 @@ def resolve(link: str, client: httpx.Client | None = None, clock: Callable[[], f
     start = clock()
     t = _Trace()
     outcome, reason, cache = "ok", None, "no"
-    failed: tuple[str, str, str | None] | None = None
+    failed: tuple | None = None  # LinkError's arguments
     own = client is None
     try:
         given = extract_url(link)
@@ -478,20 +491,20 @@ def resolve(link: str, client: httpx.Client | None = None, clock: Callable[[], f
             try:
                 (lat, lng), pin = geocode(parsed.address, client, clock, sleep), "address"
             except LinkError as e:
-                raise LinkError("need_pin", e.reason, parsed.name) from None
+                raise LinkError("need_pin", e.reason, parsed.name, parsed.address) from None
         else:
-            raise LinkError("need_pin", "no_address", parsed.name)
+            raise LinkError("need_pin", "no_address", parsed.name, parsed.address)
         t.pin = pin
-        result = Resolved(lat, lng, parsed.name, maps_url(given, lat, lng, pin), pin)
+        result = Resolved(lat, lng, parsed.name, maps_url(given, lat, lng, pin), pin, parsed.address)
         if short:
             _links.put(key, start, CACHE_TTL_S, result)
         return result
     except LinkError as e:
-        failed = (e.code, e.reason, e.name)
+        failed = (e.code, e.reason, e.name, e.address)
     except httpx.TimeoutException:
-        failed = ("link_unreadable", "timeout", None)
+        failed = ("link_unreadable", "timeout")
     except (httpx.HTTPError, httpx.InvalidURL, httpx.StreamError, ValueError):
-        failed = ("link_unreadable", "network", None)  # httpx's message carries the URL, so it goes no further
+        failed = ("link_unreadable", "network")  # httpx's message carries the URL, so it goes no further
     finally:
         if own and client is not None:
             client.close()

@@ -396,6 +396,7 @@ class Suggestion(BaseModel):
     notes: list[str]
     changes: list[SuggestLine]
     pin_source: Literal["link", "address", "typed"] | None  # a link's; None for a spot or a trip place (owner round 5)
+    address: str | None = None  # a link's whole place segment; name is its short form, or None to type (F10)
     fits: list[Fit] | None = None  # {anywhere: true} only, best first; the top level repeats fits[0]
 
 
@@ -698,6 +699,7 @@ def suggest(conn, share_slug: str, session_id: UUID, g: guides.Guide, at: AtIn, 
         name=name, lat=pin[0] if pin else None, lng=pin[1] if pin else None, maps_url=link,
         km_from_baguio=about_km(km) if km is not None else None, far=km is not None and far(km),
         time=hhmm(time), leg=leg, ripple=moves, notes=notes + ripple_notes, pin_source=resolved.pin_source if resolved else None,
+        address=resolved.address if resolved else None,
         changes=change_lines(day.day, at_kind, name, time, stops[idx] if at.replace else None, moves, {s.key: s for s in stops}),
     )
     return out, {"place": kind, "at": at_kind, "leg": leg["kind"] if leg else "none", "far": out.far, "ripple": len(moves)}
@@ -770,6 +772,7 @@ def _anywhere(conn, share_slug: str, session_id: UUID, g: guides.Guide, ref: Pla
         time=top.time if top else "", leg=top.leg if top else None, ripple=top.ripple if top else [],
         notes=top.notes if top else [NO_FIT_NOTE], changes=top.changes if top else [], fits=fits,
         pin_source=resolved.pin_source if resolved else None,  # as the tap flow does (owner round 5)
+        address=resolved.address if resolved else None,
     )
     # Two silent fallbacks, counted for the log: a placed row with no pin ranks without a detour, and a booked trip
     # that's gone leaves its bus row's time as the window

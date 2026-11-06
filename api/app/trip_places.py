@@ -110,8 +110,10 @@ def _insert(share_slug: str, name: str, got: maps_link.Resolved) -> tuple[TripPl
 
 
 def need_pin(e: maps_link.LinkError) -> JSONResponse:
-    """need_pin's flat answer, with the link's own name for the Name field (owner round 5). Also used by suggest."""
-    return JSONResponse({"detail": "need_pin", "name": e.name}, status_code=422, headers={"Cache-Control": "private, no-cache", **NOINDEX})
+    """need_pin's flat answer, with the link's own name and address for the pin step (owner round 5, F10). Also used by
+    suggest."""
+    return JSONResponse({"detail": "need_pin", "name": e.name, "address": e.address}, status_code=422,
+                        headers={"Cache-Control": "private, no-cache", **NOINDEX})
 
 
 @router.post("/sessions/{share_slug}/places", status_code=201, response_model=AddedPlaceOut, dependencies=[Depends(_link_limited)])

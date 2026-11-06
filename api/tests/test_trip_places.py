@@ -26,7 +26,7 @@ from app import db, maps_link, plan_suggest, sessions, trip_places
 from app.limits import MANILA_TZ, RateLimiter
 from app.logging_setup import RequestLogMiddleware, configure_logging
 from conftest import ROOT
-from test_maps_link import Net, page, redirect
+from test_maps_link import Net, redirect
 
 TRIP = {"name": "Made-up trip", "start_date": "2026-11-06", "return_date": "2026-11-08"}
 HOST = "https://maps.app.goo.gl"

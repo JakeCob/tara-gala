@@ -680,7 +680,7 @@ OWNER = "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Bagu
 
 
 def place_url(segment: str) -> httpx.URL:
-    return httpx.URL("https://www.google.com/maps/place/" + segment.replace(" ", "+") + "/data=!4m2!3m1!1s0x0:0x1")
+    return httpx.URL("https://www.google.com/maps/place/" + segment.replace(" ", "+").replace("/", "%2F") + "/data=!4m2!3m1!1s0x0:0x1")
 
 
 def test_the_owners_address_gives_a_short_name_and_the_whole_address():  # F10, test-plan L29
