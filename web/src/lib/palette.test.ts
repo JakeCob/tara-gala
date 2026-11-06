@@ -306,6 +306,10 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/TripView.tsx", "{text}", "alertText"], // TG-52: a form's problem (plan or wallet link, hotel, dates, delete)
   ["src/components/TripPeople.tsx", "{text}", "alertText"], // TG-58: a failed write, under its row or form
   ["src/components/JoinView.tsx", "{text}", "alertText"], // TG-58 PR 2: an answer or photo that failed, under its control
+  ["src/components/PlanBits.tsx", "{text}", "alertText"], // TG-61: a plan step that failed, under its control
+  ["src/components/PlaceInput.tsx", "farLine(", "alert"], // TG-61 ux §4.3: a pinned place far from Baguio, before it's added
+  ["src/components/StopChange.tsx", "{lead}", "alert"], // TG-61 ux §6: someone else changed the plan first
+  ["src/components/LevelMap.tsx", "busNotice(", "alert"], // TG-61 ux §7: a bus in the plan isn't on the schedule any more
 ];
 const tsxFiles = () =>
   git("ls-files", "src/**/*.tsx", "src/*.tsx").split("\n").filter(Boolean).map((f) => f.replace(/^web\//, ""));

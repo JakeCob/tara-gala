@@ -8,15 +8,19 @@ from datetime import date as Date
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Query
+from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import db
+from .body_cap import BodyCapMiddleware
 from .logging_setup import RequestLogMiddleware, configure_logging
 from .models import Terminal, Trip
 from .flags import get_flags
 from .itineraries import router as itineraries_router
 from .last_mile import router as last_mile_router
+from .plan_edit import flag_check as plan_editing
+from .plan_edit import router as plan_edit_router
+from .plan_suggest import router as plan_suggest_router
 from .planner import router as planner_router
 from .premade import router as premade_router
 from .sessions import router as sessions_router
@@ -24,6 +28,7 @@ from .trip_files import router as trip_files_router
 from .trip_files import start_sweeper
 from .trip_invites import router as trip_invites_router
 from .trip_marks import router as trip_marks_router
+from .trip_places import router as trip_places_router
 from .trip_people import router as trip_people_router
 from .wallet_proofs import router as wallet_proofs_router
 from .schedule import arrival as _arrival  # noqa: F401  re-exported: TG-12 tests use main._arrival
@@ -56,6 +61,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Tara Gala API", version="0.1.0", lifespan=lifespan)
 
+# TG-61: innermost, so its 413 is logged and carries CORS headers too
+app.add_middleware(BodyCapMiddleware)
 # added before CORS so CORS wraps it and our 500s carry CORS headers
 app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
@@ -152,3 +159,6 @@ app.include_router(trip_files_router)
 app.include_router(trip_marks_router)
 app.include_router(trip_people_router)
 app.include_router(trip_invites_router)
+# TG-61 PR 1: editing a trip's plan, behind PLAN_EDITING (404 when it's off). Reads and the new read fields are always on
+for edit_router in (plan_edit_router, plan_suggest_router, trip_places_router):
+    app.include_router(edit_router, dependencies=[Depends(plan_editing)])

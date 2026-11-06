@@ -1011,7 +1011,9 @@ const APPROVED_PAIRS = new Set([
 ]);
 // ux §3 rules, per file: red text only where ux puts it (alert leads and the card warning lines)
 const DANGER_TEXT_FILES = ["src/components/pixel/classes.ts", "src/components/TripCard.tsx", "src/components/LegCard.tsx",
-  "src/components/PlanResults.tsx", "src/components/ItineraryView.tsx", "src/components/ItineraryList.tsx", "src/components/LastMile.tsx"];
+  "src/components/PlanResults.tsx", "src/components/ItineraryView.tsx", "src/components/ItineraryList.tsx", "src/components/LastMile.tsx",
+  // TG-61: the leads of its three alert boxes (far place, clash, bus off the schedule)
+  "src/components/PlaceInput.tsx", "src/components/StopChange.tsx", "src/components/LevelMap.tsx"];
 
 test("T47-C2 every colour pair in the code is approved; red text and Blue links only where ux puts them", async () => {
   const { PX } = await loadPixel();

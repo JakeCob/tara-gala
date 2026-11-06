@@ -303,6 +303,8 @@ export function startWorld(guide: Guide, marks: readonly Mark[]): number {
 }
 
 /** A Google Maps search for a level's place, by its name. Spots get Benguet (ones outside the city, like BenCab, still resolve); terminals don't, as Cubao is in Quezon City. */
-export function placeMapsUrl({ name, kind }: { name: string; kind: GuidePlace["kind"] }): string {
+export function placeMapsUrl({ name, kind, lat, lng }: { name: string; kind: GuidePlace["kind"]; lat?: number | null; lng?: number | null }): string {
+  // TG-61: a trip place has the pin the server read from the group's link, so directions go straight to it
+  if (kind === "trip_place" && lat != null && lng != null) return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${kind === "terminal" ? "" : "Benguet, "}Philippines`)}`;
 }

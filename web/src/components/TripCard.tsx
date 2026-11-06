@@ -1,10 +1,12 @@
 // A bus card, as on the search results (TG-12/14), moved out of TripSearch.tsx for the share page (TG-23).
-// notice is the share page's "this bus changed" line (ux.md 3.2); search never passes one.
+// notice is the share page's "this bus changed" line (ux.md 3.2); search never passes one. action is TG-61's "Use this
+// bus" in the plan's bus swap.
+import type { ReactNode } from "react";
 import { formatClass, formatDayOffset, formatTime, formatVerified, type Trip } from "@/lib/api";
 import TerminalLinks from "@/components/TerminalLinks";
 import { PX, PixelBox } from "@/components/pixel";
 
-export default function TripCard({ trip: t, notice }: { trip: Trip; notice?: string }) {
+export default function TripCard({ trip: t, notice, action }: { trip: Trip; notice?: string; action?: ReactNode }) {
   return (
     <PixelBox as="li">
       {notice && <p className="text-sm font-semibold text-danger-text">{notice}</p>}
@@ -54,6 +56,7 @@ export default function TripCard({ trip: t, notice }: { trip: Trip; notice?: str
           <span>No booking link yet</span>
         )}
       </div>
+      {action}
     </PixelBox>
   );
 }

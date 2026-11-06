@@ -297,7 +297,9 @@ test("TG54-5 TripView: every GET it shows goes through afterGet, aged against wh
   const write = view.slice(view.indexOf("async function write("), view.indexOf("const onFail ="));
   assert.ok(write.indexOf("shownAt.current = Date.now();") > write.indexOf("if (!r.ok)"), "only a write that landed");
   assert.ok(write.indexOf("shownAt.current = Date.now();") < write.indexOf("setLoad("), "before its state, so no answer can slip between");
-  assert.equal(view.match(/setLoad\(/g)?.length, 3, "afterGet, the write and TG-57's afterSaved: nothing else sets the trip");
+  assert.equal(view.match(/setLoad\(/g)?.length, 4, "afterGet, the write, TG-57's afterSaved and TG-61's afterPlanSaved: nothing else sets the trip");
+  const plan = view.slice(view.indexOf("async function planWrite("), view.indexOf("async function onUndo("));
+  assert.ok(plan.indexOf("shownAt.current = Date.now();") < plan.indexOf("setLoad("), "TG-61: a plan save ages the screen first, so an older session GET can't put the old plan back");
   assert.match(view, /console\.info\("\[tg-trip\] load ok=%s", r\.ok \? \(overtaken \? "overtaken" : r\.savedAt \? "saved" : "yes"\) : r\.why\);/);
   // An overtaken answer leaves everything alone: this phone's note of the trip too
   assert.match(view, /if \(r\.ok && !overtaken\) \{\s+shownAt\.current = from;\s+remember\(r\.trip\);\s+keepFilesOffline\(r\.trip, keptFiles\.current\);\s+\}/);
@@ -474,10 +476,11 @@ test("TG57-7 TripView: saved copies go through the age rule, the guide retries w
   assert.doesNotMatch(peek, /remember\(|keepFilesOffline/, "only a fresh answer updates this phone's note and its kept files");
   const guide = src.slice(src.indexOf("const planSlug"), src.indexOf('if (load.state === "loading")'));
   assert.match(guide, /savedItinerary\(planSlug\)/);
-  assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: saved\.body\.guide \?\? null \}\)/);
-  assert.match(guide, /fillGuide\(prev, \{ plan: planSlug, guide: null, failed: true \}\)/);
-  assert.match(guide, /\[planSlug, retry\]/, "a failed fetch tries again with the next poll, not only on a full reload");
-  assert.match(src, /mapSlot\(trip\.itinerary_slug, guide\)/);
+  // TG-61: the saved copy only fills a gap, now judged with the plan's version too (planState.acceptSaved)
+  assert.match(guide, /setShown\(\(prev\) => \(acceptSaved\(prev, next, sessionSlug\.current\) \? next : prev\)\)/);
+  assert.match(guide, /if \(live\) setPlanMiss\(planSlug\);/);
+  assert.match(guide, /\[planSlug, planSeq, retry\]/, "a failed fetch tries again with the next poll, and another phone's version fetches the plan again");
+  assert.match(src, /mapSlot\(trip\.itinerary_slug, shown \? \{ plan: shown\.slug, guide: shown\.guide \} : planMiss \? \{ plan: planMiss, guide: null \} : null\)/);
   assert.match(src, /\{slot === "frame" && \(\s+<section data-map-loading/, "the frame is drawn");
   assert.doesNotMatch(read("src/components/LevelMap.tsx"), /data-map-loading/);
   assert.doesNotMatch(src.slice(src.indexOf("data-map-loading") - 200, src.indexOf("data-map-loading") + 400), /progress-title/, "#progress-title still means the real map");
