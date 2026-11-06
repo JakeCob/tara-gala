@@ -154,7 +154,7 @@ def test_link_problems_are_codes_and_store_nothing(api, dsn, net):  # T5, B28, B
     assert add_place(api, slug, "https://evil.io/maps/place/x").json()["detail"] == "link_not_maps"
     net.table[f"{HOST}/E1"] = redirect("https://www.google.com/maps/place/Kapihan/")
     r = add_place(api, slug, f"{HOST}/E1")
-    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": "Kapihan"}), "geocoded, and nothing found"
+    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": "Kapihan", "address": "Kapihan"}), "geocoded, and nothing found"
     net.table[f"{HOST}/E2"] = redirect("https://evil.io/x")
     r = add_place(api, slug, f"{HOST}/E2")
     assert (r.status_code, r.json()["detail"]) == (422, "link_unreadable")
@@ -291,7 +291,7 @@ def suggest(api, slug, at, place, base=("made-up-plan", 0)):
     return api.post(f"/sessions/{slug}/plan/suggest", json={"base": {"itinerary_slug": base[0], "seq": base[1]}, "at": at, "place": place})
 
 
-SUGGESTION_KEYS = {"name", "lat", "lng", "maps_url", "km_from_baguio", "far", "time", "leg", "ripple", "notes", "changes", "pin_source", "fits"}
+SUGGESTION_KEYS = {"name", "lat", "lng", "maps_url", "km_from_baguio", "far", "time", "leg", "ripple", "notes", "changes", "pin_source", "fits", "address"}
 
 
 def test_after_a_stop_with_a_route_on_file(api, planned):  # S11, S4, B21
@@ -510,7 +510,7 @@ def test_need_pin_then_a_typed_pin(api, dsn, net):  # N15
     slug = new_trip(api)
     link = no_pin_link(net, "U2")
     r = add_place(api, slug, link, name="Made-up Bakery")
-    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": ADDRESS[:80]})
+    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": "Made-up Bakery", "address": ADDRESS})
     net.asked.clear()
     r = add_place(api, slug, link, name="Made-up Bakery", pin="16.4138, 120.5964")
     assert r.status_code == 201, r.text
@@ -533,11 +533,11 @@ def test_suggest_says_where_the_pin_came_from(api, planned, net):  # N16
     assert s["pin_source"] == "link"
     link = no_pin_link(net, "V2", [{"lat": "16.4101", "lon": "120.5999"}])
     s = suggest(api, slug, {"after": "d2-01"}, {"link": link}).json()
-    assert (s["pin_source"], s["lat"], s["name"]) == ("address", 16.4101, ADDRESS)
+    assert (s["pin_source"], s["lat"], s["name"], s["address"]) == ("address", 16.4101, "Made-up Bakery", ADDRESS)
     net.geo.clear()
     maps_link.clear_cache()
     r = suggest(api, slug, {"after": "d2-01"}, {"link": link})
-    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": ADDRESS})
+    assert (r.status_code, r.json()) == (422, {"detail": "need_pin", "name": "Made-up Bakery", "address": ADDRESS})
     net.asked.clear()
     r = suggest(api, slug, {"after": "d2-01"}, {"link": link, "pin": "16.4138, 120.5964"})
     assert (r.status_code, r.json()["pin_source"], r.json()["lat"], r.json()["maps_url"]) == (200, "typed", 16.4138, link)
@@ -703,3 +703,26 @@ def test_bf14_the_fit_log_line_has_counts_only(api, owner_planned, net, caplog, 
     for leak in ("Made-up", "Shop", "F4", "F5", "goo.gl", "16.409", "120.598", "Session", "check-in", "d1-", "d2-", "d3-"):
         assert leak not in caplog.text, leak
 
+
+
+OWNER = "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet"
+
+
+def test_the_owners_link_prefills_a_name_that_passes_its_own_check(api, planned, dsn, net):  # F10, test-plan T10
+    slug, _ = planned
+    link = f"{HOST}/X1"
+    net.table[link] = redirect("https://www.google.com/maps/place/" + OWNER.replace(" ", "+") + "/data=!4m2!3m1!1s0x0:0x1")
+    net.geo[OWNER] = [{"lat": "16.41388", "lon": "120.59642"}]
+    s = suggest(api, slug, {"after": "d2-01"}, {"link": link}).json()
+    assert (s["name"], s["address"], s["pin_source"]) == ("Neko-ya Novelty Shop", OWNER, "address")
+    assert s["changes"][0]["text"].startswith("Neko-ya Novelty Shop at ")
+    r = add_place(api, slug, link, name=s["name"])
+    assert r.status_code == 201, r.text
+    assert sql(dsn, "select name, lat, lng, maps_url from trip_places") == [
+        {"name": "Neko-ya Novelty Shop", "lat": 16.41388, "lng": 120.59642, "maps_url": link}]
+    assert add_place(api, slug, link, name="x" * 81).status_code == 422, "a name over 80 is still refused"
+
+
+def test_a_spots_suggestion_has_no_address(api, planned):  # F10
+    slug, _ = planned
+    assert suggest(api, slug, {"after": "d1-01"}, {"spot_id": str(PARK_ID)}).json()["address"] is None

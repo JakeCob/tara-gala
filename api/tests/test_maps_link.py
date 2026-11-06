@@ -132,6 +132,8 @@ def test_every_fixture_resolves_as_recorded(path):  # L1 to L6 and N1; synthetic
         got = resolve(d["link"], net)
         assert (got.lat, got.lng, got.name, got.pin) == (want["lat"], want["lng"], want["name"], want["pin"])
         assert got.maps_url == want["maps_url"]
+        if "address" in want:
+            assert got.address == want["address"]
     else:
         e = refused(d["link"], net)
         assert e.code == want["outcome"]
@@ -168,7 +170,7 @@ def test_the_name_is_decoded_and_kept_short():  # L7
     assert got.name is None, "a dropped pin has no name; the group types it"
     long_name = "A" * 120
     got = resolve(f"https://www.google.com/maps/place/{long_name}/@16.41,120.59,17z", Net())
-    assert got.name == "A" * 80
+    assert got.name is None and got.address == long_name, "over 80 is never cut: the group types it (F10)"
 
 
 def test_a_name_in_q_is_read_and_the_pin_still_needed():  # L15, N2
@@ -531,7 +533,7 @@ def test_the_geocode_request_is_one_checked_url(monkeypatch):  # N4
     assert dict(u.params) == {"q": ADDRESS, "format": "jsonv2", "limit": "1", "countrycodes": "ph"}
     assert net.headers[-1]["user-agent"] == ml.GEOCODER_UA == "TaraGala/1.0 (trip planner)"
     assert len(seen) == 1 and str(seen[0]) == net.asked[-1]
-    assert got.maps_url == SHORT and got.name == ADDRESS
+    assert got.maps_url == SHORT and got.name == "Made-up Bakery" and got.address == ADDRESS
 
 
 @pytest.mark.parametrize("u, ok", [
@@ -610,7 +612,7 @@ def test_an_address_is_geocoded_once_and_a_miss_is_kept_15_minutes():  # N7
 def test_a_geocoder_failure_is_need_pin(answer, reason):  # N8
     net = Net({SHORT: redirect(NO_PIN)}, {ADDRESS: answer})
     e = refused(SHORT, net)
-    assert (e.code, e.reason, e.name) == ("need_pin", reason, ADDRESS)
+    assert (e.code, e.reason, e.name, e.address) == ("need_pin", reason, "Made-up Bakery", ADDRESS)
     assert "169.254" not in " ".join(net.asked), "a geocoder redirect is never followed"
     if reason not in ("geocode_none",):
         assert net.geocoded == [ADDRESS], "a failure stops the tries"
@@ -669,4 +671,72 @@ def test_the_geocode_logs_carry_no_address(caplog):  # N13
     assert any("maps link geocode outcome=failed tries=1 cache=no" in m and "reason=geocode_status_503" in m for m in lines)
     assert any("outcome=need_pin" in m and "reason=geocode_status_503" in m for m in lines)
     for leak in ("Made-up", "Bakery", "Baguio", "Benguet", "Unit", "16.41", "120.59", "Zx9", "goo.gl", "nominatim"):
+        assert leak not in caplog.text, leak
+
+
+# ---------------------------------------------------------------- F10: an address-only link's short name
+
+OWNER = "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet"
+
+
+def place_url(segment: str) -> httpx.URL:
+    return httpx.URL("https://www.google.com/maps/place/" + segment.replace(" ", "+") + "/data=!4m2!3m1!1s0x0:0x1")
+
+
+def test_the_owners_address_gives_a_short_name_and_the_whole_address():  # F10, test-plan L29
+    p = ml.parse(place_url(OWNER))
+    assert (p.name, p.address) == ("Neko-ya Novelty Shop", OWNER) and len(p.address) == 87
+    assert ml.parse(httpx.URL("https://www.google.com/maps/place/Caf%C3%A9+Yagam,+Baguio/")).address == "Café Yagam, Baguio", "decoded"
+
+
+@pytest.mark.parametrize("segment, name", [
+    ("2F, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("2/F, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("G/F, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("2nd Floor, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("Unit 3, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("Unit B-4, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("Stall 12, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("Level 2, Made-up Bakery, Baguio", "Made-up Bakery"),
+    ("Ground Floor, Unit 3, Made-up Bakery, Baguio", "Made-up Bakery"),  # more than one in a row
+    ("ground floor, Made-up Bakery", "Made-up Bakery"),
+    ("Made-up Bakery, Unit 3, Baguio", "Made-up Bakery"),
+    ("Made-up Bakery", "Made-up Bakery"),
+    ("Level Up Cafe, Baguio", "Level Up Cafe"),  # the words alone aren't a unit
+    ("Unit Coffee, Baguio", "Unit Coffee"),
+    ("2F Bakery, Baguio", "2F Bakery"),
+    ("Floor Plan Cafe, Baguio", "Floor Plan Cafe"),
+])
+def test_floor_and_unit_parts_are_dropped_from_the_name(segment, name):  # F10, test-plan L29
+    p = ml.parse(place_url(segment))
+    assert (p.name, p.address) == (name, segment)
+
+
+@pytest.mark.parametrize("segment", ["B" * 81 + ", Baguio", "Ground Floor, " + "B" * 81 + ", Baguio", "Ground Floor", "Unit 3, 2F"])
+def test_no_usable_first_part_gives_a_null_name_for_the_group_to_type(segment):  # F10, test-plan L29
+    p = ml.parse(place_url(segment))
+    assert p.name is None and p.address == segment
+    assert ml.parse(place_url("B" * 80 + ", Baguio")).name == "B" * 80, "80 is still a name"
+
+
+def test_the_geocoder_gets_the_full_address_not_the_short_name():  # F10
+    net = Net({SHORT: redirect(str(place_url(OWNER)))}, {OWNER: FOUND})
+    got = resolve(SHORT, net)
+    assert net.geocoded == [OWNER] and got.name == "Neko-ya Novelty Shop"
+
+
+def test_a_name_in_q_follows_the_same_rule():  # F10
+    p = ml.parse(httpx.URL("https://www.google.com/maps?q=Unit+3,+Made-up+Bakery,+Baguio"))
+    assert (p.name, p.address) == ("Made-up Bakery", "Unit 3, Made-up Bakery, Baguio")
+
+
+def test_need_pin_carries_the_short_name_and_the_address():  # F10
+    e = refused(str(place_url(OWNER)), Net())
+    assert (e.code, e.name, e.address, str(e)) == ("need_pin", "Neko-ya Novelty Shop", OWNER, "need_pin")
+
+
+def test_the_name_rule_logs_nothing_of_the_address(caplog):  # F10
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    resolve(SHORT, Net({SHORT: redirect(str(place_url(OWNER)))}, {OWNER: FOUND}))
+    for leak in ("Neko-ya", "Olympian", "Mabini", "Ground Floor", "Benguet"):
         assert leak not in caplog.text, leak
