@@ -123,7 +123,7 @@ test("T61-W11j Add a place (ux.md §4.8): on the bar and beside Edit the plan, w
 
 test("T61-W11k round 5: need_pin is the next step, not an error; the pin goes up as typed with the link, on every call about it", () => {
   const place = read("src/components/PlaceInput.tsx");
-  assert.match(place, /if \(!r\.ok && r\.detail === "need_pin"\) \{[\s\S]{0,120}setNeedPin\(typed\);\s+setName\(\(r\.name \?\? ""\)/, "the link's name fills in Name");
+  assert.match(place, /if \(!r\.ok && r\.detail === "need_pin"\) \{[\s\S]{0,120}setNeedPin\(typed\);\s+setName\(prefillName\(r\.name\)\)/, "the link's name fills in Name");
   assert.match(place, /inputMode="decimal"/);
   assert.match(place, /editor\.suggest\(at, \{ link, pin \}\)/);
   assert.match(place, /const pin = pinText; \/\/ as typed/, "never trimmed or cut: the server parses it");
@@ -155,4 +155,11 @@ test("T61-W11m tg-build7's W-10 and W-11: the dialog outlives its removed stop; 
   const v = view();
   assert.match(v, /useLayoutEffect\(\(\) => \{\s+shownRef\.current = shown;/, "W-11: the plan a tap reads is the one painted");
   assert.match(v, /if \(!r\.clash\) \{[\s\S]{0,200}lostRef\.current = \{ at: Date\.now\(\), failed: false \};/, "a 409 that names no plan waits for the session's word");
+});
+
+test("T61-W11n W-7 and F10: the copy's /i/ page reads changed_at, and every Name prefill goes through prefillName", () => {
+  assert.match(read("src/components/ItineraryList.tsx"), /copyLine\(true, null, it\.changed_at\)/);
+  const place = read("src/components/PlaceInput.tsx");
+  assert.equal(place.match(/setName\(prefillName\(/g)?.length, 2, "a found link, and need_pin");
+  assert.doesNotMatch(place, /setName\(\(r\./, "no name is cut to fit");
 });

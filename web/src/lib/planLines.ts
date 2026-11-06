@@ -107,9 +107,9 @@ export function undoConfirm(edits: PlanEdits | null | undefined, mine: ReadonlyM
 }
 
 /** Under the guide's summary once the trip has its own copy (ux.md §2). */
-export function copyLine(edited: boolean, edits: PlanEdits | null | undefined): string | null {
+export function copyLine(edited: boolean, edits: PlanEdits | null | undefined, changedAt?: string | null): string | null {
   if (!edited) return null;
-  const at = edits?.versions[0]?.created_at;
+  const at = edits?.versions[0]?.created_at ?? changedAt; // the /i/ page has no session: W-7, the plan's own changed_at
   return at ? `Your group's own copy of the plan, last changed ${dayOf(at)}, ${clock(at)}.` : "Your group's own copy of the plan.";
 }
 

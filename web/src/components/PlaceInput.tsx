@@ -6,7 +6,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { PX, PixelBox, PixelButton, PixelChoice, cx } from "@/components/pixel";
 import { formatTime } from "@/lib/api";
-import { type At, type Found, type PlaceIn, type Suggestion, applySuggestion, findPlaces, isLink } from "@/lib/planEdit";
+import { type At, type Found, type PlaceIn, type Suggestion, applySuggestion, findPlaces, isLink, prefillName } from "@/lib/planEdit";
 import type { ChangeLine, Done } from "@/lib/planLines";
 import { farLine, pinLine } from "@/lib/planLines";
 import { type SuggestIn, planFailureMessage, planOutcome } from "@/lib/trip";
@@ -80,12 +80,12 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
     if (!r.ok && r.detail === "need_pin") {
       // Not an error: the next step (ux.md §4.3 round 5)
       setNeedPin(typed);
-      setName((r.name ?? "").slice(0, MAX_NAME));
+      setName(prefillName(r.name));
       return;
     }
     if (!r.ok) return setProblem(planFailureMessage(r));
     setPinned({ link: typed, pin: null, suggestion: r.body });
-    setName((r.body.name ?? "").slice(0, MAX_NAME));
+    setName(prefillName(r.body.name));
   }
 
   /** The pasted pin, sent as typed with the link: the server parses it, and makes no fetch. */

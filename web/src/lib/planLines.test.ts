@@ -66,7 +66,10 @@ test("T61-L5 Undo becomes Redo after an undo; it asks first when the change may 
 test("T61-L6 the copy line, from the newest version's time", () => {
   assert.equal(copyLine(true, { seq: 3, versions: [v(3, "hand", [L("New", "x")], "2026-11-05T07:12:00Z")] }), "Your group's own copy of the plan, last changed Nov 5, 3:12 PM.");
   assert.equal(copyLine(false, null), null, "before the first edit, no line");
-  assert.equal(copyLine(true, null), "Your group's own copy of the plan.", "the /i/ page has no history");
+  assert.equal(copyLine(true, null), "Your group's own copy of the plan.", "no time known yet: the short line");
+  assert.equal(copyLine(true, null, "2026-11-05T07:12:00Z"), "Your group's own copy of the plan, last changed Nov 5, 3:12 PM.", "W-7: the /i/ page reads the plan's own changed_at");
+  assert.equal(copyLine(true, { seq: 3, versions: [v(3, "hand", [L("New", "x")], "2026-11-06T01:00:00Z")] }, "2026-11-05T07:12:00Z"), "Your group's own copy of the plan, last changed Nov 6, 9:00 AM.", "the trip page's newest version wins");
+  assert.equal(copyLine(false, null, "2026-11-05T07:12:00Z"), null, "a shared plan has no such line");
 });
 
 test("T61-L7 how to get there: a route with its Checked line, or an estimate with no fare and its own line", () => {

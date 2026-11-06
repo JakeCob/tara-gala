@@ -39,7 +39,7 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
     <>
       <PixelBox as="section" aria-label="Trip summary" className="p-4 flex flex-col gap-3">
         <p className={PX.dataHeading}>{dateRange(it.trip_date, it.return_date)}</p>
-        {it.edited && <p className={PX.meta}>{copyLine(true, null)}</p>}
+        {it.edited && <p className={PX.meta}>{copyLine(true, null, it.changed_at)}</p>}
         <p className="text-sm">{partySummary(it.party)}</p>
         {names && <p className="text-sm min-w-0 break-words">{names}</p>}
         {(it.vibe || it.premade) && (

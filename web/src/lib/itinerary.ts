@@ -33,6 +33,7 @@ export type Itinerary = {
   guide?: Guide | null; // TG-52: the day tables, buses, pick, budget, to-do and sources, when the plan has them
   edited?: boolean; // TG-61: a trip's own copy of a plan
   seq?: number | null; // TG-61: the copy's version, read with its plan; null for a shared plan
+  changed_at?: string | null; // TG-61 W-7: when the copy last changed; null for a shared plan
 };
 
 // Same pattern as SLUG in api/app/itineraries.py (a test compares them). An invalid slug shows the 404

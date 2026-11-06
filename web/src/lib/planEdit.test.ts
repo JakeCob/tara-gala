@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import type { Guide, GuideRow } from "./guide.ts";
 import {
   type GuideIn, type RowIn, type Suggestion, addRow, applySuggestion, editBudget, editPickOption, editSources, editTodo, legIn, moveRow, nudgeRow,
-  removeRow, replacePlace, setRow, swapBus, toStored, findPlaces, focusAfter, isLink, noteSuggestion, type Fit, applyFit, fitSuggestion,
+  removeRow, replacePlace, setRow, swapBus, toStored, findPlaces, focusAfter, isLink, noteSuggestion, type Fit, applyFit, fitSuggestion, prefillName,
 } from "./planEdit.ts";
 import { planFailureMessage, planOutcome, tripApi } from "./trip.ts";
 
@@ -314,4 +314,12 @@ test("T61-W9c need_pin brings the link's name, so the pin step can fill it in; a
 test("T61-W9d a 409 plan_changed with no slug or seq (the API's unique-key race) is a clash with nothing made up", async () => {
   answer(409, { detail: "plan_changed" });
   assert.deepEqual(await tripApi.savePlan(TRIP, { itinerary_slug: "c0ffee", seq: 4 }, base(), "hand"), { ok: false, why: "clash", detail: "plan_changed" });
+});
+
+test("T61-W19 (F10) Name is prefilled with the server's short name, whole or not at all: null or too long leaves the box empty", () => {
+  assert.equal(prefillName("Neko-ya Novelty Shop"), "Neko-ya Novelty Shop");
+  assert.equal(prefillName(null), "");
+  assert.equal(prefillName(undefined), "");
+  assert.equal(prefillName("x".repeat(80)), "x".repeat(80));
+  assert.equal(prefillName("x".repeat(81)), "", "never cut mid-word: the group types it");
 });
