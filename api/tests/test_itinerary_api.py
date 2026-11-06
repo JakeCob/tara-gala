@@ -28,7 +28,7 @@ NOT_FOUND = b'{"detail":"Itinerary not found"}'
 TOP_FIELDS = {
     "share_slug", "premade", "trip_date", "return_date", "party", "budget_php", "vibe", "created_at",
     "outbound", "return", "days", "plan", "issues", "guide",  # TG-52: None unless the itinerary has a guide
-    "edited", "seq"}  # TG-61: a trip's own copy, and its version
+    "edited", "seq", "changed_at"}  # TG-61: a trip's own copy, its version, and when that was made
 OUT = ("vl-cubao", "07:00", "regular_aircon")
 NIGHT = ("vl-cubao", "22:00", "regular_aircon")
 NO_MINUTES = ("vl-cubao", "09:00", "deluxe")
@@ -376,8 +376,9 @@ def test_only_exact_slug_and_premade_reads_touch_itineraries():
     # TG-52 PR 3 trip_marks.py: the guide of the trip's own linked itinerary (a join on the session's id)
     # TG-61 plan_suggest.py: the same, with the trip's own version number (a join on the session's id)
     # TG-61 plan_edit.py: the trip's own linked itinerary again (a join on the session's id); sessions.py also deletes
-    # the trip's own copy with the trip (model trip-edit, owned through itinerary_versions.session_id)
-    assert readers == {"itineraries.py": 1, "plan_edit.py": 1, "plan_suggest.py": 1, "premade.py": 1, "sessions.py": 3, "trip_marks.py": 1}
+    # the trip's own copy with the trip (model trip-edit, owned through itinerary_versions.session_id). plan_edit.py's
+    # second is the shared plan's slug that the trip's own copy was made from (F2: a replay of the first edit)
+    assert readers == {"itineraries.py": 1, "plan_edit.py": 2, "plan_suggest.py": 1, "premade.py": 1, "sessions.py": 3, "trip_marks.py": 1}
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_suggest.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_edit.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "trip_marks.py").read_text(encoding="utf-8")

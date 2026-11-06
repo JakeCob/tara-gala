@@ -5,7 +5,9 @@ The first edit copies the trip's plan into an itineraries row of its own (model 
 so the shared plan and the ready-made ones never change, and the nightly loaders never touch the copy. Every edit
 after that is the next version in itinerary_versions, and itineraries.plan always equals the newest one. A save names
 the version it was worked out from (its base); if that's no longer the newest, the answer is 409 plan_changed with
-the newest, and nothing is written (the TG-54 rule).
+the newest, and nothing is written (the TG-54 rule). The one exception is a replay: Chrome resends a PUT whose answer
+was cut, and that resend's base is one behind its own save. If the request is exactly what made the newest version, it
+gets that save's answer, and nothing is written (F2). Any other request on that base is still a 409.
 
 Only the server mints keys: a new row, to-do or pick option comes with a null key, and gets one that no version,
 tick or photo of this trip has used, so it can't inherit an old row's ticks. A row keeps its key when it moves day.
@@ -339,6 +341,103 @@ def _write(conn, session_id: UUID, cur: Current, plan: dict, source: str, change
     return slug, seq
 
 
+@dataclass
+class Prepared:
+    """A new guide that passed every check, as it would be saved."""
+    guide: guides.Guide
+    plan: dict  # the whole plan with it
+    changes: list[ChangeLine]
+    minted: int
+    size: int
+
+
+def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, used: Taken | None = None) -> Prepared:
+    """Everything a save checks, with nothing written: keys, mint, model, bus times, checks, change lines, size. `used`
+    is the keys already taken, when they aren't what taken() reads now (a replay). Raises Refused."""
+    if not _known_keys(guide_in, cur.guide):
+        raise Refused(422, "unknown_key")
+    raw, minted = mint(guide_in, used or taken(conn, session_id, cur))
+    new, problems = guides.parse_guide(raw)
+    if new is None:
+        raise Refused(422, "bad_guide", problems=len(problems))
+    trips = load_trips(conn, guides.trip_ids(new))
+    bus_times(new, cur.guide, trips)
+    codes = check(conn, session_id, cur.guide, new, trips)
+    if codes:
+        raise Refused(422, codes[0], codes=codes, problems=len(codes))
+    changes = plan_diff.changes(cur.guide, new, names(conn, session_id, cur.guide, new))
+    if not changes:
+        raise Refused(422, "no_change")
+    plan = _stored(cur.row, new.model_dump(mode="json", by_alias=True, exclude_none=True))
+    size = len(json.dumps(plan).encode())
+    if size > MAX_PLAN_BYTES:
+        raise Refused(422, "too_big")
+    return Prepared(guide=new, plan=plan, changes=changes, minted=minted, size=size)
+
+
+# ---------------------------------------------------------------- replays (F2)
+
+def _one_behind(conn, cur: Current, base: Base) -> bool:
+    """Is `base` what the newest version was saved on? The first edit's base names the shared plan it was copied from."""
+    if not cur.copy or cur.seq < 1 or base.seq != cur.seq - 1:
+        return False
+    if base.itinerary_slug == cur.row["share_slug"]:
+        return True
+    shared = conn.execute(
+        "select i.share_slug from itinerary_versions v join itineraries i on i.id = v.based_on where v.itinerary_id = %s and v.seq = 0",
+        (cur.row["id"],),
+    ).fetchone() if cur.seq == 1 else None
+    return shared is not None and shared["share_slug"] == base.itinerary_slug
+
+
+def _versions(conn, cur: Current, *seqs: int) -> list[dict]:
+    return conn.execute("select seq, source, plan, changes from itinerary_versions where itinerary_id = %s and seq = any(%s) order by seq",
+                        (cur.row["id"], list(seqs))).fetchall()
+
+
+def _without_minted(used: Taken, before: guides.Guide, after: guides.Guide) -> Taken:
+    """The keys taken before `after` was saved: it minted its new ones from what was free then, so a replay mints the
+    same. A later tick on a new row changes nothing, since its key is one of these."""
+    def letters(g: guides.Guide) -> dict[str, set[str]]:
+        return {d.pick.key: {o.id for o in d.pick.options} for d in g.days if d.pick}
+
+    was = letters(before)
+    return Taken(
+        rows=used.rows - ({r.key for d in after.days for r in d.rows} - {r.key for d in before.days for r in d.rows}),
+        todos=used.todos - ({t.key for t in after.todo} - {t.key for t in before.todo}),
+        letters={k: v - (letters(after).get(k, set()) - was.get(k, set())) for k, v in used.letters.items()},
+    )
+
+
+def replayed_save(conn, session_id: UUID, cur: Current, body: PlanIn) -> PlanSaved | None:
+    """The answer the newest version already gave, if this request is exactly what made it (F2): one behind, from the
+    same source, and worked out again from the version before, it gives the newest version's plan."""
+    if not _one_behind(conn, cur, body.base):
+        return None
+    prior, newest = _versions(conn, cur, cur.seq - 1, cur.seq)
+    before = guides.parse_guide(prior["plan"].get("guide"))[0]
+    if newest["source"] != body.source or before is None:
+        return None
+    was = Current(row={**cur.row, "plan": prior["plan"]}, copy=True, seq=prior["seq"], guide=before)
+    try:
+        p = prepare(conn, session_id, was, body.guide, _without_minted(taken(conn, session_id, cur), before, cur.guide))
+    except Refused:
+        return None  # it isn't this save, so it's an ordinary clash
+    if p.plan != newest["plan"]:
+        return None
+    return _answer(conn, cur.row["share_slug"], [ChangeLine(**c) for c in newest["changes"]])
+
+
+def replayed_undo(conn, cur: Current, base: Base) -> PlanSaved | None:
+    """The same for an undo: the newest version is the undo that this base would have made."""
+    if base.seq < 1 or not _one_behind(conn, cur, base):
+        return None
+    target, newest = _versions(conn, cur, base.seq - 1, cur.seq)
+    if newest["source"] != "undo" or newest["plan"] != target["plan"]:
+        return None
+    return _answer(conn, cur.row["share_slug"], [ChangeLine(**c) for c in newest["changes"]])
+
+
 def _answer(conn, slug: str, changes: list[ChangeLine]) -> PlanSaved:
     return PlanSaved(itinerary=its.build_out(conn, conn.execute(its.ROW_SQL, (slug,)).fetchone()), changes=changes)
 
@@ -376,30 +475,18 @@ def save_plan(share_slug: str, body: PlanIn, request: Request, response: Respons
     def work(conn) -> PlanSaved:
         session_id = _session_id(conn, share_slug, lock=True)  # two phones queue here instead of racing
         cur = current(conn, session_id)
+        replay = replayed_save(conn, session_id, cur, body)
+        if replay is not None:
+            logger.info("plan save replay share_slug=%s seq=%d", share_slug, cur.seq)
+            return replay
         _check_base(cur, body.base, share_slug, "save")
-        if not _known_keys(body.guide, cur.guide):
-            raise Refused(422, "unknown_key")
-        raw, minted = mint(body.guide, taken(conn, session_id, cur))
-        new, problems = guides.parse_guide(raw)
-        if new is None:
-            raise Refused(422, "bad_guide", problems=len(problems))
-        trips = load_trips(conn, guides.trip_ids(new))
-        bus_times(new, cur.guide, trips)
-        codes = check(conn, session_id, cur.guide, new, trips)
-        if codes:
-            raise Refused(422, codes[0], codes=codes, problems=len(codes))
-        changes = plan_diff.changes(cur.guide, new, names(conn, session_id, cur.guide, new))
-        if not changes:
-            raise Refused(422, "no_change")
-        plan = _stored(cur.row, new.model_dump(mode="json", by_alias=True, exclude_none=True))
-        size = len(json.dumps(plan).encode())
-        if size > MAX_PLAN_BYTES:
-            raise Refused(422, "too_big")
-        slug, seq = _write(conn, session_id, cur, plan, body.source, changes)
-        saved = _answer(conn, slug, changes)
+        p = prepare(conn, session_id, cur, body.guide)
+        slug, seq = _write(conn, session_id, cur, p.plan, body.source, p.changes)
+        saved = _answer(conn, slug, p.changes)
         logger.info(
             "plan save share_slug=%s source=%s base_seq=%d seq=%d copied=%s rows=%d todos=%d new_keys=%d bytes=%d",
-            share_slug, body.source, body.base.seq, seq, not cur.copy, sum(len(d.rows) for d in new.days), len(new.todo), minted, size,
+            share_slug, body.source, body.base.seq, seq, not cur.copy, sum(len(d.rows) for d in p.guide.days), len(p.guide.todo),
+            p.minted, p.size,
         )
         return saved
 
@@ -418,6 +505,10 @@ def undo_plan(share_slug: str, body: UndoIn, request: Request, response: Respons
     def work(conn) -> PlanSaved:
         session_id = _session_id(conn, share_slug, lock=True)
         cur = current(conn, session_id)
+        replay = replayed_undo(conn, cur, body.base)
+        if replay is not None:
+            logger.info("plan undo replay share_slug=%s seq=%d", share_slug, cur.seq)
+            return replay
         _check_base(cur, body.base, share_slug, "undo")
         if not cur.copy or cur.seq == 0:
             raise Refused(409, "nothing_to_undo")

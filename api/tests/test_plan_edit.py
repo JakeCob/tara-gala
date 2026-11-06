@@ -12,6 +12,7 @@ import logging
 import re
 import threading
 import uuid
+from datetime import datetime
 
 import psycopg
 import pytest
@@ -599,6 +600,7 @@ def test_a_reads_seq_always_matches_its_plan(t, client, barkada, monkeypatch):  
     monkeypatch.setattr(guides, "build", racing_build)
     it = client.get(f"/itineraries/{slug}").json()
     assert (it["seq"], it["guide"]["title"]) == (1, saved["itinerary"]["guide"]["title"]), "one statement reads both"
+    assert it["changed_at"] == saved["itinerary"]["changed_at"], "and when that version was made (W-7)"
     again = client.get(f"/itineraries/{slug}").json()
     assert (again["seq"], again["guide"]["title"]) == (2, "Raced")
 
@@ -692,3 +694,147 @@ def test_a_trip_place_and_a_leg_read_back(t, client, barkada):
     spot = row(g, "d2-06")["place"]
     assert spot["kind"] == "spot" and spot["lat"] is None and spot["maps_url"] is None
     assert stored(g) == stored(client.get(f"/itineraries/{saved['itinerary']['share_slug']}").json()["guide"])
+
+
+# ---------------------------------------------------------------- F2: Chrome resends a cut PUT
+
+def version_count(dsn) -> int:
+    return one(dsn, "select count(*) as n from itinerary_versions")["n"]
+
+
+def add_snack(g):
+    g["days"][1]["rows"].append({"key": None, "time": "19:00", "plan": "Snack"})
+
+
+def test_a_replayed_save_answers_the_save_it_already_made(t, client, barkada, caplog):  # E31
+    caplog.set_level(logging.INFO)
+    edit(client, t, retime("d2-08", "15:30"))
+    it = plan_of(client, t)
+    g, base = stored(it["guide"]), base_of(it)
+    add_snack(g)
+    first = save(client, t, g, base)
+    assert first.status_code == 200, first.text
+    n = version_count(barkada)
+    again = save(client, t, g, base)  # the same bytes: Chrome's resend, with a null key on the new row
+    assert again.status_code == 200, again.text
+    assert again.json() == first.json(), "the same PlanSaved"
+    assert version_count(barkada) == n, "no new version"
+    assert f"plan save replay share_slug={t} seq=2" in caplog.text
+    other = stored(it["guide"])
+    other["title"] = "Ours"
+    r = save(client, t, other, base)
+    assert r.status_code == 409 and r.json() == {"detail": "plan_changed", "itinerary_slug": base["itinerary_slug"], "seq": 2}
+    assert version_count(barkada) == n
+
+
+def test_a_replay_of_the_first_edit_finds_the_shared_base(t, client, barkada):  # E31: the base is the shared plan's slug
+    it = plan_of(client, t)
+    g, base = stored(it["guide"]), base_of(it)
+    add_snack(g)
+    first = save(client, t, g, base)
+    assert first.status_code == 200 and base["itinerary_slug"] == SLUG
+    again = save(client, t, g, base)
+    assert again.status_code == 200, again.text
+    assert again.json() == first.json()
+    assert one(barkada, "select count(*) as n from itineraries where model = 'trip-edit'")["n"] == 1
+    assert version_count(barkada) == 2
+    other = stored(it["guide"])
+    other["title"] = "Ours"
+    assert save(client, t, other, base).status_code == 409
+
+
+def test_a_replay_counts_the_servers_own_bus_time_and_a_tick_on_the_new_row(t, client):  # E31
+    it = plan_of(client, t)
+    g, base = stored(it["guide"]), base_of(it)
+    buses = g["getting_there"]["buses"]
+    was = next(i for i, b in enumerate(buses) if b["booked"])
+    buses[was]["booked"], buses[(was + 1) % len(buses)]["booked"] = False, True
+    add_snack(g)
+    first = save(client, t, g, base)
+    assert first.status_code == 200, first.text
+    key = first.json()["itinerary"]["guide"]["days"][1]["rows"][-1]["key"]
+    assert client.put(f"/sessions/{t}/marks/row:{key}", json={"value": "done"}).status_code == 200
+    again = save(client, t, g, base)
+    assert again.status_code == 200, again.text
+    assert again.json() == first.json(), "the server's bus time and the minted key both match"
+
+
+def test_only_the_newest_save_from_the_same_source_is_a_replay(t, client):  # E31
+    it = plan_of(client, t)
+    g, base = stored(it["guide"]), base_of(it)
+    add_snack(g)
+    assert save(client, t, g, base).status_code == 200
+    assert save(client, t, g, base, source="chat").status_code == 409, "not the save it made"
+    edit(client, t, retime("d2-08", "15:30"))
+    assert save(client, t, g, base).status_code == 409, "a newer change came after it"
+
+
+def test_a_replay_is_one_behind_on_this_trips_own_plan(t, client):  # E31: the same plan isn't enough
+    edit(client, t, retime("d2-08", "15:10"))
+    it = plan_of(client, t)
+    g = stored(it["guide"])
+    add_snack(g)
+    first = save(client, t, g, base_of(it))
+    assert first.status_code == 200, first.text
+    assert save(client, t, g, {"itinerary_slug": "another-plan", "seq": 1}).status_code == 409, "not this plan's slug"
+    edit(client, t, retime("d2-09", "18:30"))
+    newest = plan_of(client, t)
+    assert save(client, t, stored(newest["guide"]), {"itinerary_slug": newest["share_slug"], "seq": newest["seq"] - 2}).status_code == 409, "two behind"
+    r = save(client, t, stored(newest["guide"]), {"itinerary_slug": "another-plan", "seq": 0})
+    assert r.status_code == 409
+
+
+def test_a_first_edits_replay_names_the_plan_it_was_copied_from(t, client):  # E31
+    it = plan_of(client, t)
+    g, base = stored(it["guide"]), base_of(it)
+    add_snack(g)
+    assert save(client, t, g, base).status_code == 200
+    assert save(client, t, g, {"itinerary_slug": "another-plan", "seq": 0}).status_code == 409
+
+
+def test_a_replayed_undo_answers_the_undo_it_already_made(t, client, barkada, caplog):  # E32
+    caplog.set_level(logging.INFO)
+    five_edits(client, t)
+    base = base_of(plan_of(client, t))
+    first = undo(client, t, base)
+    assert first.status_code == 200, first.text
+    n = version_count(barkada)
+    again = undo(client, t, base)
+    assert again.status_code == 200, again.text
+    assert again.json() == first.json() and version_count(barkada) == n
+    assert f"plan undo replay share_slug={t} seq=6" in caplog.text
+    redo_base = base_of(first.json()["itinerary"])
+    redo = undo(client, t, redo_base)
+    assert redo.json()["itinerary"]["seq"] == 7
+    assert undo(client, t, redo_base).json() == redo.json(), "a redo replays too"
+
+
+def test_an_undo_on_an_old_base_is_still_a_clash(t, client):  # E32
+    five_edits(client, t)
+    it = plan_of(client, t)
+    r = undo(client, t, {"itinerary_slug": it["share_slug"], "seq": 4})
+    assert r.status_code == 409 and r.json()["detail"] == "plan_changed", "the newest version is a hand edit, not this undo"
+    undo(client, t)
+    r = undo(client, t, {"itinerary_slug": it["share_slug"], "seq": 4})
+    assert r.status_code == 409, "this undo was on seq 5"
+
+
+# ---------------------------------------------------------------- W-7: when a copy last changed
+
+def test_a_copy_says_when_it_last_changed(t, client, barkada):  # W-7
+    assert client.get(f"/itineraries/{SLUG}").json()["changed_at"] is None, "a shared plan has no versions"
+    saved = edit(client, t, retime("d2-08", "15:30"))
+    slug = saved["itinerary"]["share_slug"]
+
+    def newest():
+        return one(barkada, "select v.created_at from itinerary_versions v join itineraries i on i.id = v.itinerary_id"
+                            " where i.share_slug = %s order by v.seq desc limit 1", slug)["created_at"]
+
+    def read():
+        return datetime.fromisoformat(client.get(f"/itineraries/{slug}").json()["changed_at"])
+
+    assert saved["itinerary"]["changed_at"] and read() == newest()
+    first = read()
+    second = edit(client, t, retime("d2-08", "15:40"))
+    assert read() == newest() > first
+    assert datetime.fromisoformat(second["itinerary"]["changed_at"]) == newest(), "the save's own answer has it"
