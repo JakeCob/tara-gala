@@ -1,5 +1,6 @@
 import type { Itinerary } from "@/lib/itinerary";
 import type { LastMileLeg } from "@/lib/lastMile";
+import type { SpotLite } from "@/lib/planEdit";
 
 export type Trip = {
   trip_id: string;
@@ -69,6 +70,16 @@ export function formatVerified(iso: string | null): string {
   if (!iso) return "Not yet verified";
   const d = new Date(iso);
   return `Checked ${d.toLocaleDateString("en-PH", { month: "short", day: "numeric", timeZone: "Asia/Manila" })}`;
+}
+
+/** TG-61: Tara Gala's spots, for finding a place by name on the phone. Null when they can't be fetched. */
+export async function fetchSpots(): Promise<SpotLite[] | null> {
+  try {
+    const res = await fetch(`${API_URL}/spots`, { cache: "no-store" });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Last-mile legs in Baguio. Empty filters mean no filter; unknown slugs give []. */

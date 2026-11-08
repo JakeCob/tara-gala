@@ -18,6 +18,7 @@ import {
   type PlanIssue,
   type StopOut,
 } from "@/lib/itinerary";
+import { copyLine } from "@/lib/planLines";
 import { placeSprite, spriteSrc } from "@/lib/sprites";
 import LevelMap from "@/components/LevelMap";
 import LegCard from "@/components/LegCard";
@@ -38,6 +39,7 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
     <>
       <PixelBox as="section" aria-label="Trip summary" className="p-4 flex flex-col gap-3">
         <p className={PX.dataHeading}>{dateRange(it.trip_date, it.return_date)}</p>
+        {it.edited && <p className={PX.meta}>{copyLine(true, null, it.changed_at)}</p>}
         <p className="text-sm">{partySummary(it.party)}</p>
         {names && <p className="text-sm min-w-0 break-words">{names}</p>}
         {(it.vibe || it.premade) && (
@@ -47,10 +49,15 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
           </div>
         )}
         {budget && <p className={`${PX.meta} tabular-nums`}>Budget {budget}</p>}
-        {/* A guide's page is a whole row wide from lg: Copy link keeps its own width there */}
-        <div className={it.guide ? "lg:[&_button]:w-auto lg:[&_button]:self-start" : undefined}>
-          <ShareButton slug={it.share_slug} tripDate={it.trip_date} returnDate={it.return_date} />
-        </div>
+        {it.edited ? (
+          // TG-61 review S5: a trip's own copy holds its notes and places, so it isn't shared from here
+          <p className="text-sm">This is your group&apos;s own copy, with your notes and places. To share it with someone on the trip, send them the trip&apos;s link.</p>
+        ) : (
+          /* A guide's page is a whole row wide from lg: Copy link keeps its own width there */
+          <div className={it.guide ? "lg:[&_button]:w-auto lg:[&_button]:self-start" : undefined}>
+            <ShareButton slug={it.share_slug} tripDate={it.trip_date} returnDate={it.return_date} />
+          </div>
+        )}
       </PixelBox>
 
       {it.issues.length > 0 && (

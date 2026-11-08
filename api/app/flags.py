@@ -23,6 +23,7 @@ class Flags:
     planner_live: bool = False  # PLANNER_LIVE: live AI planner (TG-25)
     premade_itineraries: bool = True  # PREMADE_ITINERARIES: pre-made itineraries (TG-24)
     real_map: bool = False  # REAL_MAP: real-map toggle (TG-26, cut)
+    plan_editing: bool = False  # PLAN_EDITING: edit a trip's plan, its map modal and trip places (TG-61 PR 1)
 
 
 def parse_flag(name: str, raw: str | None, default: bool) -> bool:

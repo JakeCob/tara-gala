@@ -106,6 +106,8 @@ def test_migration_over_mains_schema_matches_schema_sql(dsn):  # test-audit G2, 
         conn.execute(sql)
         conn.execute(sql)
         assert conn.execute("select kind, attendee_id from session_files where id = %s", (fid,)).fetchall() == [{"kind": "photo", "attendee_id": None}]
+        for later in sorted(m for m in MIGRATION.parent.glob("*.sql") if m.name > MIGRATION.name):  # schema.sql has them too
+            conn.execute(later.read_text(encoding="utf-8"))
     upgraded = schema_shape(dsn)
     build_schema((ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8"))
     assert upgraded == schema_shape(dsn)

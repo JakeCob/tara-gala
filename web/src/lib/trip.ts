@@ -3,8 +3,10 @@
 
 import { API_URL, savedAnswer } from "./api.ts";
 import type { Guide, Mark } from "./guide.ts";
-import { SLUG_PATTERN } from "./itinerary.ts";
+import { type Itinerary, SLUG_PATTERN } from "./itinerary.ts";
 import type { Attendee, Rsvp } from "./people.ts";
+import type { GuideIn, Suggestion } from "./planEdit.ts";
+import type { ChangeLine, PlanEdits } from "./planLines.ts";
 import { WALLET_SLUG } from "./wallet.ts";
 
 export const TRIP_SLUG = /^[0-9a-f]{32}$/; // the API's SLUG, 128 random bits in hex
@@ -48,6 +50,23 @@ export type Trip = {
   marks: Mark[]; // PR 3: the shared checklist's ticks and the picks
   attendees?: Attendee[]; // TG-58: absent on a saved copy from before it, so read it through peopleOf
   invite_slug?: string | null; // TG-58 PR 2: the limited invite link, null until someone turns it on
+  plan_edits?: PlanEdits | null; // TG-61: the copy's newest versions; absent on a saved copy from before it
+  places?: TripPlace[]; // TG-61: the places this group pinned from a link
+};
+
+/** TG-61: a place only this trip has, pinned by the server from a Google Maps link. Never verified. */
+export type TripPlace = { id: string; name: string; lat: number; lng: number; maps_url: string; created_at: string; pin_source?: PinSource | null };
+/** Round 5: where a link's pin came from: the link itself, the address in it (check it), or the group's pasted pin. */
+export type PinSource = "link" | "address" | "typed";
+/** The plan a change is worked out from: the copy's slug and version, or the shared plan's slug and 0. */
+export type PlanBase = { itinerary_slug: string; seq: number };
+/** A save's answer: the whole new plan, from the same transaction (review M1), and the server's lines for it. */
+export type PlanSaved = { itinerary: Itinerary; changes: ChangeLine[] };
+export type SuggestIn = {
+  base: PlanBase;
+  at: { replace: string } | { after: string } | { first_of_day: number } | { anywhere: true };
+  /** pin: the coordinates the group pasted, as typed (round 5); only next to a link. The server parses them */
+  place: { spot_id: string } | { trip_place_id: string } | { link: string; pin?: string };
 };
 
 // ---------------------------------------------------------------- pure
@@ -112,7 +131,7 @@ export function toInput(wall: string | null): string {
 
 // ---------------------------------------------------------------- API
 
-export type TripFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected";
+export type TripFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected" | "clash";
 /** `savedAt`: the service worker answered with its copy, not the API; this is when that copy's GET left (ms). */
 export type TripResult = { ok: true; trip: Trip; savedAt?: number } | { ok: false; why: TripFailure; detail?: string };
 export type TripLoad = { state: "loading" } | { state: "ready"; trip: Trip } | { state: "error"; why: TripFailure };
@@ -225,6 +244,32 @@ export async function savedTrip(slug: string, store?: Parameters<typeof savedAns
   return saved?.body.share_slug === slug ? { trip: saved.body, savedAt: saved.savedAt } : null;
 }
 
+/** TG-61: an answer that isn't the trip. A clash carries the newer plan's slug and version. */
+/** need_pin (round 5) carries the name read from the link, or null, for the pin step's Name field. */
+export type Answer<T> = { ok: true; body: T } | { ok: false; why: TripFailure; detail?: string; clash?: PlanBase; name?: string | null };
+
+/** A call whose answer isn't the trip (TG-61's plan routes). The same failures as call, plus the clash. */
+async function ask<T>(path: string, init: { method: Method; body: unknown }): Promise<Answer<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { cache: "no-store", method: init.method, headers: { "content-type": "application/json" }, body: JSON.stringify(init.body) });
+  } catch {
+    return { ok: false, why: "offline" };
+  }
+  if (res.ok) return { ok: true, body: (await res.json()) as T };
+  if (res.status === 404) return { ok: false, why: "not_found" };
+  if (res.status === 429) return { ok: false, why: "rate_limited" };
+  if (res.status >= 500) return { ok: false, why: "server" };
+  const body = await res.json().catch(() => null);
+  const detail = typeof body?.detail === "string" ? body.detail : undefined;
+  if (res.status === 409 && detail === "plan_changed") {
+    // The API's unique-key race answers with no slug or seq: then the clash names no plan, rather than a made-up one
+    const named = typeof body?.itinerary_slug === "string" && Number.isInteger(body?.seq);
+    return named ? { ok: false, why: "clash", detail, clash: { itinerary_slug: body.itinerary_slug, seq: body.seq } } : { ok: false, why: "clash", detail };
+  }
+  if (detail === "need_pin") return { ok: false, why: "rejected", detail, name: typeof body?.name === "string" ? body.name : null };
+  return { ok: false, why: "rejected", detail };
+}
 export const tripApi = {
   create: (name: string, start_date: string, return_date: string) =>
     one(call("/sessions", { method: "POST", body: { name, start_date, return_date } })),
@@ -264,7 +309,52 @@ export const tripApi = {
   startInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "PUT" })),
   /** The invite link stops working; startInvite then makes a new one */
   stopInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "DELETE" })),
+  /** TG-61: the whole new guide, worked out from `base`. A 409 means another phone saved first: nothing was written */
+  savePlan: (slug: string, base: PlanBase, guide: GuideIn, source: "hand" | "chat") => ask<PlanSaved>(`${at(slug)}/plan`, { method: "PUT", body: { base, guide, source } }),
+  /** Undoes the newest version, or puts back the change an undo took out */
+  undoPlan: (slug: string, base: PlanBase) => ask<PlanSaved>(`${at(slug)}/plan/undo`, { method: "POST", body: { base } }),
+  /** A proposal for one stop; saves nothing */
+  suggest: (slug: string, body: SuggestIn) => ask<Suggestion>(`${at(slug)}/plan/suggest`, { method: "POST", body }),
+  /** The server reads the link itself; the phone never sends a pin */
+  addPlace: (slug: string, body: { link: string; name: string; pin?: string }) => ask<TripPlace>(`${at(slug)}/places`, { method: "POST", body }),
 };
+
+const PLAN_DETAIL: Record<string, string> = {
+  unknown_key: "That stop isn't in the plan any more. Check the map, then try again.",
+  unknown_place: "That place isn't on Tara Gala any more. Pick another one.",
+  no_change: "That's how the plan is already, so nothing changed.",
+  nothing_to_undo: "Nothing to undo yet.",
+  cannot_undo: "That change can't be undone: a place in it isn't on Tara Gala any more.",
+  option_picked: "The group picked that choice. Unpick it first.",
+  bus_table_changed: "Buses can only be swapped here, not added or taken out.",
+  unknown_trip: "That bus isn't on the schedule any more. Pick another one.",
+  trip_inactive: "That bus isn't on the schedule any more. Pick another one.",
+  trip_not_running: "That bus doesn't run on that day. Pick another one.",
+  wrong_direction: "That bus goes the other way. Pick another one.",
+  too_many_rows: "This plan already has as many stops as it can hold.",
+  too_many_versions: "This plan has been changed as many times as it can hold.",
+  bad_plan: "That change doesn't fit the plan. Check it and try again.",
+  too_big: "That change is too big to save. Try a smaller one.",
+  link_unreadable: "We couldn't read that link. Open the place in Google Maps, tap Share, and copy the link again.",
+  need_pin: "That link has no pin we can read. In Google Maps, press and hold the place, copy the numbers that show up, and paste them here.",
+  bad_pin: "Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.",
+  link_not_maps: "That isn't a Google Maps link. Paste one, or type a place name.",
+  too_many_places: "This trip already has 100 places of its own, the most it can hold.",
+  bad_place: "Give the place a name of 1 to 80 letters.",
+};
+
+/** A plan call's outcome for a log line: yes, a failure kind, or a code we know. Never the server's free text. */
+export function planOutcome(r: { ok: true } | { ok: false; why: TripFailure; detail?: string }): string {
+  if (r.ok) return "yes";
+  return r.why === "rejected" ? (r.detail && PLAN_DETAIL[r.detail] ? r.detail : "other") : r.why;
+}
+
+/** One plain sentence for a failed plan call (ux.md §4.3, §6). */
+export function planFailureMessage(r: { why: TripFailure; detail?: string }): string {
+  if (r.why === "clash") return "Someone just changed the plan, so your change wasn't saved.";
+  if (r.why === "rejected" && r.detail && PLAN_DETAIL[r.detail]) return PLAN_DETAIL[r.detail];
+  return tripFailureMessage(r);
+}
 
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;
 

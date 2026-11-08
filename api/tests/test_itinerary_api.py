@@ -27,7 +27,8 @@ PLANNER_PARTY = [{"type": "adult", "name": NAME, "phone": PHONE}, {"type": "stud
 NOT_FOUND = b'{"detail":"Itinerary not found"}'
 TOP_FIELDS = {
     "share_slug", "premade", "trip_date", "return_date", "party", "budget_php", "vibe", "created_at",
-    "outbound", "return", "days", "plan", "issues", "guide"}  # TG-52: None unless the itinerary has a guide
+    "outbound", "return", "days", "plan", "issues", "guide",  # TG-52: None unless the itinerary has a guide
+    "edited", "seq", "changed_at"}  # TG-61: a trip's own copy, its version, and when that was made
 OUT = ("vl-cubao", "07:00", "regular_aircon")
 NIGHT = ("vl-cubao", "22:00", "regular_aircon")
 NO_MINUTES = ("vl-cubao", "09:00", "deluxe")
@@ -342,6 +343,10 @@ OTHER_ROUTES = {
     # TG-58 PR 2: the invite link, turned on and off under the trip's own slug, and its two public writes
     ("PUT", "/sessions/{share_slug}/invite"),
     ("DELETE", "/sessions/{share_slug}/invite"),
+    ("PUT", "/sessions/{share_slug}/plan"),  # TG-61: edit the trip's own copy of its plan, behind PLAN_EDITING
+    ("POST", "/sessions/{share_slug}/plan/undo"),
+    ("POST", "/sessions/{share_slug}/plan/suggest"),  # TG-61: builder B's, behind the same flag
+    ("POST", "/sessions/{share_slug}/places"),
     ("POST", "/invites/{invite_slug}/answers"),
     ("POST", "/invites/{invite_slug}/attendees/{attendee_id}/photo"),
 }
@@ -369,7 +374,13 @@ def test_only_exact_slug_and_premade_reads_touch_itineraries():
             readers[p.name] = n
     # TG-52 sessions.py: the session's own linked itinerary (a join on its id), and one exact-slug lookup to link one
     # TG-52 PR 3 trip_marks.py: the guide of the trip's own linked itinerary (a join on the session's id)
-    assert readers == {"itineraries.py": 1, "premade.py": 1, "sessions.py": 2, "trip_marks.py": 1}
+    # TG-61 plan_suggest.py: the same, with the trip's own version number (a join on the session's id)
+    # TG-61 plan_edit.py: the trip's own linked itinerary again (a join on the session's id); sessions.py also deletes
+    # the trip's own copy with the trip (model trip-edit, owned through itinerary_versions.session_id). plan_edit.py's
+    # second is the shared plan's slug that the trip's own copy was made from (F2: a replay of the first edit)
+    assert readers == {"itineraries.py": 1, "plan_edit.py": 2, "plan_suggest.py": 1, "premade.py": 1, "sessions.py": 3, "trip_marks.py": 1}
+    assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_suggest.py").read_text(encoding="utf-8")
+    assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_edit.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "trip_marks.py").read_text(encoding="utf-8")
     assert "from itineraries where share_slug = %s" in (APP / "sessions.py").read_text(encoding="utf-8")
     assert "where model = %s" in (APP / "premade.py").read_text(encoding="utf-8")
@@ -434,7 +445,7 @@ def test_logs_never_carry_party_budget_or_plan(client, planner, caplog):
     caplog.set_level(logging.DEBUG)
     get(client, slug)
     lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.getMessage().startswith("itinerary ")]
-    assert lines == [f"itinerary get share_slug={slug} premade=False days=3 stops=6 issues=0 codes=- guide=no"]
+    assert lines == [f"itinerary get share_slug={slug} premade=False days=3 stops=6 issues=0 codes=- guide=no edited=False seq=None warnings=0"]
     first_spot = plan["days"][0]["stops"][0]["spot_id"]
     for rec in caplog.records:
         msg = rec.getMessage()
@@ -513,7 +524,7 @@ def test_openapi_documents_itinerary(client):
 def test_slug_lookup_is_parameterised():
     """T23-A17"""
     src = (APP / "itineraries.py").read_text(encoding="utf-8")
-    assert "where share_slug = %s" in src
+    assert "where i.share_slug = %s" in src
     lowered = src.lower()
     for banned in (" like ", "ilike", "lower(", " ~ ", "similar to"):
         assert banned not in lowered, banned

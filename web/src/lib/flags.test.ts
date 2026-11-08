@@ -10,6 +10,7 @@ const ENV_KEYS: Record<keyof Flags, string> = {
   realMap: "NEXT_PUBLIC_REAL_MAP",
   serviceWorker: "NEXT_PUBLIC_SERVICE_WORKER",
   overworldMap: "NEXT_PUBLIC_OVERWORLD_MAP",
+  planEditing: "NEXT_PUBLIC_PLAN_EDITING",
 };
 
 // [raw, fallback, expected]. Keep identical to CASES in api/tests/test_flags.py.
@@ -52,7 +53,7 @@ afterEach(() => {
 
 test("defaults when unset", () => {
   clearFlagEnv();
-  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true });
+  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false });
   assert.deepEqual(readFlags(), FLAG_DEFAULTS);
 });
 
