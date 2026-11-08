@@ -78,6 +78,20 @@ export function whenLine(iso: string): string {
 export type WalletFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected";
 /** `saved`: the service worker answered with its copy, not the API, so it may be older than what's on screen. */
 export type WalletResult = { ok: true; wallet: Wallet; saved?: boolean } | { ok: false; why: WalletFailure; detail?: string };
+export type WalletLoad = { state: "loading" } | { state: "ready"; wallet: Wallet } | { state: "error"; why: WalletFailure };
+
+/**
+ * TG-65: what a GET's answer does to the wallet screen. `overtaken`: a write landed after this GET left, so the answer
+ * predates it and would bring a deleted expense back or drop a new one; the screen stays and the next reload brings
+ * anything newer. A saved copy never replaces a wallet on screen (TG-53). `dialogOpen`: a failed reload mustn't take an
+ * open dialog and its picture with the page.
+ */
+export function afterGet(prev: WalletLoad, r: WalletResult, slug: string, overtaken: boolean, dialogOpen: boolean): WalletLoad {
+  const showing = prev.state === "ready" && prev.wallet.share_slug === slug;
+  if (showing && (overtaken || (r.ok && r.saved))) return prev;
+  if (r.ok) return { state: "ready", wallet: r.wallet };
+  return prev.state === "ready" && (r.why === "offline" || dialogOpen) ? prev : { state: "error", why: r.why }; // offline with a copy on screen: the offline banner says so
+}
 
 const DETAIL: Record<string, string> = {
   shares_mismatch: "The amounts don't add up to the total.",

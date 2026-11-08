@@ -317,8 +317,13 @@ test("T53-W19 P19: one always-rendered notice area directly under the heading, a
   assert.match(title, /tabIndex=\{tabIndex\}/, "SectionTitle passes tabIndex on");
 });
 
-test("T53-W29 review M1: a saved copy never replaces the wallet on screen, whether or not a dialog is open", () => {
-  assert.match(view(), /setLoad\(\(prev\) => \(prev\.state === "ready" && prev\.wallet\.share_slug === slug && r\.saved \? prev : \{ state: "ready", wallet: r\.wallet \}\)\)/);
+test("T53-W29 review M1: a saved copy never replaces the wallet on screen, whether or not a dialog is open", async () => {
+  // TG-65 moved the rule into wallet.ts's afterGet, with the overtaken check: the screen's answers all go through it
+  assert.match(view(), /setLoad\(\(prev\) => afterGet\(prev, r, slug, overtaken, proofOpen\.current\)\);/);
+  const { afterGet } = await import("./wallet.ts");
+  const onScreen = { state: "ready" as const, wallet: { share_slug: SLUG } as unknown as Wallet };
+  const saved = { ok: true as const, wallet: { share_slug: SLUG } as unknown as Wallet, saved: true };
+  for (const dialog of [false, true]) assert.equal(afterGet(onScreen, saved, SLUG, false, dialog), onScreen, `dialog open: ${dialog}`);
 });
 
 test("T53-W30 ux review: a result from a Payments made row comes to the heading, like a saved one", () => {

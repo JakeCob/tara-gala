@@ -8,6 +8,7 @@ import ProofDialog, { type ProofTarget } from "@/components/ProofDialog";
 import { type TripFile, fetchFile, knownTrips, tripApi } from "@/lib/trip";
 import { runShare, shareDeps, type ShareOutcome } from "@/lib/itinerary";
 import {
+  afterGet,
   failureMessage,
   fetchProof,
   formatPeso,
@@ -24,11 +25,10 @@ import {
   type Settlement,
   type Transfer,
   type Wallet,
-  type WalletFailure,
+  type WalletLoad,
   type WalletResult,
 } from "@/lib/wallet";
 
-type Load = { state: "loading" } | { state: "ready"; wallet: Wallet } | { state: "error"; why: WalletFailure };
 type Notice = { text: string; error: boolean };
 type ExpenseBody = Parameters<typeof walletApi.addExpense>[1];
 
@@ -194,7 +194,7 @@ function ExpenseForm({ wallet, me, busy, onAdd, onError }: {
  * remembers which person it is. The API recomputes balances and the settle-up on every write.
  */
 export default function WalletView({ slug }: { slug: string }) {
-  const [load, setLoad] = useState<Load>({ state: "loading" });
+  const [load, setLoad] = useState<WalletLoad>({ state: "loading" });
   const [reloads, setReloads] = useState(0);
   const [meChoice, setMeChoice] = useState<string | null | undefined>(undefined); // undefined: what this phone remembers
   const [busy, setBusy] = useState(false);
@@ -202,6 +202,7 @@ export default function WalletView({ slug }: { slug: string }) {
   const [settleNotice, setSettleNotice] = useState<Notice | null>(null); // TG-53: in view of the Settle up box
   const [proof, setProof] = useState<ProofTarget | null>(null);
   const proofOpen = useRef(false); // a failed reload mustn't take an open dialog and its picture with the page
+  const shownAt = useRef(0); // TG-65: how new the wallet on screen is: when its GET left, or when a write landed
   const [opening, setOpening] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [shareNote, setShareNote] = useState("");
@@ -211,17 +212,16 @@ export default function WalletView({ slug }: { slug: string }) {
 
   useEffect(() => {
     let live = true;
+    const left = Date.now();
     walletApi.get(slug).then((r) => {
       if (!live) return;
-      console.info("[tg-wallet] load ok=%s", r.ok ? (r.saved ? "saved" : "yes") : r.why);
-      if (r.ok) {
+      const overtaken = left < shownAt.current; // a write landed after this GET left: its answer is the wallet before it
+      console.info("[tg-wallet] load ok=%s", r.ok ? (overtaken ? "overtaken" : r.saved ? "saved" : "yes") : r.why);
+      if (r.ok && !overtaken) {
+        if (!r.saved) shownAt.current = left;
         rememberWallet({ slug, name: r.wallet.name });
-        // A saved copy can predate what's on screen: it would bring a paid debt back, and tell an open dialog it was undone
-        setLoad((prev) => (prev.state === "ready" && prev.wallet.share_slug === slug && r.saved ? prev : { state: "ready", wallet: r.wallet }));
-      } else {
-        // Offline with a copy on screen: keep showing it; the offline banner says so
-        setLoad((prev) => (prev.state === "ready" && (r.why === "offline" || proofOpen.current) ? prev : { state: "error", why: r.why }));
       }
+      setLoad((prev) => afterGet(prev, r, slug, overtaken, proofOpen.current));
     });
     return () => {
       live = false;
@@ -290,6 +290,7 @@ export default function WalletView({ slug }: { slug: string }) {
       say({ text: failureMessage(r), error: true });
       return r;
     }
+    shownAt.current = Date.now();
     setLoad({ state: "ready", wallet: r.wallet });
     say({ text: done, error: false });
     void walletApi.get(slug); // the service worker saves GETs, not this write: refresh the offline copy
@@ -304,6 +305,7 @@ export default function WalletView({ slug }: { slug: string }) {
   }
 
   function proofSaved(next: Wallet, text?: string) {
+    shownAt.current = Date.now();
     setLoad({ state: "ready", wallet: next });
     if (text) setSettleNotice({ text, error: false });
     void walletApi.get(slug);
