@@ -88,7 +88,9 @@ export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: b
 
 /** A row in Changes: when, then the version's first line. A chatbot version says so. */
 export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null; why: string | null } {
-  const line = firstOf(v.changes);
+  // Review M1: the server writes Dropped lines last, so a removal's reason would hide behind a Later or a New. The row
+  // stands for its version with the first line that has a why; the bar, Undo and "just changed" keep the first line
+  const line = v.changes.find((l) => l.word !== "More" && whyText(l.why)) ?? firstOf(v.changes);
   return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead: v.source === "chat" ? "Chatbot: " : "", line, why: whyText(line?.why) };
 }
 
