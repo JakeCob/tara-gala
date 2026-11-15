@@ -90,7 +90,7 @@ class PlanIn(BaseModel):
     guide: GuideIn
     source: Literal["hand", "chat"] = "hand"
     # a chat proposal's whys, sent back as the proposal gave them; a hand edit has none (owner feedback 2026-11-15)
-    whys: dict[Annotated[str, StringConstraints(pattern=WHY_AT)], Annotated[str, StringConstraints(min_length=1, max_length=120)]] | None = \
+    whys: dict[Annotated[str, StringConstraints(pattern=WHY_AT)], Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]] | None = \
         Field(default=None, max_length=3)
 
     @model_validator(mode="after")

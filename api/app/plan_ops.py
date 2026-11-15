@@ -46,7 +46,7 @@ class Op(BaseModel):
     text: Annotated[str, StringConstraints(min_length=1, max_length=120)] | None = None  # a to-do
     budget_rows: list[BudgetRow] | None = None
     budget_summary: Text | None = None
-    why: Annotated[str, StringConstraints(max_length=500)] | None = None  # 1 to MAX_WHY, checked in apply to retry with a code
+    why: str | None = None  # 1 to MAX_WHY, checked in apply so any length retries as long_why (review N2); max_tokens bounds it
 
 
 class NeedLink(BaseModel):

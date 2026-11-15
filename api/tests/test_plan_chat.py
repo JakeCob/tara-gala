@@ -449,6 +449,7 @@ WHY = "You asked for a slower Day 2"
     (op("remove_row", key="d2-05", why="   "), "no_why"),
     (op("remove_todo", key="todo-01"), "no_why"),
     (op("remove_row", key="d2-05", why="x" * 121), "long_why"),
+    (op("remove_row", key="d2-05", why="x" * 600), "long_why"),  # review N2: any length is long_why, never bad_json
     (op("move_row", key="d2-08", day=3, after=None, why="x" * 121), "long_why"),
     (op("remove_row", key="d9-99"), "unknown_key"),  # a key it made up is that, first
 ])
@@ -562,7 +563,12 @@ def test_a_hand_edit_carries_no_why(t, client):  # P9: whys only come with a cha
     body = {"base": base_of(it), "guide": g, "whys": {"row:d2-05": WHY}}
     assert client.put(f"/sessions/{t}/plan", json={**body, "source": "hand"}).status_code == 422
     four = {f"row:d2-0{n}": WHY for n in range(1, 5)}
-    for whys in ({"row:d2-05": "x" * 121}, {"row:d2-05": ""}, {"nope": WHY}, four):
+    for whys in ({"row:d2-05": "x" * 121}, {"row:d2-05": ""}, {"row:d2-05": "   "}, {"nope": WHY}, four):  # review N2: blank
         assert client.put(f"/sessions/{t}/plan", json={**body, "source": "chat", "whys": whys}).status_code == 422, whys
-    r = client.put(f"/sessions/{t}/plan", json={**body, "source": "chat", "whys": None})
+    r = client.put(f"/sessions/{t}/plan", json={**body, "source": "chat", "whys": {"row:d2-05": f"  {WHY} "}})
+    assert r.status_code == 200 and r.json()["changes"][0]["why"] == WHY, "stored stripped"
+    it = plan_of(client, t)
+    g = stored(it["guide"])
+    g["days"][1]["rows"] = [r for r in g["days"][1]["rows"] if r["key"] != "d2-06"]
+    r = client.put(f"/sessions/{t}/plan", json={"base": base_of(it), "guide": g, "source": "chat", "whys": None})
     assert r.status_code == 200 and "why" not in r.json()["changes"][0], "whys are optional on the PUT"
