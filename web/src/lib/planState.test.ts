@@ -115,5 +115,9 @@ test("T61-W12h review M1: a plan write is refused while a session write is out, 
   const apply = view.slice(view.indexOf("async function apply("), view.indexOf("async function planWrite("));
   assert.match(apply, /busyRef\.current = true/);
   assert.match(apply, /keepNewerPlan\(/, "the answer goes through keepNewerPlan");
+  // G4: the branch itself, so a revert that skips keepNewerPlan (leaving the call as dead code) fails here
+  assert.match(apply, /const moves = action === "itinerary-attach" \|\| action === "itinerary-detach";/, "only attach and detach skip it");
+  assert.match(apply, /if \(moves \|\| prev\.state !== "ready"\) return \{ state: "ready", trip: r\.trip \};\s+const next = keepNewerPlan\(prev\.trip, r\.trip\);/);
+  assert.match(apply, /return \{ state: "ready", trip: next \};/, "the trip on screen is keepNewerPlan's");
   assert.match(view, /<PlanSection trip=\{trip\} busy=\{busy \|\| planWriting\}/, "attach and detach move the plan: they wait for a plan write");
 });
