@@ -1,0 +1,1197 @@
+{
+ "_readme": "TG-61 W1: the owner's plan file through api/app/guide.py's parse_guide and build, with made-up ids, no trip rows and no names. Regenerate with the script named in the TG-61 build log.",
+ "out": {
+  "title": "Baguio Barkada Trip, Nov 6 to 8",
+  "summary": "7+ of us, bus from Cubao Friday morning, two nights at Finteo Skylands Premium (96 Dr. Cariño St, near Burnham Park), taxis around town, early nights, bus back to Cubao Sunday afternoon.",
+  "lodging": {
+   "kind": "spot",
+   "id": "36601331-e1e9-5091-aebd-872ffd177222",
+   "name": null,
+   "category": null,
+   "lodging": true
+  },
+  "getting_there": {
+   "title": "Getting there (Fri Nov 6, Cubao)",
+   "intro": "Booked: Victory Liner First Class, 10:15 AM from Cubao, about 4 hours, arriving around 2:15 PM. The other trips stay below for reference.",
+   "buses": [
+    {
+     "trip_id": "408a36fa-939f-59d3-9f38-bc90e9ef15ef",
+     "date": "2026-11-06",
+     "trip": null,
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "846d9b25-38c6-50a7-9910-4fd4449012eb",
+     "date": "2026-11-06",
+     "trip": null,
+     "note": "More stops, slower",
+     "booked": false
+    },
+    {
+     "trip_id": "2e026faa-bacc-56ea-80b2-57923545520d",
+     "date": "2026-11-06",
+     "trip": null,
+     "note": "Fewer stops",
+     "booked": false
+    },
+    {
+     "trip_id": "4d55c9c3-6c36-50b2-8bc6-4c44cfce14fd",
+     "date": "2026-11-06",
+     "trip": null,
+     "note": "Booked",
+     "booked": true
+    },
+    {
+     "trip_id": "02b5715b-ade6-59f7-908e-dd7731f97d2d",
+     "date": "2026-11-06",
+     "trip": null,
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "470c88f2-9786-555a-b324-dcf748f9dc02",
+     "date": "2026-11-06",
+     "trip": null,
+     "note": "Sleeper seats, most expensive",
+     "booked": false
+    }
+   ],
+   "tips": [
+    "Friday traffic can stretch the 4 hours, so don't plan anything fixed before check-in.",
+    "Be at the Cubao terminal by 9:30 AM, 45 minutes before departure."
+   ]
+  },
+  "days": [
+   {
+    "day": 1,
+    "title": "Day 1: Fri Nov 6, arrive and walk",
+    "intro": "A light day: the bus eats the morning, so everything after check-in is walkable from Dr. Cariño St.",
+    "pick": null,
+    "rows": [
+     {
+      "key": "d1-01",
+      "time": "09:30",
+      "plan": "Meet at Cubao terminal",
+      "note": "Eat breakfast before, buy snacks",
+      "place": {
+       "kind": "terminal",
+       "id": "aa7b3d01-3b8e-5c0a-b7a3-5eefde7e6c45",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d1-02",
+      "time": "10:15",
+      "plan": "Bus leaves",
+      "note": "",
+      "place": {
+       "kind": "terminal",
+       "id": "aa7b3d01-3b8e-5c0a-b7a3-5eefde7e6c45",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": "outbound",
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d1-03",
+      "time": "14:15",
+      "plan": "Arrive, late lunch, then 2 taxis to the condo",
+      "note": "Check-in opens 3:00 PM",
+      "place": {
+       "kind": "terminal",
+       "id": "6853f0d3-aa45-5880-a6d8-364803c2c125",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d1-04",
+      "time": "15:00",
+      "plan": "Check in at the condo",
+      "note": "Ask the host about early check-in",
+      "place": {
+       "kind": "spot",
+       "id": "36601331-e1e9-5091-aebd-872ffd177222",
+       "name": null,
+       "category": null,
+       "lodging": true
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d1-05",
+      "time": "16:30",
+      "plan": "Burnham Park walk, boating if you want",
+      "note": "About 900 m from the condo",
+      "place": {
+       "kind": "spot",
+       "id": "5f20b65a-42e2-5fdf-a146-87b87354801f",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d1-06",
+      "time": "18:00",
+      "plan": "Session Road stroll, dinner",
+      "note": "Book or arrive early for a table of 7+",
+      "place": {
+       "kind": "spot",
+       "id": "5e8c9ddf-7ed1-50d8-96ed-7f4a19248712",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d1-07",
+      "time": "20:30",
+      "plan": "Groceries and breakfast stuff, back to rest",
+      "note": "Early night for the sunrise",
+      "place": {
+       "kind": "spot",
+       "id": "36601331-e1e9-5091-aebd-872ffd177222",
+       "name": null,
+       "category": null,
+       "lodging": true
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     }
+    ],
+    "tips": [
+     "Decide tonight which sunrise option you're doing tomorrow (Day 2), so you know the alarm time."
+    ]
+   },
+   {
+    "day": 2,
+    "title": "Day 2: Sat Nov 7, the full loop",
+    "intro": "The one big day: sunrise, La Trinidad, the two art spots, then Camp John Hay, ordered north to west to east so taxis don't backtrack.",
+    "pick": {
+     "key": "sunrise",
+     "title": "Sunrise: pick one the night before",
+     "options": [
+      {
+       "id": "A",
+       "label": "Mt. Yangbew",
+       "leave": "04:45",
+       "what": "Easy 30 to 40 min hike in Tawang, La Trinidad, about ₱50 entrance (confirm); flows straight into the strawberry farm",
+       "place": {
+        "kind": "spot",
+        "id": "f4365341-3d41-5fd8-8287-e3c87e91a5a2",
+        "name": null,
+        "category": null,
+        "lodging": false
+       }
+      },
+      {
+       "id": "B",
+       "label": "Mines View at sunrise",
+       "leave": "05:15",
+       "what": "No hike, short taxi; frees up Sunday morning",
+       "place": {
+        "kind": "spot",
+        "id": "c4fea954-3482-5eaf-ae55-e38e2ce93486",
+        "name": null,
+        "category": null,
+        "lodging": false
+       }
+      },
+      {
+       "id": "C",
+       "label": "Sleep in",
+       "leave": "07:30",
+       "what": "Skip sunrise, start the day at breakfast",
+       "place": null
+      }
+     ]
+    },
+    "rows": [
+     {
+      "key": "d2-01",
+      "time": "04:45",
+      "plan": "Leave for the Mt. Yangbew sunrise hike",
+      "note": "Option A",
+      "place": {
+       "kind": "spot",
+       "id": "f4365341-3d41-5fd8-8287-e3c87e91a5a2",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": {
+       "pick": "sunrise",
+       "is": "A"
+      },
+      "hide_if": null
+     },
+     {
+      "key": "d2-02",
+      "time": "05:15",
+      "plan": "Leave for Mines View at sunrise",
+      "note": "Option B",
+      "place": {
+       "kind": "spot",
+       "id": "c4fea954-3482-5eaf-ae55-e38e2ce93486",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": {
+       "pick": "sunrise",
+       "is": "B"
+      },
+      "hide_if": null
+     },
+     {
+      "key": "d2-03",
+      "time": "07:30",
+      "plan": "Breakfast in La Trinidad",
+      "note": "",
+      "place": null,
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d2-04",
+      "time": "08:30",
+      "plan": "Strawberry Farm",
+      "note": "November is early season, picking may be thin; shop the stalls anyway",
+      "place": {
+       "kind": "spot",
+       "id": "adaef1d9-6f37-5be0-8905-ce3f56f31a91",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d2-05",
+      "time": "09:30",
+      "plan": "Bell Church",
+      "note": "Short stop, near the La Trinidad boundary. Hours unconfirmed",
+      "place": {
+       "kind": "spot",
+       "id": "8076c7b2-22d0-5cd5-9a50-836bb8d41c98",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d2-06",
+      "time": "10:30",
+      "plan": "Tam-awan Village",
+      "note": "Art village with Ifugao huts, on the way west. Hours and fee unconfirmed",
+      "place": {
+       "kind": "spot",
+       "id": "e9915d6c-4a95-550a-9000-8432aa55dbfe",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d2-07",
+      "time": "11:45",
+      "plan": "BenCab Museum, lunch at Cafe Sabel",
+      "note": "Km 6 Asin Road, Tue to Sun 9 AM to 6 PM",
+      "place": {
+       "kind": "spot",
+       "id": "ab55391b-bd7a-5685-9619-a13af77a8008",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d2-08",
+      "time": "15:00",
+      "plan": "Camp John Hay",
+      "note": "Pine trails, merienda at Choco-late de Batirol",
+      "place": {
+       "kind": "spot",
+       "id": "684e2a25-ff2d-55d9-a55a-5fa9e4d3793f",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d2-09",
+      "time": "18:00",
+      "plan": "Dinner, back to the condo",
+      "note": "Early night",
+      "place": {
+       "kind": "spot",
+       "id": "36601331-e1e9-5091-aebd-872ffd177222",
+       "name": null,
+       "category": null,
+       "lodging": true
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     }
+    ],
+    "tips": [
+     "7+ people means 2 taxis every hop. Assign a lead per taxi and drop plate numbers in the group chat.",
+     "Strawberry Farm to Tam-awan is the longest ride of the day, budget 30 to 45 minutes."
+    ]
+   },
+   {
+    "day": 3,
+    "title": "Day 3: Sun Nov 8, tourist circuit and home",
+    "intro": "Bags go to SM after checkout, so the afternoon is free; the First Class bus leaves at 4:15 PM and reaches Cubao around 8:15 PM.",
+    "pick": null,
+    "rows": [
+     {
+      "key": "d3-01",
+      "time": "07:00",
+      "plan": "Mines View Park",
+      "note": "Skip if you did it for Saturday's sunrise",
+      "place": {
+       "kind": "spot",
+       "id": "c4fea954-3482-5eaf-ae55-e38e2ce93486",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": {
+       "pick": "sunrise",
+       "is": "B"
+      }
+     },
+     {
+      "key": "d3-02",
+      "time": "07:45",
+      "plan": "Good Shepherd for pasalubong",
+      "note": "Lines get long later, go early",
+      "place": {
+       "kind": "spot",
+       "id": "194ce22b-bb2f-53c1-adc6-ea864f3399d2",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-03",
+      "time": "08:30",
+      "plan": "Botanical Garden, Wright Park",
+      "note": "All close to each other",
+      "place": {
+       "kind": "spot",
+       "id": "0208f9b8-926d-54c8-a105-ba873c5a796c",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-04",
+      "time": "10:00",
+      "plan": "Back to the condo, pack",
+      "note": "",
+      "place": {
+       "kind": "spot",
+       "id": "36601331-e1e9-5091-aebd-872ffd177222",
+       "name": null,
+       "category": null,
+       "lodging": true
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-05",
+      "time": "11:00",
+      "plan": "Check out, taxis to SM City Baguio",
+      "note": "Leave bags at SM's baggage counter (confirm it first)",
+      "place": {
+       "kind": "spot",
+       "id": "f317acf6-b401-5779-b2e2-36c454037047",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-06",
+      "time": "11:30",
+      "plan": "Lunch at SM or Session Road",
+      "note": "Session Road is a short walk from SM",
+      "place": {
+       "kind": "spot",
+       "id": "5e8c9ddf-7ed1-50d8-96ed-7f4a19248712",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-07",
+      "time": "13:00",
+      "plan": "Free time: Burnham, cafes, last pasalubong",
+      "note": "",
+      "place": {
+       "kind": "spot",
+       "id": "5f20b65a-42e2-5fdf-a146-87b87354801f",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-08",
+      "time": "15:00",
+      "plan": "Pick up bags at SM, taxis to the Victory Liner terminal",
+      "note": "",
+      "place": {
+       "kind": "spot",
+       "id": "f317acf6-b401-5779-b2e2-36c454037047",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-09",
+      "time": "15:45",
+      "plan": "Board",
+      "note": "",
+      "place": {
+       "kind": "terminal",
+       "id": "6853f0d3-aa45-5880-a6d8-364803c2c125",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null
+     },
+     {
+      "key": "d3-10",
+      "time": "16:15",
+      "plan": "Bus to Cubao",
+      "note": "Arrive around 8:15 PM",
+      "place": {
+       "kind": "terminal",
+       "id": "6853f0d3-aa45-5880-a6d8-364803c2c125",
+       "name": null,
+       "category": null,
+       "lodging": false
+      },
+      "bus": "return",
+      "show_if": null,
+      "hide_if": null
+     }
+    ],
+    "tips": []
+   }
+  ],
+  "getting_home": {
+   "title": "Getting home (Sun Nov 8, to Cubao)",
+   "intro": "Booked: Victory Liner First Class, 4:15 PM, about 4 hours, into Cubao around 8:15 PM. The other trips stay below for reference.",
+   "buses": [
+    {
+     "trip_id": "a6531dec-cdfc-57dc-94eb-14031e00fb1e",
+     "date": "2026-11-08",
+     "trip": null,
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "225c31c6-fae1-5f0f-84b2-b72bcf446c14",
+     "date": "2026-11-08",
+     "trip": null,
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "9883ee56-bbc2-594a-858a-194fc0631d39",
+     "date": "2026-11-08",
+     "trip": null,
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "b6609ef5-50c9-5151-af0e-b2d5d5fb16ad",
+     "date": "2026-11-08",
+     "trip": null,
+     "note": "Sleeper seats",
+     "booked": false
+    },
+    {
+     "trip_id": "9e122e5c-fbd2-5b73-bcc5-b0329674e80d",
+     "date": "2026-11-08",
+     "trip": null,
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "59cc7dfc-a141-5e61-a3bd-6ba634f506dd",
+     "date": "2026-11-08",
+     "trip": null,
+     "note": "Booked",
+     "booked": true
+    },
+    {
+     "trip_id": "98a6d356-c6b2-5bb6-8938-4719880452e3",
+     "date": "2026-11-08",
+     "trip": null,
+     "note": "Latest that still gets you home before midnight",
+     "booked": false
+    }
+   ],
+   "tips": [
+    "Sunday evening traffic into Manila can stretch the 4 hours."
+   ]
+  },
+  "budget": {
+   "summary": "Roughly ₱2,650 to 4,150 each, inside the ₱3,000 to 5,000 target. Figures are approximate.",
+   "rows": [
+    {
+     "item": "Meals and merienda, 2.5 days",
+     "estimate": "1,500 to 2,200"
+    },
+    {
+     "item": "Pasalubong and strawberries",
+     "estimate": "500 to 1,000"
+    },
+    {
+     "item": "Entrance fees (BenCab, Tam-awan, Yangbew)",
+     "estimate": "350 to 450"
+    },
+    {
+     "item": "Taxis, split 4 per cab",
+     "estimate": "300 to 500"
+    }
+   ],
+   "excluded": "Not included: the condo and the bus (the bus tables show the operator's current fare)."
+  },
+  "todo": [
+   {
+    "key": "todo-01",
+    "text": "Book Cubao to Baguio, Fri Nov 6, 10:15 AM First Class",
+    "done": true
+   },
+   {
+    "key": "todo-02",
+    "text": "Book Baguio to Cubao, Sun Nov 8, 4:15 PM First Class",
+    "done": true
+   },
+   {
+    "key": "todo-03",
+    "text": "Ask the host: sleeping setup for 7+, and early check-in since you land around 2:15 PM",
+    "done": false
+   },
+   {
+    "key": "todo-04",
+    "text": "Confirm SM City Baguio's baggage counter takes luggage for the afternoon",
+    "done": false
+   },
+   {
+    "key": "todo-05",
+    "text": "Confirm Tam-awan Village hours and fee",
+    "done": false
+   },
+   {
+    "key": "todo-06",
+    "text": "Pick a sunrise option on Friday night",
+    "done": false
+   },
+   {
+    "key": "todo-07",
+    "text": "Split the group into 2 taxi teams with a lead each",
+    "done": false
+   },
+   {
+    "key": "todo-08",
+    "text": "Pack jackets for the early mornings",
+    "done": false
+   }
+  ],
+  "sources": [
+   {
+    "label": "Victory Liner schedules and fares",
+    "url": "https://tickets.victoryliner.com/"
+   },
+   {
+    "label": "BenCab Museum hours",
+    "url": "https://bencabmuseum.org/location-info/"
+   },
+   {
+    "label": "Mt. Yangbew, Wanderlog",
+    "url": "https://wanderlog.com/place/details/2010716"
+   },
+   {
+    "label": "Mt. Yangbew, Pinoy Mountaineer",
+    "url": "https://www.pinoymountaineer.com/2020/02/hiking-matters-636-easy-hikes-near-baguio-city-mt-yangbew.html"
+   },
+   {
+    "label": "Spot locations, OpenStreetMap",
+    "url": "https://www.openstreetmap.org/"
+   }
+  ]
+ },
+ "stored": {
+  "title": "Baguio Barkada Trip, Nov 6 to 8",
+  "summary": "7+ of us, bus from Cubao Friday morning, two nights at Finteo Skylands Premium (96 Dr. Cariño St, near Burnham Park), taxis around town, early nights, bus back to Cubao Sunday afternoon.",
+  "lodging": {
+   "spot_id": "36601331-e1e9-5091-aebd-872ffd177222"
+  },
+  "getting_there": {
+   "title": "Getting there (Fri Nov 6, Cubao)",
+   "intro": "Booked: Victory Liner First Class, 10:15 AM from Cubao, about 4 hours, arriving around 2:15 PM. The other trips stay below for reference.",
+   "buses": [
+    {
+     "trip_id": "408a36fa-939f-59d3-9f38-bc90e9ef15ef",
+     "date": "2026-11-06",
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "846d9b25-38c6-50a7-9910-4fd4449012eb",
+     "date": "2026-11-06",
+     "note": "More stops, slower",
+     "booked": false
+    },
+    {
+     "trip_id": "2e026faa-bacc-56ea-80b2-57923545520d",
+     "date": "2026-11-06",
+     "note": "Fewer stops",
+     "booked": false
+    },
+    {
+     "trip_id": "4d55c9c3-6c36-50b2-8bc6-4c44cfce14fd",
+     "date": "2026-11-06",
+     "note": "Booked",
+     "booked": true
+    },
+    {
+     "trip_id": "02b5715b-ade6-59f7-908e-dd7731f97d2d",
+     "date": "2026-11-06",
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "470c88f2-9786-555a-b324-dcf748f9dc02",
+     "date": "2026-11-06",
+     "note": "Sleeper seats, most expensive",
+     "booked": false
+    }
+   ],
+   "tips": [
+    "Friday traffic can stretch the 4 hours, so don't plan anything fixed before check-in.",
+    "Be at the Cubao terminal by 9:30 AM, 45 minutes before departure."
+   ]
+  },
+  "days": [
+   {
+    "day": 1,
+    "title": "Day 1: Fri Nov 6, arrive and walk",
+    "intro": "A light day: the bus eats the morning, so everything after check-in is walkable from Dr. Cariño St.",
+    "rows": [
+     {
+      "key": "d1-01",
+      "time": "09:30",
+      "plan": "Meet at Cubao terminal",
+      "note": "Eat breakfast before, buy snacks",
+      "place": {
+       "terminal_id": "aa7b3d01-3b8e-5c0a-b7a3-5eefde7e6c45"
+      }
+     },
+     {
+      "key": "d1-02",
+      "time": "10:15",
+      "plan": "Bus leaves",
+      "note": "",
+      "place": {
+       "terminal_id": "aa7b3d01-3b8e-5c0a-b7a3-5eefde7e6c45"
+      },
+      "bus": "outbound"
+     },
+     {
+      "key": "d1-03",
+      "time": "14:15",
+      "plan": "Arrive, late lunch, then 2 taxis to the condo",
+      "note": "Check-in opens 3:00 PM",
+      "place": {
+       "terminal_id": "6853f0d3-aa45-5880-a6d8-364803c2c125"
+      }
+     },
+     {
+      "key": "d1-04",
+      "time": "15:00",
+      "plan": "Check in at the condo",
+      "note": "Ask the host about early check-in",
+      "place": {
+       "spot_id": "36601331-e1e9-5091-aebd-872ffd177222"
+      }
+     },
+     {
+      "key": "d1-05",
+      "time": "16:30",
+      "plan": "Burnham Park walk, boating if you want",
+      "note": "About 900 m from the condo",
+      "place": {
+       "spot_id": "5f20b65a-42e2-5fdf-a146-87b87354801f"
+      }
+     },
+     {
+      "key": "d1-06",
+      "time": "18:00",
+      "plan": "Session Road stroll, dinner",
+      "note": "Book or arrive early for a table of 7+",
+      "place": {
+       "spot_id": "5e8c9ddf-7ed1-50d8-96ed-7f4a19248712"
+      }
+     },
+     {
+      "key": "d1-07",
+      "time": "20:30",
+      "plan": "Groceries and breakfast stuff, back to rest",
+      "note": "Early night for the sunrise",
+      "place": {
+       "spot_id": "36601331-e1e9-5091-aebd-872ffd177222"
+      }
+     }
+    ],
+    "tips": [
+     "Decide tonight which sunrise option you're doing tomorrow (Day 2), so you know the alarm time."
+    ]
+   },
+   {
+    "day": 2,
+    "title": "Day 2: Sat Nov 7, the full loop",
+    "intro": "The one big day: sunrise, La Trinidad, the two art spots, then Camp John Hay, ordered north to west to east so taxis don't backtrack.",
+    "pick": {
+     "key": "sunrise",
+     "title": "Sunrise: pick one the night before",
+     "options": [
+      {
+       "id": "A",
+       "label": "Mt. Yangbew",
+       "leave": "04:45",
+       "what": "Easy 30 to 40 min hike in Tawang, La Trinidad, about ₱50 entrance (confirm); flows straight into the strawberry farm",
+       "place": {
+        "spot_id": "f4365341-3d41-5fd8-8287-e3c87e91a5a2"
+       }
+      },
+      {
+       "id": "B",
+       "label": "Mines View at sunrise",
+       "leave": "05:15",
+       "what": "No hike, short taxi; frees up Sunday morning",
+       "place": {
+        "spot_id": "c4fea954-3482-5eaf-ae55-e38e2ce93486"
+       }
+      },
+      {
+       "id": "C",
+       "label": "Sleep in",
+       "leave": "07:30",
+       "what": "Skip sunrise, start the day at breakfast"
+      }
+     ]
+    },
+    "rows": [
+     {
+      "key": "d2-01",
+      "time": "04:45",
+      "plan": "Leave for the Mt. Yangbew sunrise hike",
+      "note": "Option A",
+      "place": {
+       "spot_id": "f4365341-3d41-5fd8-8287-e3c87e91a5a2"
+      },
+      "show_if": {
+       "pick": "sunrise",
+       "is": "A"
+      }
+     },
+     {
+      "key": "d2-02",
+      "time": "05:15",
+      "plan": "Leave for Mines View at sunrise",
+      "note": "Option B",
+      "place": {
+       "spot_id": "c4fea954-3482-5eaf-ae55-e38e2ce93486"
+      },
+      "show_if": {
+       "pick": "sunrise",
+       "is": "B"
+      }
+     },
+     {
+      "key": "d2-03",
+      "time": "07:30",
+      "plan": "Breakfast in La Trinidad",
+      "note": ""
+     },
+     {
+      "key": "d2-04",
+      "time": "08:30",
+      "plan": "Strawberry Farm",
+      "note": "November is early season, picking may be thin; shop the stalls anyway",
+      "place": {
+       "spot_id": "adaef1d9-6f37-5be0-8905-ce3f56f31a91"
+      }
+     },
+     {
+      "key": "d2-05",
+      "time": "09:30",
+      "plan": "Bell Church",
+      "note": "Short stop, near the La Trinidad boundary. Hours unconfirmed",
+      "place": {
+       "spot_id": "8076c7b2-22d0-5cd5-9a50-836bb8d41c98"
+      }
+     },
+     {
+      "key": "d2-06",
+      "time": "10:30",
+      "plan": "Tam-awan Village",
+      "note": "Art village with Ifugao huts, on the way west. Hours and fee unconfirmed",
+      "place": {
+       "spot_id": "e9915d6c-4a95-550a-9000-8432aa55dbfe"
+      }
+     },
+     {
+      "key": "d2-07",
+      "time": "11:45",
+      "plan": "BenCab Museum, lunch at Cafe Sabel",
+      "note": "Km 6 Asin Road, Tue to Sun 9 AM to 6 PM",
+      "place": {
+       "spot_id": "ab55391b-bd7a-5685-9619-a13af77a8008"
+      }
+     },
+     {
+      "key": "d2-08",
+      "time": "15:00",
+      "plan": "Camp John Hay",
+      "note": "Pine trails, merienda at Choco-late de Batirol",
+      "place": {
+       "spot_id": "684e2a25-ff2d-55d9-a55a-5fa9e4d3793f"
+      }
+     },
+     {
+      "key": "d2-09",
+      "time": "18:00",
+      "plan": "Dinner, back to the condo",
+      "note": "Early night",
+      "place": {
+       "spot_id": "36601331-e1e9-5091-aebd-872ffd177222"
+      }
+     }
+    ],
+    "tips": [
+     "7+ people means 2 taxis every hop. Assign a lead per taxi and drop plate numbers in the group chat.",
+     "Strawberry Farm to Tam-awan is the longest ride of the day, budget 30 to 45 minutes."
+    ]
+   },
+   {
+    "day": 3,
+    "title": "Day 3: Sun Nov 8, tourist circuit and home",
+    "intro": "Bags go to SM after checkout, so the afternoon is free; the First Class bus leaves at 4:15 PM and reaches Cubao around 8:15 PM.",
+    "rows": [
+     {
+      "key": "d3-01",
+      "time": "07:00",
+      "plan": "Mines View Park",
+      "note": "Skip if you did it for Saturday's sunrise",
+      "place": {
+       "spot_id": "c4fea954-3482-5eaf-ae55-e38e2ce93486"
+      },
+      "hide_if": {
+       "pick": "sunrise",
+       "is": "B"
+      }
+     },
+     {
+      "key": "d3-02",
+      "time": "07:45",
+      "plan": "Good Shepherd for pasalubong",
+      "note": "Lines get long later, go early",
+      "place": {
+       "spot_id": "194ce22b-bb2f-53c1-adc6-ea864f3399d2"
+      }
+     },
+     {
+      "key": "d3-03",
+      "time": "08:30",
+      "plan": "Botanical Garden, Wright Park",
+      "note": "All close to each other",
+      "place": {
+       "spot_id": "0208f9b8-926d-54c8-a105-ba873c5a796c"
+      }
+     },
+     {
+      "key": "d3-04",
+      "time": "10:00",
+      "plan": "Back to the condo, pack",
+      "note": "",
+      "place": {
+       "spot_id": "36601331-e1e9-5091-aebd-872ffd177222"
+      }
+     },
+     {
+      "key": "d3-05",
+      "time": "11:00",
+      "plan": "Check out, taxis to SM City Baguio",
+      "note": "Leave bags at SM's baggage counter (confirm it first)",
+      "place": {
+       "spot_id": "f317acf6-b401-5779-b2e2-36c454037047"
+      }
+     },
+     {
+      "key": "d3-06",
+      "time": "11:30",
+      "plan": "Lunch at SM or Session Road",
+      "note": "Session Road is a short walk from SM",
+      "place": {
+       "spot_id": "5e8c9ddf-7ed1-50d8-96ed-7f4a19248712"
+      }
+     },
+     {
+      "key": "d3-07",
+      "time": "13:00",
+      "plan": "Free time: Burnham, cafes, last pasalubong",
+      "note": "",
+      "place": {
+       "spot_id": "5f20b65a-42e2-5fdf-a146-87b87354801f"
+      }
+     },
+     {
+      "key": "d3-08",
+      "time": "15:00",
+      "plan": "Pick up bags at SM, taxis to the Victory Liner terminal",
+      "note": "",
+      "place": {
+       "spot_id": "f317acf6-b401-5779-b2e2-36c454037047"
+      }
+     },
+     {
+      "key": "d3-09",
+      "time": "15:45",
+      "plan": "Board",
+      "note": "",
+      "place": {
+       "terminal_id": "6853f0d3-aa45-5880-a6d8-364803c2c125"
+      }
+     },
+     {
+      "key": "d3-10",
+      "time": "16:15",
+      "plan": "Bus to Cubao",
+      "note": "Arrive around 8:15 PM",
+      "place": {
+       "terminal_id": "6853f0d3-aa45-5880-a6d8-364803c2c125"
+      },
+      "bus": "return"
+     }
+    ],
+    "tips": []
+   }
+  ],
+  "getting_home": {
+   "title": "Getting home (Sun Nov 8, to Cubao)",
+   "intro": "Booked: Victory Liner First Class, 4:15 PM, about 4 hours, into Cubao around 8:15 PM. The other trips stay below for reference.",
+   "buses": [
+    {
+     "trip_id": "a6531dec-cdfc-57dc-94eb-14031e00fb1e",
+     "date": "2026-11-08",
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "225c31c6-fae1-5f0f-84b2-b72bcf446c14",
+     "date": "2026-11-08",
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "9883ee56-bbc2-594a-858a-194fc0631d39",
+     "date": "2026-11-08",
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "b6609ef5-50c9-5151-af0e-b2d5d5fb16ad",
+     "date": "2026-11-08",
+     "note": "Sleeper seats",
+     "booked": false
+    },
+    {
+     "trip_id": "9e122e5c-fbd2-5b73-bcc5-b0329674e80d",
+     "date": "2026-11-08",
+     "note": "",
+     "booked": false
+    },
+    {
+     "trip_id": "59cc7dfc-a141-5e61-a3bd-6ba634f506dd",
+     "date": "2026-11-08",
+     "note": "Booked",
+     "booked": true
+    },
+    {
+     "trip_id": "98a6d356-c6b2-5bb6-8938-4719880452e3",
+     "date": "2026-11-08",
+     "note": "Latest that still gets you home before midnight",
+     "booked": false
+    }
+   ],
+   "tips": [
+    "Sunday evening traffic into Manila can stretch the 4 hours."
+   ]
+  },
+  "budget": {
+   "summary": "Roughly ₱2,650 to 4,150 each, inside the ₱3,000 to 5,000 target. Figures are approximate.",
+   "rows": [
+    {
+     "item": "Meals and merienda, 2.5 days",
+     "estimate": "1,500 to 2,200"
+    },
+    {
+     "item": "Pasalubong and strawberries",
+     "estimate": "500 to 1,000"
+    },
+    {
+     "item": "Entrance fees (BenCab, Tam-awan, Yangbew)",
+     "estimate": "350 to 450"
+    },
+    {
+     "item": "Taxis, split 4 per cab",
+     "estimate": "300 to 500"
+    }
+   ],
+   "excluded": "Not included: the condo and the bus (the bus tables show the operator's current fare)."
+  },
+  "todo": [
+   {
+    "key": "todo-01",
+    "text": "Book Cubao to Baguio, Fri Nov 6, 10:15 AM First Class",
+    "done": true
+   },
+   {
+    "key": "todo-02",
+    "text": "Book Baguio to Cubao, Sun Nov 8, 4:15 PM First Class",
+    "done": true
+   },
+   {
+    "key": "todo-03",
+    "text": "Ask the host: sleeping setup for 7+, and early check-in since you land around 2:15 PM",
+    "done": false
+   },
+   {
+    "key": "todo-04",
+    "text": "Confirm SM City Baguio's baggage counter takes luggage for the afternoon",
+    "done": false
+   },
+   {
+    "key": "todo-05",
+    "text": "Confirm Tam-awan Village hours and fee",
+    "done": false
+   },
+   {
+    "key": "todo-06",
+    "text": "Pick a sunrise option on Friday night",
+    "done": false
+   },
+   {
+    "key": "todo-07",
+    "text": "Split the group into 2 taxi teams with a lead each",
+    "done": false
+   },
+   {
+    "key": "todo-08",
+    "text": "Pack jackets for the early mornings",
+    "done": false
+   }
+  ],
+  "sources": [
+   {
+    "label": "Victory Liner schedules and fares",
+    "url": "https://tickets.victoryliner.com/"
+   },
+   {
+    "label": "BenCab Museum hours",
+    "url": "https://bencabmuseum.org/location-info/"
+   },
+   {
+    "label": "Mt. Yangbew, Wanderlog",
+    "url": "https://wanderlog.com/place/details/2010716"
+   },
+   {
+    "label": "Mt. Yangbew, Pinoy Mountaineer",
+    "url": "https://www.pinoymountaineer.com/2020/02/hiking-matters-636-easy-hikes-near-baguio-city-mt-yangbew.html"
+   },
+   {
+    "label": "Spot locations, OpenStreetMap",
+    "url": "https://www.openstreetmap.org/"
+   }
+  ]
+ }
+}

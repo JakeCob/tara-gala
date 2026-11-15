@@ -90,7 +90,7 @@ def resolve_guide(cur, raw: dict) -> tuple[dict | None, list[str]]:
                 del o["place"]
     if problems:
         return None, problems
-    parsed, errs = parse_guide(g)
+    parsed, errs = parse_guide(g, keys_follow_days=True)  # TG-61: the owner's files keep each key on its day
     if parsed is None:
         return None, [f"guide.{e}" for e in errs]
     return parsed.model_dump(mode="json", by_alias=True, exclude_none=True), []

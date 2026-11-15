@@ -328,6 +328,38 @@ create table session_marks (
   primary key (session_id, key)
 );
 
+-- A trip's edited copy of its plan (TG-61): the first edit copies the plan into an itineraries row of model
+-- 'trip-edit', and every edit after is the next version. itineraries.plan always equals the newest version's plan.
+-- session_id says which trip owns the copy. Version 0 is the plan as copied, and based_on names the plan it came from.
+create table itinerary_versions (
+  id            uuid primary key default gen_random_uuid(),
+  itinerary_id  uuid not null references itineraries(id) on delete cascade,
+  session_id    uuid not null references trip_sessions(id) on delete cascade,  -- the trip that owns the copy
+  based_on      uuid references itineraries(id) on delete set null,            -- version 0: the shared plan it was copied from
+  seq           integer not null check (seq between 0 and 9999),
+  source        text not null check (source in ('copy', 'hand', 'chat', 'undo')),
+  plan          jsonb not null,                                                  -- the whole plan after this change
+  changes       jsonb not null check (jsonb_typeof(changes) = 'array' and jsonb_array_length(changes) between 1 and 4),
+                -- the change lines, written by the server: [{"word", "day", "text"}]
+  created_at    timestamptz not null default now(),
+  unique (itinerary_id, seq),
+  check (based_on is null or seq = 0)
+);
+create index itinerary_versions_session on itinerary_versions (session_id);
+
+-- A trip's own places (TG-61), from a pasted Google Maps link: "added by your group, not verified". Never shown on
+-- another trip, and deleted with the trip. The API checks every bound before it inserts; these checks are a backstop.
+create table trip_places (
+  id          uuid primary key default gen_random_uuid(),
+  session_id  uuid not null references trip_sessions(id) on delete cascade,  -- deleted with the trip
+  name        text not null check (char_length(name) between 1 and 80),
+  lat         double precision not null check (lat between -90 and 90),
+  lng         double precision not null check (lng between -180 and 180),
+  maps_url    text not null check (maps_url ~ '^https://' and char_length(maps_url) <= 500),
+  created_at  timestamptz not null default now()
+);
+create index trip_places_session on trip_places (session_id);
+
 -- ---------------------------------------------------------------------------
 -- Search view: one row per active trip, flattened for the API
 -- ---------------------------------------------------------------------------
@@ -396,6 +428,8 @@ alter table session_hotels     enable row level security;
 alter table session_attendees  enable row level security;
 alter table session_files      enable row level security;
 alter table session_marks      enable row level security;
+alter table itinerary_versions enable row level security;
+alter table trip_places        enable row level security;
 
 create policy public_read on operators          for select using (true);
 create policy public_read on terminals          for select using (true);
@@ -409,6 +443,7 @@ create policy public_read on last_mile_routes   for select using (true);
 -- wallets, wallet_members, expenses, expense_shares, settlements: no public policy (TG-50). Same as itineraries.
 -- trip_sessions, session_hotels, session_files, session_marks: no public policy (TG-52). Same as the wallets.
 -- session_attendees: no public policy (TG-58). It holds names.
+-- itinerary_versions, trip_places: no public policy (TG-61)
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP

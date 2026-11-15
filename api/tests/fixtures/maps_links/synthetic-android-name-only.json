@@ -1,0 +1,30 @@
+{
+  "_note": "SYNTHETIC, made up for TG-61 (plan.md \u00a74 task 0). Not a real place, link or chain. The long URL has a name and no pin, so it's never requested: the name is geocoded (owner round 5), by a MockTransport stand-in for Nominatim.",
+  "link": "https://maps.app.goo.gl/Qw2SyntheticB2",
+  "hops": [
+    {
+      "url": "https://maps.app.goo.gl/Qw2SyntheticB2",
+      "status": 301,
+      "location": "http://maps.google.com/maps?q=Panaderia+Synthetica+(made+up)&ftid=0x0:0x1"
+    }
+  ],
+  "geocode": {
+    "Panaderia Synthetica (made up)": [
+      {
+        "lat": "16.4178",
+        "lon": "120.5987"
+      }
+    ]
+  },
+  "expect": {
+    "outcome": "ok",
+    "lat": 16.4178,
+    "lng": 120.5987,
+    "name": "Panaderia Synthetica (made up)",
+    "pin": "address",
+    "maps_url": "https://maps.app.goo.gl/Qw2SyntheticB2",
+    "geocoded": [
+      "Panaderia Synthetica (made up)"
+    ]
+  }
+}

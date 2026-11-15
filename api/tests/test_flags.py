@@ -56,12 +56,13 @@ def fresh_cache():
 
 
 def test_defaults_when_unset():
-    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP"}
+    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP", "PLAN_EDITING"}
     flags = load_flags({})
     assert flags == Flags()
     assert flags.planner_live is False
     assert flags.premade_itineraries is True
     assert flags.real_map is False
+    assert flags.plan_editing is False  # TG-61
 
 
 @pytest.mark.parametrize("name", sorted(ENV_NAMES))

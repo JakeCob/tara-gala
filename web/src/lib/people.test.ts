@@ -255,7 +255,7 @@ test("T58-W23 TripPeople: results stay next to the control", () => {
 });
 
 test("T58-W24 DeleteTrip names the people and their photos", () => {
-  assert.match(view().replace(/\s+/g, " "), /This deletes the trip, its hotel, its list of people and their photos, and its shared tickets and QRs from the server, not from phones that already saved the trip\. The plan and the wallet keep their own links\./);
+  assert.match(view().replace(/\s+/g, " "), /This deletes the trip, its hotel, its list of people and their photos, its own copy of the plan and the places your group added, and its shared tickets and QRs from the server, not from phones that already saved the trip\. The shared plan and the wallet keep their own links\./);
 });
 
 test("T58-W25 avatars stay out of the albums and tickets", () => {
@@ -288,7 +288,8 @@ test("T58-W27 plain words, and no colour on a time", () => {
 // T58-W28 (no invite in PR 1) is replaced by T58-J9 in invite.test.ts, with F2's sentence restored
 
 test("T58-W29 fences: these files don't change, and TripPeople writes nothing to a wallet", () => {
-  const changed = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/src/components/LevelMap.tsx", "web/public/sw.js", "web/package.json", "web/package-lock.json", "package.json", "package-lock.json"], { cwd: new URL("../", WEB), encoding: "utf8" });
+  // TG-61 changes LevelMap.tsx (the plan editor), so it's no longer fenced here; TG-61 doesn't touch sw.js either
+  const changed = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/public/sw.js", "web/package.json", "web/package-lock.json", "package.json", "package-lock.json"], { cwd: new URL("../", WEB), encoding: "utf8" });
   assert.equal(changed.trim(), "");
   const src = box();
   assert.match(src, /walletApi\.get\(/, "the count comes from the wallet's GET");
