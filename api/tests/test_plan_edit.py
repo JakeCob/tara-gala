@@ -838,3 +838,59 @@ def test_a_copy_says_when_it_last_changed(t, client, barkada):  # W-7
     second = edit(client, t, retime("d2-08", "15:40"))
     assert read() == newest() > first
     assert datetime.fromisoformat(second["itinerary"]["changed_at"]) == newest(), "the save's own answer has it"
+
+
+# ---------------------------------------------------------------- E34: the refusals test-audit G1 to G3 found untested
+
+def test_a_planner_plan_cant_be_edited(t, client, barkada):  # E34 (test-plan E33, test-audit G1)
+    planner = uuid.uuid4().hex
+    with psycopg.connect(barkada, autocommit=True) as conn:
+        conn.execute("insert into itineraries (share_slug, trip_date, return_date, party, budget_php, vibe, plan, model)"
+                     " select %s, trip_date, return_date, party, budget_php, vibe, plan - 'guide', model from itineraries where share_slug = %s",
+                     (planner, SLUG))
+    assert client.put(f"/sessions/{t}/itinerary", json={"share_slug": planner}).status_code == 200
+    g = stored(client.get(f"/itineraries/{SLUG}").json()["guide"])
+    before = one(barkada, "select count(*) as n from itineraries")["n"]
+    r = save(client, t, g, {"itinerary_slug": planner, "seq": 0})
+    assert (r.status_code, r.json()["detail"]) == (422, "no_guide"), r.text
+    assert version_count(barkada) == 0 and one(barkada, "select count(*) as n from itineraries")["n"] == before
+    assert session(client, t)["itinerary_slug"] == planner, "nothing written"
+
+
+def test_the_thousandth_version_is_the_last(t, client, barkada):  # E34a (test-audit G2)
+    slug = edit(client, t, retime("d2-08", "15:30"))["itinerary"]["share_slug"]
+
+    def newest(seq):
+        with psycopg.connect(barkada, autocommit=True) as conn:
+            conn.execute("update itinerary_versions v set seq = %s from itineraries i"
+                         " where i.id = v.itinerary_id and i.share_slug = %s and v.seq = (select max(seq) from itinerary_versions where itinerary_id = i.id)",
+                         (seq, slug))
+
+    newest(998)
+    assert edit(client, t, retime("d2-08", "15:40"))["itinerary"]["seq"] == 999, "seq 0 to 999: the 1,000th version"
+    n = version_count(barkada)
+    g = stored(plan_of(client, t)["guide"])
+    retime("d2-08", "15:50")(g)
+    r = save(client, t, g)
+    assert (r.status_code, r.json()["detail"]) == (422, "too_many_versions"), r.text
+    assert version_count(barkada) == n and plan_of(client, t)["seq"] == 999, "no version 1000"
+    r = undo(client, t)
+    assert (r.status_code, r.json()["detail"]) == (422, "too_many_versions"), "undo writes a version too"
+
+
+def test_undo_to_a_version_whose_spot_is_gone_is_refused(t, client, barkada):  # E34b (test-audit G3)
+    with psycopg.connect(barkada, autocommit=True) as conn:
+        gone = str(conn.execute("insert into spots (slug, name, lat, lng) values ('test-gone', 'Made-up Gone Spot', 16.41, 120.59)"
+                                " returning id").fetchone()[0])
+
+    def to_gone(g):
+        row(g, "d2-08").update(place={"spot_id": gone}, leg=None)
+
+    edit(client, t, to_gone)
+    edit(client, t, lambda g: row(g, "d2-08").update(place=None))
+    with psycopg.connect(barkada, autocommit=True) as conn:
+        conn.execute("delete from spots where id = %s", (gone,))
+    n, it = version_count(barkada), plan_of(client, t)
+    r = undo(client, t)
+    assert (r.status_code, r.json()["detail"]) == (422, "cannot_undo"), r.text
+    assert version_count(barkada) == n and plan_of(client, t)["guide"] == it["guide"], "nothing written"

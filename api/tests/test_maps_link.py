@@ -11,6 +11,8 @@ synthetic fixtures for now, so L1 to L6 run on them rather than waiting as xfail
 import json
 import logging
 import math
+import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -572,6 +574,62 @@ def test_one_request_a_second_across_resolves():  # N6
     ml.resolve(f"{SHORT}2", client=net.client(), clock=clock, sleep=clock.sleep)
     assert clock.slept == [0.75], "the second trip's lookup waits out the rest of the second"
     assert ml.GEOCODE_GAP_S == 1.0
+
+
+def busy_addresses(n: int) -> list[str]:
+    return [f"Made-up Shop {i}, Made-up St, Baguio" for i in range(n)]
+
+
+def test_a_lookup_that_would_wait_too_long_is_need_pin_at_once():  # N6, review S1
+    addresses = busy_addresses(5)
+    net, slept = Net(geo={a: FOUND for a in addresses}), []
+    outcomes = []
+    for a in addresses:  # five at the same instant: the clock stands still, as it does for callers arriving together
+        try:
+            ml.geocode(a, net.client(), lambda: 1000.0, slept.append)
+            outcomes.append("pin")
+        except LinkError as e:
+            outcomes.append(e.reason)
+    assert outcomes == ["pin"] * 3 + ["geocode_busy"] * 2
+    assert slept == [1.0, 2.0], "each booked its own second, and nobody waits more than GEOCODE_MAX_WAIT_S"
+    assert net.geocoded == addresses[:3], "a busy lookup makes no request"
+    assert ml.GEOCODE_MAX_WAIT_S == 2.0 < ml.DEADLINE_S
+
+
+def test_a_turn_past_the_deadline_isnt_slept_for():  # N6, review S1
+    ml._last_geocode[0] = 1000.5  # another lookup has the next turn, at 1001.5: past this one's deadline
+    slept = []
+    with pytest.raises(LinkError) as e:
+        ml._wait_turn(1001.0, lambda: 1000.0, slept.append)
+    assert (e.value.reason, slept, ml._last_geocode[0]) == ("geocode_busy", [], 1000.5), "not slept for, and not booked"
+
+
+def test_a_waiting_lookup_doesnt_hold_the_others(caplog):  # N6, review S1: the wait is outside the lock
+    addresses = busy_addresses(5)
+    net, release = Net(geo={a: FOUND for a in addresses}), threading.Event()
+    outcomes: list[str] = []
+
+    def one(a):
+        try:
+            ml.geocode(a, net.client(), lambda: 1000.0, lambda s: release.wait(10))
+            outcomes.append("pin")
+        except LinkError as e:
+            outcomes.append(e.reason)
+
+    threads = [threading.Thread(target=one, args=(a,)) for a in addresses]
+    for th in threads:
+        th.start()
+    try:
+        deadline = time.monotonic() + 5
+        while outcomes.count("geocode_busy") < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert sorted(outcomes) == ["geocode_busy", "geocode_busy", "pin"], "two wait their turn; the late two are refused, not queued"
+    finally:
+        release.set()
+        for th in threads:
+            th.join(10)
+    assert sorted(outcomes) == ["geocode_busy"] * 2 + ["pin"] * 3
+    assert "reason=geocode_busy" in caplog.text and "Made-up" not in caplog.text
 
 
 def test_an_address_is_geocoded_once_and_a_miss_is_kept_15_minutes():  # N7

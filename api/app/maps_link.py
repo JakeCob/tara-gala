@@ -57,6 +57,7 @@ CACHE_TTL_S = 15 * 60
 GEOCODER_HOST = "nominatim.openstreetmap.org"
 GEOCODER_UA = "TaraGala/1.0 (trip planner)"  # Nominatim's policy asks every app to say who it is
 GEOCODE_GAP_S = 1.0  # Nominatim's limit: one request a second
+GEOCODE_MAX_WAIT_S = 2.0  # the longest a lookup waits for its turn; then need_pin (review S1)
 GEOCODE_TRIES = 3
 GEOCODE_MIN_PARTS = 3  # never down to just a city or a province: that pin would be kilometres off
 GEOCODE_BODY = 64 * 1024
@@ -340,13 +341,18 @@ def clear_cache(geocodes: bool = True) -> None:
         _last_geocode[0] = -math.inf
 
 
-def _wait_turn(clock: Callable[[], float], sleep: Callable[[float], None]) -> None:
-    """At most one geocode request a second across the process: a caller waits out the rest of the second."""
+def _wait_turn(deadline: float, clock: Callable[[], float], sleep: Callable[[float], None]) -> None:
+    """At most one geocode request a second across the process. A caller books the next free second under the lock
+    and waits for it outside, so no one sleeps holding it. A turn more than GEOCODE_MAX_WAIT_S off, or past the
+    deadline, isn't booked: need_pin at once, so a burst of lookups can't hold the API's worker threads (review S1)."""
     with _pace:
-        wait = _last_geocode[0] + GEOCODE_GAP_S - clock()
-        if wait > 0:
-            sleep(wait)
-        _last_geocode[0] = clock()
+        now = clock()
+        turn = max(now, _last_geocode[0] + GEOCODE_GAP_S)
+        if turn - now > GEOCODE_MAX_WAIT_S or turn > deadline:
+            raise LinkError("need_pin", "geocode_busy")
+        _last_geocode[0] = turn
+    if turn > now:
+        sleep(turn - now)
 
 
 class _Trace:
@@ -372,7 +378,7 @@ def _read(response: httpx.Response, deadline: float, clock: Callable[[], float],
 
 
 def _geocode_once(client: httpx.Client, q: str, deadline: float, clock, sleep) -> tuple[float, float] | None:
-    _wait_turn(clock, sleep)
+    _wait_turn(deadline, clock, sleep)
     if clock() > deadline:
         raise LinkError("need_pin", "geocode_deadline")
     u = geocode_url(q)
