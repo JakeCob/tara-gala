@@ -4,6 +4,10 @@ with null keys on what's new), and plan_edit.prepare() then checks it exactly as
 
 The model names only existing keys. It can't mint a key, and it can't make a pin: a place is a spot or a trip place
 it was given, never coordinates or a link. Pure: no database, no model call.
+
+Every removal says why (owner feedback 2026-11-15): remove_row and remove_todo need a why of 1 to 120 characters, and
+move_row, set_row and swap_bus may have one. whys() keys them to the change lines they explain (plan_diff). A why is
+the trip's own text, like a note: it's checked by the time and fare rule and never logged.
 """
 
 import copy
@@ -18,6 +22,10 @@ from .guide import HHMM, BudgetRow, Guide, Text
 NAMES = ("add_row", "remove_row", "move_row", "set_row", "swap_bus", "add_todo", "remove_todo", "set_budget")
 TABLES = ("getting_there", "getting_home")
 MAX_OPS = 20
+MAX_WHY = 120
+MAX_WHYS = 3  # plan_diff.MAX_LINES: a line with a why is never folded into "More", and a version has 1 to 4 lines
+NEEDS_WHY = ("remove_row", "remove_todo")
+MAY_HAVE_WHY = ("move_row", "set_row", "swap_bus")
 
 
 class Op(BaseModel):
@@ -38,6 +46,7 @@ class Op(BaseModel):
     text: Annotated[str, StringConstraints(min_length=1, max_length=120)] | None = None  # a to-do
     budget_rows: list[BudgetRow] | None = None
     budget_summary: Text | None = None
+    why: Annotated[str, StringConstraints(max_length=500)] | None = None  # 1 to MAX_WHY, checked in apply to retry with a code
 
 
 class NeedLink(BaseModel):
@@ -83,6 +92,8 @@ _OP = _obj(
     budget_rows={"type": ["array", "null"], "items": _obj(item={"type": "string"}, estimate={"type": "string"}),
                  "description": "set_budget: every budget row"},
     budget_summary=_maybe("string", "set_budget: the budget's one-line summary"),
+    why=_maybe("string", f"remove_row, remove_todo: required, why it goes, at most {MAX_WHY} characters. "
+                         "move_row, set_row, swap_bus: optional. Null for the rest"),
 )
 REPLY_SCHEMA: dict = _obj(
     reply={"type": "string", "description": "What you say to the group, in their own mix of English and Filipino"},
@@ -138,9 +149,18 @@ def _need(o: Op, *fields: str) -> None:
         raise _Refused("bad_op")
 
 
+def _why(o: Op) -> str | None:
+    why = (o.why or "").strip() or None
+    if why and len(why) > MAX_WHY:
+        raise _Refused("long_why")
+    return why
+
+
 def _one(g: dict, o: Op) -> None:
     if o.time is not None and not re.fullmatch(HHMM, o.time):
         raise _Refused("bad_op")
+    if o.op in MAY_HAVE_WHY:
+        _why(o)
     if o.op == "add_row":
         if o.key is not None:
             raise _Refused("bad_op")  # only the server mints a key
@@ -156,6 +176,8 @@ def _one(g: dict, o: Op) -> None:
         _insert(day, o.after, r)
     elif o.op == "remove_row":
         d, r = _find(g, o.key)
+        if _why(o) is None:
+            raise _Refused("no_why")
         d["rows"].remove(r)
     elif o.op == "move_row":
         _need(o, "day")
@@ -184,6 +206,8 @@ def _one(g: dict, o: Op) -> None:
         todo = next((x for x in g.get("todo", []) if x.get("key") == o.key), None)
         if todo is None:
             raise _Refused("unknown_key")
+        if _why(o) is None:
+            raise _Refused("no_why")
         g["todo"].remove(todo)
     elif o.op == "set_budget":
         _need(o, "budget_rows")
@@ -201,10 +225,30 @@ def apply(g: Guide, ops: list[Op]) -> tuple[dict | None, list[str]]:
             _one(out, o)
     except _Refused as e:
         return None, [e.code]
+    if len(whys(ops)) > MAX_WHYS:
+        return None, ["too_many_whys"]
     return out, []
 
 
 def texts(ops: list[Op]) -> list[str]:
-    """Every text an operation adds or changes, for the time and fare rule. Budget rows are the group's own estimates."""
-    return [t for o in ops for t in (o.plan, o.note, o.text) if t]
+    """Every text an operation adds or changes, and every why, for the time and fare rule. Budget rows are the group's
+    own estimates."""
+    return [t for o in ops for t in (o.plan, o.note, o.text) if t] + list(whys(ops).values())
+
+
+def whys(ops: list[Op]) -> dict[str, str]:
+    """The ops' whys by what they explain, for plan_diff.changes: row:<key>, todo:<nn> (as a mark names it) or
+    bus:<table>:<index>. Only an op that may have one; run after apply(), which refused a long one."""
+    out = {}
+    for o in ops:
+        why = (o.why or "").strip()
+        if not why or o.op not in NEEDS_WHY + MAY_HAVE_WHY:
+            continue
+        if o.op == "swap_bus":
+            out[f"bus:{o.table}:{o.index}"] = why
+        elif o.op == "remove_todo":
+            out[f"todo:{o.key.removeprefix('todo-')}"] = why
+        else:
+            out[f"row:{o.key}"] = why
+    return out
 

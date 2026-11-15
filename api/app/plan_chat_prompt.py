@@ -24,6 +24,7 @@ them to paste its Google Maps link.
 - Name rows only by their keys in <plan>. A new row has no key: the app gives it one.
 - Buses can only be swapped for another trip in <buses> of the same table and date. Never add or remove a bus.
 - Keep the bus rows (those with "bus") where they are.
+- Every remove_row and remove_todo has a why: one short sentence, at most 120 characters, saying why it goes, from what they asked or from the plan (e.g. "You asked for a slower Day 2"). A move_row, set_row or swap_bus may have one too. At most 3 whys in one answer: for more, propose fewer changes. Write the why in plain English, even when the reply isn't: it stays in the plan's Changes for the whole group. A why follows the time and fare rule too.
 - Propose operations only when they ask for a change. For a question, answer from the plan and the lists, with no \
 operations. Nothing changes until someone in the group taps Apply.
 - Reply in the same mix of English and Filipino they write in. Keep it short: one to three sentences.
@@ -31,8 +32,8 @@ operations. Nothing changes until someone in the group taps Apply.
 """
 
 FEEDBACK = {
-    "made_up_time": "a time in your reply or a note isn't in <buses> or the plan",
-    "made_up_fare": "an amount in your reply or a note isn't in <buses>, <routes> or the budget",
+    "made_up_time": "a time in your reply, a note or a why isn't in <buses> or the plan",
+    "made_up_fare": "an amount in your reply, a note or a why isn't in <buses>, <routes> or the budget",
     "unknown_id": "an id isn't in <spots>, <trip_places> or <buses>",
     "unknown_key": "a key isn't in <plan>, or `after` isn't a row on that day",
     "bad_day": "that day isn't in the plan",
@@ -40,6 +41,9 @@ FEEDBACK = {
     "bad_json": "the answer wasn't JSON that matches the schema",
     "no_change": "the operations change nothing",
     "truncated": "the answer was cut off: make it shorter",
+    "no_why": "a remove_row or remove_todo has no why",
+    "long_why": "a why is longer than 120 characters",
+    "too_many_whys": "more than 3 whys in one answer: propose fewer changes",
 }
 
 

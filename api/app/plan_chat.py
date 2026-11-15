@@ -120,11 +120,13 @@ class ChatIn(BaseModel):
 
 
 class Proposal(BaseModel):
-    """A change nobody has applied: the guide to show, the GuideIn that Apply sends, its lines, and its base."""
+    """A change nobody has applied: the guide to show, the GuideIn that Apply sends, its lines, and its base. Apply
+    sends `whys` back too (PlanIn.whys), so the applied version's lines keep them."""
     guide: guides.GuideOut
     stored: plan_edit.GuideIn
     changes: list[ChangeLine]
     base: plan_edit.Base
+    whys: dict[str, str]
 
 
 class NeedLinkOut(BaseModel):
@@ -230,9 +232,10 @@ class Chat:
             out, codes_now, n_ops = self._judge(reply, session_id, cur, ctx, body.base)
             logger.info(
                 "plan chat share_slug=%s attempt=%d/%d model=%s stop=%s input_tokens=%d output_tokens=%d cost_usd=%.4f "
-                "spent_today_usd=%.4f ops=%d proposal=%s codes=%s",
+                "spent_today_usd=%.4f ops=%d proposal=%s whys=%d codes=%s",
                 share_slug, attempt, s.max_attempts, reply.model, reply.stop, reply.input_tokens, reply.output_tokens, cost,
-                self.spend.spent_today, n_ops, "yes" if out and out.proposal else "no", ",".join(codes_now) or "-",
+                self.spend.spent_today, n_ops, "yes" if out and out.proposal else "no", len(out.proposal.whys) if out and out.proposal else 0,
+                ",".join(codes_now) or "-",
             )
             if out is not None:
                 return out
@@ -273,13 +276,13 @@ class Chat:
                 return None, ["bad_op"], len(ops)
             try:
                 with db.get_conn() as conn:
-                    p = plan_edit.prepare(conn, session_id, cur, guide_in)
+                    p = plan_edit.prepare(conn, session_id, cur, guide_in, plan_ops.whys(ops))
                     shown = its.guide_out(conn, p.guide, session_id)
             except plan_edit.Refused as r:
                 return None, r.body.get("codes", [r.body["detail"]]), len(ops)
             times |= _guide_times(p.guide)
             amounts |= _budget_amounts(p.guide)
-            proposal = Proposal(guide=shown, stored=guide_in, changes=p.changes, base=base)
+            proposal = Proposal(guide=shown, stored=guide_in, changes=p.changes, base=base, whys=plan_ops.whys(ops))
         codes = check_text(answer.reply, times, amounts)
         for t in plan_ops.texts(ops):
             codes += check_text(t, times, amounts)

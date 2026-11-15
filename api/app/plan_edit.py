@@ -24,7 +24,7 @@ import psycopg
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from . import db, plan_diff
 from . import guide as guides
@@ -81,11 +81,23 @@ class Base(BaseModel):
     seq: int = Field(ge=0, le=9999)
 
 
+WHY_AT = r"^(row:d[1-9]-\d{2}|todo:\d{2}|bus:(getting_there|getting_home):\d{1,2})$"  # plan_ops.whys' keys
+
+
 class PlanIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     base: Base
     guide: GuideIn
     source: Literal["hand", "chat"] = "hand"
+    # a chat proposal's whys, sent back as the proposal gave them; a hand edit has none (owner feedback 2026-11-15)
+    whys: dict[Annotated[str, StringConstraints(pattern=WHY_AT)], Annotated[str, StringConstraints(min_length=1, max_length=120)]] | None = \
+        Field(default=None, max_length=3)
+
+    @model_validator(mode="after")
+    def _whys_from_chat(self) -> "PlanIn":
+        if self.whys and self.source != "chat":
+            raise ValueError("only a chat proposal has whys")
+        return self
 
 
 class UndoIn(BaseModel):
@@ -349,9 +361,10 @@ class Prepared:
     size: int
 
 
-def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn) -> Prepared:
+def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, whys: dict[str, str] | None = None) -> Prepared:
     """Everything a save checks, with nothing written: keys, mint, model, bus times, checks, change lines, size.
-    TG-61 PR 2: the chatbot's proposals go through this too, before anyone taps Apply. Raises Refused."""
+    TG-61 PR 2: the chatbot's proposals go through this too, before anyone taps Apply, and its whys go on their
+    lines. Raises Refused."""
     if not _known_keys(guide_in, cur.guide):
         raise Refused(422, "unknown_key")
     raw, minted = mint(guide_in, taken(conn, session_id, cur))
@@ -363,7 +376,7 @@ def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn) -> Prepared
     codes = check(conn, session_id, cur.guide, new, trips)
     if codes:
         raise Refused(422, codes[0], codes=codes, problems=len(codes))
-    changes = plan_diff.changes(cur.guide, new, names(conn, session_id, cur.guide, new))
+    changes = plan_diff.changes(cur.guide, new, names(conn, session_id, cur.guide, new), whys)
     if not changes:
         raise Refused(422, "no_change")
     plan = _stored(cur.row, new.model_dump(mode="json", by_alias=True, exclude_none=True))
@@ -411,13 +424,13 @@ def save_plan(share_slug: str, body: PlanIn, request: Request, response: Respons
         session_id = _session_id(conn, share_slug, lock=True)  # two phones queue here instead of racing
         cur = current(conn, session_id)
         _check_base(cur, body.base, share_slug, "save")
-        p = prepare(conn, session_id, cur, body.guide)
+        p = prepare(conn, session_id, cur, body.guide, body.whys)
         slug, seq = _write(conn, session_id, cur, p.plan, body.source, p.changes)
         saved = _answer(conn, slug, p.changes)
         logger.info(
-            "plan save share_slug=%s source=%s base_seq=%d seq=%d copied=%s rows=%d todos=%d new_keys=%d bytes=%d",
+            "plan save share_slug=%s source=%s base_seq=%d seq=%d copied=%s rows=%d todos=%d new_keys=%d bytes=%d whys=%d",
             share_slug, body.source, body.base.seq, seq, not cur.copy, sum(len(d.rows) for d in p.guide.days), len(p.guide.todo),
-            p.minted, p.size,
+            p.minted, p.size, len(body.whys or {}),  # a count: a why is the trip's own text, never logged
         )
         return saved
 

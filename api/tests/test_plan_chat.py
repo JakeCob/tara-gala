@@ -466,12 +466,27 @@ def test_a_why_is_optional_on_a_move_a_change_or_a_swap(g):  # P9
         op("move_row", key="d2-08", day=3, after=None),
         op("set_row", key="d2-09", time="18:30", why="Dinner after the market"),
         op("swap_bus", table="getting_there", index=0, trip_id=other_trip, why="An earlier start"),
-        op("remove_row", key="d2-05", why=WHY),
         op("remove_todo", key="todo-01", why="Already done"),
     )]
     assert plan_ops.apply(g, ops)[1] == []
     assert plan_ops.whys(ops) == {"row:d2-09": "Dinner after the market", "bus:getting_there:0": "An earlier start",
-                                  "row:d2-05": WHY, "todo:todo-01": "Already done"}
+                                  "todo:01": "Already done"}
+    four = ops + [plan_ops.Op.model_validate(op("remove_row", key="d2-05", why=WHY))]
+    assert plan_ops.apply(g, four) == (None, ["too_many_whys"]), "a version holds 4 lines, and a why is never in More"
+
+
+def test_a_why_is_on_the_first_line_its_row_makes_only(chat, t, client):  # P9: never on a second or ripple line
+    chat.script(say("Done.", [op("set_row", key="d2-09", time="18:30", note="After the market", why="Dinner after the market")]))
+    p = ask(client, t).json()["proposal"]
+    assert [(c["word"], c.get("why")) for c in p["changes"]] == [("Later", "Dinner after the market"), ("Changed", None)]
+
+
+def test_a_line_with_a_why_is_never_folded_into_more(chat, t, client):  # P9, ux.md §10
+    chat.script(say("Done.", [op("set_row", key="d1-01", note="a"), op("set_row", key="d1-02", note="b"),
+                              op("set_row", key="d1-03", note="c"), op("remove_row", key="d2-05", why=WHY)]))
+    p = ask(client, t).json()["proposal"]
+    assert [c["word"] for c in p["changes"]] == ["Changed", "Changed", "Dropped", "More"]
+    assert p["changes"][2]["why"] == WHY and p["changes"][3]["text"] == "and 1 more change"
 
 
 def test_the_prompt_and_schema_ask_for_a_why():  # P9
@@ -480,8 +495,8 @@ def test_the_prompt_and_schema_ask_for_a_why():  # P9
 
     props = plan_ops.REPLY_SCHEMA["properties"]["ops"]["items"]
     assert "why" in props["properties"] and "why" in props["required"]
-    assert "remove_row and remove_todo" in SYSTEM_PROMPT and "why" in SYSTEM_PROMPT
-    assert {"no_why", "long_why"} <= set(FEEDBACK)
+    assert "remove_row and remove_todo" in SYSTEM_PROMPT and "plain English" in SYSTEM_PROMPT and "At most 3 whys" in SYSTEM_PROMPT
+    assert {"no_why", "long_why", "too_many_whys"} <= set(FEEDBACK)
 
 
 def test_a_removal_without_a_why_is_retried_then_refused(chat, t, client):  # P9
@@ -537,7 +552,7 @@ def test_a_why_is_never_logged(chat, t, client, caplog):  # P9
     p = ask(client, t).json()["proposal"]
     assert save_chat(client, t, p).status_code == 200
     assert MARKER not in caplog.text
-    assert "plan chat share_slug=" in caplog.text and "plan save share_slug=" in caplog.text
+    assert "whys=1 codes=-" in caplog.text and re.search(r"plan save share_slug=\S+ source=chat .* whys=1", caplog.text), "the count only"
 
 
 def test_a_hand_edit_carries_no_why(t, client):  # P9: whys only come with a chat proposal
@@ -546,7 +561,8 @@ def test_a_hand_edit_carries_no_why(t, client):  # P9: whys only come with a cha
     g["days"][1]["rows"] = [r for r in g["days"][1]["rows"] if r["key"] != "d2-05"]
     body = {"base": base_of(it), "guide": g, "whys": {"row:d2-05": WHY}}
     assert client.put(f"/sessions/{t}/plan", json={**body, "source": "hand"}).status_code == 422
-    for whys in ({"row:d2-05": "x" * 121}, {"row:d2-05": ""}, {"nope": WHY}):
+    four = {f"row:d2-0{n}": WHY for n in range(1, 5)}
+    for whys in ({"row:d2-05": "x" * 121}, {"row:d2-05": ""}, {"nope": WHY}, four):
         assert client.put(f"/sessions/{t}/plan", json={**body, "source": "chat", "whys": whys}).status_code == 422, whys
-    r = client.put(f"/sessions/{t}/plan", json={**body, "source": "chat"})
+    r = client.put(f"/sessions/{t}/plan", json={**body, "source": "chat", "whys": None})
     assert r.status_code == 200 and "why" not in r.json()["changes"][0], "whys are optional on the PUT"
