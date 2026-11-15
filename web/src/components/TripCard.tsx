@@ -1,12 +1,13 @@
 // A bus card, as on the search results (TG-12/14), moved out of TripSearch.tsx for the share page (TG-23).
 // notice is the share page's "this bus changed" line (ux.md 3.2); search never passes one. action is TG-61's "Use this
-// bus" in the plan's bus swap.
+// bus" in the plan's bus swap, whose cards are plain: no Book and no Get to the terminal, since choosing a bus is the only
+// job there (TG-61 UX review Must 1). The trust lines stay.
 import type { ReactNode } from "react";
 import { formatClass, formatDayOffset, formatTime, formatVerified, type Trip } from "@/lib/api";
 import TerminalLinks from "@/components/TerminalLinks";
 import { PX, PixelBox } from "@/components/pixel";
 
-export default function TripCard({ trip: t, notice, action }: { trip: Trip; notice?: string; action?: ReactNode }) {
+export default function TripCard({ trip: t, notice, action, plain }: { trip: Trip; notice?: string; action?: ReactNode; plain?: boolean }) {
   return (
     <PixelBox as="li">
       {notice && <p className="text-sm font-semibold text-danger-text">{notice}</p>}
@@ -30,7 +31,7 @@ export default function TripCard({ trip: t, notice, action }: { trip: Trip; noti
           ""
         )}
       </div>
-      <TerminalLinks slug={t.origin_slug} name={t.origin_name} city={t.origin_city} />
+      {!plain && <TerminalLinks slug={t.origin_slug} name={t.origin_name} city={t.origin_city} />}
       <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted">
         <span>
           {formatVerified(t.last_verified_at)}
@@ -43,7 +44,7 @@ export default function TripCard({ trip: t, notice, action }: { trip: Trip; noti
             </>
           )}
         </span>
-        {t.booking_url ? (
+        {!plain && (t.booking_url ? (
           <a
             href={t.booking_url}
             target="_blank"
@@ -54,7 +55,7 @@ export default function TripCard({ trip: t, notice, action }: { trip: Trip; noti
           </a>
         ) : (
           <span>No booking link yet</span>
-        )}
+        ))}
       </div>
       {action}
     </PixelBox>

@@ -10,7 +10,7 @@ import { type Guide, type GuideRow, type Mark, marksByKey, rowMark, rowShows } f
 import type { Level } from "@/lib/levelMap";
 import { type At, type PlaceIn, type RowIn, type Suggestion, noteSuggestion, nudgeRow, removeRow, setRow, toStored } from "@/lib/planEdit";
 import { busChangedLine, levelLabel, removeConfirm } from "@/lib/planLines";
-import { type SuggestIn, type TripFile, planFailureMessage } from "@/lib/trip";
+import { type SuggestIn, type TripFile, clashAgain, planFailureMessage, saveProblem } from "@/lib/trip";
 import BusSwap, { type BusAt, busAt, swapTitle } from "./BusSwap";
 import FitPlace, { type FitState, type Slot } from "./FitPlace";
 import { PlanProblem, SaidText } from "./PlanBits";
@@ -145,7 +145,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     const word = dir < 0 ? "earlier" : "later";
     const out = await editor.save("plan-nudge", (g) => nudgeRow(g, key, dir, (r: RowIn) => rowShows(r as unknown as GuideRow, picks)), { kind: "nudge", dir: word }, key);
     if (!out.ok) {
-      if (!out.ignored) setSaid(out.message);
+      if (!out.ignored) setSaid(saveProblem(out, `Move ${word}`));
       return;
     }
     const now = levelLabel(out.guide, marks, key);
@@ -167,7 +167,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     }
     const out = await editor.save("plan-remove", (g) => removeRow(g, key), { kind: "remove" }, key);
     if (out.ok) return onDone(out.focus);
-    if (!out.ignored) setProblem(out.message);
+    if (!out.ignored) setProblem(saveProblem(out, "Remove this stop"));
   }
 
   // Where a place fits, asked again: after a clash the ranking can change with the newer plan (B60, ux.md §4.8)
@@ -334,7 +334,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           </>
         ) : (
           <>
-            <ClashBox lead="Someone just changed the plan, so your change wasn't saved." rest="The map now shows their version. Check your change against it, then tap Apply again." />
+            <ClashBox lead="Someone just changed the plan, so your change wasn't saved." rest={clashAgain("Apply")} />
             {problem && <PlanProblem text={problem} />}
             <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={off || undefined} onClick={() => onRecheck(step)}>
               {step.mode === "fit" ? "Find where it fits again" : "Check my change again"}
@@ -364,7 +364,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
             })}
           </div>
           {/* The edit bar sits behind this dialog, so the dialog says what happened (ux.md §3.3) */}
-          <p role="status" aria-live="polite" className="text-sm empty:sr-only">{said === "Moving..." && editor.status !== "Saving..." && !off ? "" : said}</p>
+          <p role="status" aria-live="polite" className="whitespace-pre-line text-sm empty:sr-only">{said === "Moving..." && editor.status !== "Saving..." && !off ? "" : said}</p>
           {!row.bus && guide.days.length > 1 && (
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-1 text-sm font-semibold">Or move it to another day</legend>
@@ -430,7 +430,7 @@ function TimeAndNote({ editor, row, before, after, label, onSaved, onBack }: {
     const out = await editor.save("plan-edit", (g) => setRow(g, row.key, parts), { kind: "edit", key: row.key }, row.key);
     setSaving(false);
     if (out.ok) return onSaved(out.focus);
-    if (!out.ignored) setProblem({ field: "save", text: out.message });
+    if (!out.ignored) setProblem({ field: "save", text: saveProblem(out, "Save") });
   }
 
   return (

@@ -356,6 +356,14 @@ export function planFailureMessage(r: { why: TripFailure; detail?: string }): st
   return tripFailureMessage(r);
 }
 
+/** ux.md §6's second line after a clash, naming the button that was tapped (UX review should 2). */
+export const clashAgain = (button: string) => `The map now shows their version. Check your change against it, then tap ${button} again.`;
+
+/** A save's failure as shown in its dialog: a clash also says what to do next. */
+export function saveProblem(out: { message: string; clash: boolean }, button: string): string {
+  return out.clash ? `${out.message}\n${clashAgain(button)}` : out.message;
+}
+
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;
 
 const FILES_IN_MEMORY = 60; // about 18 MB of photos: a few Album pages, so reopening one downloads nothing

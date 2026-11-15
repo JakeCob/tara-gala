@@ -139,6 +139,9 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
 
   const s = pinned?.suggestion;
   const said = s ? pinLine(s) : null;
+  // UX review should 1: once a place is found, its Next is the step's one Red action; Find is Red again if the field changes
+  const shownFor = needPin ?? (s ? pinned?.link : null);
+  const findFirst = !shownFor || text.trim() !== shownFor;
   return (
     <div className="flex flex-col gap-3">
       <form onSubmit={onFind} noValidate className="flex flex-col gap-2">
@@ -148,7 +151,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
         </label>
         <p className={PX.meta}>Paste a Google Maps link, or type a place or store name.</p>
         {problem && <PlanProblem text={problem} />}
-        <PixelButton type="submit" variant="primary" aria-disabled={finding || undefined} className="w-full px-4 py-3">
+        <PixelButton type="submit" variant={findFirst ? "primary" : "secondary"} aria-disabled={finding || undefined} className="w-full px-4 py-3">
           {finding ? (findingLabel ?? "Finding...") : "Find"}
         </PixelButton>
       </form>

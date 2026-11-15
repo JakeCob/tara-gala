@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Guide } from "./guide.ts";
-import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "./planState.ts";
+import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, keepNewerPlan, shownFrom } from "./planState.ts";
 import type { PlanSaved, Trip } from "./trip.ts";
 
 const WEB = new URL("../../", import.meta.url);
@@ -90,4 +90,30 @@ test("T61-W12f TG-57 still holds: the worker's saved copy only fills a gap, or b
   assert.equal(acceptSaved(plan(COPY, 5), plan(COPY, 4), COPY), false);
   assert.equal(acceptSaved(plan(SHARED, null), plan(COPY, 3), COPY), true, "the trip moved to its copy");
   assert.equal(acceptSaved(null, plan(SHARED, null), COPY), false, "never another plan's copy");
+});
+
+test("T61-W12g review M1: a session write's answer never puts back an older plan than the one on screen", () => {
+  const ticked = (t: Trip): Trip => ({ ...t, marks: [{ key: "d1-01", value: "done", updated_at: "" }] });
+  // A tick that committed before the plan save, landing after it
+  const kept = keepNewerPlan(trip(COPY, 6), ticked(trip(COPY, 5)));
+  assert.equal(kept.plan_edits?.seq, 6, "an older version of the copy is kept out");
+  assert.equal(kept.marks.length, 1, "the rest of the answer is taken");
+  const first = keepNewerPlan(trip(COPY, 1), ticked(trip(SHARED, null)));
+  assert.equal(first.itinerary_slug, COPY, "on a trip's first edit, the shared plan from before the copy is kept out");
+  assert.equal(first.plan_edits?.seq, 1);
+  assert.equal(first.marks.length, 1);
+  assert.equal(keepNewerPlan(trip(COPY, 5), trip(COPY, 6)).plan_edits?.seq, 6, "a newer version, from another phone, is taken");
+  assert.equal(keepNewerPlan(trip(SHARED, null), trip(COPY, 1)).itinerary_slug, COPY, "another phone made the copy: taken");
+  assert.equal(keepNewerPlan(trip(COPY, 5), trip(COPY, 5)).plan_edits?.seq, 5);
+});
+
+test("T61-W12h review M1: a plan write is refused while a session write is out, and attach or detach waits for a plan write", () => {
+  const view = read("src/components/TripView.tsx");
+  const top = view.slice(view.indexOf("async function planWrite("), view.indexOf("const base = baseOf(s)"));
+  assert.match(top, /canEdit\(s, t, navigator\.onLine, busyRef\.current \|\|/, "canEdit's writing, at the top of planWrite, counts a session write that's out");
+  assert.match(view, /const editable = canEdit\(shown, trip, online, [^;]*\bbusy\b/, "editable counts it too");
+  const apply = view.slice(view.indexOf("async function apply("), view.indexOf("async function planWrite("));
+  assert.match(apply, /busyRef\.current = true/);
+  assert.match(apply, /keepNewerPlan\(/, "the answer goes through keepNewerPlan");
+  assert.match(view, /<PlanSection trip=\{trip\} busy=\{busy \|\| planWriting\}/, "attach and detach move the plan: they wait for a plan write");
 });
