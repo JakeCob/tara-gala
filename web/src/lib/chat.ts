@@ -16,7 +16,8 @@ export type ChatIn = { base: PlanBase; messages: ChatMessage[]; focus: { key: st
 /** Where a place the chatbot can't pin would go, if it named one; keys were checked against the base */
 export type LinkAt = { after: string } | { replace: string } | { first_of_day: number } | null;
 export type NeedLink = { name: string; at: LinkAt };
-export type ChatProposal = { guide: Guide; stored: GuideIn; changes: ChangeLine[]; base: PlanBase };
+/** whys: opaque ("row:d2-05" to the reason), sent back on Apply so the saved version's lines keep their whys */
+export type ChatProposal = { guide: Guide; stored: GuideIn; changes: ChangeLine[]; base: PlanBase; whys?: Record<string, string> };
 export type ChatOut = { reply: string; proposal: ChatProposal | null; outcome: "proposal" | "answer" | "no_fit"; need_link: NeedLink | null };
 export type ChatFailure = "offline" | "not_found" | "busy" | "cap" | "off" | "clash" | "server" | "rejected";
 export type ChatAnswer = { ok: true; body: ChatOut } | { ok: false; why: ChatFailure; retryAt?: string | null; clash?: PlanBase };
@@ -139,6 +140,8 @@ function isOut(b: unknown): b is ChatOut {
   if (o.need_link !== null && o.need_link !== undefined && !isNeedLink(o.need_link)) return false;
   const p = o.proposal;
   if (p === null) return true;
+  const w: unknown = p?.whys;
+  if (w !== undefined && w !== null && (typeof w !== "object" || Array.isArray(w) || !Object.values(w).every((v) => typeof v === "string"))) return false;
   return !!p && typeof p === "object" && !!p.guide && !!p.stored && Array.isArray(p.changes) && p.changes.every(isLine)
     && !!p.base && typeof p.base.itinerary_slug === "string" && typeof p.base.seq === "number";
 }

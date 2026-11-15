@@ -320,7 +320,9 @@ export const tripApi = {
   /** The invite link stops working; startInvite then makes a new one */
   stopInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "DELETE" })),
   /** TG-61: the whole new guide, worked out from `base`. A 409 means another phone saved first: nothing was written */
-  savePlan: (slug: string, base: PlanBase, guide: GuideIn, source: "hand" | "chat") => ask<PlanSaved>(`${at(slug)}/plan`, { method: "PUT", body: { base, guide, source } }),
+  savePlan: (slug: string, base: PlanBase, guide: GuideIn, source: "hand" | "chat", whys?: Record<string, string>) =>
+    // A chat Apply sends the proposal's whys, so the version's lines keep them; a hand save never carries any (the API's 422)
+    ask<PlanSaved>(`${at(slug)}/plan`, { method: "PUT", body: { base, guide, source, ...(source === "chat" && whys ? { whys } : {}) } }),
   /** Undoes the newest version, or puts back the change an undo took out */
   undoPlan: (slug: string, base: PlanBase) => ask<PlanSaved>(`${at(slug)}/plan/undo`, { method: "POST", body: { base } }),
   /** A proposal for one stop; saves nothing */

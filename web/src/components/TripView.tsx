@@ -387,7 +387,7 @@ export default function TripView({ slug }: { slug: string }) {
         return r;
       },
       // The proposal's own plan and base, never the base of a newer plan: a stale proposal gets the server's 409 (review M1)
-      apply: (p) => planWrite("plan-chat-apply", () => tripApi.savePlan(slug, p.base, p.stored, "chat"), { kind: "chat" }, null, "chat"),
+      apply: (p) => planWrite("plan-chat-apply", () => tripApi.savePlan(slug, p.base, p.stored, "chat", p.whys), { kind: "chat" }, null, "chat"),
     } : null,
     entry: (addPlace) => (
       <div className="flex flex-col gap-1">
