@@ -43,7 +43,7 @@ test("T61-P11 asking sends the plan on screen's own base, through tripApi.chat, 
 
 test("T61-P12 Apply saves the proposal's own plan with the proposal's own base, as a chat version, through planWrite", () => {
   const editor = between(view(), "chat: flags.chatbotLive ? {", "} : null,");
-  assert.match(editor, /planWrite\("plan-chat-apply", \(\) => tripApi\.savePlan\(slug, (\w+)\.base, \1\.stored, "chat"\), \{ kind: "chat" \}, null, "chat"\)/,
+  assert.match(editor, /planWrite\("plan-chat-apply", \(\) => tripApi\.savePlan\(slug, (\w+)\.base, \1\.stored, "chat", \1\.whys\), \{ kind: "chat" \}, null, "chat"\)/,
     "never the base of a newer plan: a stale proposal must get the server's 409, not be re-based (review M1)");
   assert.doesNotMatch(chat(), /savePlan|tripApi/, "the dialog only asks the page to save");
 });

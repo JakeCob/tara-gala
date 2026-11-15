@@ -92,3 +92,53 @@ test("T61-Y7 a why is never logged", () => {
     }
   }
 });
+
+// ---- Apply sends the whys back (tg-build, 2026-11-15): the server rebuilds the lines and puts the whys on them only
+// if the phone sends them, so Changes keeps them. A hand save never carries whys (the API refuses that with a 422).
+
+const WHYS = { "row:d2-05": WHY, "todo:01": "Already bought (made up)" };
+const BASE = { itinerary_slug: "edit-made-up-copy", seq: 4 };
+const OUT = { reply: "r", outcome: "proposal", need_link: null, proposal: { guide: {}, stored: { days: [] }, base: BASE, changes: [dropped], whys: WHYS } };
+
+test("T61-Y8 a proposal's whys are read as an opaque map of text, and may be absent", async () => {
+  const { chatAnswer } = await import("./chat.ts");
+  const r = chatAnswer(200, OUT);
+  assert.ok(r.ok);
+  assert.deepEqual(r.ok && r.body.proposal?.whys, WHYS);
+  const none = { ...OUT, proposal: { ...OUT.proposal, whys: undefined } };
+  assert.equal(chatAnswer(200, none).ok, true, "no whys: still a proposal");
+  for (const bad of [[], "x", { "row:d2-05": 3 }, null]) {
+    assert.equal(chatAnswer(200, { ...OUT, proposal: { ...OUT.proposal, whys: bad } }).ok, bad === null, JSON.stringify(bad));
+  }
+});
+
+test("T61-Y9 savePlan sends the whys only on a chat save; a hand save never does", async (t) => {
+  const { tripApi } = await import("./trip.ts");
+  const sent: unknown[] = [];
+  t.mock.method(globalThis, "fetch", async (_url: string, init: { body: string }) => {
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ itinerary: {}, changes: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  const save = tripApi.savePlan as (slug: string, base: unknown, guide: unknown, source: "hand" | "chat", whys?: Record<string, string>) => Promise<unknown>;
+  await save("s", BASE, { days: [] }, "chat", WHYS);
+  await save("s", BASE, { days: [] }, "chat");
+  await save("s", BASE, { days: [] }, "hand", WHYS);
+  await save("s", BASE, { days: [] }, "hand");
+  assert.deepEqual(sent[0], { base: BASE, guide: { days: [] }, source: "chat", whys: WHYS });
+  assert.deepEqual(sent[1], { base: BASE, guide: { days: [] }, source: "chat" }, "no whys: the key is left out");
+  assert.deepEqual(sent[2], { base: BASE, guide: { days: [] }, source: "hand" }, "a hand save never carries whys");
+  assert.deepEqual(sent[3], { base: BASE, guide: { days: [] }, source: "hand" });
+});
+
+test("T61-Y10 the chat's Apply passes the proposal's whys; the hand editor's saves don't; whys are never stored or logged", () => {
+  const view = read("src/components/TripView.tsx");
+  assert.match(view, /tripApi\.savePlan\(slug, (\w+)\.base, \1\.stored, "chat", \1\.whys\)/);
+  assert.match(view, /tripApi\.savePlan\(slug, base, next, "hand"\)/, "the hand path is unchanged");
+  const chat = read("src/lib/chat.ts");
+  const keep = chat.slice(chat.indexOf("function keep("), chat.indexOf("\n}\n", chat.indexOf("function keep(")));
+  assert.doesNotMatch(keep, /whys/, "the phone's log keeps words, never the whys map");
+  for (const file of ["src/components/TripView.tsx", "src/components/PlanChat.tsx", "src/lib/trip.ts", "src/lib/chat.ts"]) {
+    for (const [, args] of read(file).matchAll(/console\.(?:info|warn|error|log)\(([^;]*)\);/g)) assert.doesNotMatch(args, /whys/, `${file}: ${args}`);
+  }
+});
+
