@@ -94,13 +94,13 @@ def test_each_operation_applies(g, barkada):  # P1
     cases = [
         (op("add_row", day=2, after="d2-03", time="08:00", plan="Merienda", note="", spot_id=spot),
          lambda x: x["days"][1]["rows"][3]["key"] is None and x["days"][1]["rows"][3]["plan"] == "Merienda"),
-        (op("remove_row", key="d2-05"), lambda x: "d2-05" not in [r["key"] for d in x["days"] for r in d["rows"]]),
+        (op("remove_row", key="d2-05", why="You asked for a slower Day 2"), lambda x: "d2-05" not in [r["key"] for d in x["days"] for r in d["rows"]]),
         (op("move_row", key="d2-08", day=3, after=None), lambda x: x["days"][2]["rows"][0]["key"] == "d2-08"),
         (op("set_row", key="d2-08", time="16:00", note="Bring jackets"),
          lambda x: next(r for r in x["days"][1]["rows"] if r["key"] == "d2-08")["time"] == "16:00"),
         (op("swap_bus", table="getting_there", index=0, trip_id=other_trip), lambda x: x["getting_there"]["buses"][0]["trip_id"] == other_trip),
         (op("add_todo", text="Pack jackets"), lambda x: x["todo"][-1] == {"key": None, "text": "Pack jackets", "done": False}),
-        (op("remove_todo", key="todo-01"), lambda x: "todo-01" not in [y["key"] for y in x["todo"]]),
+        (op("remove_todo", key="todo-01", why="Already done"), lambda x: "todo-01" not in [y["key"] for y in x["todo"]]),
         (op("set_budget", budget_rows=[{"item": "Food", "estimate": "PHP 2,000"}], budget_summary="About PHP 5,000 each"),
          lambda x: x["budget"]["rows"] == [{"item": "Food", "estimate": "PHP 2,000"}]),
     ]
@@ -437,3 +437,116 @@ def test_a_proposal_gets_every_check_a_hand_edit_gets(chat, t, client):  # B40: 
     out = ask(client, t).json()
     assert out["outcome"] == "proposal" and out["reply"] == "Moved it."
     assert "wrong_direction" in chat.llm.calls[1]["user"], "a bus going the other way, refused as a hand edit would be"
+
+
+# ---------------------------------------------------------------- P9: why a stop goes (owner feedback 2026-11-15)
+
+WHY = "You asked for a slower Day 2"
+
+
+@pytest.mark.parametrize("o, code", [
+    (op("remove_row", key="d2-05"), "no_why"),
+    (op("remove_row", key="d2-05", why="   "), "no_why"),
+    (op("remove_todo", key="todo-01"), "no_why"),
+    (op("remove_row", key="d2-05", why="x" * 121), "long_why"),
+    (op("move_row", key="d2-08", day=3, after=None, why="x" * 121), "long_why"),
+    (op("remove_row", key="d9-99"), "unknown_key"),  # a key it made up is that, first
+])
+def test_a_removal_needs_a_short_why(g, o, code):  # P9
+    from app import plan_ops
+
+    assert plan_ops.apply(g, [plan_ops.Op.model_validate(o)]) == (None, [code])
+
+
+def test_a_why_is_optional_on_a_move_a_change_or_a_swap(g):  # P9
+    from app import plan_ops
+
+    other_trip = str(g.getting_there.buses[1].trip_id)
+    ops = [plan_ops.Op.model_validate(o) for o in (
+        op("move_row", key="d2-08", day=3, after=None),
+        op("set_row", key="d2-09", time="18:30", why="Dinner after the market"),
+        op("swap_bus", table="getting_there", index=0, trip_id=other_trip, why="An earlier start"),
+        op("remove_row", key="d2-05", why=WHY),
+        op("remove_todo", key="todo-01", why="Already done"),
+    )]
+    assert plan_ops.apply(g, ops)[1] == []
+    assert plan_ops.whys(ops) == {"row:d2-09": "Dinner after the market", "bus:getting_there:0": "An earlier start",
+                                  "row:d2-05": WHY, "todo:todo-01": "Already done"}
+
+
+def test_the_prompt_and_schema_ask_for_a_why():  # P9
+    from app import plan_ops
+    from app.plan_chat_prompt import FEEDBACK, SYSTEM_PROMPT
+
+    props = plan_ops.REPLY_SCHEMA["properties"]["ops"]["items"]
+    assert "why" in props["properties"] and "why" in props["required"]
+    assert "remove_row and remove_todo" in SYSTEM_PROMPT and "why" in SYSTEM_PROMPT
+    assert {"no_why", "long_why"} <= set(FEEDBACK)
+
+
+def test_a_removal_without_a_why_is_retried_then_refused(chat, t, client):  # P9
+    bare = say("Tinanggal ko ang park.", [op("remove_row", key="d2-05")])
+    chat.script(bare, bare, bare)
+    out = ask(client, t, "gawin nating chill ang Day 2").json()
+    assert out["outcome"] == "no_fit" and out["proposal"] is None
+    assert len(chat.llm.calls) == 3
+    assert all("no_why" in c["user"] and "<feedback>" in c["user"] for c in chat.llm.calls[1:]), "retried with its code"
+
+
+def test_a_removals_why_is_on_its_line_and_kept_after_apply(chat, t, client):  # P9
+    chat.script(say("Tinanggal ko ang park.", [op("remove_row", key="d2-05")]),
+                say("Tinanggal ko ang park.", [op("remove_row", key="d2-05", why=WHY),
+                                               op("move_row", key="d2-08", day=3, after=None)]))
+    out = ask(client, t, "gawin nating chill ang Day 2").json()
+    assert out["outcome"] == "proposal" and "no_why" in chat.llm.calls[1]["user"]
+    p = out["proposal"]
+    dropped = next(c for c in p["changes"] if c["word"] == "Dropped")
+    moved = next(c for c in p["changes"] if c["word"] == "Moved")
+    assert dropped["why"] == WHY and "why" not in moved, "a line with no why has no why field"
+    assert p["whys"] == {"row:d2-05": WHY}
+    applied = save_chat(client, t, p)
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["changes"] == p["changes"]
+    assert client.get(f"/sessions/{t}").json()["plan_edits"]["versions"][0]["changes"] == p["changes"], "Changes keeps it"
+
+
+def save_chat(client, slug, p):
+    return client.put(f"/sessions/{slug}/plan", json={"base": p["base"], "guide": p["stored"], "source": "chat", "whys": p["whys"]})
+
+
+def test_a_why_goes_on_a_to_do_and_a_bus_line(chat, t, client, g):  # P9
+    other_trip = str(g.getting_there.buses[1].trip_id)
+    chat.script(say("Done.", [op("remove_todo", key="todo-01", why="Already done"),
+                              op("swap_bus", table="getting_there", index=0, trip_id=other_trip, why="An earlier start")]))
+    p = ask(client, t).json()["proposal"]
+    assert [(c["word"], c.get("why")) for c in p["changes"]] == [("Bus", "An earlier start"), ("To-do", "Already done")]
+
+
+def test_a_why_follows_the_time_and_fare_rule(chat, t, client):  # P9, check_text
+    chat.script(say("Tinanggal ko.", [op("remove_row", key="d2-05", why="The jeep leaves at 3:35 PM")]),
+                say("Tinanggal ko.", [op("remove_row", key="d2-05", why="It costs ₱999 now")]),
+                say("Tinanggal ko.", [op("remove_row", key="d2-05", why=WHY)]))
+    out = ask(client, t).json()
+    assert out["outcome"] == "proposal"
+    assert "made_up_time" in chat.llm.calls[1]["user"] and "made_up_fare" in chat.llm.calls[2]["user"]
+
+
+def test_a_why_is_never_logged(chat, t, client, caplog):  # P9
+    caplog.set_level(logging.DEBUG)
+    chat.script(say("Tinanggal ko.", [op("remove_row", key="d2-05", why=f"{MARKER} why")]))
+    p = ask(client, t).json()["proposal"]
+    assert save_chat(client, t, p).status_code == 200
+    assert MARKER not in caplog.text
+    assert "plan chat share_slug=" in caplog.text and "plan save share_slug=" in caplog.text
+
+
+def test_a_hand_edit_carries_no_why(t, client):  # P9: whys only come with a chat proposal
+    it = plan_of(client, t)
+    g = stored(it["guide"])
+    g["days"][1]["rows"] = [r for r in g["days"][1]["rows"] if r["key"] != "d2-05"]
+    body = {"base": base_of(it), "guide": g, "whys": {"row:d2-05": WHY}}
+    assert client.put(f"/sessions/{t}/plan", json={**body, "source": "hand"}).status_code == 422
+    for whys in ({"row:d2-05": "x" * 121}, {"row:d2-05": ""}, {"nope": WHY}):
+        assert client.put(f"/sessions/{t}/plan", json={**body, "source": "chat", "whys": whys}).status_code == 422, whys
+    r = client.put(f"/sessions/{t}/plan", json={**body, "source": "chat"})
+    assert r.status_code == 200 and "why" not in r.json()["changes"][0], "whys are optional on the PUT"
