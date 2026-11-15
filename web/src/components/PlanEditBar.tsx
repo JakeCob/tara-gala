@@ -78,6 +78,7 @@ function HistoryRow({ v, today }: { v: PlanEdits["versions"][number]; today: str
     <>
       {r.at} · {r.lead}
       {r.line && <LineText line={r.line} />}
+      {r.why && <span className="block pl-4 text-sm">{r.why}</span>}
     </>
   );
 }

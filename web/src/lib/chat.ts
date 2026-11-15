@@ -46,7 +46,8 @@ export function chatStorage(): Store | null {
 
 const isLine = (l: unknown): l is ChangeLine => {
   const o = l as ChangeLine;
-  return !!o && typeof o.word === "string" && typeof o.text === "string" && (o.day === null || typeof o.day === "number");
+  return !!o && typeof o.word === "string" && typeof o.text === "string" && (o.day === null || typeof o.day === "number")
+    && (o.why === undefined || o.why === null || typeof o.why === "string");
 };
 const isAt = (a: unknown): a is LinkAt => {
   if (a === null) return true;
@@ -64,7 +65,7 @@ function keep(e: unknown): Entry | null {
   if (o.kind === "user") return { kind: "user", text: o.text };
   if (o.kind !== "bot") return null;
   const out: Entry = { kind: "bot", text: o.text };
-  if (Array.isArray(o.changes) && o.changes.every(isLine)) out.changes = o.changes.map((l) => ({ word: l.word, day: l.day, text: l.text }));
+  if (Array.isArray(o.changes) && o.changes.every(isLine)) out.changes = o.changes.map((l) => ({ word: l.word, day: l.day, text: l.text, ...(typeof l.why === "string" ? { why: l.why } : {}) }));
   if (typeof o.proposal === "string" && (STATES as string[]).includes(o.proposal)) out.proposal = o.proposal as ProposalState;
   if (isNeedLink(o.needLink)) out.needLink = { name: o.needLink.name, at: o.needLink.at };
   if (o.noFit === true) out.noFit = true;

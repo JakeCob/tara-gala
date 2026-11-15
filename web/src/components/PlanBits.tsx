@@ -3,7 +3,7 @@
 // TG-61: small pieces the plan editor's steps share: a failed step's alert, the list of what a change does, and how to
 // get to a stop.
 import { useEffect, useRef } from "react";
-import { PX, PixelBox } from "@/components/pixel";
+import { PX, PixelBox, cx } from "@/components/pixel";
 import type { LegOut } from "@/lib/guide";
 import { type ChangeLine, type Said, changeRows, legLines, lineParts } from "@/lib/planLines";
 
@@ -46,11 +46,13 @@ export function SaidText({ said }: { said: Said | string }) {
 /** What changes (ux.md §4.4), in the same display. */
 export function ChangeList({ lines }: { lines: ChangeLine[] }) {
   return (
-    <ul className="flex flex-col gap-1 text-sm">
+    <ul className={cx("flex flex-col text-sm", lines.some((l) => l.why) ? "gap-2" : "gap-1")}>
       {changeRows(lines).map((l, i) => (
         <li key={i} className="break-words">
           {l.word && <span className="font-bold">{l.word}</span>}
           {l.rest}
+          {/* the chatbot's reason, read with its line (ux.md §10): not fine print, and Why: isn't bold */}
+          {l.why && <span className="block pl-4 text-sm">{l.why}</span>}
         </li>
       ))}
     </ul>

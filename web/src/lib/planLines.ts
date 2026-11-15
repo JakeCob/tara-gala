@@ -5,7 +5,8 @@ import { formatTime, formatVerified } from "./api.ts";
 import { type BusWarning, type Guide, type LegOut, type Mark, marksByKey, rowShows } from "./guide.ts";
 import type { Fit } from "./planEdit.ts";
 
-export type ChangeLine = { word: string; day: number | null; text: string; part?: "stop" | "ripple" };
+/** why (TG-61, owner 2026-11-15): the chatbot's reason for a removal, and for a move or a bus swap when it gave one */
+export type ChangeLine = { word: string; day: number | null; text: string; part?: "stop" | "ripple"; why?: string | null };
 export type PlanVersion = { seq: number; source: "copy" | "hand" | "chat" | "undo"; changes: ChangeLine[]; created_at: string };
 /** SessionOut.plan_edits: the copy's newest version and its last five, newest first. Null before the first edit. */
 export type PlanEdits = { seq: number; versions: PlanVersion[] };
@@ -51,8 +52,16 @@ export function linePlain(l: ChangeLine): string {
 /** A status as plain text: a Said, or a plain line like "Saving...". */
 export const saidPlain = (s: Said | string) => (typeof s === "string" ? s : `${s.lead}${s.line ? linePlain(s.line) : ""}${s.tail}`);
 
-/** What changes, in a proposal: the same display. */
-export const changeRows = (lines: ChangeLine[]) => lines.map(lineParts);
+/** The chatbot's reason, as its own line (ux.md §10): "Why: " and the why as written, with a "." only when it doesn't end in
+ * . ! or ?. Nothing is cut. No why, no line: never a placeholder. */
+export function whyText(why: unknown): string | null {
+  if (typeof why !== "string" || !why.trim()) return null;
+  const said = why.trim();
+  return `Why: ${said}${/[.!?]$/.test(said) ? "" : "."}`;
+}
+
+/** What changes, in a proposal: the same display, with each line's why under it. */
+export const changeRows = (lines: ChangeLine[]) => lines.map((l) => ({ ...lineParts(l), why: whyText(l.why) }));
 
 const firstOf = (lines: ChangeLine[]) => lines.find((l) => l.word !== "More") ?? null;
 
@@ -78,8 +87,9 @@ export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: b
 }
 
 /** A row in Changes: when, then the version's first line. A chatbot version says so. */
-export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null } {
-  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead: v.source === "chat" ? "Chatbot: " : "", line: firstOf(v.changes) };
+export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null; why: string | null } {
+  const line = firstOf(v.changes);
+  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead: v.source === "chat" ? "Chatbot: " : "", line, why: whyText(line?.why) };
 }
 
 /** Another phone's change, above the World tabs (ux.md §6). */
