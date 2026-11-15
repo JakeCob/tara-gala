@@ -107,6 +107,9 @@ test("T61-Y8 a proposal's whys are read as an opaque map of text, and may be abs
   assert.deepEqual(r.ok && r.body.proposal?.whys, WHYS);
   const none = { ...OUT, proposal: { ...OUT.proposal, whys: undefined } };
   assert.equal(chatAnswer(200, none).ok, true, "no whys: still a proposal");
+  const empty = chatAnswer(200, { ...OUT, proposal: { ...OUT.proposal, whys: {} } });
+  assert.ok(empty.ok, "the API always sends whys, {} when there are none: an empty map is a good answer");
+  assert.deepEqual(empty.ok && empty.body.proposal?.whys, {});
   for (const bad of [[], "x", { "row:d2-05": 3 }, null]) {
     assert.equal(chatAnswer(200, { ...OUT, proposal: { ...OUT.proposal, whys: bad } }).ok, bad === null, JSON.stringify(bad));
   }
@@ -122,12 +125,14 @@ test("T61-Y9 savePlan sends the whys only on a chat save; a hand save never does
   const save = tripApi.savePlan as (slug: string, base: unknown, guide: unknown, source: "hand" | "chat", whys?: Record<string, string>) => Promise<unknown>;
   await save("s", BASE, { days: [] }, "chat", WHYS);
   await save("s", BASE, { days: [] }, "chat");
+  await save("s", BASE, { days: [] }, "chat", {});
   await save("s", BASE, { days: [] }, "hand", WHYS);
   await save("s", BASE, { days: [] }, "hand");
   assert.deepEqual(sent[0], { base: BASE, guide: { days: [] }, source: "chat", whys: WHYS });
   assert.deepEqual(sent[1], { base: BASE, guide: { days: [] }, source: "chat" }, "no whys: the key is left out");
-  assert.deepEqual(sent[2], { base: BASE, guide: { days: [] }, source: "hand" }, "a hand save never carries whys");
-  assert.deepEqual(sent[3], { base: BASE, guide: { days: [] }, source: "hand" });
+  assert.deepEqual(sent[2], { base: BASE, guide: { days: [] }, source: "chat", whys: {} }, "an empty map goes back as it came");
+  assert.deepEqual(sent[3], { base: BASE, guide: { days: [] }, source: "hand" }, "a hand save never carries whys");
+  assert.deepEqual(sent[4], { base: BASE, guide: { days: [] }, source: "hand" });
 });
 
 test("T61-Y10 the chat's Apply passes the proposal's whys; the hand editor's saves don't; whys are never stored or logged", () => {
