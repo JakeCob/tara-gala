@@ -75,6 +75,24 @@ test("T61-Y11 review M1: a Changes row shows the first line with a why, so a rem
   assert.ok(ask === null || (ask.includes("Later · World 2") && !ask.includes("BenCab")), "the Undo confirm stays on the first line");
 });
 
+test("T61-Y12 owner 2026-11-15: a place swap's why shows on the card and in Changes, like a removal's", () => {
+  const SWAP = "Hill Station is closed on Mondays (made up)";
+  const out: ChangeLine & { why?: string } = { word: "Out", day: 2, text: "Hill Station (made up)", why: SWAP };
+  const into: ChangeLine = { word: "In", day: 2, text: "Café Yagam (made up)" };
+  const later: ChangeLine = { word: "Later", day: 2, text: "Dinner, by 15 min" };
+  // the card: the why under Out, in the same row; In gets none
+  const rows = L.changeRows([out, into, later]) as (ReturnType<typeof L.lineParts> & { why: string | null })[];
+  assert.deepEqual(rows.map((r) => [r.word, r.why]), [["Out", `Why: ${SWAP}.`], ["In", null], ["Later", null]]);
+  // wherever the server puts the why on the swap, the line that carries it shows it
+  const onIn = L.changeRows([{ ...out, why: undefined }, { ...into, why: "Closer to the hotel" } as ChangeLine]) as typeof rows;
+  assert.deepEqual(onIn.map((r) => r.why), [null, "Why: Closer to the hotel."]);
+  // Changes, with M1: a swap behind a time change still stands for its version, with its why
+  const row = L.historyRow({ seq: 6, source: "chat", changes: [later, out, into], created_at: "2026-11-15T09:00:00Z" }, "2026-11-15") as ReturnType<typeof L.historyRow> & { why: string | null };
+  assert.deepEqual([row.line, row.why], [out, `Why: ${SWAP}.`]);
+  // the one-line places stay on the first line
+  assert.doesNotMatch(L.saidPlain(L.barSaid([later, out, into], "chat")), /Why|Hill Station/);
+});
+
 test("T61-Y5 the phone's chat log keeps a proposal's whys, as words on screen", async () => {
   const { saveLog, loadLog, chatAnswer } = await import("./chat.ts");
   const data = new Map<string, string>();
