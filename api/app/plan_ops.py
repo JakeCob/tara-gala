@@ -5,8 +5,9 @@ with null keys on what's new), and plan_edit.prepare() then checks it exactly as
 The model names only existing keys. It can't mint a key, and it can't make a pin: a place is a spot or a trip place
 it was given, never coordinates or a link. Pure: no database, no model call.
 
-Every removal says why (owner feedback 2026-11-15): remove_row and remove_todo need a why of 1 to 120 characters, and
-move_row, set_row and swap_bus may have one. whys() keys them to the change lines they explain (plan_diff). A why is
+Every removal says why (owner feedback 2026-11-15): remove_row, remove_todo and a set_row that changes a row's place
+(owner decision 2026-11-15: Out/In takes a stop out too) need a why of 1 to 120 characters. Any other move_row,
+set_row or swap_bus may have one. whys() keys them to the change lines they explain (plan_diff). A why is
 the trip's own text, like a note: it's checked by the time and fare rule and never logged.
 """
 
@@ -92,8 +93,8 @@ _OP = _obj(
     budget_rows={"type": ["array", "null"], "items": _obj(item={"type": "string"}, estimate={"type": "string"}),
                  "description": "set_budget: every budget row"},
     budget_summary=_maybe("string", "set_budget: the budget's one-line summary"),
-    why=_maybe("string", f"remove_row, remove_todo: required, why it goes, at most {MAX_WHY} characters. "
-                         "move_row, set_row, swap_bus: optional. Null for the rest"),
+    why=_maybe("string", f"remove_row, remove_todo, and set_row with a new place: required, why it goes, at most {MAX_WHY} "
+                         "characters. Other move_row, set_row, swap_bus: optional. Null for the rest"),
 )
 REPLY_SCHEMA: dict = _obj(
     reply={"type": "string", "description": "What you say to the group, in their own mix of English and Filipino"},
@@ -191,6 +192,8 @@ def _one(g: dict, o: Op) -> None:
             if getattr(o, f) is not None:
                 r[f] = getattr(o, f)
         if (place := _place(o)) is not None:
+            if place != r.get("place") and _why(o) is None:
+                raise _Refused("no_why")  # a new place takes the old one out, like a removal
             r["place"] = place
             r.pop("leg", None)  # the way to the old place doesn't lead to the new one
     elif o.op == "swap_bus":

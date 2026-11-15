@@ -482,6 +482,37 @@ def test_a_why_is_on_the_first_line_its_row_makes_only(chat, t, client):  # P9: 
     assert [(c["word"], c.get("why")) for c in p["changes"]] == [("Later", "Dinner after the market"), ("Changed", None)]
 
 
+def other_spot(g, dsn, key="d2-08") -> str:
+    here = next(r for d in g.days for r in d.rows if r.key == key).place
+    return next(s for s in spot_ids(dsn) if not here or str(here.spot_id) != s)
+
+
+def test_a_place_swap_needs_a_why(g, barkada):  # P9, owner decision 2026-11-15 (review N3)
+    from app import plan_ops
+
+    spot = other_spot(g, barkada)
+    here = next(r for d in g.days for r in d.rows if r.key == "d2-08").place
+
+    def codes(o):
+        return plan_ops.apply(g, [plan_ops.Op.model_validate(o)])[1]
+
+    assert codes(op("set_row", key="d2-08", spot_id=spot)) == ["no_why"], "Out/In takes a stop out, like a removal"
+    assert codes(op("set_row", key="d2-08", spot_id=spot, why="  ")) == ["no_why"]
+    assert codes(op("set_row", key="d2-08", spot_id=spot, why="Closer to the market")) == []
+    assert codes(op("set_row", key="d2-08", time="16:00", note="Bring jackets")) == [], "no new place: the why stays optional"
+    if here and here.spot_id:
+        assert codes(op("set_row", key="d2-08", spot_id=str(here.spot_id))) == [], "the same place isn't a swap"
+
+
+def test_a_place_swap_without_a_why_is_retried(chat, t, client, g, barkada):  # P9, owner decision 2026-11-15
+    spot = other_spot(g, barkada)
+    chat.script(say("Pinalitan ko.", [op("set_row", key="d2-08", spot_id=spot)]),
+                say("Pinalitan ko.", [op("set_row", key="d2-08", spot_id=spot, why="Closer to the market")]))
+    out = ask(client, t, "palitan natin ang strawberry farm").json()
+    assert out["outcome"] == "proposal" and "no_why" in chat.llm.calls[1]["user"]
+    assert (out["proposal"]["changes"][0]["word"], out["proposal"]["changes"][0].get("why")) == ("Out", "Closer to the market")
+
+
 def test_a_line_with_a_why_is_never_folded_into_more(chat, t, client):  # P9, ux.md §10
     chat.script(say("Done.", [op("set_row", key="d1-01", note="a"), op("set_row", key="d1-02", note="b"),
                               op("set_row", key="d1-03", note="c"), op("remove_row", key="d2-05", why=WHY)]))
@@ -496,7 +527,7 @@ def test_the_prompt_and_schema_ask_for_a_why():  # P9
 
     props = plan_ops.REPLY_SCHEMA["properties"]["ops"]["items"]
     assert "why" in props["properties"] and "why" in props["required"]
-    assert "remove_row and remove_todo" in SYSTEM_PROMPT and "plain English" in SYSTEM_PROMPT and "At most 3 whys" in SYSTEM_PROMPT
+    assert "remove_row, remove_todo, and set_row that changes a row's place" in SYSTEM_PROMPT and "plain English" in SYSTEM_PROMPT and "At most 3 whys" in SYSTEM_PROMPT
     assert {"no_why", "long_why", "too_many_whys"} <= set(FEEDBACK)
 
 
