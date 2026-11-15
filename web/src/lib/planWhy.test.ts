@@ -53,6 +53,28 @@ test("T61-Y4 Changes: a chatbot version's row keeps its line's why for the row u
   assert.equal(hand.why, null);
 });
 
+test("T61-Y11 review M1: a Changes row shows the first line with a why, so a removal's reason isn't hidden behind other lines", () => {
+  const later: ChangeLine = { word: "Later", day: 2, text: "Lunch, by 30 min" };
+  const changed: ChangeLine = { word: "Changed", day: 2, text: "Dinner's note" };
+  const more: ChangeLine = { word: "More", day: null, text: "and 2 more changes" };
+  const at = "2026-11-15T07:40:00Z";
+  const row = (changes: ChangeLine[]) => L.historyRow({ seq: 5, source: "chat", changes, created_at: at }, "2026-11-15") as ReturnType<typeof L.historyRow> & { why?: string | null };
+  // "Make Day 2 slower": times later, then the removal the server writes last
+  assert.deepEqual([row([later, dropped]).line, row([later, dropped]).why], [dropped, `Why: ${WHY}.`]);
+  assert.deepEqual([row([changed, changed, dropped, more]).line, row([changed, changed, dropped, more]).why], [dropped, `Why: ${WHY}.`], "the server's own case");
+  const moved: ChangeLine & { why?: string } = { word: "Moved", day: 3, text: "Lunch to World 3", why: "Mas chill ang Day 2" };
+  assert.deepEqual(row([later, moved, dropped]).line, moved, "the first line that has one");
+  assert.deepEqual([row([later, changed]).line, row([later, changed]).why], [later, null], "no why: the first line, as before");
+  assert.deepEqual(row([{ ...dropped, why: "  " }, later]).line, { ...dropped, why: "  " }, "a blank why counts as none: still the first line");
+  assert.deepEqual(row([later, { ...dropped, why: "  " }]).line, later);
+  // The one-line places stay on the first line (ux.md §10)
+  const v = { seq: 5, source: "chat" as const, changes: [later, dropped], created_at: at };
+  assert.equal(L.saidPlain(L.justChanged(v)), "The plan just changed: Later · World 2 · Lunch, by 30 min.");
+  assert.match(L.saidPlain(L.barSaid(v.changes, "chat")), /^Applied the chatbot's change: Later · World 2 · Lunch, by 30 min\./);
+  const ask = L.undoConfirm({ seq: 5, versions: [v] }, new Map(), Date.now());
+  assert.ok(ask === null || (ask.includes("Later · World 2") && !ask.includes("BenCab")), "the Undo confirm stays on the first line");
+});
+
 test("T61-Y5 the phone's chat log keeps a proposal's whys, as words on screen", async () => {
   const { saveLog, loadLog, chatAnswer } = await import("./chat.ts");
   const data = new Map<string, string>();
