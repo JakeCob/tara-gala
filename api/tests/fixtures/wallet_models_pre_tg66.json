@@ -1,0 +1,657 @@
+{
+ "BalanceOut": {
+  "properties": {
+   "member_id": {
+    "format": "uuid",
+    "title": "Member Id",
+    "type": "string"
+   },
+   "net_centavos": {
+    "title": "Net Centavos",
+    "type": "integer"
+   },
+   "paid_centavos": {
+    "title": "Paid Centavos",
+    "type": "integer"
+   },
+   "share_centavos": {
+    "title": "Share Centavos",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "member_id",
+   "paid_centavos",
+   "share_centavos",
+   "net_centavos"
+  ],
+  "title": "BalanceOut",
+  "type": "object"
+ },
+ "ExpenseIn": {
+  "$defs": {
+   "ShareIn": {
+    "properties": {
+     "member_id": {
+      "format": "uuid",
+      "title": "Member Id",
+      "type": "string"
+     },
+     "share_centavos": {
+      "maximum": 10000000,
+      "minimum": 0,
+      "title": "Share Centavos",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "member_id",
+     "share_centavos"
+    ],
+    "title": "ShareIn",
+    "type": "object"
+   }
+  },
+  "additionalProperties": false,
+  "description": "Split equally among `split_among`, or by the exact `shares` given. One or the other.",
+  "properties": {
+   "amount_centavos": {
+    "maximum": 10000000,
+    "minimum": 1,
+    "title": "Amount Centavos",
+    "type": "integer"
+   },
+   "note": {
+    "maxLength": 60,
+    "minLength": 1,
+    "title": "Note",
+    "type": "string"
+   },
+   "paid_by": {
+    "format": "uuid",
+    "title": "Paid By",
+    "type": "string"
+   },
+   "shares": {
+    "anyOf": [
+     {
+      "items": {
+       "$ref": "#/$defs/ShareIn"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Shares"
+   },
+   "split_among": {
+    "anyOf": [
+     {
+      "items": {
+       "format": "uuid",
+       "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Split Among"
+   }
+  },
+  "required": [
+   "paid_by",
+   "amount_centavos",
+   "note"
+  ],
+  "title": "ExpenseIn",
+  "type": "object"
+ },
+ "ExpenseOut": {
+  "$defs": {
+   "ShareOut": {
+    "properties": {
+     "member_id": {
+      "format": "uuid",
+      "title": "Member Id",
+      "type": "string"
+     },
+     "share_centavos": {
+      "title": "Share Centavos",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "member_id",
+     "share_centavos"
+    ],
+    "title": "ShareOut",
+    "type": "object"
+   }
+  },
+  "properties": {
+   "amount_centavos": {
+    "title": "Amount Centavos",
+    "type": "integer"
+   },
+   "created_at": {
+    "format": "date-time",
+    "title": "Created At",
+    "type": "string"
+   },
+   "id": {
+    "format": "uuid",
+    "title": "Id",
+    "type": "string"
+   },
+   "note": {
+    "title": "Note",
+    "type": "string"
+   },
+   "paid_by": {
+    "format": "uuid",
+    "title": "Paid By",
+    "type": "string"
+   },
+   "shares": {
+    "items": {
+     "$ref": "#/$defs/ShareOut"
+    },
+    "title": "Shares",
+    "type": "array"
+   }
+  },
+  "required": [
+   "id",
+   "paid_by",
+   "amount_centavos",
+   "note",
+   "created_at",
+   "shares"
+  ],
+  "title": "ExpenseOut",
+  "type": "object"
+ },
+ "MemberIn": {
+  "additionalProperties": false,
+  "properties": {
+   "name": {
+    "maxLength": 30,
+    "minLength": 1,
+    "title": "Name",
+    "type": "string"
+   }
+  },
+  "required": [
+   "name"
+  ],
+  "title": "MemberIn",
+  "type": "object"
+ },
+ "MemberOut": {
+  "properties": {
+   "id": {
+    "format": "uuid",
+    "title": "Id",
+    "type": "string"
+   },
+   "name": {
+    "title": "Name",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id",
+   "name"
+  ],
+  "title": "MemberOut",
+  "type": "object"
+ },
+ "SettlementIn": {
+  "additionalProperties": false,
+  "properties": {
+   "amount_centavos": {
+    "maximum": 10000000,
+    "minimum": 1,
+    "title": "Amount Centavos",
+    "type": "integer"
+   },
+   "from_member": {
+    "format": "uuid",
+    "title": "From Member",
+    "type": "string"
+   },
+   "to_member": {
+    "format": "uuid",
+    "title": "To Member",
+    "type": "string"
+   }
+  },
+  "required": [
+   "from_member",
+   "to_member",
+   "amount_centavos"
+  ],
+  "title": "SettlementIn",
+  "type": "object"
+ },
+ "SettlementOut": {
+  "properties": {
+   "amount_centavos": {
+    "title": "Amount Centavos",
+    "type": "integer"
+   },
+   "created_at": {
+    "format": "date-time",
+    "title": "Created At",
+    "type": "string"
+   },
+   "from_member": {
+    "format": "uuid",
+    "title": "From Member",
+    "type": "string"
+   },
+   "has_proof": {
+    "title": "Has Proof",
+    "type": "boolean"
+   },
+   "id": {
+    "format": "uuid",
+    "title": "Id",
+    "type": "string"
+   },
+   "proof_at": {
+    "anyOf": [
+     {
+      "format": "date-time",
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "title": "Proof At"
+   },
+   "to_member": {
+    "format": "uuid",
+    "title": "To Member",
+    "type": "string"
+   }
+  },
+  "required": [
+   "id",
+   "from_member",
+   "to_member",
+   "amount_centavos",
+   "created_at",
+   "has_proof",
+   "proof_at"
+  ],
+  "title": "SettlementOut",
+  "type": "object"
+ },
+ "ShareIn": {
+  "properties": {
+   "member_id": {
+    "format": "uuid",
+    "title": "Member Id",
+    "type": "string"
+   },
+   "share_centavos": {
+    "maximum": 10000000,
+    "minimum": 0,
+    "title": "Share Centavos",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "member_id",
+   "share_centavos"
+  ],
+  "title": "ShareIn",
+  "type": "object"
+ },
+ "ShareOut": {
+  "properties": {
+   "member_id": {
+    "format": "uuid",
+    "title": "Member Id",
+    "type": "string"
+   },
+   "share_centavos": {
+    "title": "Share Centavos",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "member_id",
+   "share_centavos"
+  ],
+  "title": "ShareOut",
+  "type": "object"
+ },
+ "TransferOut": {
+  "properties": {
+   "amount_centavos": {
+    "title": "Amount Centavos",
+    "type": "integer"
+   },
+   "from_member": {
+    "format": "uuid",
+    "title": "From Member",
+    "type": "string"
+   },
+   "to_member": {
+    "format": "uuid",
+    "title": "To Member",
+    "type": "string"
+   }
+  },
+  "required": [
+   "from_member",
+   "to_member",
+   "amount_centavos"
+  ],
+  "title": "TransferOut",
+  "type": "object"
+ },
+ "WalletIn": {
+  "additionalProperties": false,
+  "properties": {
+   "members": {
+    "items": {
+     "maxLength": 30,
+     "minLength": 1,
+     "type": "string"
+    },
+    "maxItems": 20,
+    "minItems": 1,
+    "title": "Members",
+    "type": "array"
+   },
+   "name": {
+    "maxLength": 40,
+    "minLength": 1,
+    "title": "Name",
+    "type": "string"
+   }
+  },
+  "required": [
+   "name",
+   "members"
+  ],
+  "title": "WalletIn",
+  "type": "object"
+ },
+ "WalletOut": {
+  "$defs": {
+   "BalanceOut": {
+    "properties": {
+     "member_id": {
+      "format": "uuid",
+      "title": "Member Id",
+      "type": "string"
+     },
+     "net_centavos": {
+      "title": "Net Centavos",
+      "type": "integer"
+     },
+     "paid_centavos": {
+      "title": "Paid Centavos",
+      "type": "integer"
+     },
+     "share_centavos": {
+      "title": "Share Centavos",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "member_id",
+     "paid_centavos",
+     "share_centavos",
+     "net_centavos"
+    ],
+    "title": "BalanceOut",
+    "type": "object"
+   },
+   "ExpenseOut": {
+    "properties": {
+     "amount_centavos": {
+      "title": "Amount Centavos",
+      "type": "integer"
+     },
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "note": {
+      "title": "Note",
+      "type": "string"
+     },
+     "paid_by": {
+      "format": "uuid",
+      "title": "Paid By",
+      "type": "string"
+     },
+     "shares": {
+      "items": {
+       "$ref": "#/$defs/ShareOut"
+      },
+      "title": "Shares",
+      "type": "array"
+     }
+    },
+    "required": [
+     "id",
+     "paid_by",
+     "amount_centavos",
+     "note",
+     "created_at",
+     "shares"
+    ],
+    "title": "ExpenseOut",
+    "type": "object"
+   },
+   "MemberOut": {
+    "properties": {
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name"
+    ],
+    "title": "MemberOut",
+    "type": "object"
+   },
+   "SettlementOut": {
+    "properties": {
+     "amount_centavos": {
+      "title": "Amount Centavos",
+      "type": "integer"
+     },
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "from_member": {
+      "format": "uuid",
+      "title": "From Member",
+      "type": "string"
+     },
+     "has_proof": {
+      "title": "Has Proof",
+      "type": "boolean"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "proof_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Proof At"
+     },
+     "to_member": {
+      "format": "uuid",
+      "title": "To Member",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "from_member",
+     "to_member",
+     "amount_centavos",
+     "created_at",
+     "has_proof",
+     "proof_at"
+    ],
+    "title": "SettlementOut",
+    "type": "object"
+   },
+   "ShareOut": {
+    "properties": {
+     "member_id": {
+      "format": "uuid",
+      "title": "Member Id",
+      "type": "string"
+     },
+     "share_centavos": {
+      "title": "Share Centavos",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "member_id",
+     "share_centavos"
+    ],
+    "title": "ShareOut",
+    "type": "object"
+   },
+   "TransferOut": {
+    "properties": {
+     "amount_centavos": {
+      "title": "Amount Centavos",
+      "type": "integer"
+     },
+     "from_member": {
+      "format": "uuid",
+      "title": "From Member",
+      "type": "string"
+     },
+     "to_member": {
+      "format": "uuid",
+      "title": "To Member",
+      "type": "string"
+     }
+    },
+    "required": [
+     "from_member",
+     "to_member",
+     "amount_centavos"
+    ],
+    "title": "TransferOut",
+    "type": "object"
+   }
+  },
+  "properties": {
+   "balances": {
+    "items": {
+     "$ref": "#/$defs/BalanceOut"
+    },
+    "title": "Balances",
+    "type": "array"
+   },
+   "created_at": {
+    "format": "date-time",
+    "title": "Created At",
+    "type": "string"
+   },
+   "expenses": {
+    "items": {
+     "$ref": "#/$defs/ExpenseOut"
+    },
+    "title": "Expenses",
+    "type": "array"
+   },
+   "members": {
+    "items": {
+     "$ref": "#/$defs/MemberOut"
+    },
+    "title": "Members",
+    "type": "array"
+   },
+   "name": {
+    "title": "Name",
+    "type": "string"
+   },
+   "settlements": {
+    "items": {
+     "$ref": "#/$defs/SettlementOut"
+    },
+    "title": "Settlements",
+    "type": "array"
+   },
+   "share_slug": {
+    "title": "Share Slug",
+    "type": "string"
+   },
+   "total_centavos": {
+    "title": "Total Centavos",
+    "type": "integer"
+   },
+   "transfers": {
+    "items": {
+     "$ref": "#/$defs/TransferOut"
+    },
+    "title": "Transfers",
+    "type": "array"
+   }
+  },
+  "required": [
+   "share_slug",
+   "name",
+   "created_at",
+   "members",
+   "expenses",
+   "settlements",
+   "balances",
+   "transfers",
+   "total_centavos"
+  ],
+  "title": "WalletOut",
+  "type": "object"
+ }
+}

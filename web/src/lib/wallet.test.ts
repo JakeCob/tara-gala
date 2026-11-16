@@ -243,3 +243,138 @@ test("TG65-5 the repro, in order: a return-to-app GET, then a delete and an add,
   land({ ok: true, wallet: walletWith(["Jeep", "Lunch"]) }, 6000); // the next return to the app
   assert.deepEqual(notes(), ["Jeep", "Lunch"], "a later GET brings another phone's expense");
 });
+
+// ---------------------------------------------------------------- TG-66 P0: the shared contracts (plan §2)
+// Dynamic imports, as above: before P0's GREEN the new exports don't exist, and a named import would stop the file.
+
+const revWallet = (rev: number | undefined, notes: string[] = []) => ({ ...walletWith(notes), ...(rev === undefined ? {} : { rev }) });
+
+test("TG66-1 afterGet: an answer with a lower rev never replaces the wallet on screen; equal or higher does", async () => {
+  const { afterGet } = await import("./wallet.ts");
+  const prev = { state: "ready" as const, wallet: revWallet(8, []) }; // a comment was deleted: rev 8
+  const older = { ok: true as const, wallet: revWallet(7, ["Taxi"]) };
+  assert.equal(afterGet(prev, older, W, false, false), prev, "rev 7 under rev 8: the screen stays, whatever the clock says");
+  assert.deepEqual(afterGet(prev, { ok: true, wallet: revWallet(8, ["Taxi"]) }, W, false, false), { state: "ready", wallet: revWallet(8, ["Taxi"]) });
+  assert.deepEqual(afterGet(prev, { ok: true, wallet: revWallet(9) }, W, false, false), { state: "ready", wallet: revWallet(9) });
+  // a wallet from before TG-66 (or the worker's old copy) has no rev: it counts as 0
+  assert.equal(afterGet(prev, { ok: true, wallet: revWallet(undefined) }, W, false, false), prev);
+  assert.deepEqual(afterGet({ state: "ready", wallet: revWallet(undefined) }, { ok: true, wallet: revWallet(0) }, W, false, false), { state: "ready", wallet: revWallet(0) });
+  // another wallet's screen, or nothing on screen, isn't this wallet's
+  assert.deepEqual(afterGet({ state: "ready", wallet: { ...revWallet(9), share_slug: "d".repeat(32) } }, older, W, false, false), { state: "ready", wallet: older.wallet });
+  assert.deepEqual(afterGet({ state: "loading" }, older, W, false, false), { state: "ready", wallet: older.wallet });
+  // TG-65's rules still hold beside it
+  assert.equal(afterGet(prev, { ok: true, wallet: revWallet(9) }, W, true, false), prev, "overtaken");
+  assert.equal(afterGet(prev, { ok: true, wallet: revWallet(9), saved: true }, W, false, false), prev, "a saved copy");
+});
+
+type Sent = { url: string; method: string; body: string | undefined };
+async function withFetch<T>(answers: Response[], run: (sent: Sent[]) => Promise<T>): Promise<T> {
+  const real = globalThis.fetch;
+  const sent: Sent[] = [];
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    sent.push({ url, method: init?.method ?? "GET", body: init?.body as string | undefined });
+    const next = answers.shift();
+    if (!next) throw new TypeError("offline");
+    return next;
+  }) as typeof fetch;
+  try {
+    return await run(sent);
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const E = "e".repeat(8);
+
+test("TG66-2 walletApi: an old-shape add goes out byte for byte; delete takes an optional version; edit is a PATCH", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const old = { paid_by: "a", amount_centavos: 1000, note: "Taxi", split_among: ["a", "b"] };
+  await withFetch([json(201, revWallet(1)), json(200, revWallet(2)), json(200, revWallet(3)), json(200, revWallet(4))], async (sent) => {
+    assert.ok((await walletApi.addExpense(W, old)).ok);
+    await walletApi.deleteExpense(W, E);
+    await walletApi.deleteExpense(W, E, 3);
+    const v2 = { mode: "shares" as const, paid_by: "a", amount_centavos: 1000, note: "Taxi", inputs: [{ member_id: "a", value: 2 }], version: 2 };
+    const r = await walletApi.editExpense(W, E, v2);
+    assert.ok(r.ok && r.wallet.rev === 4);
+    assert.equal(sent[0].body, JSON.stringify(old), "today's body, untouched");
+    assert.deepEqual(sent.map((s) => [s.method, s.url.slice(s.url.indexOf("/wallets"))]), [
+      ["POST", `/wallets/${W}/expenses`],
+      ["DELETE", `/wallets/${W}/expenses/${E}`],
+      ["DELETE", `/wallets/${W}/expenses/${E}?version=3`],
+      ["PATCH", `/wallets/${W}/expenses/${E}`],
+    ]);
+    assert.equal(sent[3].body, JSON.stringify(v2));
+  });
+});
+
+test("TG66-3 refusals: a string detail stays a code; an object detail gives its code, the current wallet and an item's seq", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const current = revWallet(9, ["Taxi"]);
+  const answers = [
+    json(409, { detail: { code: "expense_changed", wallet: current } }),
+    json(404, { detail: { code: "expense_gone", wallet: current } }),
+    json(404, { detail: "feature_off" }),
+    json(422, { detail: { code: "item_no_one", seq: 3 } }),
+    json(422, { detail: "percent_total" }),
+    json(422, { detail: [{ loc: ["body"], msg: "x" }] }), // pydantic's own 422: no code, as today
+    json(404, { detail: "Wallet not found" }),
+  ];
+  await withFetch(answers, async () => {
+    const got = [];
+    for (let i = 0; i < 7; i++) got.push(await walletApi.deleteExpense(W, E, 1));
+    assert.deepEqual(got, [
+      { ok: false, why: "rejected", detail: "expense_changed", wallet: current },
+      { ok: false, why: "not_found", detail: "expense_gone", wallet: current },
+      { ok: false, why: "not_found", detail: "feature_off" },
+      { ok: false, why: "rejected", detail: "item_no_one", seq: 3 },
+      { ok: false, why: "rejected", detail: "percent_total" },
+      { ok: false, why: "rejected", detail: undefined },
+      { ok: false, why: "not_found", detail: "Wallet not found" },
+    ]);
+  });
+});
+
+test("TG66-4 comments and activity: GETs answer {rev, …}; comment writes answer the wallet and the list; offline is offline", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const comment = { id: "k1", expense_id: E, author: null, body: "Nice", created_at: "2026-11-16T01:00:00.000000Z" };
+  const row = { id: 12, at: "2026-11-16T01:00:00.000000Z", actor: null, action: "comment_add", expense_id: E, settlement_id: null, member_id: null, before: null, after: null };
+  const answers = [
+    json(200, { rev: 7, comments: [comment] }),
+    json(201, { wallet: revWallet(8), comments: [comment, { ...comment, id: "k2" }] }),
+    json(200, { wallet: revWallet(9), comments: [] }),
+    json(200, { rev: 9, rows: [row] }),
+    json(200, { rev: 9, rows: [] }),
+    json(404, { detail: "feature_off" }),
+  ];
+  await withFetch(answers, async (sent) => {
+    assert.deepEqual(await walletApi.comments(W, E), { ok: true, rev: 7, comments: [comment] });
+    const added = await walletApi.addComment(W, E, { body: "Nice", by: "a" });
+    assert.ok(added.ok && added.wallet.rev === 8 && added.comments.length === 2);
+    const gone = await walletApi.deleteComment(W, E, "k1");
+    assert.ok(gone.ok && gone.wallet.rev === 9 && gone.comments.length === 0);
+    assert.deepEqual(await walletApi.activity(W), { ok: true, rev: 9, rows: [row] });
+    await walletApi.activity(W, 12);
+    assert.deepEqual(await walletApi.comments(W, E), { ok: false, why: "not_found", detail: "feature_off" });
+    assert.deepEqual(await walletApi.activity(W), { ok: false, why: "offline" });
+    assert.deepEqual(sent.map((s) => [s.method, s.url.slice(s.url.indexOf("/wallets"))]), [
+      ["GET", `/wallets/${W}/expenses/${E}/comments`],
+      ["POST", `/wallets/${W}/expenses/${E}/comments`],
+      ["DELETE", `/wallets/${W}/expenses/${E}/comments/k1`],
+      ["GET", `/wallets/${W}/activity?limit=15`],
+      ["GET", `/wallets/${W}/activity?before=12&limit=15`],
+      ["GET", `/wallets/${W}/expenses/${E}/comments`],
+      ["GET", `/wallets/${W}/activity?limit=15`],
+    ]);
+    assert.equal(sent[1].body, JSON.stringify({ body: "Nice", by: "a" }));
+  });
+});
+
+test("TG66-5 the new expense fields are optional, so a wallet saved before TG-66 still type-checks and reads", async () => {
+  const src = read("src/lib/wallet.ts");
+  for (const field of ["category", "mode", "inputs", "items", "charges", "payers", "version", "updated_at", "comment_count"]) {
+    assert.match(src, new RegExp(`\\b${field}\\?:`), `Expense.${field} is optional`);
+  }
+  assert.match(src, /\brev\?: number;/, "Wallet.rev is optional");
+  assert.match(src, /export type SplitMode = "equal" \| "exact" \| "percent" \| "shares" \| "adjust" \| "itemized";/);
+  assert.match(src, /export type Category = "transport" \| "hotel" \| "food" \| "activities" \| "other";/);
+});
