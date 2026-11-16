@@ -9,7 +9,32 @@ export const MAX_MEMBERS = 20;
 
 export type Member = { id: string; name: string };
 export type Share = { member_id: string; share_centavos: number };
-export type Expense = { id: string; paid_by: string; amount_centavos: number; note: string; created_at: string; shares: Share[] };
+// TG-66: how an expense's shares were worked out. A wallet saved before TG-66 (the API's or the worker's copy) has none
+// of these, so every new field is optional: a missing mode is a legacy expense, a missing category is "Not sorted yet".
+export type SplitMode = "equal" | "exact" | "percent" | "shares" | "adjust" | "itemized";
+export type Category = "transport" | "hotel" | "food" | "activities" | "other";
+/** One row per person: 1 (equal, the rows are among), centavos (exact), basis points (percent), weight (shares), extra centavos (adjust). */
+export type InputRow = { member_id: string; value: number };
+export type Item = { seq: number; name: string; price_centavos: number; who: string[] };
+export type Charge = { kind: "service" | "vat"; basis: "percent" | "amount"; value: number };
+export type Payer = { member_id: string; paid_centavos: number };
+export type Expense = {
+  id: string;
+  paid_by: string;
+  amount_centavos: number;
+  note: string;
+  created_at: string;
+  shares: Share[];
+  category?: Category | null;
+  mode?: SplitMode | null;
+  inputs?: InputRow[];
+  items?: Item[];
+  charges?: Charge[];
+  payers?: Payer[]; // only with several payers; one payer is paid_by
+  version?: number;
+  updated_at?: string | null;
+  comment_count?: number;
+};
 export type Settlement = { id: string; from_member: string; to_member: string; amount_centavos: number; created_at: string; has_proof?: boolean; proof_at?: string | null };
 export type Balance = { member_id: string; paid_centavos: number; share_centavos: number; net_centavos: number };
 export type Transfer = { from_member: string; to_member: string; amount_centavos: number };
@@ -23,6 +48,32 @@ export type Wallet = {
   balances: Balance[];
   transfers: Transfer[];
   total_centavos: number;
+  rev?: number; // TG-66: the wallet's write counter; missing on a wallet saved before it, which counts as 0
+};
+
+/** TG-66: the add and edit bodies. The web with WALLET_SPLITS off sends LegacyExpenseBody, byte for byte as before. */
+export type LegacyExpenseBody = { paid_by: string; amount_centavos: number; note: string } & ({ split_among: string[] } | { shares: Share[] });
+type V2Base = { note: string; category?: Category | null; by?: string | null } & ({ paid_by: string } | { payers: Payer[] });
+export type ExpenseBodyV2 = V2Base &
+  (
+    | { mode: Exclude<SplitMode, "itemized">; amount_centavos: number; inputs: InputRow[] }
+    | { mode: "itemized"; amount_centavos?: number; items: Omit<Item, "seq">[]; charges: Charge[] }
+  );
+export type ExpensePatch = ExpenseBodyV2 & { version: number };
+export type Comment = { id: string; expense_id: string; author: string | null; body: string; created_at: string };
+export type ActivityAction =
+  | "expense_add" | "expense_edit" | "expense_delete" | "comment_add" | "comment_delete" | "settle" | "settle_undo"
+  | "proof_add" | "proof_change" | "proof_remove" | "member_join";
+export type Activity = {
+  id: number;
+  at: string;
+  actor: string | null; // null: "Someone"
+  action: ActivityAction;
+  expense_id: string | null;
+  settlement_id: string | null;
+  member_id: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
 };
 
 // ---------------------------------------------------------------- money
@@ -77,7 +128,15 @@ export function whenLine(iso: string): string {
 
 export type WalletFailure = "offline" | "not_found" | "rate_limited" | "server" | "rejected";
 /** `saved`: the service worker answered with its copy, not the API, so it may be older than what's on screen. */
-export type WalletResult = { ok: true; wallet: Wallet; saved?: boolean } | { ok: false; why: WalletFailure; detail?: string };
+/**
+ * A refusal's `detail` is its code. TG-66: 409 expense_changed and 404 expense_gone also bring the wallet as it is now,
+ * and 422 item_no_one the item's seq (never its name).
+ */
+export type WalletFailed = { ok: false; why: WalletFailure; detail?: string; wallet?: Wallet; seq?: number };
+export type WalletResult = { ok: true; wallet: Wallet; saved?: boolean } | WalletFailed;
+export type CommentsResult = { ok: true; rev: number; comments: Comment[] } | WalletFailed;
+export type CommentWriteResult = { ok: true; wallet: Wallet; comments: Comment[] } | WalletFailed;
+export type ActivityResult = { ok: true; rev: number; rows: Activity[] } | WalletFailed;
 export type WalletLoad = { state: "loading" } | { state: "ready"; wallet: Wallet } | { state: "error"; why: WalletFailure };
 
 /**
@@ -89,6 +148,10 @@ export type WalletLoad = { state: "loading" } | { state: "ready"; wallet: Wallet
 export function afterGet(prev: WalletLoad, r: WalletResult, slug: string, overtaken: boolean, dialogOpen: boolean): WalletLoad {
   const showing = prev.state === "ready" && prev.wallet.share_slug === slug;
   if (showing && (overtaken || (r.ok && r.saved))) return prev;
+  // TG-66: an answer with a lower rev is older than the screen, across tabs and phones, whatever the clocks say. Only when
+  // both carry a rev: a live answer with none comes from an API reverted to before TG-66, and must still show
+  const revs = r.ok && showing ? [r.wallet.rev, prev.wallet.rev] : [];
+  if (typeof revs[0] === "number" && typeof revs[1] === "number" && revs[0] < revs[1]) return prev;
   if (r.ok) return { state: "ready", wallet: r.wallet };
   return prev.state === "ready" && (r.why === "offline" || dialogOpen) ? prev : { state: "error", why: r.why }; // offline with a copy on screen: the offline banner says so
 }
@@ -118,7 +181,25 @@ export function failureMessage(r: { why: WalletFailure; detail?: string }): stri
   }
 }
 
-async function call(path: string, init?: { method: "POST" | "DELETE"; body?: unknown; raw?: Blob }): Promise<WalletResult> {
+/** A refusal's `detail`: today's string code, or TG-66's {code, wallet?, seq?}. Pydantic's own 422 list has no code. */
+function refusal(why: WalletFailure, body: unknown): WalletFailed {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return { ok: false, why, detail };
+  const d = detail as { code?: unknown; wallet?: unknown; seq?: unknown } | null | undefined;
+  if (!d || Array.isArray(d) || typeof d.code !== "string") return { ok: false, why, detail: undefined };
+  return {
+    ok: false,
+    why,
+    detail: d.code,
+    ...(d.wallet && typeof d.wallet === "object" ? { wallet: d.wallet as Wallet } : {}),
+    ...(typeof d.seq === "number" ? { seq: d.seq } : {}),
+  };
+}
+
+type Init = { method: "POST" | "PATCH" | "DELETE"; body?: unknown; raw?: Blob };
+
+/** One request; `read` turns a good answer into its result. Every failure is a WalletFailed, as call() has always given. */
+async function request<T>(path: string, init: Init | undefined, read: (body: unknown, res: Response) => T): Promise<T | WalletFailed> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
@@ -130,18 +211,18 @@ async function call(path: string, init?: { method: "POST" | "DELETE"; body?: unk
   } catch {
     return { ok: false, why: "offline" };
   }
-  if (res.ok) {
-    const wallet = (await res.json()) as Wallet;
-    return res.headers.has("x-tg-saved-at") ? { ok: true, wallet, saved: true } : { ok: true, wallet };
-  }
-  if (res.status === 404) {
-    const missing = await res.json().catch(() => null);
-    return { ok: false, why: "not_found", detail: typeof missing?.detail === "string" ? missing.detail : undefined };
-  }
+  if (res.ok) return read(await res.json(), res);
+  if (res.status === 404) return refusal("not_found", await res.json().catch(() => null));
   if (res.status === 429) return { ok: false, why: "rate_limited" };
   if (res.status >= 500) return { ok: false, why: "server" };
-  const body = await res.json().catch(() => null);
-  return { ok: false, why: "rejected", detail: typeof body?.detail === "string" ? body.detail : undefined };
+  return refusal("rejected", await res.json().catch(() => null));
+}
+
+function call(path: string, init?: Init): Promise<WalletResult> {
+  return request<WalletResult>(path, init, (body, res) => {
+    const wallet = body as Wallet;
+    return res.headers.has("x-tg-saved-at") ? { ok: true, wallet, saved: true } : { ok: true, wallet };
+  });
 }
 
 const at = (slug: string) => `/wallets/${encodeURIComponent(slug)}`;
@@ -150,11 +231,23 @@ export const walletApi = {
   create: (name: string, members: string[]) => call("/wallets", { method: "POST", body: { name, members } }),
   get: (slug: string) => call(at(slug)),
   addMember: (slug: string, name: string) => call(`${at(slug)}/members`, { method: "POST", body: { name } }),
-  addExpense: (
-    slug: string,
-    body: { paid_by: string; amount_centavos: number; note: string } & ({ split_among: string[] } | { shares: Share[] }),
-  ) => call(`${at(slug)}/expenses`, { method: "POST", body }),
-  deleteExpense: (slug: string, id: string) => call(`${at(slug)}/expenses/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  addExpense: (slug: string, body: LegacyExpenseBody | ExpenseBodyV2) => call(`${at(slug)}/expenses`, { method: "POST", body }),
+  /** TG-66: `version` is the one the screen showed; a stale one is 409 expense_changed with the wallet as it is now. */
+  deleteExpense: (slug: string, id: string, version?: number) =>
+    call(`${at(slug)}/expenses/${encodeURIComponent(id)}${version === undefined ? "" : `?version=${version}`}`, { method: "DELETE" }),
+  editExpense: (slug: string, id: string, body: ExpensePatch) => call(`${at(slug)}/expenses/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+  comments: (slug: string, id: string) =>
+    request<CommentsResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments`, undefined, (b) => ({ ok: true, ...(b as { rev: number; comments: Comment[] }) })),
+  addComment: (slug: string, id: string, body: { body: string; by?: string | null }) =>
+    request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments`, { method: "POST", body }, (b) => ({ ok: true, ...(b as { wallet: Wallet; comments: Comment[] }) })),
+  deleteComment: (slug: string, id: string, commentId: string) =>
+    request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: "DELETE" }, (b) => ({
+      ok: true,
+      ...(b as { wallet: Wallet; comments: Comment[] }),
+    })),
+  /** Newest first, 15 a page; `before` is the oldest row's id on screen. Never cached by the worker (needs signal). */
+  activity: (slug: string, before?: number) =>
+    request<ActivityResult>(`${at(slug)}/activity?${before === undefined ? "" : `before=${before}&`}limit=15`, undefined, (b) => ({ ok: true, ...(b as { rev: number; rows: Activity[] }) })),
   settle: (slug: string, t: Transfer) => call(`${at(slug)}/settlements`, { method: "POST", body: t }),
   undoSettlement: (slug: string, id: string) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}`, { method: "DELETE" }),
   addProof: (slug: string, id: string, picture: Blob) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { method: "POST", raw: picture }),
