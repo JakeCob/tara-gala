@@ -505,3 +505,11 @@ test("TG57-9 TripView: when the worker takes over mid-visit, ask again for its c
   assert.match(keep, /serviceWorker\?\.removeEventListener\("controllerchange", keepCopies\)/);
   assert.doesNotMatch(keep, /setReloads|setLoad|setGuide/, "the screen's own GET isn't cancelled, and these answers don't go to the screen");
 });
+
+test("T61-W20 (UX should 2) a clash says what to do, naming the button that was tapped (ux.md §6)", async () => {
+  const { clashAgain, saveProblem } = await import("./trip.ts");
+  assert.equal(clashAgain("Save"), "The map now shows their version. Check your change against it, then tap Save again.");
+  assert.equal(saveProblem({ message: "Someone just changed the plan, so your change wasn't saved.", clash: true }, "Save"),
+    "Someone just changed the plan, so your change wasn't saved.\nThe map now shows their version. Check your change against it, then tap Save again.");
+  assert.equal(saveProblem({ message: "That didn't save. Try again.", clash: false }, "Save"), "That didn't save. Try again.", "only a clash gets the second line");
+});

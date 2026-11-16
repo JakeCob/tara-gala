@@ -347,3 +347,8 @@ export function fitSuggestion(s: Suggestion, fit: Fit): Suggestion {
 export function applyFit(g: GuideIn, fit: Fit, picked: { place: PlaceIn | null; plan: string; time: string; ripple: boolean }): GuideIn {
   return applySuggestion(g, { after: fit.after }, { name: null, lat: null, lng: null, maps_url: null, km_from_baguio: null, far: false, time: fit.time, leg: fit.leg, ripple: fit.ripple, notes: fit.notes, changes: fit.changes }, picked);
 }
+
+/** F10: the Name box's first value: the server's short name, whole or not at all. A cut name would read as a real one. */
+export function prefillName(name: string | null | undefined): string {
+  return name && name.length <= 80 ? name : "";
+}

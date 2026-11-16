@@ -82,6 +82,7 @@ class ItineraryOut(BaseModel):
     guide: guides.GuideOut | None = None  # TG-52: day tables, bus tables, pick, budget, to-do and sources, if it has one
     edited: bool = False  # TG-61: a trip's own edited copy (model trip-edit)
     seq: int | None = None  # TG-61: the copy's version, read in the same statement as its plan; None for a shared plan
+    changed_at: datetime | None = None  # TG-61: when that version was made, from the same statement; None for a shared plan
 
 
 # TG-61 (review M2): seq comes from the same statement as plan, so a save between two reads can't pair them. owner is
@@ -89,6 +90,7 @@ class ItineraryOut(BaseModel):
 ROW_SQL = """
 select i.id, i.share_slug, i.trip_date, i.return_date, i.party, i.budget_php, i.vibe, i.plan, i.model, i.created_at,
        (select max(v.seq) from itinerary_versions v where v.itinerary_id = i.id) as seq,
+       (select v.created_at from itinerary_versions v where v.itinerary_id = i.id order by v.seq desc limit 1) as changed_at,
        (select v.session_id from itinerary_versions v where v.itinerary_id = i.id and v.seq = 0) as owner
 from itineraries i where i.share_slug = %s
 """
@@ -224,4 +226,5 @@ def build_out(conn, row) -> ItineraryOut:
         guide=the_guide,
         edited=edited,
         seq=row["seq"] if edited else None,
+        changed_at=row["changed_at"] if edited else None,
     )

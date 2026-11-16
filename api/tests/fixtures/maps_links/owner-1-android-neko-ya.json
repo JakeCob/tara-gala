@@ -23,13 +23,14 @@
     "outcome": "ok",
     "lat": 16.41388,
     "lng": 120.59642,
-    "name": "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio",
+    "name": "Neko-ya Novelty Shop",
     "pin": "address",
     "maps_url": "https://maps.app.goo.gl/CdNzAdm2XtP3fZ8J8",
     "geocoded": [
       "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet",
       "Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet",
       "Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet"
-    ]
+    ],
+    "address": "Ground Floor, Neko-ya Novelty Shop, Olympian Lane Bldg, Mabini St, Baguio, 2600 Benguet"
   }
 }

@@ -28,8 +28,12 @@ test("T61-L1 one display for a change line: the word, its World, the server's te
 test("T61-L2 the bar: a lead for what happened, then the first line; more lines are counted, a removal says Undo brings it back", () => {
   assert.equal(plain(barSaid([L("New", "Café Yagam at 3:00 PM")], "save")), "Saved: New · World 1 · Café Yagam at 3:00 PM.");
   assert.equal(plain(barSaid([L("Dropped", "Museum", 3)], "save")), "Saved: Dropped · World 3 · Museum. Undo brings it back.");
-  assert.equal(plain(barSaid([L("Dropped", "Cafe")], "undo")), "Undid: Dropped · World 1 · Cafe. Undo brings it back.");
+  // UX review Must 2: after Undo, the lines of the version it took back; the tail only after a hand removal
+  assert.equal(plain(barSaid([L("New", "Cafe at 3:00 PM")], "undo")), "Undone: New · World 1 · Cafe at 3:00 PM.");
+  assert.equal(plain(barSaid([L("Dropped", "Cafe")], "undo")), "Undone: Dropped · World 1 · Cafe.", "no Undo brings it back: the button reads Redo");
   assert.equal(plain(barSaid([L("New", "Cafe at 3:00 PM")], "redo")), "Put back: New · World 1 · Cafe at 3:00 PM.");
+  assert.equal(plain(barSaid([L("Dropped", "Cafe")], "redo")), "Put back: Dropped · World 1 · Cafe.");
+  assert.equal(plain(barSaid([L("Dropped", "Cafe")], "chat")), "Applied the chatbot's change: Dropped · World 1 · Cafe.");
   assert.equal(plain(barSaid([L("New", "Cafe at 3:00 PM")], "chat")), "Applied the chatbot's change: New · World 1 · Cafe at 3:00 PM.");
   assert.equal(plain(barSaid([L("New", "Cafe"), L("Later", "Lunch to 1:00 PM")], "save")), "Saved: New · World 1 · Cafe. And 1 more change.");
   const lines = [L("New", "Café Yagam"), L("Later", "Check in", 1), L("Later", "Dinner", 1), { word: "More", day: null, text: "and 5 more changes" }];
@@ -47,6 +51,8 @@ test("T61-L3 Changes, the plan just changed line and their times: no level numbe
   assert.deepEqual(historyRow(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]), "2026-11-09"), { at: "3:12 PM", lead: "", line: L("New", "Café Yagam at 3:00 PM"), why: null });
   assert.equal(historyRow(v(3, "hand", [L("New", "x")]), "2026-11-10").at, "Nov 9", "before today: the date");
   assert.equal(historyRow(v(4, "chat", [L("New", "Cafe")]), "2026-11-09").lead, "Chatbot: ");
+  assert.equal(historyRow(v(5, "undo", [L("Dropped", "Cafe")]), "2026-11-09").lead, "Undo: ", "UX review Must 2: an undo or redo version says so, with its own lines");
+  assert.equal(historyRow(v(3, "hand", [L("Dropped", "Cafe")]), "2026-11-09").lead, "");
   assert.deepEqual(historyRow(v(0, "copy", [{ word: "Copied", day: null, text: "the plan" }]), "2026-11-09").line, { word: "Copied", day: null, text: "the plan" });
   assert.equal(plain(justChanged(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]))), "The plan just changed: New · World 1 · Café Yagam at 3:00 PM.");
 });
@@ -66,7 +72,10 @@ test("T61-L5 Undo becomes Redo after an undo; it asks first when the change may 
 test("T61-L6 the copy line, from the newest version's time", () => {
   assert.equal(copyLine(true, { seq: 3, versions: [v(3, "hand", [L("New", "x")], "2026-11-05T07:12:00Z")] }), "Your group's own copy of the plan, last changed Nov 5, 3:12 PM.");
   assert.equal(copyLine(false, null), null, "before the first edit, no line");
-  assert.equal(copyLine(true, null), "Your group's own copy of the plan.", "the /i/ page has no history");
+  assert.equal(copyLine(true, null), "Your group's own copy of the plan.", "no time known yet: the short line");
+  assert.equal(copyLine(true, null, "2026-11-05T07:12:00Z"), "Your group's own copy of the plan, last changed Nov 5, 3:12 PM.", "W-7: the /i/ page reads the plan's own changed_at");
+  assert.equal(copyLine(true, { seq: 3, versions: [v(3, "hand", [L("New", "x")], "2026-11-06T01:00:00Z")] }, "2026-11-05T07:12:00Z"), "Your group's own copy of the plan, last changed Nov 6, 9:00 AM.", "the trip page's newest version wins");
+  assert.equal(copyLine(false, null, "2026-11-05T07:12:00Z"), null, "a shared plan has no such line");
 });
 
 test("T61-L7 how to get there: a route with its Checked line, or an estimate with no fare and its own line", () => {
@@ -201,4 +210,35 @@ test("T61-L17 (e2e W-9) after a swap the booked bus row says to check its note, 
   assert.equal(busChangedLine({ seq: 5, versions: [edited, swap] }, "Bus leaves"), null, "the row was changed after the swap");
   assert.equal(busChangedLine({ seq: 5, versions: [at(5, [L("New", "Cafe")], "2026-11-05T08:00:00Z"), swap] }, "Bus leaves"), "The bus changed on Nov 5. Check this note.", "another row's change doesn't count");
   assert.equal(busChangedLine(null, "Bus leaves"), null);
+});
+
+// ---------------------------------------------------------------- tg-ux's PR review (ux-review.md, 2026-11-08)
+
+test("T61-L18 (UX Must 1) Swap shows the buses within 2 hours of the old one, in time order, then Show all", async () => {
+  const { swapWindow, swapHeader, swapNone, showAllLabel } = await import("./planLines.ts");
+  const bus = (departure_time: string) => ({ trip_id: departure_time, departure_time });
+  const day = ["23:55:00", "00:15:00", "08:14:00", "08:15:00", "10:15:00", "12:15:00", "12:16:00", "11:00:00"].map(bus);
+  const w = swapWindow("10:15:00", day);
+  assert.deepEqual(w.window, { from: "08:15", to: "12:15" });
+  assert.deepEqual(w.near.map((t) => t.departure_time), ["08:15:00", "10:15:00", "11:00:00", "12:15:00"], "both edges in, in time order");
+  assert.deepEqual(w.all.map((t) => t.departure_time), ["00:15:00", "08:14:00", "08:15:00", "10:15:00", "11:00:00", "12:15:00", "12:16:00", "23:55:00"]);
+  assert.deepEqual(swapWindow("01:00", day).window, { from: "00:00", to: "03:00" }, "kept within the day");
+  assert.deepEqual(swapWindow("23:00", day).window, { from: "21:00", to: "23:59" });
+  const none = swapWindow(null, day);
+  assert.equal(none.window, null, "no time to go by (the bus is gone): the whole day");
+  assert.equal(none.near.length, day.length);
+  assert.equal(swapHeader(true, "2026-11-06", w.window), "Buses on file from Metro Manila to Baguio on Fri, Nov 6, 8:15 AM to 12:15 PM.");
+  assert.equal(swapHeader(false, "2026-11-08", w.window), "Buses on file from Baguio to Metro Manila on Sun, Nov 8, 8:15 AM to 12:15 PM.");
+  assert.equal(swapHeader(true, "2026-11-06", null), "Buses on file from Metro Manila to Baguio on Fri, Nov 6.");
+  assert.equal(swapNone(w.window!), "No buses on file between 8:15 AM and 12:15 PM.");
+  assert.equal(showAllLabel(100), "Show all 100 buses that day");
+  assert.equal(showAllLabel(1), "Show all 1 bus that day");
+});
+
+test("T61-L19 (UX should 3) before the first edit the bar says why Undo is greyed", async () => {
+  const { barLine } = await import("./planLines.ts");
+  assert.equal(barLine("", null), "Nothing to undo yet.");
+  assert.equal(barLine("", { seq: 0, versions: [v(0, "copy", [{ word: "Copied", day: null, text: "the plan" }])] }), "Nothing to undo yet.", "only the copy");
+  assert.equal(barLine("", { seq: 1, versions: [v(1, "hand", [L("New", "x")])] }), "");
+  assert.equal(barLine("Saving...", null), "Saving...", "a status of its own wins");
 });

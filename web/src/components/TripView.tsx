@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
@@ -8,7 +8,7 @@ import { chatRequest } from "@/lib/chat";
 import { flags } from "@/lib/flags";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
 import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
-import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, shownFrom } from "@/lib/planState";
+import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, keepNewerPlan, shownFrom } from "@/lib/planState";
 import {
   type Answer, type Hotel, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
   hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, planOutcome, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
@@ -61,6 +61,7 @@ export default function TripView({ slug }: { slug: string }) {
   const [load, setLoad] = useState<TripLoad>({ state: "loading" });
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false); // review M1: a plan write waits for a session write that's out, read in the same tick
   const [notice, setNotice] = useState<Notice | null>(null);
   const keptFiles = useRef(new Set<string>());
   const shownAt = useRef(0); // TG-54: how new the trip on screen is: when its GET left, or when a write landed
@@ -129,7 +130,8 @@ export default function TripView({ slug }: { slug: string }) {
   const shownRef = useRef<Shown | null>(null);
   const sessionSlug = useRef<string | null>(null);
   const tripRef = useRef<Trip | null>(null);
-  useEffect(() => {
+  // W-11: before paint, so a tap always reads the plan that's on screen
+  useLayoutEffect(() => {
     shownRef.current = shown;
   }, [shown]);
   useEffect(() => {
@@ -255,12 +257,21 @@ export default function TripView({ slug }: { slug: string }) {
   /** A write with no notice, for controls that show their own result (TG-58). */
   async function apply(action: string, op: () => Promise<TripResult>): Promise<TripResult> {
     setBusy(true); // one write at a time on the page: each answer is the whole trip, so two could land out of order (TG-54)
+    busyRef.current = true;
     const r = await op();
     setBusy(false);
+    busyRef.current = false;
     console.info("[tg-trip] %s ok=%s", action, r.ok ? "yes" : r.why);
     if (!r.ok) return r;
     shownAt.current = Date.now();
-    setLoad({ state: "ready", trip: r.trip });
+    // review M1: only attach and detach move the plan; any other answer never puts back an older plan than the screen's
+    const moves = action === "itinerary-attach" || action === "itinerary-detach";
+    setLoad((prev) => {
+      if (moves || prev.state !== "ready") return { state: "ready", trip: r.trip };
+      const next = keepNewerPlan(prev.trip, r.trip);
+      if (next !== r.trip) console.info("[tg-trip] %s kept plan seq=%s answer_seq=%s", action, prev.trip.plan_edits?.seq ?? "none", r.trip.plan_edits?.seq ?? "none");
+      return { state: "ready", trip: next };
+    });
     remember(r.trip);
     void tripApi.get(slug); // the service worker saves GETs, not this write: refresh the offline copy
     return r;
@@ -274,7 +285,7 @@ export default function TripView({ slug }: { slug: string }) {
   async function planWrite(action: string, run: (base: PlanBase, stored: GuideIn) => Promise<Answer<PlanSaved>> | null, done: Done, anchor: string | null, source: PlanVersion["source"]): Promise<SaveOutcome> {
     const s = shownRef.current;
     const t = tripRef.current;
-    if (writingPlan.current || !s?.guide || !t || !canEdit(s, t, navigator.onLine, !!lostRef.current || behind(s, clashAtRef.current, t?.itinerary_slug))) {
+    if (writingPlan.current || !s?.guide || !t || !canEdit(s, t, navigator.onLine, busyRef.current || !!lostRef.current || behind(s, clashAtRef.current, t?.itinerary_slug))) {
       console.info("[tg-trip] plan %s ignored", action);
       return IGNORED;
     }
@@ -297,6 +308,11 @@ export default function TripView({ slug }: { slug: string }) {
         clashWait.current = source === "undo" ? "undo" : "edit";
         clashAtRef.current = r.clash ?? null;
         setClashAt(clashAtRef.current);
+        if (!r.clash) {
+          // A 409 that names no plan: wait for the session's own word, as after a lost answer
+          lostRef.current = { at: Date.now(), failed: false };
+          setLost(lostRef.current);
+        }
       }
       if (r.why === "clash" || r.why === "offline" || r.why === "server") setReloads((n) => n + 1); // the newer plan, or an answer that may have been lost
       // e2e W-4: online, a request that got no answer may have landed: wait for the server's word (ux §3.3)
@@ -319,7 +335,8 @@ export default function TripView({ slug }: { slug: string }) {
     const g = next.guide;
     // F13 FINAL: a lead for what happened, then the server's first line as sent; no level numbers
     const how = done.kind === "undo" ? (done.redo ? "redo" : "undo") : done.kind === "chat" ? "chat" : "save";
-    setPlanSaid(barSaid(saved.changes, how, { firstCopy: s.seq === null }));
+    // UX review Must 2: after Undo, the lines of the version it took back; after Redo, the redo's own
+    setPlanSaid(barSaid(how === "undo" && done.kind === "undo" && done.undone ? done.undone.changes : saved.changes, how, { firstCopy: s.seq === null }));
     setReloads((n) => n + 1); // the session's own answer, so the worker keeps the new plan's link
     const key = anchor && g ? focusAfter(s.guide, g, anchor) : null;
     const day = key && g?.days.find((d) => d.rows.some((r) => r.key === key))?.day;
@@ -347,7 +364,7 @@ export default function TripView({ slug }: { slug: string }) {
   // review M2: the newer plan didn't come, or came back older; e2e W-4: or the answer to a save was lost and still is
   const stale = (!!shown && !synced && planMiss === trip.itinerary_slug) || !!lost?.failed;
   const waiting = !!lost || behind(shown, clashAt, trip.itinerary_slug);
-  const editable = canEdit(shown, trip, online, planWriting || waiting);
+  const editable = canEdit(shown, trip, online, planWriting || busy || waiting);
   const barStatus = !online
     ? typeof planSaid === "string" && planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
     : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : (!synced && !planWriting && shown) || waiting ? "Updating the map..." : planSaid;
@@ -491,7 +508,7 @@ export default function TripView({ slug }: { slug: string }) {
     )}
     <div className="flex flex-col gap-5 md:grid md:grid-cols-2 md:items-start md:gap-6">
       <div className="flex flex-col gap-5">
-        <PlanSection trip={trip} busy={busy} write={write} />
+        <PlanSection trip={trip} busy={busy || planWriting} write={write} />
         <SharedTickets trip={trip} busy={busy} write={write} onFail={onFail} />
         <WalletSection trip={trip} busy={busy} write={write} setNotice={setNotice} />
         <PayoutQrs trip={trip} busy={busy} write={write} onFail={onFail} />

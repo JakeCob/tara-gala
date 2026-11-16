@@ -1,14 +1,15 @@
 "use client";
 
 // TG-61 ux.md §7: swap a bus for another real trip on the same day and way. Only trips on file are listed, through
-// TripCard with its trust lines; a time or fare is never typed in (CLAUDE.md). Picking one goes to a proposal.
+// TripCard with its trust lines; a time or fare is never typed in (CLAUDE.md). Picking one goes to a proposal. UX review
+// Must 1: the buses within 2 hours of the old one first, then Show all, so a 10:15 AM bus isn't swapped past 40 night ones.
 import { useEffect, useState } from "react";
 import { PX, PixelButton } from "@/components/pixel";
 import { type Trip, formatClass, formatTime, searchTrips } from "@/lib/api";
 import type { BusRow, Guide } from "@/lib/guide";
 import { swapBus } from "@/lib/planEdit";
-import { type ChangeLine, busWarningLine, town } from "@/lib/planLines";
-import { datesLine } from "@/lib/trip";
+import { type ChangeLine, busWarningLine, showAllLabel, swapHeader, swapNone, swapWindow, town } from "@/lib/planLines";
+import { datesLine, saveProblem } from "@/lib/trip";
 import { ChangeList, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import TripCard from "./TripCard";
@@ -38,14 +39,23 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
   const [picked, setPicked] = useState<Trip | null>(null);
   const [applying, setApplying] = useState(false);
   const [problem, setProblem] = useState("");
+  const [everyBus, setEveryBus] = useState(false);
+  const [focusId, setFocusId] = useState<string | null>(null);
   const date = bus?.date ?? "";
+  // The old bus's time, or its row's when the trip row is gone
+  const oldTime = bus?.trip?.departure_time ?? busRowOf(guide, at.table)?.r.time ?? null;
+
+  // Show all keeps focus on the first card it added (ux.md §7)
+  useEffect(() => {
+    if (focusId) document.getElementById(`swap-use-${focusId}`)?.focus();
+  }, [focusId]);
 
   useEffect(() => {
     if (!date) return;
     let live = true;
     searchTrips({ originCity: up ? "Metro Manila" : "Baguio", destinationCity: up ? "Baguio" : "Metro Manila", date }).then(
       (trips) => {
-        console.info("[tg-trip] plan swap list trips=%d", trips.length);
+        console.info("[tg-trip] plan swap list trips=%d near=%s", trips.length, oldTime ? swapWindow(oldTime, trips).near.length : "none");
         if (live) setList(trips);
       },
       () => {
@@ -56,7 +66,7 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
     return () => {
       live = false;
     };
-  }, [date, up]);
+  }, [date, up, oldTime]);
 
   if (!bus) return null;
   const old = bus.trip;
@@ -65,6 +75,9 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
   const to = old ? town(old.destination_name, old.operator_name) : up ? "Baguio" : "Metro Manila";
   const day = datesLine(date, date);
   const others = (list ?? []).filter((t) => t.trip_id !== bus.trip_id);
+  const w = swapWindow(oldTime, others);
+  const cards = everyBus ? w.all : w.near;
+  const more = w.all.length > w.near.length && !everyBus;
   const off = !editor.can || applying;
   const booked = bus.booked;
 
@@ -76,7 +89,7 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
     const out = await editor.save("plan-bus", (g) => swapBus(g, at.table, at.index, picked.trip_id), { kind: "bus", from: old?.departure_time ?? null, to: picked.departure_time }, booked ? (row?.r.key ?? null) : null);
     setApplying(false);
     if (out.ok) return onApplied(out.focus);
-    if (!out.ignored) setProblem(out.message);
+    if (!out.ignored) setProblem(saveProblem(out, "Apply"));
   }
 
   if (picked) {
@@ -107,17 +120,27 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
     <div className="flex flex-col gap-3">
       {bus.warning && <p className="text-sm font-semibold">{busWarningLine(bus.warning, date)}</p>}
       {bus.booked && <p className="text-sm">You marked it booked, so check your ticket with {old?.operator_name ?? "the bus company"} before you swap.</p>}
-      <p className="text-sm">Buses on file from {from} to {to} on {day}.</p>
+      <p className="text-sm">{swapHeader(up, date, everyBus ? null : w.window)}</p>
       {failed && <PlanProblem text="The bus list didn't load. Check your signal, then try again." />}
       {list === null && !failed && <p className="text-sm text-muted">Finding buses...</p>}
       {list !== null && others.length === 0 && <p className="text-sm">No other buses on file from {from} to {to} on {day} yet.</p>}
-      {others.length > 0 && (
+      {others.length > 0 && cards.length === 0 && w.window && <p className="text-sm">{swapNone(w.window)}</p>}
+      {cards.length > 0 && (
         <ul className="flex flex-col gap-3">
-          {others.map((t) => (
-            <TripCard key={t.trip_id} trip={t}
-              action={<PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setPicked(t)}>Use this bus</PixelButton>} />
+          {cards.map((t) => (
+            <TripCard key={t.trip_id} trip={t} plain
+              action={<PixelButton id={`swap-use-${t.trip_id}`} variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setPicked(t)}>Use this bus</PixelButton>} />
           ))}
         </ul>
+      )}
+      {more && (
+        <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={() => {
+          console.info("[tg-trip] plan swap show-all near=%d all=%d", w.near.length, w.all.length);
+          setEveryBus(true);
+          setFocusId(w.all.find((t) => !w.near.includes(t))?.trip_id ?? null);
+        }}>
+          {showAllLabel(w.all.length)}
+        </PixelButton>
       )}
       {others[0]?.confirm_note && <p className={PX.meta}>{others[0].confirm_note}</p>}
       {onBack && <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onBack}>Back</PixelButton>}

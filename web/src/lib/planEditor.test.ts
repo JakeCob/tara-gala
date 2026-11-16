@@ -22,9 +22,9 @@ test("T61-W11b every edit control checks for signal: Edit the plan, Change this 
   assert.match(v, /aria-disabled=\{!online \|\| undefined\}/, "Edit the plan");
   assert.match(v, /Editing needs signal\. You can still tick stops\./);
   assert.match(v, /const waiting = !!lost \|\| behind\(shown, clashAt, trip\.itinerary_slug\);/, "a lost answer, or a 409's newer plan not on screen yet");
-  assert.match(v, /const editable = canEdit\(shown, trip, online, planWriting \|\| waiting\);/);
+  assert.match(v, /const editable = canEdit\(shown, trip, online, planWriting \|\| busy \|\| waiting\);/);
   assert.match(v, /can: editable,/);
-  assert.match(v, /!canEdit\(s, t, navigator\.onLine, !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)/, "and again when the save goes");
+  assert.match(v, /!canEdit\(s, t, navigator\.onLine, busyRef\.current \|\| !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)/, "and again when the save goes");
   assert.match(read("src/components/LevelMap.tsx"), /\{change && change\.editor\.online && \(/, "Change this stop is left out offline (ux.md §4.1)");
 });
 
@@ -38,7 +38,7 @@ test("T61-W11c the trip page fetches the plan again when another phone's version
 test("T61-W11d a tap while a plan write is out is ignored, not queued; ticks wait only for that write", () => {
   const v = view();
   const write = v.slice(v.indexOf("async function planWrite("), v.indexOf("async function onUndo("));
-  assert.match(write, /if \(writingPlan\.current \|\| !s\?\.guide \|\| !t \|\| !canEdit\(s, t, navigator\.onLine, !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)\) \{\s+console\.info\("\[tg-trip\] plan %s ignored", action\);\s+return IGNORED;/);
+  assert.match(write, /if \(writingPlan\.current \|\| !s\?\.guide \|\| !t \|\| !canEdit\(s, t, navigator\.onLine, busyRef\.current \|\| !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)\) \{\s+console\.info\("\[tg-trip\] plan %s ignored", action\);\s+return IGNORED;/);
   assert.ok(write.indexOf("writingPlan.current = true;") < write.indexOf("const r = await req;"));
   assert.match(v, /busy=\{busy \|\| planWriting\}/, "ticks, Mark done! and the to-do boxes wait while a plan write is out");
   for (const file of ["src/components/StopChange.tsx", "src/components/PlaceInput.tsx", "src/components/BusSwap.tsx", "src/components/PlanTextEditors.tsx"]) {
@@ -75,7 +75,7 @@ test("T61-W11g the edit bar stays in view, and every result has a live status li
   assert.match(bar, /aria-expanded=\{open\}/, "Changes is a disclosure");
   assert.match(view(), /<p role="status" aria-live="polite" className="text-sm empty:sr-only"><SaidText said=\{otherLine\} \/><\/p>/, "the plan just changed line");
   // F13 FINAL: one display for a change line, the word in bold; the server's text is never put inside a sentence
-  assert.match(bar, /<SaidText said=\{status\} \/>/);
+  assert.match(bar, /<SaidText said=\{barLine\(status, edits\)\} \/>/);
   assert.match(bar, /<LineText line=\{r\.line\} \/>/, "Changes uses it too");
   assert.match(read("src/components/PlanBits.tsx"), /\{p\.word && <span className="font-bold">\{p\.word\}<\/span>\}/);
   assert.doesNotMatch(view(), /resultLine|levelLabel\(g/, "no level numbers in the bar");
@@ -123,7 +123,7 @@ test("T61-W11j Add a place (ux.md §4.8): on the bar and beside Edit the plan, w
 
 test("T61-W11k round 5: need_pin is the next step, not an error; the pin goes up as typed with the link, on every call about it", () => {
   const place = read("src/components/PlaceInput.tsx");
-  assert.match(place, /if \(!r\.ok && r\.detail === "need_pin"\) \{[\s\S]{0,120}setNeedPin\(typed\);\s+setName\(\(r\.name \?\? ""\)/, "the link's name fills in Name");
+  assert.match(place, /if \(!r\.ok && r\.detail === "need_pin"\) \{[\s\S]{0,120}setNeedPin\(typed\);\s+setName\(prefillName\(r\.name\)\)/, "the link's name fills in Name");
   assert.match(place, /inputMode="decimal"/);
   assert.match(place, /editor\.suggest\(at, \{ link, pin \}\)/);
   assert.match(place, /const pin = pinText; \/\/ as typed/, "never trimmed or cut: the server parses it");
@@ -141,8 +141,58 @@ test("T61-W11l tg-build7's e2e findings: W-2 the search waits for the spots, W-3
   const v = view();
   assert.match(v, /setChangesOpen\(true\); \/\/ e2e W-3/);
   assert.match(v, /const lostAnswer = r\.why === "offline" && navigator\.onLine;/, "W-4: online, an unanswered save may have landed");
-  assert.match(v, /canEdit\(s, t, navigator\.onLine, !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)/, "W-4: editing waits for the server's word");
+  assert.match(v, /canEdit\(s, t, navigator\.onLine, busyRef\.current \|\| !!lostRef\.current \|\| behind\(s, clashAtRef\.current, t\?\.itinerary_slug\)\)/, "W-4: editing waits for the server's word");
   assert.match(v, /clashAtRef\.current = r\.clash \?\? null;/, "a 409 names the newer plan, and editing waits for it");
   assert.match(v, /const stale = \(!!shown && !synced && planMiss === trip\.itinerary_slug\) \|\| !!lost\?\.failed;/);
   assert.match(v, /newerPlan\(before, now\)/, "W-1: the first copy from another phone is news too");
+});
+
+test("T61-W11m tg-build7's W-10 and W-11: the dialog outlives its removed stop; nothing is live before the newer plan is on screen", () => {
+  const map = read("src/components/LevelMap.tsx");
+  assert.match(map, /const found = open && list\.find\(\(l\) => l\.row\.key === open\.key\);/);
+  assert.match(map, /if \(found && kept\?\.row !== found\.row\) setKept\(found\);/, "the open stop is kept as it was last seen");
+  assert.match(map, /const current = found \|\| \(open && kept\?\.row\.key === open\.key \? kept : undefined\);/, "W-10: removed by another phone, its dialog stays to say so");
+  const v = view();
+  assert.match(v, /useLayoutEffect\(\(\) => \{\s+shownRef\.current = shown;/, "W-11: the plan a tap reads is the one painted");
+  assert.match(v, /if \(!r\.clash\) \{[\s\S]{0,200}lostRef\.current = \{ at: Date\.now\(\), failed: false \};/, "a 409 that names no plan waits for the session's word");
+});
+
+test("T61-W11n W-7 and F10: the copy's /i/ page reads changed_at, and every Name prefill goes through prefillName", () => {
+  assert.match(read("src/components/ItineraryList.tsx"), /copyLine\(true, null, it\.changed_at\)/);
+  const place = read("src/components/PlaceInput.tsx");
+  assert.equal(place.match(/setName\(prefillName\(/g)?.length, 2, "a found link, and need_pin");
+  assert.doesNotMatch(place, /setName\(\(r\./, "no name is cut to fit");
+});
+
+// ---------------------------------------------------------------- tg-ux's PR review (ux-review.md, 2026-11-08)
+
+test("T61-W11o (UX Must 1) Swap's cards: the window first, Show all after, and no Book or Get to the terminal", () => {
+  const swap = read("src/components/BusSwap.tsx");
+  assert.match(swap, /swapWindow\(/, "the list is windowed around the old bus");
+  assert.match(swap, /showAllLabel\(/);
+  assert.match(swap, /<TripCard [^>]*\bplain\b/, "the cards are drawn plain");
+  const card = read("src/components/TripCard.tsx");
+  assert.match(card, /\{!plain && <TerminalLinks/, "plain leaves out Get to the terminal");
+  assert.match(card, /!plain && \(t\.booking_url/, "and Book");
+});
+
+test("T61-W11p (UX Must 2) after Undo the bar shows the version it took back; after Redo, the redo's own lines", () => {
+  assert.match(view(), /how === "undo" && done\.kind === "undo" && done\.undone \? done\.undone\.changes : saved\.changes/);
+});
+
+test("T61-W11q (UX should 1) Find turns secondary once a place is found, and Red again when the field changes", () => {
+  const input = read("src/components/PlaceInput.tsx");
+  assert.match(input, /<PixelButton type="submit" variant=\{findFirst \? "primary" : "secondary"\}/);
+});
+
+test("T61-W11r (UX should 2) a clash on Save, Move, Remove or a swap's Apply says what to do next", () => {
+  const stop = read("src/components/StopChange.tsx");
+  assert.match(stop, /saveProblem\(out, "Save"\)/, "Change time and note");
+  assert.match(stop, /saveProblem\(out, "Remove this stop"\)/);
+  assert.match(stop, /saveProblem\(out, `Move \$\{word\}`\)/);
+  assert.match(read("src/components/BusSwap.tsx"), /saveProblem\(out, "Apply"\)/);
+});
+
+test("T61-W11s (UX should 3) the bar's status line says why Undo is greyed", () => {
+  assert.match(read("src/components/PlanEditBar.tsx"), /<SaidText said=\{barLine\(status, edits\)\} \/>/);
 });

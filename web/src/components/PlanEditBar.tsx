@@ -4,7 +4,7 @@
 // Done editing; under it, Add a place (round 4, §4.8), Undo (Redo right after an undo) and Changes; then one status
 // line that every change replaces, so a result never lands off-screen (the TG-53 lesson).
 import { PX, PixelBox, PixelButton } from "@/components/pixel";
-import { type PlanEdits, type Said, historyRow, undoLabel } from "@/lib/planLines";
+import { type PlanEdits, type Said, barLine, historyRow, undoLabel } from "@/lib/planLines";
 import { LineText, SaidText } from "./PlanBits";
 
 export default function PlanEditBar({ edits, status, can, online, stale, today, changesOpen: open, onChanges, onAddPlace, onUndo, onReload, onDone }: {
@@ -47,7 +47,7 @@ export default function PlanEditBar({ edits, status, can, online, stale, today, 
           Changes
         </PixelButton>
       </div>
-      <p role="status" aria-live="polite" className="text-sm break-words empty:sr-only"><SaidText said={status} /></p>
+      <p role="status" aria-live="polite" className="text-sm break-words empty:sr-only"><SaidText said={barLine(status, edits)} /></p>
       {stale && (
         <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onReload}>
           Reload the plan

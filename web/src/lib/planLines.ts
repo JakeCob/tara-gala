@@ -29,6 +29,11 @@ const MINE_FOR_MS = 10 * 60_000; // ux.md §3.2: Undo asks first after this, or 
 const manila = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Manila", ...opts });
 const clock = (iso: string) => manila(iso, { hour: "numeric", minute: "2-digit" });
 const dayOf = (iso: string) => manila(iso, { month: "short", day: "numeric" });
+/** A trip date ("2026-11-06") as "Fri, Nov 6". */
+function weekday(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
 const manilaDate = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
 
 /** The bar's line: a lead for what happened, then the first change line, then its tails. Structured, so the line's word
@@ -70,7 +75,7 @@ function moreThan(lines: ChangeLine[]): number {
   const more = lines.find((l) => l.word === "More");
   return Math.max(0, lines.filter((l) => l.word !== "More").length - 1) + (more ? Number(more.text.match(/\d+/)?.[0] ?? 0) : 0);
 }
-const LEADS = { save: "Saved: ", undo: "Undid: ", redo: "Put back: ", chat: "Applied the chatbot's change: " } as const;
+const LEADS = { save: "Saved: ", undo: "Undone: ", redo: "Put back: ", chat: "Applied the chatbot's change: " } as const;
 export type SaidHow = keyof typeof LEADS;
 
 /** The edit bar after this phone's change. No level numbers: positions move after later changes. */
@@ -80,19 +85,53 @@ export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: b
   const tail = [
     ".",
     n ? ` And ${n} more change${n === 1 ? "" : "s"}.` : "",
-    first?.word === "Dropped" ? " Undo brings it back." : "",
+    first?.word === "Dropped" && how === "save" ? " Undo brings it back." : "", // UX review Must 2: after Undo the button reads Redo
     opts.firstCopy ? " This trip now has its own copy of the plan. The shared plan's link doesn't change." : "",
   ].join("");
   return { lead: LEADS[how], line: first, tail };
 }
 
-/** A row in Changes: when, then the version's first line. A chatbot version says so. */
+/** A row in Changes: when, then the version's line. A chatbot version says so, and so does an undo or redo
+ * (UX review Must 2), so its own lines read honestly. */
 export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null; why: string | null } {
   // Review M1: the server writes Dropped lines last, so a removal's reason would hide behind a Later or a New. The row
   // stands for its version with the first line that has a why; the bar, Undo and "just changed" keep the first line
   const line = v.changes.find((l) => l.word !== "More" && whyText(l.why)) ?? firstOf(v.changes);
-  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead: v.source === "chat" ? "Chatbot: " : "", line, why: whyText(line?.why) };
+  const lead = v.source === "chat" ? "Chatbot: " : v.source === "undo" ? "Undo: " : "";
+  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead, line, why: whyText(line?.why) };
 }
+
+/** The bar's status line: before the first edit it says why Undo is greyed (ux.md §3.2, UX review should 3). */
+export function barLine(status: Said | string, edits: PlanEdits | null | undefined): Said | string {
+  return status === "" && (!edits || edits.versions[0]?.seq === 0) ? "Nothing to undo yet." : status;
+}
+
+const SWAP_SPAN_MIN = 120; // ux.md §7: the buses within 2 hours either side of the old one
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+export type SwapWindow = { from: string; to: string };
+
+/**
+ * Swap's list (UX review Must 1): the day's buses within 2 hours of the old one first, kept within the day, and the whole
+ * day in time order for Show all. With no time to go by (the bus is gone and its row has none), the whole day.
+ */
+export function swapWindow<T extends { departure_time: string }>(old: string | null, trips: T[]): { window: SwapWindow | null; near: T[]; all: T[] } {
+  const all = [...trips].sort((a, b) => a.departure_time.localeCompare(b.departure_time));
+  if (!old) return { window: null, near: all, all };
+  const at = toMin(old);
+  const lo = Math.max(0, at - SWAP_SPAN_MIN);
+  const hi = Math.min(23 * 60 + 59, at + SWAP_SPAN_MIN);
+  return { window: { from: hhmm(lo), to: hhmm(hi) }, near: all.filter((t) => toMin(t.departure_time) >= lo && toMin(t.departure_time) <= hi), all };
+}
+
+/** The query is by city, so the header names the cities, not the old bus's terminal (UX review Must 1). */
+export function swapHeader(up: boolean, date: string, w: SwapWindow | null): string {
+  const way = up ? "from Metro Manila to Baguio" : "from Baguio to Metro Manila";
+  return `Buses on file ${way} on ${weekday(date)}${w ? `, ${formatTime(w.from)} to ${formatTime(w.to)}` : ""}.`;
+}
+
+export const swapNone = (w: SwapWindow) => `No buses on file between ${formatTime(w.from)} and ${formatTime(w.to)}.`;
+export const showAllLabel = (n: number) => `Show all ${n} bus${n === 1 ? "" : "es"} that day`;
 
 /** Another phone's change, above the World tabs (ux.md §6). */
 export function justChanged(v: PlanVersion): Said {
@@ -119,9 +158,9 @@ export function undoConfirm(edits: PlanEdits | null | undefined, mine: ReadonlyM
 }
 
 /** Under the guide's summary once the trip has its own copy (ux.md §2). */
-export function copyLine(edited: boolean, edits: PlanEdits | null | undefined): string | null {
+export function copyLine(edited: boolean, edits: PlanEdits | null | undefined, changedAt?: string | null): string | null {
   if (!edited) return null;
-  const at = edits?.versions[0]?.created_at;
+  const at = edits?.versions[0]?.created_at ?? changedAt; // the /i/ page has no session: W-7, the plan's own changed_at
   return at ? `Your group's own copy of the plan, last changed ${dayOf(at)}, ${clock(at)}.` : "Your group's own copy of the plan.";
 }
 
@@ -160,9 +199,7 @@ export function removeConfirm(plan: string, world: number, ticked: boolean, phot
 /** A bus row's warning (ux.md §7). The date is a plain calendar day. */
 export function busWarningLine(warning: BusWarning, date: string): string {
   if (warning !== "not_running") return "This bus isn't on the schedule any more.";
-  const [y, m, d] = date.split("-").map(Number);
-  const day = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-  return `This bus isn't on the schedule for ${day} any more.`;
+  return `This bus isn't on the schedule for ${weekday(date)} any more.`;
 }
 
 /** The one notice above the World tabs. */

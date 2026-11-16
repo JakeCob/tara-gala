@@ -264,7 +264,9 @@ async function ask<T>(path: string, init: { method: Method; body: unknown }): Pr
   const body = await res.json().catch(() => null);
   const detail = typeof body?.detail === "string" ? body.detail : undefined;
   if (res.status === 409 && detail === "plan_changed") {
-    return { ok: false, why: "clash", detail, clash: { itinerary_slug: String(body.itinerary_slug), seq: Number(body.seq) } };
+    // The API's unique-key race answers with no slug or seq: then the clash names no plan, rather than a made-up one
+    const named = typeof body?.itinerary_slug === "string" && Number.isInteger(body?.seq);
+    return named ? { ok: false, why: "clash", detail, clash: { itinerary_slug: body.itinerary_slug, seq: body.seq } } : { ok: false, why: "clash", detail };
   }
   if (detail === "need_pin") return { ok: false, why: "rejected", detail, name: typeof body?.name === "string" ? body.name : null };
   return { ok: false, why: "rejected", detail };
@@ -368,6 +370,14 @@ export function planFailureMessage(r: { why: TripFailure; detail?: string }): st
   if (r.why === "clash") return "Someone just changed the plan, so your change wasn't saved.";
   if (r.why === "rejected" && r.detail && PLAN_DETAIL[r.detail]) return PLAN_DETAIL[r.detail];
   return tripFailureMessage(r);
+}
+
+/** ux.md §6's second line after a clash, naming the button that was tapped (UX review should 2). */
+export const clashAgain = (button: string) => `The map now shows their version. Check your change against it, then tap ${button} again.`;
+
+/** A save's failure as shown in its dialog: a clash also says what to do next. */
+export function saveProblem(out: { message: string; clash: boolean }, button: string): string {
+  return out.clash ? `${out.message}\n${clashAgain(button)}` : out.message;
 }
 
 export const fileUrl = (slug: string, id: string) => `${API_URL}${at(slug)}/files/${encodeURIComponent(id)}`;

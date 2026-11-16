@@ -13,7 +13,7 @@ export function PlanProblem({ text }: { text: string }) {
   useEffect(() => here.current?.scrollIntoView({ block: "nearest" }), [text]);
   return (
     <div ref={here}>
-      <PixelBox as="p" tone="alertText" role="alert" className="p-3 text-sm">
+      <PixelBox as="p" tone="alertText" role="alert" className="whitespace-pre-line p-3 text-sm">
         {text}
       </PixelBox>
     </div>
