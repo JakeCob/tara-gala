@@ -9,13 +9,13 @@ import { formatTime } from "@/lib/api";
 import { type Guide, type GuideRow, type Mark, marksByKey, rowMark, rowShows } from "@/lib/guide";
 import type { Level } from "@/lib/levelMap";
 import { type At, type PlaceIn, type RowIn, type Suggestion, noteSuggestion, nudgeRow, removeRow, setRow, toStored } from "@/lib/planEdit";
-import { levelLabel, removeConfirm } from "@/lib/planLines";
-import { type SuggestIn, type TripFile, planFailureMessage } from "@/lib/trip";
+import { busChangedLine, levelLabel, removeConfirm } from "@/lib/planLines";
+import { type SuggestIn, type TripFile, clashAgain, planFailureMessage, saveProblem } from "@/lib/trip";
 import BusSwap, { type BusAt, busAt, swapTitle } from "./BusSwap";
 import FitPlace, { type FitState, type Slot } from "./FitPlace";
-import { PlanProblem } from "./PlanBits";
+import { PlanProblem, SaidText } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
-import { type Chosen, FindPlace, Proposal } from "./PlaceInput";
+import { type Chosen, FindPlace, Proposal, linkPlace } from "./PlaceInput";
 
 type Mode = "replace" | "add" | "move" | "fit";
 type SlotAt = Exclude<SuggestIn["at"], { anywhere: true }>;
@@ -136,7 +136,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     const r = place ? await editor.suggest(s, place as SuggestIn["place"]) : null;
     if (r && !r.ok) return setProblem(planFailureMessage(r));
     const suggestion = r?.ok ? r.body : noteFor("move", toDay)(row.plan);
-    setStep({ k: "propose", mode: "move", day: toDay, chosen: { place, link: null, name: row.plan, suggestion } });
+    setStep({ k: "propose", mode: "move", day: toDay, chosen: { place, link: null, pin: null, name: row.plan, suggestion } });
   }
 
   async function onNudge(dir: -1 | 1) {
@@ -145,7 +145,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     const word = dir < 0 ? "earlier" : "later";
     const out = await editor.save("plan-nudge", (g) => nudgeRow(g, key, dir, (r: RowIn) => rowShows(r as unknown as GuideRow, picks)), { kind: "nudge", dir: word }, key);
     if (!out.ok) {
-      if (!out.ignored) setSaid(out.message);
+      if (!out.ignored) setSaid(saveProblem(out, `Move ${word}`));
       return;
     }
     const now = levelLabel(out.guide, marks, key);
@@ -167,14 +167,14 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     }
     const out = await editor.save("plan-remove", (g) => removeRow(g, key), { kind: "remove" }, key);
     if (out.ok) return onDone(out.focus);
-    if (!out.ignored) setProblem(out.message);
+    if (!out.ignored) setProblem(saveProblem(out, "Remove this stop"));
   }
 
   // Where a place fits, asked again: after a clash the ranking can change with the newer plan (B60, ux.md §4.8)
   async function onRefit(s: Proposed) {
     if (off) return;
     const { chosen } = s;
-    const place = (chosen.place ?? (chosen.link ? { link: chosen.link } : null)) as SuggestIn["place"] | null;
+    const place = (chosen.place ?? (chosen.link ? linkPlace(chosen) : null)) as SuggestIn["place"] | null;
     const r = place ? await editor.suggest({ anywhere: true }, place) : null;
     if (r && !r.ok) return setProblem(planFailureMessage(r));
     setProblem("");
@@ -185,7 +185,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
     if (off) return;
     if (s.mode === "fit") return onRefit(s);
     const { chosen } = s;
-    const r = chosen.place ? await editor.suggest(suggestAt(s.mode, s.day), chosen.place as SuggestIn["place"]) : chosen.link ? await editor.suggest(suggestAt(s.mode, s.day), { link: chosen.link }) : null;
+    const r = chosen.place ? await editor.suggest(suggestAt(s.mode, s.day), chosen.place as SuggestIn["place"]) : chosen.link ? await editor.suggest(suggestAt(s.mode, s.day), linkPlace(chosen)) : null;
     if (r && !r.ok) return setProblem(planFailureMessage(r));
     setProblem("");
     setStep({ ...s, k: "propose", chosen: { ...chosen, suggestion: r?.ok ? r.body : noteFor(s.mode, s.day)(chosen.name) } });
@@ -254,6 +254,8 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
       {step.k === "menu" && row && (
         <>
           <p className="text-lg font-bold break-words">{row.plan}</p>
+          {/* e2e W-9: in edit mode too, the swapped bus's row says to check its note (ux §7) */}
+          {row.bus && busChangedLine(editor.edits, row.plan) && <p className={PX.meta}>{busChangedLine(editor.edits, row.plan)}</p>}
           {row.note && <p className="text-sm break-words">{row.note}</p>}
           {row.place?.name && <p className="text-sm font-semibold break-words">{row.place.name}</p>}
           {(row.show_if || row.hide_if) && (
@@ -319,7 +321,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           anchor={step.slot ? step.slot.after : step.mode === "add" ? addAfter : key} done={doneFor(step.mode, step.day, step.slot)}
           fit={fit(step.mode, step.day, step.slot)} from={fromFor(step.mode, step.day, step.slot)}
           rowName={rowName} rowTime={rowTime} onApplied={onDone}
-          onBack={() => setStep(step.mode === "move" ? { k: "move" } : step.mode === "fit" ? { k: "fit", chosen: step.fitFrom ?? step.chosen, fit: step.fit! } : { k: "find", mode: step.mode })}
+          onBack={() => setStep(step.mode === "move" ? { k: "move" } : step.mode === "fit" ? { k: "fit", chosen: step.fitFrom ?? step.chosen, fit: step.fit! } : { k: "find", mode: step.mode, text: step.chosen.link ?? step.chosen.name })}
           onClash={() => setStep({ ...step, k: "clash" })} />
       )}
 
@@ -332,12 +334,12 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           </>
         ) : (
           <>
-            <ClashBox lead="Someone just changed the plan, so your change wasn't saved." rest="The map now shows their version. Check your change against it, then tap Apply again." />
+            <ClashBox lead="Someone just changed the plan, so your change wasn't saved." rest={clashAgain("Apply")} />
             {problem && <PlanProblem text={problem} />}
             <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={off || undefined} onClick={() => onRecheck(step)}>
               {step.mode === "fit" ? "Find where it fits again" : "Check my change again"}
             </PixelButton>
-            <p role="status" className="text-sm empty:sr-only">{off ? editor.status : ""}</p>
+            <p role="status" className="text-sm empty:sr-only">{off ? <SaidText said={editor.status} /> : ""}</p>
           </>
         )
       )}
@@ -362,7 +364,7 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
             })}
           </div>
           {/* The edit bar sits behind this dialog, so the dialog says what happened (ux.md §3.3) */}
-          <p role="status" aria-live="polite" className="text-sm empty:sr-only">{said === "Moving..." && editor.status !== "Saving..." && !off ? "" : said}</p>
+          <p role="status" aria-live="polite" className="whitespace-pre-line text-sm empty:sr-only">{said === "Moving..." && editor.status !== "Saving..." && !off ? "" : said}</p>
           {!row.bus && guide.days.length > 1 && (
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-1 text-sm font-semibold">Or move it to another day</legend>
@@ -428,7 +430,7 @@ function TimeAndNote({ editor, row, before, after, label, onSaved, onBack }: {
     const out = await editor.save("plan-edit", (g) => setRow(g, row.key, parts), { kind: "edit", key: row.key }, row.key);
     setSaving(false);
     if (out.ok) return onSaved(out.focus);
-    if (!out.ignored) setProblem({ field: "save", text: out.message });
+    if (!out.ignored) setProblem({ field: "save", text: saveProblem(out, "Save") });
   }
 
   return (

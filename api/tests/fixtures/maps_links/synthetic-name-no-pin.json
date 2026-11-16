@@ -1,9 +1,19 @@
 {
-  "_note": "SYNTHETIC, made up for TG-61 (plan.md §4 task 0). A name and no pin anywhere, so link_no_pin (B30).",
+  "_note": "SYNTHETIC, made up for TG-61 (plan.md \u00a74 task 0). A name and no pin anywhere, and the geocoder (a MockTransport stand-in) finds nothing: need_pin, so the web asks for the pin (owner round 5). The place page is never requested.",
   "link": "https://maps.app.goo.gl/Ty5SyntheticD4",
   "hops": [
-    {"url": "https://maps.app.goo.gl/Ty5SyntheticD4", "status": 302, "location": "https://www.google.com/maps/place/Tindahan+Synthetic+(made+up)/"},
-    {"url": "https://www.google.com/maps/place/Tindahan+Synthetic+(made+up)/", "status": 200, "html": "<html><head><title>Google Maps</title></head></html>"}
+    {
+      "url": "https://maps.app.goo.gl/Ty5SyntheticD4",
+      "status": 302,
+      "location": "https://www.google.com/maps/place/Tindahan+Synthetic+(made+up)/"
+    }
   ],
-  "expect": {"outcome": "link_no_pin"}
+  "geocode": {},
+  "expect": {
+    "outcome": "need_pin",
+    "name": "Tindahan Synthetic (made up)",
+    "geocoded": [
+      "Tindahan Synthetic (made up)"
+    ]
+  }
 }

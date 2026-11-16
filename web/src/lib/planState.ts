@@ -60,3 +60,17 @@ export function afterPlanSaved(trip: Trip, saved: PlanSaved, source: PlanVersion
   const versions = [{ seq, source, changes: saved.changes, created_at: now }, ...(trip.plan_edits?.versions ?? []).filter((v) => v.seq < seq)];
   return { ...trip, itinerary_slug: saved.itinerary.share_slug, plan_edits: { seq, versions: versions.slice(0, VERSIONS_KEPT) } };
 }
+
+/**
+ * Review M1: a session write's answer (a tick, a photo, the hotel) carries the whole trip, plan fields included, as of
+ * when it committed. One that committed before a plan save but landed after it would put the old plan back: the shared
+ * slug on a trip's first edit, or an older seq. So the plan on screen stays when the answer's is older; the rest is taken.
+ * Attach and detach move the plan on purpose, so they don't come through here.
+ */
+export function keepNewerPlan(prev: Trip, next: Trip): Trip {
+  const was = prev.plan_edits?.seq ?? null;
+  if (was === null) return next;
+  const now = next.plan_edits?.seq ?? null;
+  const older = next.itinerary_slug === prev.itinerary_slug ? now === null || now < was : now === null;
+  return older ? { ...next, itinerary_slug: prev.itinerary_slug, plan_edits: prev.plan_edits } : next;
+}

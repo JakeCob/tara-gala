@@ -48,6 +48,8 @@ export type Suggestion = {
   ripple: ({ key: string; time: string } | { key: string; drop: true })[];
   notes: string[];
   changes: { word: string; day: number | null; text: string; part?: "stop" | "ripple" }[];
+  /** Round 5: where a link's pin came from; null for a spot or a trip place */
+  pin_source?: "link" | "address" | "typed" | null;
   /** TG-61 round 4: with at {anywhere: true}, up to 3 slots, best first; [] when none fits. Absent otherwise */
   fits?: Fit[] | null;
 };
@@ -314,7 +316,7 @@ export function noteSuggestion(g: GuideIn, at: { after: string } | { first_of_da
   const hhmm = toHHMM(Math.ceil(time / 15) * 15);
   return {
     name: plan, lat: null, lng: null, maps_url: null, km_from_baguio: null, far: false, time: hhmm, leg: null, ripple: [], notes: [],
-    changes: [{ word: "New", day, text: `${clockOf(hhmm)} ${plan}`, part: "stop" }],
+    changes: [{ word: "New", day, text: `${plan} at ${clockOf(hhmm)}`, part: "stop" }], // the server's own form
   };
 }
 
@@ -344,4 +346,9 @@ export function fitSuggestion(s: Suggestion, fit: Fit): Suggestion {
 /** Only the chosen fit, after its anchor: the new row takes the anchor's condition, which is the fit's (plan.md §15). */
 export function applyFit(g: GuideIn, fit: Fit, picked: { place: PlaceIn | null; plan: string; time: string; ripple: boolean }): GuideIn {
   return applySuggestion(g, { after: fit.after }, { name: null, lat: null, lng: null, maps_url: null, km_from_baguio: null, far: false, time: fit.time, leg: fit.leg, ripple: fit.ripple, notes: fit.notes, changes: fit.changes }, picked);
+}
+
+/** F10: the Name box's first value: the server's short name, whole or not at all. A cut name would read as a real one. */
+export function prefillName(name: string | null | undefined): string {
+  return name && name.length <= 80 ? name : "";
 }

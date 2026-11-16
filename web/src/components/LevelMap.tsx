@@ -13,7 +13,7 @@ import {
 } from "@/lib/levelMap";
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
-import { busNotice, busWarningLine } from "@/lib/planLines";
+import { busChangedLine, busNotice, busWarningLine } from "@/lib/planLines";
 import { type TripFile, fetchFile } from "@/lib/trip";
 import { fnv1a, usableWidth } from "@/lib/world";
 import BusSwap, { type BusAt, swapTitle } from "./BusSwap";
@@ -88,7 +88,12 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const band = snake ? undefined : BAND_PX;
   const chosen = day.pick ? byKey.get(pickMark(day.pick.key))?.value : undefined;
   const photosAt = (key: string | null) => photos?.files.filter((f) => f.kind === "photo" && f.row_key === key) ?? [];
-  const current = open && list.find((l) => l.row.key === open.key); // stays fresh as ticks land
+  // Stays fresh as ticks land. W-10: if another phone removes the open stop (or moves it to another World), its dialog
+  // stays, with the stop as it was last seen, so a change in progress can say what happened (ux §6)
+  const [kept, setKept] = useState<Level | null>(null);
+  const found = open && list.find((l) => l.row.key === open.key);
+  if (found && kept?.row !== found.row) setKept(found);
+  const current = found || (open && kept?.row.key === open.key ? kept : undefined);
   const next = marks ? nextLevel(list) : null;
   const atStart = !!marks && !list.some((l) => l.done); // no ticks in this world yet: the group waits at START
 
@@ -409,6 +414,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
           </PixelButton>
         </div>
         <p className="text-lg font-bold">{r.plan}</p>
+        {r.bus && change && busChangedLine(change.editor.edits, r.plan) && <p className={PX.meta}>{busChangedLine(change.editor.edits, r.plan)}</p>}
         {r.note && <p className="text-sm">{r.note}</p>}
         {r.place?.name && r.place.kind === "trip_place" ? (
           // TG-61: a place the group pinned from a link; never "verified" (ux.md §5)

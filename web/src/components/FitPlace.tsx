@@ -12,7 +12,7 @@ import { NO_FIT, fitFooter, fitLines, levelLabel } from "@/lib/planLines";
 import { type SuggestIn, planFailureMessage } from "@/lib/trip";
 import { PlanProblem } from "./PlanBits";
 import type { PlanEditor } from "./PlanEditor";
-import type { Chosen } from "./PlaceInput";
+import { type Chosen, linkPlace } from "./PlaceInput";
 
 export type Slot = { day: number; after: string };
 /** Where step 2 was left, so the proposal's Back returns to the same choice. */
@@ -59,7 +59,7 @@ export default function FitPlace({ editor, guide, marks, chosen, start, onNext, 
     }
     setFinding(true);
     setProblem("");
-    const place = (chosen.place ?? { link: chosen.link! }) as SuggestIn["place"];
+    const place = (chosen.place ?? linkPlace(chosen)) as SuggestIn["place"];
     const r = await editor.suggest({ after: anchor }, place);
     setFinding(false);
     if (!r.ok) return setProblem(planFailureMessage(r));

@@ -3,24 +3,26 @@
 // TG-61 ux.md §3: the slim bar that stays in view while editing, above the World tabs. Its top line is the title and
 // Done editing; under it, Add a place (round 4, §4.8), Undo (Redo right after an undo) and Changes; then one status
 // line that every change replaces, so a result never lands off-screen (the TG-53 lesson).
-import { useState } from "react";
 import { PX, PixelBox, PixelButton } from "@/components/pixel";
-import { type PlanEdits, historyLine, undoLabel } from "@/lib/planLines";
+import { type PlanEdits, type Said, barLine, historyRow, undoLabel } from "@/lib/planLines";
+import { LineText, SaidText } from "./PlanBits";
 
-export default function PlanEditBar({ edits, status, can, online, stale, today, onAddPlace, onUndo, onReload, onDone }: {
+export default function PlanEditBar({ edits, status, can, online, stale, today, changesOpen: open, onChanges, onAddPlace, onUndo, onReload, onDone }: {
   edits: PlanEdits | null;
-  status: string;
+  status: Said | string;
   can: boolean;
   online: boolean;
   /** A newer plan is known but isn't on screen, and its fetch failed or came back older (review M2) */
   stale: boolean;
   today: string;
+  /** Changes is open: the page opens it itself after an undo that met a newer change (ux §6) */
+  changesOpen: boolean;
+  onChanges: () => void;
   onAddPlace: () => void;
   onUndo: () => void;
   onReload: () => void;
   onDone: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const nothing = !edits || edits.versions[0]?.seq === 0;
   return (
     <PixelBox className="sticky top-0 z-20 flex flex-col gap-2 p-3">
@@ -41,11 +43,11 @@ export default function PlanEditBar({ edits, status, can, online, stale, today, 
         <PixelButton variant="secondary" aria-disabled={!can || nothing || undefined} onClick={() => can && onUndo()}>
           {undoLabel(edits)}
         </PixelButton>
-        <PixelButton variant="secondary" aria-expanded={open} aria-controls="plan-changes" onClick={() => setOpen((o) => !o)}>
+        <PixelButton variant="secondary" aria-expanded={open} aria-controls="plan-changes" onClick={onChanges}>
           Changes
         </PixelButton>
       </div>
-      <p role="status" aria-live="polite" className="text-sm break-words empty:sr-only">{status}</p>
+      <p role="status" aria-live="polite" className="text-sm break-words empty:sr-only"><SaidText said={barLine(status, edits)} /></p>
       {stale && (
         <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={onReload}>
           Reload the plan
@@ -56,7 +58,7 @@ export default function PlanEditBar({ edits, status, can, online, stale, today, 
           {edits?.versions.length ? (
             <ol className="flex flex-col gap-1 text-sm">
               {edits.versions.map((v) => (
-                <li key={v.seq} className="break-words">{historyLine(v, today)}</li>
+                <li key={v.seq} className="break-words"><HistoryRow v={v} today={today} /></li>
               ))}
             </ol>
           ) : (
@@ -66,5 +68,16 @@ export default function PlanEditBar({ edits, status, can, online, stale, today, 
         </div>
       )}
     </PixelBox>
+  );
+}
+
+/** A row in Changes (F13 FINAL): its time, then its first line in the shared display. */
+function HistoryRow({ v, today }: { v: PlanEdits["versions"][number]; today: string }) {
+  const r = historyRow(v, today);
+  return (
+    <>
+      {r.at} · {r.lead}
+      {r.line && <LineText line={r.line} />}
+    </>
   );
 }

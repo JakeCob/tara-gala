@@ -160,3 +160,86 @@ test("V11 home: the fourth quick action is the trip wallet, which links on to ti
   assert.match(read("src/components/TripHome.tsx"), /href="\/tickets"/);
   assert.match(read("src/components/WalletHome.tsx"), /href="\/tickets"/);
 });
+
+// ---------------------------------------------------------------- TG-65: an older GET never replaces a newer wallet
+// WalletView reloads when the phone comes back to the app. A write that lands while that GET is on the wire must stay:
+// the GET read the wallet before the write, so its answer would bring a deleted expense back or drop a new one.
+// Dynamic imports: before the fix, afterGet doesn't exist, and a named import would stop the whole file.
+
+const W = "c".repeat(32);
+const walletWith = (notes: string[], slug = W) =>
+  ({ share_slug: slug, name: "E2E", members: [], expenses: notes.map((note, i) => ({ id: `e${i}`, note })), settlements: [] }) as unknown as import("./wallet.ts").Wallet;
+const ready = (notes: string[], slug = W) => ({ state: "ready" as const, wallet: walletWith(notes, slug) });
+
+test("TG65-1 afterGet: an answer a write overtook keeps the wallet on screen; one that wasn't overtaken shows", async () => {
+  const { afterGet } = await import("./wallet.ts");
+  const prev = ready([]); // the expense was just deleted on this phone
+  const older = { ok: true as const, wallet: walletWith(["Taxi"]) };
+  assert.equal(afterGet(prev, older, W, true, false), prev, "the deleted expense doesn't come back");
+  assert.deepEqual(afterGet(prev, older, W, false, false), { state: "ready", wallet: older.wallet }, "not overtaken: another phone's expense comes through");
+  assert.deepEqual(afterGet({ state: "loading" }, older, W, true, false), { state: "ready", wallet: older.wallet }, "nothing on screen to keep");
+  const other = ready([], "d".repeat(32));
+  assert.deepEqual(afterGet(other, older, W, true, false), { state: "ready", wallet: older.wallet }, "another wallet's screen isn't this wallet");
+});
+
+test("TG65-2 afterGet keeps TG-53's rule: a saved copy never replaces the wallet on screen, and still opens one offline", async () => {
+  const { afterGet } = await import("./wallet.ts");
+  const prev = ready(["Taxi"]);
+  const saved = { ok: true as const, wallet: walletWith([]), saved: true };
+  assert.equal(afterGet(prev, saved, W, false, false), prev);
+  assert.equal(afterGet(prev, saved, W, false, true), prev, "with a dialog open too");
+  assert.deepEqual(afterGet({ state: "loading" }, saved, W, false, false), { state: "ready", wallet: saved.wallet });
+  assert.deepEqual(afterGet({ state: "error", why: "offline" }, saved, W, false, false), { state: "ready", wallet: saved.wallet });
+});
+
+test("TG65-3 afterGet: a failure keeps the wallet when offline, a dialog is open, or a write overtook it; shows otherwise", async () => {
+  const { afterGet } = await import("./wallet.ts");
+  const prev = ready(["Taxi"]);
+  assert.equal(afterGet(prev, { ok: false, why: "offline" }, W, false, false), prev, "offline with a copy on screen");
+  assert.equal(afterGet(prev, { ok: false, why: "server" }, W, false, true), prev, "an open proof dialog keeps its page");
+  assert.equal(afterGet(prev, { ok: false, why: "server" }, W, true, false), prev, "a write landed after this GET left: it just worked");
+  assert.deepEqual(afterGet(prev, { ok: false, why: "server" }, W, false, false), { state: "error", why: "server" });
+  assert.deepEqual(afterGet(prev, { ok: false, why: "not_found" }, W, false, false), { state: "error", why: "not_found" });
+  assert.deepEqual(afterGet({ state: "loading" }, { ok: false, why: "server" }, W, true, false), { state: "error", why: "server" });
+});
+
+test("TG65-4 WalletView: every GET goes through afterGet, aged against the last write that landed", () => {
+  const view = read("src/components/WalletView.tsx");
+  assert.match(view, /const left = Date\.now\(\);\s+walletApi\.get\(slug\)\.then\(\(r\) => \{\s+if \(!live\) return;\s+const overtaken = left < shownAt\.current;/, "timed before the GET leaves");
+  assert.match(view, /setLoad\(\(prev\) => afterGet\(prev, r, slug, overtaken, proofOpen\.current\)\);/);
+  assert.match(view, /console\.info\("\[tg-wallet\] load ok=%s", r\.ok \? \(overtaken \? "overtaken" : r\.saved \? "saved" : "yes"\) : r\.why\);/);
+  assert.match(view, /if \(r\.ok && !overtaken\) \{\s+if \(!r\.saved\) shownAt\.current = left;\s+rememberWallet\(/, "an overtaken answer leaves everything alone");
+  for (const [from, to] of [["async function write(", "function openProof("], ["function proofSaved(", "/** Settle up"]]) {
+    const body = view.slice(view.indexOf(from), view.indexOf(to));
+    assert.ok(body.includes("shownAt.current = Date.now();"), `${from} marks the screen as new`);
+    assert.ok(body.indexOf("shownAt.current = Date.now();") < body.indexOf("setLoad("), `${from}: before its state, so no answer can slip between`);
+    if (from.startsWith("async")) assert.ok(body.indexOf("shownAt.current = Date.now();") > body.indexOf("if (!r.ok)"), "only a write that landed");
+  }
+  assert.equal(view.match(/setLoad\(/g)?.length, 3, "afterGet, a write and a saved proof: nothing else sets the wallet");
+});
+
+test("TG65-5 the repro, in order: a return-to-app GET, then a delete and an add, then the old answers land", async () => {
+  const { afterGet } = await import("./wallet.ts");
+  // WalletView's load path and its writes, as in TG65-4
+  let shownAt = 0;
+  let screen: import("./wallet.ts").WalletLoad = { state: "loading" };
+  const land = (r: import("./wallet.ts").WalletResult, left: number) => {
+    const overtaken = left < shownAt;
+    if (r.ok && !overtaken && !r.saved) shownAt = left;
+    screen = afterGet(screen, r, W, overtaken, false);
+  };
+  const write = (notes: string[], at: number) => {
+    shownAt = at;
+    screen = ready(notes);
+  };
+  const notes = () => (screen.state === "ready" ? screen.wallet.expenses.map((e) => e.note) : null);
+  land({ ok: true, wallet: walletWith(["Taxi"]) }, 1000); // opened
+  write([], 2500); // Delete Taxi lands while the return-to-app GET (left at 2000) is on the wire
+  land({ ok: true, wallet: walletWith(["Taxi"]) }, 2000);
+  assert.deepEqual(notes(), [], "the deleted expense stays deleted");
+  write(["Jeep"], 4500); // Add Jeep lands while another (left at 4000) is on the wire
+  land({ ok: true, wallet: walletWith([]) }, 4000);
+  assert.deepEqual(notes(), ["Jeep"], "the new expense stays");
+  land({ ok: true, wallet: walletWith(["Jeep", "Lunch"]) }, 6000); // the next return to the app
+  assert.deepEqual(notes(), ["Jeep", "Lunch"], "a later GET brings another phone's expense");
+});

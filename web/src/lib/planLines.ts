@@ -24,124 +24,115 @@ export type Done =
   | { kind: "undo"; redo: boolean; undone: PlanVersion | null };
 
 const MINE_FOR_MS = 10 * 60_000; // ux.md §3.2: Undo asks first after this, or for another phone's change
-const LISTS = { budget: "Changed the budget.", todo: "Changed the to-do list.", sources: "Changed the sources.", pick: "Changed the choices." } as const;
 
 const manila = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Manila", ...opts });
 const clock = (iso: string) => manila(iso, { hour: "numeric", minute: "2-digit" });
 const dayOf = (iso: string) => manila(iso, { month: "short", day: "numeric" });
+/** A trip date ("2026-11-06") as "Fri, Nov 6". */
+function weekday(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
 const manilaDate = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-const world = (l: ChangeLine) => (l.day === null ? "" : ` (World ${l.day})`);
 
-/** How many changes a version holds past its first sentence: the lines after it, and the server's own "and N more". */
-function moreThan(lines: ChangeLine[], used: number): number {
+/** The bar's line: a lead for what happened, then the first change line, then its tails. Structured, so the line's word
+ * can be bold (F13 FINAL, ux.md §3.1). */
+export type Said = { lead: string; line: ChangeLine | null; tail: string };
+
+/** One display everywhere (F13 FINAL): the word in bold, " · World N" when there's a day, then " · <text>" verbatim. The
+ * server's text is never put inside a sentence. More is a plain line, and version 0 reads "Copied the plan". */
+export function lineParts(l: ChangeLine): { word: string | null; rest: string } {
+  if (l.word === "More") return { word: null, rest: l.text };
+  if (l.word === "Copied") return { word: null, rest: `Copied ${l.text}` };
+  return { word: l.word, rest: `${l.day === null ? "" : ` · World ${l.day}`} · ${l.text}` };
+}
+
+/** The same line as plain text, for a confirm (which can't be bold) and for tests. */
+export function linePlain(l: ChangeLine): string {
+  const p = lineParts(l);
+  return `${p.word ?? ""}${p.rest}`;
+}
+
+/** A status as plain text: a Said, or a plain line like "Saving...". */
+export const saidPlain = (s: Said | string) => (typeof s === "string" ? s : `${s.lead}${s.line ? linePlain(s.line) : ""}${s.tail}`);
+
+/** What changes, in a proposal: the same display. */
+export const changeRows = (lines: ChangeLine[]) => lines.map(lineParts);
+
+const firstOf = (lines: ChangeLine[]) => lines.find((l) => l.word !== "More") ?? null;
+
+/** How many changes a version holds past its first line: the lines after it, not counting More, plus More's own number. */
+function moreThan(lines: ChangeLine[]): number {
   const more = lines.find((l) => l.word === "More");
-  const counted = lines.filter((l) => l.word !== "More").length - used;
-  return Math.max(0, counted) + (more ? Number(more.text.match(/\d+/)?.[0] ?? 0) : 0);
+  return Math.max(0, lines.filter((l) => l.word !== "More").length - 1) + (more ? Number(more.text.match(/\d+/)?.[0] ?? 0) : 0);
 }
-const andMore = (n: number) => (n ? ` And ${n} more change${n === 1 ? "" : "s"}.` : "");
-const pair = (lines: ChangeLine[]) => ({ out: lines.find((l) => l.word === "Out"), in: lines.find((l) => l.word === "In") });
+const LEADS = { save: "Saved: ", undo: "Undone: ", redo: "Put back: ", chat: "Applied the chatbot's change: " } as const;
+export type SaidHow = keyof typeof LEADS;
 
-/** The edit bar's line after this phone's own change (ux.md §3.1), with this phone's level numbers. */
-export function resultLine(lines: ChangeLine[], done: Done, levelOf: (key: string) => string | null, opts: { firstCopy?: boolean } = {}): string {
-  const first = lines.find((l) => l.word !== "More");
-  const text = first?.text ?? "";
-  let said: string;
-  let used = 1;
-  switch (done.kind) {
-    case "add": {
-      const added = lines.find((l) => l.word === "New") ?? first;
-      const after = done.after && levelOf(done.after);
-      if (done.world && after) said = `Added ${added?.text ?? ""} to World ${done.day}, after Level ${after}.`;
-      else said = after ? `Added ${added?.text ?? ""} after Level ${after}.` : `Added ${added?.text ?? ""} at the start of World ${done.day}.`;
-      break;
-    }
-    case "replace": {
-      const p = pair(lines);
-      said = `${p.out?.text ?? ""} is now ${p.in?.text ?? text}.`;
-      used = p.out && p.in ? 2 : 1;
-      break;
-    }
-    case "edit":
-      said = `Changed Level ${levelOf(done.key) ?? ""}.`;
-      break;
-    case "move":
-      said = `Moved ${text} to World ${done.day}.`;
-      break;
-    case "nudge":
-      said = `Moved ${text} ${done.dir}.`;
-      break;
-    case "remove":
-      said = `Removed ${text}. Undo brings it back.`;
-      break;
-    case "bus":
-      said = done.from ? `Swapped the ${formatTime(done.from)} bus for the ${formatTime(done.to)}.` : `Swapped the bus for the ${formatTime(done.to)}.`;
-      break;
-    case "list":
-      said = LISTS[done.what];
-      break;
-    case "chat":
-      return "Applied the chatbot's change.";
-    case "undo":
-      return `${done.redo ? "Put back" : "Undid"}: ${done.undone ? summaryOf(done.undone) : "the last change"}.`;
-  }
-  const copy = opts.firstCopy ? " This trip now has its own copy of the plan. The shared plan's link doesn't change." : "";
-  return said + andMore(moreThan(lines, used)) + copy;
+/** The edit bar after this phone's change. No level numbers: positions move after later changes. */
+export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: boolean } = {}): Said {
+  const first = firstOf(lines);
+  const n = moreThan(lines);
+  const tail = [
+    ".",
+    n ? ` And ${n} more change${n === 1 ? "" : "s"}.` : "",
+    first?.word === "Dropped" && how === "save" ? " Undo brings it back." : "", // UX review Must 2: after Undo the button reads Redo
+    opts.firstCopy ? " This trip now has its own copy of the plan. The shared plan's link doesn't change." : "",
+  ].join("");
+  return { lead: LEADS[how], line: first, tail };
 }
 
-/** A version in a few words, with its World and no level number: positions move after later changes (ux.md §3.1). */
-export function summaryOf(v: PlanVersion): string {
-  const l = v.changes.find((c) => c.word !== "More");
-  const said = ((): string => {
-    if (!l) return "Changed the plan";
-    switch (l.word) {
-      case "New":
-        return `Added ${l.text}${world(l)}`;
-      case "Out":
-      case "In": {
-        const p = pair(v.changes);
-        return `${p.out?.text ?? ""} is now ${p.in?.text ?? ""}${world(l)}`;
-      }
-      case "Moved":
-      case "Earlier":
-      case "Later":
-        return `Moved ${l.text}${world(l)}`;
-      case "Dropped":
-        return `Removed ${l.text}${world(l)}`;
-      case "Bus":
-        return `Swapped a bus: ${l.text}`;
-      case "Budget":
-        return "Changed the budget";
-      case "To-do":
-        return "Changed the to-do list";
-      case "Sources":
-        return "Changed the sources";
-      case "Copied":
-        return "Copied the plan";
-      default:
-        return `Changed ${l.text}${world(l)}`;
-    }
-  })();
-  return v.source === "chat" ? `Chatbot: ${said}` : said;
+/** A row in Changes: when, then the version's first line. A chatbot version says so, and so does an undo or redo
+ * (UX review Must 2), so its own lines read honestly. */
+export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null } {
+  const lead = v.source === "chat" ? "Chatbot: " : v.source === "undo" ? "Undo: " : "";
+  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead, line: firstOf(v.changes) };
 }
 
-/** A line in Changes: the Manila time today, the date before that. */
-export function historyLine(v: PlanVersion, today: string): string {
-  return `${manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at)} · ${summaryOf(v)}`;
+/** The bar's status line: before the first edit it says why Undo is greyed (ux.md §3.2, UX review should 3). */
+export function barLine(status: Said | string, edits: PlanEdits | null | undefined): Said | string {
+  return status === "" && (!edits || edits.versions[0]?.seq === 0) ? "Nothing to undo yet." : status;
 }
+
+const SWAP_SPAN_MIN = 120; // ux.md §7: the buses within 2 hours either side of the old one
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+export type SwapWindow = { from: string; to: string };
+
+/**
+ * Swap's list (UX review Must 1): the day's buses within 2 hours of the old one first, kept within the day, and the whole
+ * day in time order for Show all. With no time to go by (the bus is gone and its row has none), the whole day.
+ */
+export function swapWindow<T extends { departure_time: string }>(old: string | null, trips: T[]): { window: SwapWindow | null; near: T[]; all: T[] } {
+  const all = [...trips].sort((a, b) => a.departure_time.localeCompare(b.departure_time));
+  if (!old) return { window: null, near: all, all };
+  const at = toMin(old);
+  const lo = Math.max(0, at - SWAP_SPAN_MIN);
+  const hi = Math.min(23 * 60 + 59, at + SWAP_SPAN_MIN);
+  return { window: { from: hhmm(lo), to: hhmm(hi) }, near: all.filter((t) => toMin(t.departure_time) >= lo && toMin(t.departure_time) <= hi), all };
+}
+
+/** The query is by city, so the header names the cities, not the old bus's terminal (UX review Must 1). */
+export function swapHeader(up: boolean, date: string, w: SwapWindow | null): string {
+  const way = up ? "from Metro Manila to Baguio" : "from Baguio to Metro Manila";
+  return `Buses on file ${way} on ${weekday(date)}${w ? `, ${formatTime(w.from)} to ${formatTime(w.to)}` : ""}.`;
+}
+
+export const swapNone = (w: SwapWindow) => `No buses on file between ${formatTime(w.from)} and ${formatTime(w.to)}.`;
+export const showAllLabel = (n: number) => `Show all ${n} bus${n === 1 ? "" : "es"} that day`;
 
 /** Another phone's change, above the World tabs (ux.md §6). */
-export function justChanged(v: PlanVersion): string {
-  return `The plan just changed: ${summaryOf(v)}.`;
-}
-
-/** What changes, in a proposal: a bold word, the World, the text. The server's More is a plain line. */
-export function changeRows(lines: ChangeLine[]): { word: string | null; text: string }[] {
-  return lines.map((l) => (l.word === "More" ? { word: null, text: l.text } : { word: l.word, text: l.day === null ? l.text : `World ${l.day}, ${l.text}` }));
+export function justChanged(v: PlanVersion): Said {
+  return { lead: "The plan just changed: ", line: firstOf(v.changes), tail: "." };
 }
 
 /** Undo's honest name: right after an undo, the next tap puts the change back. */
 export function undoLabel(edits: PlanEdits | null | undefined): "Undo" | "Redo" {
-  return edits?.versions[0]?.source === "undo" ? "Redo" : "Undo";
+  // e2e W-6: a redo is saved as an undo too, so count the run: an odd run of undos reads Redo, an even one Undo
+  const versions = edits?.versions ?? [];
+  let run = 0;
+  while (run < versions.length && versions[run].source === "undo") run++;
+  return run % 2 === 1 ? "Redo" : "Undo";
 }
 
 /** The confirm before undoing a change that may be another phone's, or this phone's from a while ago. Null: no confirm. */
@@ -150,13 +141,14 @@ export function undoConfirm(edits: PlanEdits | null | undefined, mine: ReadonlyM
   if (!v) return null;
   const at = mine.get(v.seq);
   if (at !== undefined && now - at <= MINE_FOR_MS) return null;
-  return `Undo the last change? "${summaryOf(v)}", at ${clock(v.created_at)}, maybe from another phone.`;
+  const first = firstOf(v.changes);
+  return `Undo the last change? ${first ? linePlain(first) : "The newest change"}. It was saved at ${clock(v.created_at)}, maybe from another phone.`;
 }
 
 /** Under the guide's summary once the trip has its own copy (ux.md §2). */
-export function copyLine(edited: boolean, edits: PlanEdits | null | undefined): string | null {
+export function copyLine(edited: boolean, edits: PlanEdits | null | undefined, changedAt?: string | null): string | null {
   if (!edited) return null;
-  const at = edits?.versions[0]?.created_at;
+  const at = edits?.versions[0]?.created_at ?? changedAt; // the /i/ page has no session: W-7, the plan's own changed_at
   return at ? `Your group's own copy of the plan, last changed ${dayOf(at)}, ${clock(at)}.` : "Your group's own copy of the plan.";
 }
 
@@ -185,7 +177,7 @@ export function farLine(km: number): string {
 
 /** The confirm before a stop is removed (ux.md §4.7): its tick and photos are hidden, not deleted. */
 export function removeConfirm(plan: string, world: number, ticked: boolean, photos: number): string {
-  const parts = [ticked ? "tick" : "", photos === 1 ? "photo" : photos > 1 ? `${photos} photos` : ""].filter(Boolean);
+  const parts = [ticked ? "tick" : "", photos === 1 ? "1 photo" : photos > 1 ? `${photos} photos` : ""].filter(Boolean); // e2e W-5: always counted
   const ask = `Remove ${plan} from World ${world}?`;
   if (!parts.length) return `${ask} Undo brings it back.`;
   const many = parts.length > 1 || photos > 1;
@@ -195,9 +187,7 @@ export function removeConfirm(plan: string, world: number, ticked: boolean, phot
 /** A bus row's warning (ux.md §7). The date is a plain calendar day. */
 export function busWarningLine(warning: BusWarning, date: string): string {
   if (warning !== "not_running") return "This bus isn't on the schedule any more.";
-  const [y, m, d] = date.split("-").map(Number);
-  const day = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-  return `This bus isn't on the schedule for ${day} any more.`;
+  return `This bus isn't on the schedule for ${weekday(date)} any more.`;
 }
 
 /** The one notice above the World tabs. */
@@ -267,4 +257,41 @@ export function fitFooter(fits: readonly Fit[], pinned: boolean): string[] {
   if (!pinned) return ["Ranked by free time only: this place has no pin."];
   const ranked = "Ranked by how close it is to the stops around it, and by free time that day.";
   return fits.some((f) => f.leg?.kind === "estimate") ? [ranked, "Estimates come from the distance, not routes on file."] : [ranked];
+}
+
+// ---------------------------------------------------------------- round 5: links with no pin (ux.md §4.3)
+
+/** The line under a link's chip: where its pin came from. An address pin links to itself, so the group can check it. */
+export function pinLine(s: { pin_source?: "link" | "address" | "typed" | null; lat: number | null; lng: number | null; km_from_baguio: number | null }):
+  { lead: string; link: string | null; href: string | null; rest: string } | null {
+  if (!s.pin_source) return null;
+  const km = s.km_from_baguio != null ? `, about ${Math.round(s.km_from_baguio)} km from Baguio` : "";
+  if (s.pin_source === "address" && s.lat != null && s.lng != null) {
+    return { lead: "Pin from the address, ", link: "check it on Google Maps", href: `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`, rest: "" };
+  }
+  return { lead: s.pin_source === "typed" ? `Pin you pasted${km}.` : `Pinned from your link${km}.`, link: null, href: null, rest: "" };
+}
+
+// ---------------------------------------------------------------- tg-build7's e2e findings (W-1, W-8, W-9)
+
+/** e2e W-1: a plan on screen that's newer than the last one, so another phone's change is said. The first plan the page
+ * opens with is no news; the first copy after a shared plan (a null seq) is. */
+export function newerPlan(before: { slug: string; seq: number | null } | undefined, now: { slug: string; seq: number | null }): boolean {
+  if (!before || now.seq === null) return false;
+  return before.slug !== now.slug ? before.seq === null || now.seq > before.seq : now.seq > (before.seq ?? -1);
+}
+
+/** e2e W-8: a terminal's town, as ux §7 names it ("Cubao"): the name without its operator's, when it starts with it. */
+export function town(terminal: string, operator: string): string {
+  return terminal.startsWith(`${operator} `) ? terminal.slice(operator.length + 1) : terminal;
+}
+
+/** e2e W-9 (ux §7): after a swap, the booked bus row's note may name the old bus. Said until a later version changes that
+ * row (a line with its plan text). Read from the last five versions, so it ends once the swap scrolls out of them. */
+export function busChangedLine(edits: PlanEdits | null | undefined, rowPlan: string): string | null {
+  const versions = edits?.versions ?? [];
+  const swap = versions.findIndex((v) => v.changes.some((l) => l.word === "Bus"));
+  if (swap < 0) return null;
+  if (versions.slice(0, swap).some((v) => v.changes.some((l) => l.word !== "More" && l.text === rowPlan))) return null;
+  return `The bus changed on ${dayOf(versions[swap].created_at)}. Check this note.`;
 }
