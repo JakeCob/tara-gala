@@ -206,3 +206,16 @@ def test_cascades_keep_the_history(dsn):
         assert count("wallet_activity", f"expense_id = '{eid}'") == 1, "a deleted expense's lines stay"
         conn.execute("delete from wallets where id = %s", (wid,))
         assert count("wallet_activity") == 0
+
+
+def test_the_approved_indexes_by_name(dsn):  # final audit nit 1: a missing index changes no behaviour, so pin them
+    with psycopg.connect(dsn, row_factory=dict_row) as conn:
+        found = {r["indexname"]: r["indexdef"] for r in conn.execute(
+            "select indexname, indexdef from pg_indexes where schemaname = 'public' and indexname = any(%s)",
+            (["expense_comments_expense", "wallet_activity_wallet", "wallet_activity_expense"],),
+        )}
+    assert found == {
+        "expense_comments_expense": "CREATE INDEX expense_comments_expense ON public.expense_comments USING btree (expense_id)",
+        "wallet_activity_wallet": "CREATE INDEX wallet_activity_wallet ON public.wallet_activity USING btree (wallet_id, id DESC)",
+        "wallet_activity_expense": "CREATE INDEX wallet_activity_expense ON public.wallet_activity USING btree (expense_id) WHERE (expense_id IS NOT NULL)",
+    }

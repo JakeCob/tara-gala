@@ -48,7 +48,7 @@ export type Wallet = {
   balances: Balance[];
   transfers: Transfer[];
   total_centavos: number;
-  rev?: number; // TG-66: the wallet's write counter; missing on a wallet saved before it, which counts as 0
+  rev?: number; // TG-66: the wallet's write counter; missing on a wallet saved before it, so afterGet's rev rule needs it on both sides
 };
 
 /** TG-66: the add and edit bodies. The web with WALLET_SPLITS off sends LegacyExpenseBody, byte for byte as before. */
