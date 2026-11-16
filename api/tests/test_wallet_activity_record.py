@@ -88,12 +88,28 @@ def test_a_missing_wallet_is_an_error_not_a_silent_row(dsn):
             wallet_activity.record(conn, "00000000-0000-0000-0000-000000000000", "settle")
 
 
-def test_the_log_has_the_action_and_rev_only(dsn, caplog):
+def test_load_reads_rev_and_each_expenses_comment_count(dsn):  # test-audit P0 M1: A2's comment answers need both
+    from app import wallets
+
+    with psycopg.connect(dsn, row_factory=dict_row) as conn:
+        wid, a = wallet(conn)
+        e1, e2 = (conn.execute("insert into expenses (wallet_id, paid_by, amount_centavos, note) values (%s, %s, 1000, 'E2E') returning id", (wid, a)).fetchone()["id"] for _ in range(2))
+        conn.execute("insert into expense_comments (expense_id, body) values (%s, 'E2E one'), (%s, 'E2E two')", (e1, e1))
+        assert wallets._load(conn, wid).rev == 0
+        wallet_activity.record(conn, wid, "comment_add", expense_id=e1)
+        wallet_activity.record(conn, wid, "comment_add", expense_id=e1)
+        loaded = wallets._load(conn, wid)
+        assert loaded.rev == 2
+        assert {e.id: e.comment_count for e in loaded.expenses} == {e1: 2, e2: 0}
+
+
+def test_the_log_has_the_slug_action_and_rev_only(dsn, caplog):
     caplog.set_level(logging.INFO)
     with psycopg.connect(dsn, row_factory=dict_row) as conn:
         wid, a = wallet(conn)
+        slug = conn.execute("select share_slug from wallets where id = %s", (wid,)).fetchone()["share_slug"]
         wallet_activity.record(conn, wid, "expense_add", by=a, after={"note": "Lunch at TESTPLACE", "amount": 1000})
     lines = [r.getMessage() for r in caplog.records if r.name.startswith("tara_gala")]
-    assert lines == ["wallet activity action=expense_add rev=1"]
+    assert lines == [f"wallet activity share_slug={slug} action=expense_add rev=1"]  # rev is per wallet: the slug ties it to one
     for secret in ("TESTPLACE", "Ana", "E2E", str(a), str(wid)):
         assert all(secret not in line for line in lines), secret

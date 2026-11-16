@@ -114,6 +114,9 @@ def test_itemized_validates_with_charges_and_computes_its_amount_later():
     # an item with nobody, a price of 0 and over 40 items are the split's refusals (item_no_one, items_zero, too_many_items)
     e = V2.validate_python(body("itemized", items=[{"name": "E2E", "price_centavos": 0, "who": []}] * 41))
     assert len(e.items) == 41
+    # audit S3: a percent charge over 100% is the split's charge_too_big, so the model lets 10001 bp through
+    e = V2.validate_python(body("itemized", charges=[{"kind": "service", "basis": "percent", "value": 10001}]))
+    assert e.charges[0].value == 10001
 
 
 def test_several_payers_validate_and_their_checks_are_the_splits():
@@ -136,6 +139,9 @@ def test_several_payers_validate_and_their_checks_are_the_splits():
     {"inputs": []},
     {"inputs": [{"member_id": A, "value": 1}, {"member_id": A, "value": 1}]},  # each person once
     {"inputs": [{"member_id": A, "value": 2}]},  # equal's value is 1
+    {"inputs": [{"member_id": str(uuid4()), "value": 1} for _ in range(21)]},  # a wallet holds 20 people
+    {"paid_by": None, "payers": [{"member_id": A, "paid_centavos": 600}, {"member_id": A, "paid_centavos": 400}]},  # audit S2: once each
+    {"paid_by": None, "payers": [{"member_id": str(uuid4()), "paid_centavos": 1} for _ in range(21)]},  # audit S2: capped
     {"by": "not a uuid"},
 ])
 def test_bad_equal_bodies_are_refused(change):
@@ -161,6 +167,7 @@ def test_input_values_are_bounded_per_mode(mode, value):
     {"charges": [{"kind": "vat", "basis": "ratio", "value": 1}]},
     {"charges": [{"kind": "vat", "basis": "amount", "value": -1}]},
     {"charges": [{"kind": "vat", "basis": "amount", "value": 1}, {"kind": "vat", "basis": "percent", "value": 1}]},
+    {"items": [{"name": "E2E", "price_centavos": 1, "who": [A]}] * 101},  # a loose bound on the body; 41 to 100 is too_many_items
 ])
 def test_bad_itemized_bodies_are_refused(change):
     with pytest.raises(ValidationError):
@@ -216,4 +223,8 @@ def test_refusal_bodies_carry_codes_never_names():
     assert m.WalletRefusal(code="expense_changed", wallet=wallet).model_dump(mode="json")["wallet"]["rev"] == 0
     assert m.ItemRefusal(seq=3).model_dump() == {"code": "item_no_one", "seq": 3}
     assert set(m.ItemRefusal.model_fields) == {"code", "seq"}
-    assert {"feature_off", "expense_changed", "expense_gone", "item_no_one", "payers_mismatch", "comments_full"} <= set(m.REFUSALS)
+    assert m.REFUSALS == (  # audit nit: the whole list, in ux.md §9's words
+        "shares_mismatch", "percent_total", "shares_zero", "extras_too_big", "item_no_one", "too_many_items", "amount_mismatch",
+        "items_zero", "amount_too_big", "charge_too_big", "payers_mismatch",
+        "feature_off", "expense_changed", "expense_gone", "comments_full", "unknown_member",
+    )

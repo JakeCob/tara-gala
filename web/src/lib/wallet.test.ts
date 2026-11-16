@@ -256,8 +256,11 @@ test("TG66-1 afterGet: an answer with a lower rev never replaces the wallet on s
   assert.equal(afterGet(prev, older, W, false, false), prev, "rev 7 under rev 8: the screen stays, whatever the clock says");
   assert.deepEqual(afterGet(prev, { ok: true, wallet: revWallet(8, ["Taxi"]) }, W, false, false), { state: "ready", wallet: revWallet(8, ["Taxi"]) });
   assert.deepEqual(afterGet(prev, { ok: true, wallet: revWallet(9) }, W, false, false), { state: "ready", wallet: revWallet(9) });
-  // a wallet from before TG-66 (or the worker's old copy) has no rev: it counts as 0
-  assert.equal(afterGet(prev, { ok: true, wallet: revWallet(undefined) }, W, false, false), prev);
+  // audit S1: the rule needs a rev on both sides. A live answer with none comes from an API reverted to before TG-66
+  // (plan §6): it shows, or an open wallet would ignore every refresh until it reloads. The worker's old copy is held by
+  // the saved-copy rule, not this one.
+  assert.deepEqual(afterGet(prev, { ok: true, wallet: revWallet(undefined, ["Taxi"]) }, W, false, false), { state: "ready", wallet: revWallet(undefined, ["Taxi"]) });
+  assert.equal(afterGet(prev, { ok: true, wallet: revWallet(undefined), saved: true }, W, false, false), prev);
   assert.deepEqual(afterGet({ state: "ready", wallet: revWallet(undefined) }, { ok: true, wallet: revWallet(0) }, W, false, false), { state: "ready", wallet: revWallet(0) });
   // another wallet's screen, or nothing on screen, isn't this wallet's
   assert.deepEqual(afterGet({ state: "ready", wallet: { ...revWallet(9), share_slug: "d".repeat(32) } }, older, W, false, false), { state: "ready", wallet: older.wallet });
