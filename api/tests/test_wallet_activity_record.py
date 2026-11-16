@@ -94,6 +94,8 @@ def test_load_reads_rev_and_each_expenses_comment_count(dsn):  # test-audit P0 M
     with psycopg.connect(dsn, row_factory=dict_row) as conn:
         wid, a = wallet(conn)
         e1, e2 = (conn.execute("insert into expenses (wallet_id, paid_by, amount_centavos, note) values (%s, %s, 1000, 'E2E') returning id", (wid, a)).fetchone()["id"] for _ in range(2))
+        for e in (e1, e2):
+            conn.execute("insert into expense_shares (expense_id, member_id, share_centavos) values (%s, %s, 1000)", (e, a))
         conn.execute("insert into expense_comments (expense_id, body) values (%s, 'E2E one'), (%s, 'E2E two')", (e1, e1))
         assert wallets._load(conn, wid).rev == 0
         wallet_activity.record(conn, wid, "comment_add", expense_id=e1)

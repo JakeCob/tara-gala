@@ -46,14 +46,36 @@ def seed(conn) -> list:
     return out
 
 
-def old_view(conn, wid) -> dict:
-    """What today's API shows for a wallet: every field it had before TG-66."""
-    w = wallets._load(conn, wid).model_dump(mode="json")
-    w.pop("rev", None)
-    for e in w["expenses"]:
-        for new in ("category", "mode", "inputs", "items", "charges", "payers", "version", "updated_at", "comment_count"):
-            e.pop(new, None)
-    return w
+# Every column the wallet tables had before TG-66. They must read back identically after the migration.
+OLD_COLUMNS = {
+    "wallets": "id, share_slug, name, created_at",
+    "wallet_members": "id, seq, wallet_id, name, created_at",
+    "expenses": "id, wallet_id, paid_by, amount_centavos, note, created_at",
+    "expense_shares": "expense_id, member_id, share_centavos",
+    "settlements": "id, wallet_id, from_member, to_member, amount_centavos, created_at, proof_path, proof_type, proof_bytes, proof_at",
+}
+
+
+def old_rows(conn) -> dict:
+    return {t: conn.execute(f"select {cols} from {t} order by 1, 2").fetchall() for t, cols in OLD_COLUMNS.items()}
+
+
+def balances_from(rows: dict, wid) -> tuple[list, list]:
+    """The balances and transfers, worked out from the old rows alone (paid_by, the shares and the payments)."""
+    order = [m["id"] for m in sorted((m for m in rows["wallet_members"] if m["wallet_id"] == wid), key=lambda m: m["seq"])]
+    mine = {e["id"]: e for e in rows["expenses"] if e["wallet_id"] == wid}
+    paid, owed = dict.fromkeys(order, 0), dict.fromkeys(order, 0)
+    for e in mine.values():
+        paid[e["paid_by"]] += e["amount_centavos"]
+    for s in rows["expense_shares"]:
+        if s["expense_id"] in mine:
+            owed[s["member_id"]] += s["share_centavos"]
+    net = {m: paid[m] - owed[m] for m in order}
+    for s in rows["settlements"]:
+        if s["wallet_id"] == wid:
+            net[s["from_member"]] += s["amount_centavos"]
+            net[s["to_member"]] -= s["amount_centavos"]
+    return [(m, paid[m], owed[m], net[m]) for m in order], wallets.settle_up(net, order)
 
 
 def test_migration_over_pre_tg66_schema_with_rows_matches_schema_sql(dsn):  # S3
@@ -62,7 +84,7 @@ def test_migration_over_pre_tg66_schema_with_rows_matches_schema_sql(dsn):  # S3
     later = sorted(m for m in MIGRATIONS.glob("*.sql") if m.name > PRE_NEWEST and m != MIGRATION)
     with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as conn:
         wids = seed(conn)
-        before = [old_view(conn, w) for w in wids]
+        before = old_rows(conn)  # _load itself needs TG-66's columns now (it reads rev and comment counts)
         for m in sorted([*later, MIGRATION, MIGRATION], key=lambda p: p.name):  # TG-66's twice: re-runnable
             conn.execute(sql if m == MIGRATION else m.read_text(encoding="utf-8"))
         # The old rows: legacy, not sorted yet, version 1, never edited, and every wallet at rev 0
@@ -73,9 +95,15 @@ def test_migration_over_pre_tg66_schema_with_rows_matches_schema_sql(dsn):  # S3
         assert {r["rev"] for r in conn.execute("select rev from wallets")} == {0}
         for t in NEW_TABLES:
             assert conn.execute(f"select count(*) as n from {t}").fetchone()["n"] == 0, t
-        # _load gives the same wallet, balances and transfers as before the migration
-        assert [old_view(conn, w) for w in wids] == before
-        assert all(wallets._load(conn, w).rev == 0 for w in wids)
+        # Every old column reads back identically, and _load's balances and transfers are those of the old rows
+        assert old_rows(conn) == before
+        for w in wids:
+            loaded = wallets._load(conn, w)
+            want_balances, want_transfers = balances_from(before, w)
+            assert [(b.member_id, b.paid_centavos, b.share_centavos, b.net_centavos) for b in loaded.balances] == want_balances
+            assert [(t.from_member, t.to_member, t.amount_centavos) for t in loaded.transfers] == want_transfers
+            assert loaded.total_centavos == sum(e["amount_centavos"] for e in before["expenses"] if e["wallet_id"] == w)
+            assert loaded.rev == 0 and {e.comment_count for e in loaded.expenses} == {0}
     upgraded = schema_shape(dsn)
     build_schema((ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8"))
     assert upgraded == schema_shape(dsn)  # columns, defaults, checks, foreign keys and cascades, indexes, RLS, policies
