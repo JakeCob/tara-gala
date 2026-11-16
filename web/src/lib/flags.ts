@@ -8,6 +8,9 @@ export type Flags = {
   serviceWorker: boolean;
   overworldMap: boolean;
   planEditing: boolean;
+  walletSplits: boolean;
+  walletMultiPayer: boolean;
+  walletActivity: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -17,6 +20,9 @@ export const FLAG_DEFAULTS: Flags = {
   serviceWorker: true,
   overworldMap: true,
   planEditing: false, // TG-61: the hand editor, until the API's PLAN_EDITING is on
+  walletSplits: false, // TG-66: the split modes, edit and categories; off sends today's add body, byte for byte
+  walletMultiPayer: false, // TG-66: several payers, which ships last
+  walletActivity: false, // TG-66: the activity list and comments
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -42,6 +48,9 @@ export function readFlags(): Flags {
     serviceWorker: parseFlag(process.env.NEXT_PUBLIC_SERVICE_WORKER, FLAG_DEFAULTS.serviceWorker),
     overworldMap: parseFlag(process.env.NEXT_PUBLIC_OVERWORLD_MAP, FLAG_DEFAULTS.overworldMap),
     planEditing: parseFlag(process.env.NEXT_PUBLIC_PLAN_EDITING, FLAG_DEFAULTS.planEditing),
+    walletSplits: parseFlag(process.env.NEXT_PUBLIC_WALLET_SPLITS, FLAG_DEFAULTS.walletSplits),
+    walletMultiPayer: parseFlag(process.env.NEXT_PUBLIC_WALLET_MULTI_PAYER, FLAG_DEFAULTS.walletMultiPayer),
+    walletActivity: parseFlag(process.env.NEXT_PUBLIC_WALLET_ACTIVITY, FLAG_DEFAULTS.walletActivity),
   };
 }
 

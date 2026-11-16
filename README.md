@@ -236,6 +236,9 @@ Each flag is an environment variable on both sides: the API reads it from `os.en
 | Pre-made itineraries | `PREMADE_ITINERARIES` | `NEXT_PUBLIC_PREMADE_ITINERARIES` | `true` | TG-24 pre-made itineraries |
 | Real-map toggle | `REAL_MAP` | `NEXT_PUBLIC_REAL_MAP` | `false` | TG-26 real map (cut) |
 | Plan editing | `PLAN_EDITING` | `NEXT_PUBLIC_PLAN_EDITING` | `false` | TG-61 editing a trip's plan: the edit, undo, suggest and place routes (404 when off) and the trip page's edit controls. Turn on the API first |
+| Wallet split modes | `WALLET_SPLITS` | `NEXT_PUBLIC_WALLET_SPLITS` | `false` | TG-66 split by percent, shares, items and equal plus extras; editing an expense; categories. Off, the API still takes an `Equally` or `Amounts` add (category dropped) and refuses the rest with 404 `feature_off`, and the web sends today's add body. Turn on the API first; on a rollback, the web first |
+| Wallet several payers | `WALLET_MULTI_PAYER` | `NEXT_PUBLIC_WALLET_MULTI_PAYER` | `false` | TG-66 several payers on one expense. Ships last, after a week of the split modes with the owner's yes. Off, a body with payers, or an edit of an expense that has them, is 404 `feature_off`; it can still be deleted |
+| Wallet activity and comments | `WALLET_ACTIVITY` | `NEXT_PUBLIC_WALLET_ACTIVITY` | `false` | TG-66 the wallet's activity list and comments on an expense (404 `feature_off` when off). Every wallet write records its activity row and moves `rev` either way |
 | Overworld map | - | `NEXT_PUBLIC_OVERWORLD_MAP` | `true` | TG-22 map on the share page `/i/[slug]`. Web only. Setting `false` shows TG-23's list view instead (the same facts), the escape hatch if the map misbehaves on a phone |
 | Offline service worker | - | `NEXT_PUBLIC_SERVICE_WORKER` | `true` | TG-27 offline caching. Web only. Setting `false` is the kill switch: on the next online load each phone unregisters the worker and deletes its `tg-*` caches, **saved trips and itineraries included** |
 

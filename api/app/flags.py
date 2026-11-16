@@ -24,6 +24,9 @@ class Flags:
     premade_itineraries: bool = True  # PREMADE_ITINERARIES: pre-made itineraries (TG-24)
     real_map: bool = False  # REAL_MAP: real-map toggle (TG-26, cut)
     plan_editing: bool = False  # PLAN_EDITING: edit a trip's plan, its map modal and trip places (TG-61 PR 1)
+    wallet_splits: bool = False  # WALLET_SPLITS: the new split modes, edits and categories (TG-66)
+    wallet_multi_payer: bool = False  # WALLET_MULTI_PAYER: several payers on one expense (TG-66, ships last)
+    wallet_activity: bool = False  # WALLET_ACTIVITY: the activity list and comments (TG-66); writes record either way
 
 
 def parse_flag(name: str, raw: str | None, default: bool) -> bool:
