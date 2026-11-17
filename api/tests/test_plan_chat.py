@@ -229,12 +229,30 @@ def test_twenty_an_hour_per_trip_and_sixty_per_ip(chat, t, client):  # P2, B42
     assert ask(client, other).json()["detail"] == "chat_busy", "per IP, across trips"
 
 
+def test_the_owners_limits_are_the_defaults():  # P2, P8 (test-audit-pr2 G2)
+    from app.llm import LLMConfig
+    from app.plan_chat import ChatSettings
+
+    s = ChatSettings.from_env(LLMConfig.from_env({}), {})
+    assert (s.model, s.fallback_model) == ("claude-haiku-5-5", "claude-sonnet-5-5")
+    assert s.daily_cap_usd == 1.00 and s.max_tokens == 1000 and s.trip_per_hour == 20
+    assert s.ip_per_hour == 60 and s.max_attempts == 3
+    planner = {"PLANNER_DAILY_SPEND_CAP_USD": "5", "LLM_MAX_TOKENS": "16000", "PLANNER_RATE_LIMIT_PER_HOUR": "99"}
+    s = ChatSettings.from_env(LLMConfig.from_env(planner), planner)
+    assert (s.daily_cap_usd, s.max_tokens, s.trip_per_hour) == (1.00, 1000, 20), "the planner's settings aren't the chat's"
+    assert ChatSettings.from_env(LLMConfig.from_env({}), {"CHAT_MAX_TOKENS": "99999"}).max_tokens == 1000, "out of range"
+    assert ChatSettings.from_env(LLMConfig.from_env({}), {"CHAT_MAX_TOKENS": "4000"}).max_tokens == 4000
+
+
 def test_chat_off_and_plan_editing_off(t, client, monkeypatch):  # P2
     from app import plan_chat
 
     assert client.app.state.flags.chatbot_live is False
+    monkeypatch.setenv("LLM_API_KEY", "sk-test-not-a-key")  # so only the flag can answer chat_off (test-audit-pr2 G3)
+    plan_chat._build_chat.cache_clear()
     r = ask(client, t)
     assert r.status_code == 503 and r.json() == {"detail": "chat_off"}
+    assert plan_chat._build_chat.cache_info().misses == 0, "the flag answers before a client is built"
     client.app.state.flags = dataclasses.replace(client.app.state.flags, chatbot_live=True)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     plan_chat._build_chat.cache_clear()
