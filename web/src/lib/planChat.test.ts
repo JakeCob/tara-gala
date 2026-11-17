@@ -23,7 +23,8 @@ test("T61-P10 the chatbot is behind NEXT_PUBLIC_CHATBOT_LIVE, off by default, an
   assert.equal(FLAG_DEFAULTS.chatbotLive, false);
   assert.match(read("src/lib/flags.ts"), /chatbotLive: parseFlag\(process\.env\.NEXT_PUBLIC_CHATBOT_LIVE, FLAG_DEFAULTS\.chatbotLive\)/);
   const editor = between(view(), "const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {", "} : undefined;");
-  assert.match(editor, /chat: flags\.chatbotLive \? \{/, "no chat tools unless the flag is on, and never without the plan editor");
+  assert.match(editor, /chat: chatTools,/, "the editor hands the map the page's chat tools");
+  assert.match(view(), /const chatTools: ChatTools \| null = flags\.planEditing && flags\.chatbotLive \? \{/, "no chat tools unless the flag is on, and never without the plan editor");
   assert.match(read("src/components/PlanEditor.ts"), /chat: ChatTools \| null;/);
   for (const file of ["src/components/ItineraryList.tsx", "src/components/ItineraryView.tsx"]) {
     assert.doesNotMatch(read(file), /PlanChat|Ask the chatbot/, `${file}: the /i/ page has no chatbot`);
@@ -110,8 +111,9 @@ test("T61-P17 a place it can't pin: the app's line and Paste a Google Maps link,
   assert.match(src, /needLinkLine\(/);
   assert.match(src, />\s*Paste a Google Maps link\s*</);
   assert.match(src, /onNeedLink\(/);
+  assert.match(view(), /onNeedLink=\{/);
   const map = read("src/components/LevelMap.tsx");
-  assert.match(map, /onNeedLink=\{/);
+  assert.match(map, /linkFor\(/, "the map opens the find step when the page hands it the chatbot's place");
   assert.match(read("src/components/StopChange.tsx"), /start: "menu" \| "find" \| "fit" \| "replace";/, "Replace's find step can be opened directly");
 });
 
@@ -128,7 +130,7 @@ test("T61-P19 Ask the chatbot: beside Add a stop to World N in edit mode, and on
   const add = between(map, "Add a stop to World {day.day}", "<nav ");
   assert.match(add, /\{editor\.chat && \(/);
   assert.match(add, />\s*Ask the chatbot\s*</);
-  assert.match(map, /<PlanChat\b/);
+  assert.match(view(), /<PlanChat\b/);
   const input = read("src/components/PlaceInput.tsx");
   assert.match(input, /\{onAsk && \(/);
   assert.match(input, /onAsk\(askLine\(chosen\.name\)\)/, "ux.md §4.4: this stop and place already in the message, then sent");
@@ -146,4 +148,44 @@ test("T61-P20 logs: the action, outcomes and counts, never the chat's words, a n
   }
   const chatLogs = [...chat().matchAll(/console\.info\("\[tg-trip\] chat (\w+)/g)].map((m) => m[1]);
   for (const action of ["send", "answer", "apply", "clear"]) assert.ok(chatLogs.includes(action), `a [tg-trip] chat ${action} line`);
+});
+
+// ---- PR 2 review fixes: tg-ux's ux-review-pr2.md shoulds 2 and 3, and tg-test's test-audit-pr2.md G1 --------------------
+
+test("T61-P21 UX S2: after Apply, focus moves to the Applied line; after a 409, to Ask again (ux.md §10)", () => {
+  const src = chat();
+  const applied = between(src, 'e.proposal === "applied" ? (', ") : (");
+  assert.match(applied, /tabIndex=\{-1\}/, "the Applied line can take focus");
+  assert.match(applied, /outline-none/);
+  assert.match(applied, /data-chat-focus=\{[^}]*"applied"/, "the newest applied line is the target");
+  assert.match(applied, /\{APPLIED\}/);
+  const again = between(src, "{e.again && i === log.length - 1 && lastAsked && (", "Ask again");
+  assert.match(again, /data-chat-focus="again"/);
+  const apply = between(src, "async function onApply()", "function onNotThis()");
+  assert.match(apply, /if \(out\.ok\) \{[^}]*focusNext\.current = "applied";/);
+  assert.match(apply, /if \(out\.clash\) \{[^}]*focusNext\.current = "again";/);
+  // once the line or the button is drawn, it gets focus, once
+  assert.match(src, /querySelector<HTMLElement>\(`\[data-chat-focus="\$\{to\}"\]`\)/);
+  assert.match(src, /focusNext\.current = null;\s*el\.focus\(\);/);
+});
+
+test("T61-P22 UX S3: one Red button: Send is secondary while the newest proposal has Apply", () => {
+  const src = chat();
+  assert.match(src, /<PixelButton type="submit" variant=\{proposal \? "secondary" : "primary"\}/);
+  assert.match(src, /\{e\.proposal === "open" && proposal \? \(/, "the open proposal's buttons show exactly while proposal is held");
+  assert.equal(src.match(/variant="primary"/g)?.length, 1, "Apply is the only fixed Red button");
+});
+
+test("T61-P23 audit G1: the chat is the page's, not the map's, so it stays open while a first copy loads", () => {
+  const map = read("src/components/LevelMap.tsx");
+  assert.doesNotMatch(map, /<PlanChat\b|import PlanChat/, "the map's slot unmounts LevelMap while the trip's new copy loads");
+  assert.match(map, /editor\.chat\?\.open\(null\)/, "Ask the chatbot opens the page's chat");
+  assert.match(map, /editor\.chat\?\.open\(\{ text, focus \}\)/, "and so does a proposal's");
+  const v = view();
+  assert.match(v, /\{chatting && chatTools && \(\s*<PlanChat /, "drawn by the page whatever the map's slot holds");
+  assert.match(v, /<PlanChat editor=\{\{ can: editable, online, status: barStatus \}\}/, "with the page's own lines, which exist without the map");
+  const tools = between(v, "const chatTools: ChatTools | null =", "} : null;");
+  assert.doesNotMatch(tools, /theGuide|editor\b/, "chat tools don't wait for the map's guide");
+  assert.match(tools, /open: \(ask\) => setChatting\(\{ ask \}\)/);
+  assert.match(read("src/components/PlanChat.tsx"), /editor: Pick<PlanEditor, "can" \| "online" \| "status">;/);
 });

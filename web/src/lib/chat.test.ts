@@ -182,17 +182,17 @@ test("T61-W10h chatAnswer: busy and cap carry retry_at; off, a stale base, a los
 
 // ---- ux.md §10's lines ---------------------------------------------------------------------------------
 
-test("T61-W10i the limits' lines; chat_busy's time is retry_at in Manila, on any phone clock", async () => {
+test("T61-W10i the limits' lines; chat_busy names no number (PR 2 UX S1), and its time is retry_at in Manila, on any phone clock", async () => {
   const { chatFailureLines } = await load();
   for (const tz of ["UTC", "Asia/Manila", "America/Los_Angeles"]) {
     process.env.TZ = tz;
     assert.deepEqual(chatFailureLines({ why: "busy", retryAt: "2026-11-09T16:10:00+08:00" }),
-      ["The chatbot has answered 20 messages for this trip this hour. Try again after 4:10 PM, or change the plan by hand."], tz);
+      ["The chatbot has had too many messages this hour. Try again after 4:10 PM, or change the plan by hand."], tz);
     assert.deepEqual(chatFailureLines({ why: "busy", retryAt: "2026-11-09T08:10:00Z" }),
-      ["The chatbot has answered 20 messages for this trip this hour. Try again after 4:10 PM, or change the plan by hand."], `${tz}, a UTC retry_at`);
+      ["The chatbot has had too many messages this hour. Try again after 4:10 PM, or change the plan by hand."], `${tz}, a UTC retry_at`);
   }
   assert.deepEqual(chatFailureLines({ why: "busy", retryAt: null }),
-    ["The chatbot has answered 20 messages for this trip this hour. Try again later, or change the plan by hand."]);
+    ["The chatbot has had too many messages this hour. Try again later, or change the plan by hand."]);
   assert.deepEqual(chatFailureLines({ why: "cap", retryAt: "2026-11-10T00:00:00+08:00" }), ["The chatbot is done for today. You can still change the plan by hand."]);
   assert.deepEqual(chatFailureLines({ why: "off" }), ["The chatbot is off right now. You can still change the plan by hand."]);
   assert.deepEqual(chatFailureLines({ why: "offline" }), ["The chatbot needs signal."]);

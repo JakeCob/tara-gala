@@ -53,7 +53,7 @@ test("T61-Y4 Changes: a chatbot version's row keeps its line's why for the row u
   assert.equal(hand.why, null);
 });
 
-test("T61-Y11 review M1: a Changes row shows the first line with a why, so a removal's reason isn't hidden behind other lines", () => {
+test("T61-Y11 review M1, then PR 2 UX Must 1: a Changes row stands for its version with the lead line, so a removal's reason isn't hidden", () => {
   const later: ChangeLine = { word: "Later", day: 2, text: "Lunch, by 30 min" };
   const changed: ChangeLine = { word: "Changed", day: 2, text: "Dinner's note" };
   const more: ChangeLine = { word: "More", day: null, text: "and 2 more changes" };
@@ -63,16 +63,17 @@ test("T61-Y11 review M1: a Changes row shows the first line with a why, so a rem
   assert.deepEqual([row([later, dropped]).line, row([later, dropped]).why], [dropped, `Why: ${WHY}.`]);
   assert.deepEqual([row([changed, changed, dropped, more]).line, row([changed, changed, dropped, more]).why], [dropped, `Why: ${WHY}.`], "the server's own case");
   const moved: ChangeLine & { why?: string } = { word: "Moved", day: 3, text: "Lunch to World 3", why: "Mas chill ang Day 2" };
-  assert.deepEqual(row([later, moved, dropped]).line, moved, "the first line that has one");
+  assert.deepEqual(row([later, moved, dropped]).line, dropped, "PR 2 UX Must 1: a Dropped line with a why comes before the first line with one");
+  assert.deepEqual(row([later, moved]).line, moved, "no removal: the first line that has one");
   assert.deepEqual([row([later, changed]).line, row([later, changed]).why], [later, null], "no why: the first line, as before");
   assert.deepEqual(row([{ ...dropped, why: "  " }, later]).line, { ...dropped, why: "  " }, "a blank why counts as none: still the first line");
   assert.deepEqual(row([later, { ...dropped, why: "  " }]).line, later);
-  // The one-line places stay on the first line (ux.md §10)
+  // PR 2 UX Must 1: the one-line places use the same lead line, without its why (ux.md §3.2, §10)
   const v = { seq: 5, source: "chat" as const, changes: [later, dropped], created_at: at };
-  assert.equal(L.saidPlain(L.justChanged(v)), "The plan just changed: Later · World 2 · Lunch, by 30 min.");
-  assert.match(L.saidPlain(L.barSaid(v.changes, "chat")), /^Applied the chatbot's change: Later · World 2 · Lunch, by 30 min\./);
+  assert.equal(L.saidPlain(L.justChanged(v)), "The plan just changed: Dropped · World 2 · BenCab Museum (made up).");
+  assert.equal(L.saidPlain(L.barSaid(v.changes, "chat")), "Applied the chatbot's change: Dropped · World 2 · BenCab Museum (made up). And 1 more change.");
   const ask = L.undoConfirm({ seq: 5, versions: [v] }, new Map(), Date.now());
-  assert.ok(ask === null || (ask.includes("Later · World 2") && !ask.includes("BenCab")), "the Undo confirm stays on the first line");
+  assert.ok(ask?.includes("Dropped · World 2 · BenCab Museum (made up).") && !ask.includes("Why"), `the Undo confirm names the lead line: ${ask}`);
 });
 
 test("T61-Y12 owner 2026-11-15: a place swap's why shows on the card and in Changes, like a removal's", () => {
@@ -89,8 +90,56 @@ test("T61-Y12 owner 2026-11-15: a place swap's why shows on the card and in Chan
   // Changes, with M1: a swap behind a time change still stands for its version, with its why
   const row = L.historyRow({ seq: 6, source: "chat", changes: [later, out, into], created_at: "2026-11-15T09:00:00Z" }, "2026-11-15") as ReturnType<typeof L.historyRow> & { why: string | null };
   assert.deepEqual([row.line, row.why], [out, `Why: ${SWAP}.`]);
-  // the one-line places stay on the first line
-  assert.doesNotMatch(L.saidPlain(L.barSaid([later, out, into], "chat")), /Why|Hill Station/);
+  // the one-line places use the lead line (the Out line, which has the why), without the why
+  assert.equal(L.saidPlain(L.barSaid([later, out, into], "chat")), "Applied the chatbot's change: Out · World 2 · Hill Station (made up). And 2 more changes.");
+});
+
+test("T61-Y13 PR 2 UX Must 1: one lead line per version, the same in Changes, the bar, the Undo confirm and the plan just changed", () => {
+  const leadLine = (L as unknown as { leadLine?: (lines: ChangeLine[]) => ChangeLine | null }).leadLine;
+  assert.equal(typeof leadLine, "function", "planLines.leadLine exists");
+  const lead = leadLine!;
+  // tg-ux's run: "mas chill sana ang Day 2", lines in the server's order
+  const later: ChangeLine = { word: "Later", day: 2, text: "BenCab Museum, lunch at Cafe Sabel to 12:30 PM (made up)" };
+  const moved: ChangeLine = { word: "Moved", day: 2, text: "Bell Church (made up)", why: "It's a short stop, so it fits after lunch instead of before it." };
+  const tam: ChangeLine = { word: "Dropped", day: 2, text: "Tam-awan Village (made up)", why: WHY };
+  const more: ChangeLine = { word: "More", day: null, text: "and 3 more changes" };
+  const three = [later, moved, tam];
+  assert.deepEqual(lead(three), tam, "1. the first Dropped line that has a why");
+  assert.deepEqual(lead([later, moved, { ...tam, why: undefined }]), moved, "2. else the first line that has a why");
+  assert.deepEqual(lead([later, { ...tam, why: null }]), later, "3. else the first line: a hand removal isn't moved up");
+  assert.deepEqual(lead([{ ...more, why: "x" }, later, { ...tam, why: " " }]), later, "More is never the lead line, and a blank why is none");
+  assert.equal(lead([more]), null);
+  assert.equal(lead([]), null);
+
+  const at = "2026-11-16T10:39:00Z"; // 6:39 PM in Manila
+  const v: PlanVersion = { seq: 7, source: "chat", changes: three, created_at: at };
+  assert.equal(L.saidPlain(L.barSaid(three, "chat")), "Applied the chatbot's change: Dropped · World 2 · Tam-awan Village (made up). And 2 more changes.");
+  assert.equal(L.saidPlain(L.barSaid(three, "undo")), "Undone: Dropped · World 2 · Tam-awan Village (made up). And 2 more changes.", "Undo names the taken-back version's lead line");
+  assert.equal(L.saidPlain(L.justChanged(v)), "The plan just changed: Dropped · World 2 · Tam-awan Village (made up).");
+  assert.equal(L.undoConfirm({ seq: 7, versions: [v] }, new Map(), Date.parse("2026-11-16T11:00:00Z")),
+    "Undo the last change? Dropped · World 2 · Tam-awan Village (made up). It was saved at 6:39 PM, maybe from another phone.");
+
+  // Changes: the lead line, its why under it, then the count, counted as the bar counts
+  type Row = ReturnType<typeof L.historyRow> & { more?: string | null };
+  const row = (changes: ChangeLine[], source: PlanVersion["source"] = "chat") => L.historyRow({ ...v, source, changes }, "2026-11-16") as Row;
+  const r = row(three);
+  assert.deepEqual([r.at, r.lead, r.line, r.why, r.more], ["6:39 PM", "Chatbot: ", tam, `Why: ${WHY}.`, "And 2 more changes."]);
+  assert.equal(row([later, tam, more]).more, "And 4 more changes.", "More's own number counts too");
+  assert.equal(row([later, tam]).more, "And 1 more change.");
+  assert.equal(row([tam]).more, null, "one line: no count");
+  assert.equal(row([later, { word: "Changed", day: 2, text: "Dinner's note" }], "hand").more, null, "a hand version's row is as it was");
+
+  // every place goes through the one helper: no other pick of a version's line is left
+  const src = read("src/lib/planLines.ts");
+  for (const fn of ["export function barSaid(", "export function historyRow(", "export function justChanged(", "export function undoConfirm("]) {
+    const body = src.slice(src.indexOf(fn), src.indexOf("\n}\n", src.indexOf(fn)));
+    assert.match(body, /leadLine\(/, `${fn} uses leadLine`);
+    assert.doesNotMatch(body, /firstOf\(|\.find\(/, `${fn} picks no line of its own`);
+  }
+  const bar = read("src/components/PlanEditBar.tsx");
+  const hist = bar.slice(bar.indexOf("function HistoryRow"));
+  assert.match(hist, /\{r\.why && <span className="block pl-4 text-sm">\{r\.why\}<\/span>\}\s*\{r\.more && <span className="block pl-4 text-sm">\{r\.more\}<\/span>\}/,
+    "Changes: the count on its own line after the why");
 });
 
 test("T61-Y5 the phone's chat log keeps a proposal's whys, as words on screen", async () => {
