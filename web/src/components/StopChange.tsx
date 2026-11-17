@@ -59,7 +59,7 @@ export function PlanDialog({ label, bare, onClose, children }: { label: string; 
   );
 }
 
-export default function StopChange({ editor, guide, marks, files, level, world, start, onClose, onBack, onDone }: {
+export default function StopChange({ editor, guide, marks, files, level, world, start, onClose, onBack, onDone, onAsk }: {
   editor: PlanEditor;
   guide: Guide;
   marks: readonly Mark[];
@@ -67,14 +67,16 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
   /** The stop, or null for "Add a stop to World N" */
   level: Level | null;
   world: number;
-  /** fit: Add a place, which asks the server where the place fits (ux.md §4.8) */
-  start: "menu" | "find" | "fit";
+  /** fit: Add a place, which asks the server where the place fits (ux.md §4.8). replace: straight to Replace's find step (the chatbot's Paste a Google Maps link) */
+  start: "menu" | "find" | "fit" | "replace";
   onClose: () => void;
   /** Back from the menu, to the stop's own view (when it was opened from there) */
   onBack?: () => void;
   onDone: (focus: Focus) => void;
+  /** TG-61 PR 2: Ask the chatbot from a proposal, with the stop it's about */
+  onAsk?: (message: string, focus: string | null) => void;
 }) {
-  const [step, setStep] = useState<Step>(start === "menu" ? { k: "menu" } : { k: "find", mode: start === "fit" ? "fit" : "add" });
+  const [step, setStep] = useState<Step>(start === "menu" ? { k: "menu" } : { k: "find", mode: start === "fit" ? "fit" : start === "replace" ? "replace" : "add" });
   const [said, setSaid] = useState("");
   const [problem, setProblem] = useState("");
   const used = useRef<string | null>(null);
@@ -322,7 +324,8 @@ export default function StopChange({ editor, guide, marks, files, level, world, 
           fit={fit(step.mode, step.day, step.slot)} from={fromFor(step.mode, step.day, step.slot)}
           rowName={rowName} rowTime={rowTime} onApplied={onDone}
           onBack={() => setStep(step.mode === "move" ? { k: "move" } : step.mode === "fit" ? { k: "fit", chosen: step.fitFrom ?? step.chosen, fit: step.fit! } : { k: "find", mode: step.mode, text: step.chosen.link ?? step.chosen.name })}
-          onClash={() => setStep({ ...step, k: "clash" })} />
+          onClash={() => setStep({ ...step, k: "clash" })}
+          onAsk={onAsk && step.mode !== "move" ? (m) => onAsk(m, step.slot ? step.slot.after : step.mode === "add" ? addAfter : key) : undefined} />
       )}
 
       {step.k === "clash" && (

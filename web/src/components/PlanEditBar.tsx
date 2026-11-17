@@ -71,13 +71,15 @@ export default function PlanEditBar({ edits, status, can, online, stale, today, 
   );
 }
 
-/** A row in Changes (F13 FINAL): its time, then its first line in the shared display. */
+/** A row in Changes (F13 FINAL): its time, then its lead line in the shared display, its why, and a chatbot version's count. */
 function HistoryRow({ v, today }: { v: PlanEdits["versions"][number]; today: string }) {
   const r = historyRow(v, today);
   return (
     <>
       {r.at} · {r.lead}
       {r.line && <LineText line={r.line} />}
+      {r.why && <span className="block pl-4 text-sm">{r.why}</span>}
+      {r.more && <span className="block pl-4 text-sm">{r.more}</span>}
     </>
   );
 }

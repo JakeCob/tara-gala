@@ -5,7 +5,8 @@ import { formatTime, formatVerified } from "./api.ts";
 import { type BusWarning, type Guide, type LegOut, type Mark, marksByKey, rowShows } from "./guide.ts";
 import type { Fit } from "./planEdit.ts";
 
-export type ChangeLine = { word: string; day: number | null; text: string; part?: "stop" | "ripple" };
+/** why (TG-61, owner 2026-11-15): the chatbot's reason for a removal, and for a move or a bus swap when it gave one */
+export type ChangeLine = { word: string; day: number | null; text: string; part?: "stop" | "ripple"; why?: string | null };
 export type PlanVersion = { seq: number; source: "copy" | "hand" | "chat" | "undo"; changes: ChangeLine[]; created_at: string };
 /** SessionOut.plan_edits: the copy's newest version and its last five, newest first. Null before the first edit. */
 export type PlanEdits = { seq: number; versions: PlanVersion[] };
@@ -56,12 +57,26 @@ export function linePlain(l: ChangeLine): string {
 /** A status as plain text: a Said, or a plain line like "Saving...". */
 export const saidPlain = (s: Said | string) => (typeof s === "string" ? s : `${s.lead}${s.line ? linePlain(s.line) : ""}${s.tail}`);
 
-/** What changes, in a proposal: the same display. */
-export const changeRows = (lines: ChangeLine[]) => lines.map(lineParts);
+/** The chatbot's reason, as its own line (ux.md §10): "Why: " and the why as written, with a "." only when it doesn't end in
+ * . ! or ?. Nothing is cut. No why, no line: never a placeholder. */
+export function whyText(why: unknown): string | null {
+  if (typeof why !== "string" || !why.trim()) return null;
+  const said = why.trim();
+  return `Why: ${said}${/[.!?]$/.test(said) ? "" : "."}`;
+}
 
-const firstOf = (lines: ChangeLine[]) => lines.find((l) => l.word !== "More") ?? null;
+/** What changes, in a proposal: the same display, with each line's why under it. */
+export const changeRows = (lines: ChangeLine[]) => lines.map((l) => ({ ...lineParts(l), why: whyText(l.why) }));
 
-/** How many changes a version holds past its first line: the lines after it, not counting More, plus More's own number. */
+/** A version's lead line, the one line that stands for it everywhere (ux.md §3.2, PR 2 UX review M1): the first Dropped
+ * line with a why, else the first line with a why, else the first line. More never is. Hand lines have no why, so theirs
+ * is the first line. */
+export function leadLine(lines: ChangeLine[]): ChangeLine | null {
+  const shown = lines.filter((l) => l.word !== "More");
+  return shown.find((l) => l.word === "Dropped" && whyText(l.why)) ?? shown.find((l) => whyText(l.why)) ?? shown[0] ?? null;
+}
+
+/** How many changes a version holds past its lead line: its other lines, not counting More, plus More's own number. */
 function moreThan(lines: ChangeLine[]): number {
   const more = lines.find((l) => l.word === "More");
   return Math.max(0, lines.filter((l) => l.word !== "More").length - 1) + (more ? Number(more.text.match(/\d+/)?.[0] ?? 0) : 0);
@@ -71,7 +86,7 @@ export type SaidHow = keyof typeof LEADS;
 
 /** The edit bar after this phone's change. No level numbers: positions move after later changes. */
 export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: boolean } = {}): Said {
-  const first = firstOf(lines);
+  const first = leadLine(lines);
   const n = moreThan(lines);
   const tail = [
     ".",
@@ -82,11 +97,16 @@ export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: b
   return { lead: LEADS[how], line: first, tail };
 }
 
-/** A row in Changes: when, then the version's first line. A chatbot version says so, and so does an undo or redo
+/** A row in Changes: when, then the version's line. A chatbot version says so, and so does an undo or redo
  * (UX review Must 2), so its own lines read honestly. */
-export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null } {
+export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null; why: string | null; more: string | null } {
+  // Review M1, PR 2 UX Must 1: the server writes Dropped lines last, so the row stands for a chatbot version with its lead
+  // line and its why, then counts the rest, so a removal is never hidden
+  const line = leadLine(v.changes);
   const lead = v.source === "chat" ? "Chatbot: " : v.source === "undo" ? "Undo: " : "";
-  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead, line: firstOf(v.changes) };
+  const n = v.source === "chat" ? moreThan(v.changes) : 0;
+  const more = n ? `And ${n} more change${n === 1 ? "" : "s"}.` : null;
+  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead, line, why: whyText(line?.why), more };
 }
 
 /** The bar's status line: before the first edit it says why Undo is greyed (ux.md §3.2, UX review should 3). */
@@ -123,7 +143,7 @@ export const showAllLabel = (n: number) => `Show all ${n} bus${n === 1 ? "" : "e
 
 /** Another phone's change, above the World tabs (ux.md §6). */
 export function justChanged(v: PlanVersion): Said {
-  return { lead: "The plan just changed: ", line: firstOf(v.changes), tail: "." };
+  return { lead: "The plan just changed: ", line: leadLine(v.changes), tail: "." };
 }
 
 /** Undo's honest name: right after an undo, the next tap puts the change back. */
@@ -141,7 +161,7 @@ export function undoConfirm(edits: PlanEdits | null | undefined, mine: ReadonlyM
   if (!v) return null;
   const at = mine.get(v.seq);
   if (at !== undefined && now - at <= MINE_FOR_MS) return null;
-  const first = firstOf(v.changes);
+  const first = leadLine(v.changes);
   return `Undo the last change? ${first ? linePlain(first) : "The newest change"}. It was saved at ${clock(v.created_at)}, maybe from another phone.`;
 }
 

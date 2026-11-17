@@ -8,6 +8,7 @@ export type Flags = {
   serviceWorker: boolean;
   overworldMap: boolean;
   planEditing: boolean;
+  chatbotLive: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -17,6 +18,7 @@ export const FLAG_DEFAULTS: Flags = {
   serviceWorker: true,
   overworldMap: true,
   planEditing: false, // TG-61: the hand editor, until the API's PLAN_EDITING is on
+  chatbotLive: false, // TG-61 PR 2: the chatbot, inside the hand editor, until the API's CHATBOT_LIVE is on
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -42,6 +44,7 @@ export function readFlags(): Flags {
     serviceWorker: parseFlag(process.env.NEXT_PUBLIC_SERVICE_WORKER, FLAG_DEFAULTS.serviceWorker),
     overworldMap: parseFlag(process.env.NEXT_PUBLIC_OVERWORLD_MAP, FLAG_DEFAULTS.overworldMap),
     planEditing: parseFlag(process.env.NEXT_PUBLIC_PLAN_EDITING, FLAG_DEFAULTS.planEditing),
+    chatbotLive: parseFlag(process.env.NEXT_PUBLIC_CHATBOT_LIVE, FLAG_DEFAULTS.chatbotLive),
   };
 }
 

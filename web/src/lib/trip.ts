@@ -5,6 +5,7 @@ import { API_URL, savedAnswer } from "./api.ts";
 import type { Guide, Mark } from "./guide.ts";
 import { type Itinerary, SLUG_PATTERN } from "./itinerary.ts";
 import type { Attendee, Rsvp } from "./people.ts";
+import { type ChatAnswer, type ChatIn, chatAnswer } from "./chat.ts";
 import type { GuideIn, Suggestion } from "./planEdit.ts";
 import type { ChangeLine, PlanEdits } from "./planLines.ts";
 import { WALLET_SLUG } from "./wallet.ts";
@@ -270,6 +271,17 @@ async function ask<T>(path: string, init: { method: Method; body: unknown }): Pr
   if (detail === "need_pin") return { ok: false, why: "rejected", detail, name: typeof body?.name === "string" ? body.name : null };
   return { ok: false, why: "rejected", detail };
 }
+/** TG-61 PR 2: one question to the chatbot. Every answer, the limits' 429s included, is read by chatAnswer */
+async function askChat(path: string, body: ChatIn): Promise<ChatAnswer> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { cache: "no-store", method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  } catch {
+    return { ok: false, why: "offline" };
+  }
+  return chatAnswer(res.status, await res.json().catch(() => null));
+}
+
 export const tripApi = {
   create: (name: string, start_date: string, return_date: string) =>
     one(call("/sessions", { method: "POST", body: { name, start_date, return_date } })),
@@ -310,13 +322,17 @@ export const tripApi = {
   /** The invite link stops working; startInvite then makes a new one */
   stopInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "DELETE" })),
   /** TG-61: the whole new guide, worked out from `base`. A 409 means another phone saved first: nothing was written */
-  savePlan: (slug: string, base: PlanBase, guide: GuideIn, source: "hand" | "chat") => ask<PlanSaved>(`${at(slug)}/plan`, { method: "PUT", body: { base, guide, source } }),
+  savePlan: (slug: string, base: PlanBase, guide: GuideIn, source: "hand" | "chat", whys?: Record<string, string>) =>
+    // A chat Apply sends the proposal's whys, so the version's lines keep them; a hand save never carries any (the API's 422)
+    ask<PlanSaved>(`${at(slug)}/plan`, { method: "PUT", body: { base, guide, source, ...(source === "chat" && whys ? { whys } : {}) } }),
   /** Undoes the newest version, or puts back the change an undo took out */
   undoPlan: (slug: string, base: PlanBase) => ask<PlanSaved>(`${at(slug)}/plan/undo`, { method: "POST", body: { base } }),
   /** A proposal for one stop; saves nothing */
   suggest: (slug: string, body: SuggestIn) => ask<Suggestion>(`${at(slug)}/plan/suggest`, { method: "POST", body }),
   /** The server reads the link itself; the phone never sends a pin */
   addPlace: (slug: string, body: { link: string; name: string; pin?: string }) => ask<TripPlace>(`${at(slug)}/places`, { method: "POST", body }),
+  /** TG-61 PR 2: a proposal at most; saves nothing. Apply is savePlan with the proposal's own base and source "chat" */
+  chat: (slug: string, body: ChatIn) => askChat(`${at(slug)}/plan/chat`, body),
 };
 
 const PLAN_DETAIL: Record<string, string> = {
