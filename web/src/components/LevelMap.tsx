@@ -18,7 +18,6 @@ import { type TripFile, fetchFile } from "@/lib/trip";
 import { fnv1a, usableWidth } from "@/lib/world";
 import type { NeedLink } from "@/lib/chat";
 import BusSwap, { type BusAt, swapTitle } from "./BusSwap";
-import PlanChat from "./PlanChat";
 import { LegLine } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import { BudgetEdits, PickEdits, SourcesEdits, TodoEdits } from "./PlanTextEditors";
@@ -73,8 +72,6 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const [placing, setPlacing] = useState(false); // TG-61 round 4: Add a place, which asks where it fits
   const addPlace = () => setPlacing(true);
   const [swapping, setSwapping] = useState<BusAt | null>(null); // TG-61: Swap this bus, from the Buses panel
-  // TG-61 PR 2: the chat, opened from the map or from a stop's proposal with its message
-  const [chatting, setChatting] = useState<{ ask: { text: string; focus: string | null } | null } | null>(null);
   // The chatbot's Paste a Google Maps link: the find step at the place it named (after or instead of a stop), or a World
   const [linking, setLinking] = useState<{ key: string | null; world: number; start: "find" | "replace" } | null>(null);
   const focusTo = useRef<string | null>(null); // TG-61: the level to focus once a change is on screen
@@ -154,7 +151,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
     setOpen(null);
     setAdding(false);
     setPlacing(false);
-    setChatting({ ask: { text, focus } });
+    editor?.chat?.open({ text, focus }); // the page's chat (audit G1)
   };
   const linkFor = (need: NeedLink) => {
     const at = need.at;
@@ -162,11 +159,20 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
     const home = key ? guide.days.find((d) => d.rows.some((r) => r.key === key))?.day : undefined;
     const toWorld = home ?? (at && "first_of_day" in at && guide.days.some((d) => d.day === at.first_of_day) ? at.first_of_day : day.day);
     console.info("[tg-trip] chat pin-ask find at=%s", home ? (at && "replace" in at ? "replace" : "after") : "world");
-    setChatting(null);
     tabPicked.current = true;
     setWorld(toWorld);
     setLinking({ key: home ? key : null, world: toWorld, start: home && at && "replace" in at ? "replace" : "find" });
   };
+  // The page's chat closed on Paste a Google Maps link: open the find step there, once per tap (audit G1: the map may
+  // have been redrawn meanwhile). Like the focus effect above: after any render
+  const linkSeen = useRef(0);
+  useEffect(() => {
+    const ask = editor?.chat?.need;
+    if (!ask || ask.n === linkSeen.current) return;
+    linkSeen.current = ask.n;
+    editor?.chat?.took(ask.n);
+    linkFor(ask.need);
+  });
   const linkDay = linking ? guide.days.find((d) => d.day === linking.world) : undefined;
   const linkLevel = linking?.key && linkDay ? (levels(linkDay, byKey).find((l) => l.row.key === linking.key) ?? null) : null;
 
@@ -318,7 +324,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
             <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm"
               onClick={() => {
                 console.info("[tg-trip] chat open from=map");
-                setChatting({ ask: null });
+                editor.chat?.open(null);
               }}>
               Ask the chatbot
             </PixelButton>
@@ -363,9 +369,6 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
           <StopChange editor={editor} guide={guide} marks={marks ?? []} files={photos?.files ?? []} level={linkLevel} world={linking.world} start={linkLevel ? linking.start : "find"}
             onClose={() => setLinking(null)} onDone={changed} />
         </PlanDialog>
-      )}
-      {chatting && editor?.chat && (
-        <PlanChat editor={editor} chat={editor.chat} ask={chatting.ask} onClose={() => setChatting(null)} onNeedLink={linkFor} />
       )}
       {placing && editor && (
         <PlanDialog label="Add a place" bare onClose={() => setPlacing(false)}>

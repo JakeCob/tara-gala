@@ -24,7 +24,8 @@ function ChatAlert({ lines }: { lines: string[] }) {
 }
 
 export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
-  editor: PlanEditor;
+  /** The page's own lines, not the map's: the chat stays open while the map's slot waits for a new copy (audit G1) */
+  editor: Pick<PlanEditor, "can" | "online" | "status">;
   chat: ChatTools;
   /** Opened from a proposal: this message is sent at once, about this stop (ux.md §4.4) */
   ask: { text: string; focus: string | null } | null;
@@ -34,6 +35,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const end = useRef<HTMLDivElement>(null);
+  const focusNext = useRef<"applied" | "again" | null>(null); // ux.md §10, UX review S2: the Apply button it was on is gone
   const fieldId = useId();
   const [log, setLog] = useState<Entry[]>(() => loadLog(chatStorage(), chat.slug));
   const [draft, setDraft] = useState("");
@@ -53,6 +55,13 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
     if (!saveLog(chatStorage(), chat.slug, log)) console.info("[tg-trip] chat store kept=page"); // the log lasts as long as the page
   }, [log, chat.slug]);
   useEffect(() => end.current?.scrollIntoView({ block: "end" }), [log.length, sending]);
+  useEffect(() => {
+    const to = focusNext.current;
+    const el = to && dialog.current?.querySelector<HTMLElement>(`[data-chat-focus="${to}"]`);
+    if (!el) return; // not drawn yet: a later render tries again
+    focusNext.current = null;
+    el.focus();
+  });
 
   async function send(text: string, again = false) {
     const words = text.trim().slice(0, MAX_TEXT);
@@ -106,11 +115,13 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
     setApplying(false);
     console.info("[tg-trip] chat apply ok=%s", out.ok ? "yes" : out.ignored ? "ignored" : out.clash ? "clash" : "no");
     if (out.ok) {
+      focusNext.current = "applied";
       setProposal(null);
       return setLog((l) => settle(l, "applied"));
     }
     if (out.ignored) return; // a tap while the newest plan isn't on screen yet: nothing was sent
     if (out.clash) {
+      focusNext.current = "again";
       setProposal(null);
       return setLog((l) => addEntry(l.map((e) => (e.kind === "bot" && e.proposal === "open" ? { ...e, proposal: "lapsed" as const } : e)), { kind: "alert", text: APPLY_CLASH.join("\n"), again: true }));
     }
@@ -137,6 +148,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   }
 
   const lastAsked = [...log].reverse().find((e) => e.kind === "user")?.text ?? null;
+  const lastApplied = log.findLastIndex((e) => e.kind === "bot" && e.proposal === "applied");
   return (
     <dialog ref={dialog} aria-label="Ask the chatbot" onClose={(e) => e.target === e.currentTarget && onClose()}
       onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}
@@ -166,7 +178,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
                   <ChatAlert lines={e.text.split("\n")} />
                   {e.again && i === log.length - 1 && lastAsked && (
                     <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={!online || sending || undefined}
-                      onClick={() => void send(lastAsked, true)}>
+                      data-chat-focus="again" onClick={() => void send(lastAsked, true)}>
                       Ask again
                     </PixelButton>
                   )}
@@ -204,7 +216,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
                           </PixelButton>
                         </div>
                       ) : e.proposal === "applied" ? (
-                        <p className={PX.meta}>{APPLIED}</p>
+                        <p tabIndex={-1} className={PX.meta} data-chat-focus={i === lastApplied ? "applied" : undefined}>{APPLIED}</p>
                       ) : (
                         <p className={PX.meta}>{NOT_APPLIED}</p>
                       )}
@@ -231,7 +243,8 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
                 void send(draft);
               }
             }} />
-          <PixelButton type="submit" variant="primary" className="px-4 py-2" aria-disabled={!online || sending || undefined}>
+          {/* One Red button (UX review S3): while the newest proposal has Apply, Send gives way */}
+          <PixelButton type="submit" variant={proposal ? "secondary" : "primary"} className="px-4 py-2" aria-disabled={!online || sending || undefined}>
             {sending ? "Sending..." : "Send"}
           </PixelButton>
           <p className={PX.meta}>{PRIVACY_LINE}</p>

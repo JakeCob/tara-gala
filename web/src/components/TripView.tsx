@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
-import { chatRequest } from "@/lib/chat";
+import { type NeedLink, chatRequest } from "@/lib/chat";
 import { flags } from "@/lib/flags";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
 import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
@@ -16,7 +16,8 @@ import {
 import LevelMap from "./LevelMap";
 import { SaidText } from "./PlanBits";
 import PlanEditBar from "./PlanEditBar";
-import type { PlanEditor, SaveOutcome } from "./PlanEditor";
+import PlanChat from "./PlanChat";
+import type { ChatAsk, ChatTools, PlanEditor, SaveOutcome } from "./PlanEditor";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
 import TripPeople from "./TripPeople";
 import { fetchItinerary, savedItinerary } from "@/lib/api";
@@ -174,6 +175,9 @@ export default function TripView({ slug }: { slug: string }) {
   const writingPlan = useRef(false); // set in the handler, so a second tap in the same tick sees it
   const [planSaid, setPlanSaid] = useState<Said | string>("");
   const [otherLine, setOtherLine] = useState<Said | string>("");
+  // TG-61 PR 2: the chat is the page's, so it outlives the map's slot while a first copy loads (audit G1)
+  const [chatting, setChatting] = useState<{ ask: ChatAsk | null } | null>(null);
+  const [linkAsk, setLinkAsk] = useState<{ need: NeedLink; n: number } | null>(null);
   const clashWait = useRef<"edit" | "undo" | null>(null);
   // e2e W-4 (ux §3.3): a save whose answer was lost may have landed. Editing waits until a live session answer says
   const [lost, setLost] = useState<{ at: number; failed: boolean } | null>(null);
@@ -368,6 +372,21 @@ export default function TripView({ slug }: { slug: string }) {
   const barStatus = !online
     ? typeof planSaid === "string" && planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
     : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : (!synced && !planWriting && shown) || waiting ? "Updating the map..." : planSaid;
+  const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive ? {
+    slug,
+    send: async (log, text, focus) => {
+      const s = shownRef.current;
+      if (!s) return { ok: false, why: "rejected" };
+      const r = await tripApi.chat(slug, chatRequest(baseOf(s), log, text, focus)); // the plan on screen as the question goes (review M1)
+      if (!r.ok && r.why === "clash") setReloads((n) => n + 1); // another phone saved first: fetch the newer plan to ask about
+      return r;
+    },
+    // The proposal's own plan and base, never the base of a newer plan: a stale proposal gets the server's 409 (review M1)
+    apply: (p) => planWrite("plan-chat-apply", () => tripApi.savePlan(slug, p.base, p.stored, "chat", p.whys), { kind: "chat" }, null, "chat"),
+    open: (ask) => setChatting({ ask }),
+    need: linkAsk,
+    took: (n) => setLinkAsk((a) => (a?.n === n ? null : a)),
+  } : null;
   const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {
     editing,
     can: editable,
@@ -394,18 +413,7 @@ export default function TripView({ slug }: { slug: string }) {
       console.info("[tg-trip] plan edit mode on after=add-place");
       setEditing(true);
     },
-    chat: flags.chatbotLive ? {
-      slug,
-      send: async (log, text, focus) => {
-        const s = shownRef.current;
-        if (!s) return { ok: false, why: "rejected" };
-        const r = await tripApi.chat(slug, chatRequest(baseOf(s), log, text, focus)); // the plan on screen as the question goes (review M1)
-        if (!r.ok && r.why === "clash") setReloads((n) => n + 1); // another phone saved first: fetch the newer plan to ask about
-        return r;
-      },
-      // The proposal's own plan and base, never the base of a newer plan: a stale proposal gets the server's 409 (review M1)
-      apply: (p) => planWrite("plan-chat-apply", () => tripApi.savePlan(slug, p.base, p.stored, "chat", p.whys), { kind: "chat" }, null, "chat"),
-    } : null,
+    chat: chatTools,
     entry: (addPlace) => (
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap gap-2">
@@ -534,6 +542,13 @@ export default function TripView({ slug }: { slug: string }) {
         />
       </div>
     </div>
+    {chatting && chatTools && (
+      <PlanChat editor={{ can: editable, online, status: barStatus }} chat={chatTools} ask={chatting.ask} onClose={() => setChatting(null)}
+        onNeedLink={(need) => {
+          setChatting(null);
+          setLinkAsk((a) => ({ need, n: (a?.n ?? 0) + 1 })); // the map opens the find step once it's drawn
+        }} />
+    )}
     </div>
   );
 }

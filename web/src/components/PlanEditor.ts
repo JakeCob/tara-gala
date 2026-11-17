@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import type { Guide } from "@/lib/guide";
 import type { GuideIn, SpotLite, Suggestion } from "@/lib/planEdit";
 import type { Done, PlanEdits, Said } from "@/lib/planLines";
-import type { ChatAnswer, ChatProposal, Entry } from "@/lib/chat";
+import type { ChatAnswer, ChatProposal, Entry, NeedLink } from "@/lib/chat";
 import type { Answer, SuggestIn, TripPlace } from "@/lib/trip";
 
 /** The level to focus once a change is on screen, and its World (a move can take it to another one). */
@@ -13,12 +13,21 @@ export type Focus = { key: string; day: number } | null;
 /** A save's outcome. ok: the new plan is on screen. ignored: a tap while waiting, so nothing was sent. */
 export type SaveOutcome = { ok: true; guide: Guide; focus: Focus } | { ok: false; message: string; clash: boolean; ignored?: boolean };
 
-/** TG-61 PR 2: the chatbot. The page asks with the plan on screen's own base, and saves a proposal with its own base */
+/** A chat opened from a stop's proposal: this message is sent at once, about this stop (ux.md §4.4) */
+export type ChatAsk = { text: string; focus: string | null };
+
+/** TG-61 PR 2: the chatbot. The page asks with the plan on screen's own base, and saves a proposal with its own base.
+ * The page draws the chat, not the map, so it stays open while the map waits for the trip's new copy (audit G1) */
 export type ChatTools = {
   /** This trip's slug: the log is kept per trip, on this phone only */
   slug: string;
   send: (log: readonly Entry[], text: string, focus: string | null) => Promise<ChatAnswer>;
   apply: (proposal: ChatProposal) => Promise<SaveOutcome>;
+  open: (ask: ChatAsk | null) => void;
+  /** Paste a Google Maps link: the chat has closed, and the map opens the find step there. n tells one tap from the next */
+  need: { need: NeedLink; n: number } | null;
+  /** The map opened it */
+  took: (n: number) => void;
 };
 
 export type PlanEditor = {

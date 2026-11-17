@@ -48,7 +48,7 @@ test("T61-L2 the bar: a lead for what happened, then the first line; more lines 
 });
 
 test("T61-L3 Changes, the plan just changed line and their times: no level numbers, the same display", () => {
-  assert.deepEqual(historyRow(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]), "2026-11-09"), { at: "3:12 PM", lead: "", line: L("New", "Café Yagam at 3:00 PM"), why: null });
+  assert.deepEqual(historyRow(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]), "2026-11-09"), { at: "3:12 PM", lead: "", line: L("New", "Café Yagam at 3:00 PM"), why: null, more: null });
   assert.equal(historyRow(v(3, "hand", [L("New", "x")]), "2026-11-10").at, "Nov 9", "before today: the date");
   assert.equal(historyRow(v(4, "chat", [L("New", "Cafe")]), "2026-11-09").lead, "Chatbot: ");
   assert.equal(historyRow(v(5, "undo", [L("Dropped", "Cafe")]), "2026-11-09").lead, "Undo: ", "UX review Must 2: an undo or redo version says so, with its own lines");

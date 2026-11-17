@@ -185,7 +185,7 @@ export function manilaClock(iso: string): string {
 export function chatFailureLines(r: { why: ChatFailure; retryAt?: string | null }): string[] | null {
   switch (r.why) {
     case "busy":
-      return [`The chatbot has answered 20 messages for this trip this hour. ${r.retryAt ? `Try again after ${manilaClock(r.retryAt)}` : "Try again later"}, or change the plan by hand.`];
+      return [`The chatbot has had too many messages this hour. ${r.retryAt ? `Try again after ${manilaClock(r.retryAt)}` : "Try again later"}, or change the plan by hand.`];
     case "cap":
       return ["The chatbot is done for today. You can still change the plan by hand."];
     case "off":

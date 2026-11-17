@@ -68,9 +68,15 @@ export function whyText(why: unknown): string | null {
 /** What changes, in a proposal: the same display, with each line's why under it. */
 export const changeRows = (lines: ChangeLine[]) => lines.map((l) => ({ ...lineParts(l), why: whyText(l.why) }));
 
-const firstOf = (lines: ChangeLine[]) => lines.find((l) => l.word !== "More") ?? null;
+/** A version's lead line, the one line that stands for it everywhere (ux.md §3.2, PR 2 UX review M1): the first Dropped
+ * line with a why, else the first line with a why, else the first line. More never is. Hand lines have no why, so theirs
+ * is the first line. */
+export function leadLine(lines: ChangeLine[]): ChangeLine | null {
+  const shown = lines.filter((l) => l.word !== "More");
+  return shown.find((l) => l.word === "Dropped" && whyText(l.why)) ?? shown.find((l) => whyText(l.why)) ?? shown[0] ?? null;
+}
 
-/** How many changes a version holds past its first line: the lines after it, not counting More, plus More's own number. */
+/** How many changes a version holds past its lead line: its other lines, not counting More, plus More's own number. */
 function moreThan(lines: ChangeLine[]): number {
   const more = lines.find((l) => l.word === "More");
   return Math.max(0, lines.filter((l) => l.word !== "More").length - 1) + (more ? Number(more.text.match(/\d+/)?.[0] ?? 0) : 0);
@@ -80,7 +86,7 @@ export type SaidHow = keyof typeof LEADS;
 
 /** The edit bar after this phone's change. No level numbers: positions move after later changes. */
 export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: boolean } = {}): Said {
-  const first = firstOf(lines);
+  const first = leadLine(lines);
   const n = moreThan(lines);
   const tail = [
     ".",
@@ -93,12 +99,14 @@ export function barSaid(lines: ChangeLine[], how: SaidHow, opts: { firstCopy?: b
 
 /** A row in Changes: when, then the version's line. A chatbot version says so, and so does an undo or redo
  * (UX review Must 2), so its own lines read honestly. */
-export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null; why: string | null } {
-  // Review M1: the server writes Dropped lines last, so a removal's reason would hide behind a Later or a New. The row
-  // stands for its version with the first line that has a why; the bar, Undo and "just changed" keep the first line
-  const line = v.changes.find((l) => l.word !== "More" && whyText(l.why)) ?? firstOf(v.changes);
+export function historyRow(v: PlanVersion, today: string): { at: string; lead: string; line: ChangeLine | null; why: string | null; more: string | null } {
+  // Review M1, PR 2 UX Must 1: the server writes Dropped lines last, so the row stands for a chatbot version with its lead
+  // line and its why, then counts the rest, so a removal is never hidden
+  const line = leadLine(v.changes);
   const lead = v.source === "chat" ? "Chatbot: " : v.source === "undo" ? "Undo: " : "";
-  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead, line, why: whyText(line?.why) };
+  const n = v.source === "chat" ? moreThan(v.changes) : 0;
+  const more = n ? `And ${n} more change${n === 1 ? "" : "s"}.` : null;
+  return { at: manilaDate(v.created_at) === today ? clock(v.created_at) : dayOf(v.created_at), lead, line, why: whyText(line?.why), more };
 }
 
 /** The bar's status line: before the first edit it says why Undo is greyed (ux.md §3.2, UX review should 3). */
@@ -135,7 +143,7 @@ export const showAllLabel = (n: number) => `Show all ${n} bus${n === 1 ? "" : "e
 
 /** Another phone's change, above the World tabs (ux.md §6). */
 export function justChanged(v: PlanVersion): Said {
-  return { lead: "The plan just changed: ", line: firstOf(v.changes), tail: "." };
+  return { lead: "The plan just changed: ", line: leadLine(v.changes), tail: "." };
 }
 
 /** Undo's honest name: right after an undo, the next tap puts the change back. */
@@ -153,7 +161,7 @@ export function undoConfirm(edits: PlanEdits | null | undefined, mine: ReadonlyM
   if (!v) return null;
   const at = mine.get(v.seq);
   if (at !== undefined && now - at <= MINE_FOR_MS) return null;
-  const first = firstOf(v.changes);
+  const first = leadLine(v.changes);
   return `Undo the last change? ${first ? linePlain(first) : "The newest change"}. It was saved at ${clock(v.created_at)}, maybe from another phone.`;
 }
 

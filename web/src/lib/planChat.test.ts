@@ -32,7 +32,7 @@ test("T61-P10 the chatbot is behind NEXT_PUBLIC_CHATBOT_LIVE, off by default, an
 });
 
 test("T61-P11 asking sends the plan on screen's own base, through tripApi.chat, and the answer is read by chatAnswer", () => {
-  const editor = between(view(), "chat: flags.chatbotLive ? {", "} : null,");
+  const editor = between(view(), "const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive ? {", "} : null;");
   assert.match(editor, /tripApi\.chat\(slug, chatRequest\(baseOf\((\w+)\), /, "the base comes from the plan on screen as the question goes (review M1)");
   const trip = read("src/lib/trip.ts");
   assert.match(trip, /chat: \(slug: string, body: ChatIn\) => askChat\(`\$\{at\(slug\)\}\/plan\/chat`, body\)/);
@@ -43,7 +43,7 @@ test("T61-P11 asking sends the plan on screen's own base, through tripApi.chat, 
 });
 
 test("T61-P12 Apply saves the proposal's own plan with the proposal's own base, as a chat version, through planWrite", () => {
-  const editor = between(view(), "chat: flags.chatbotLive ? {", "} : null,");
+  const editor = between(view(), "const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive ? {", "} : null;");
   assert.match(editor, /planWrite\("plan-chat-apply", \(\) => tripApi\.savePlan\(slug, (\w+)\.base, \1\.stored, "chat", \1\.whys\), \{ kind: "chat" \}, null, "chat"\)/,
     "never the base of a newer plan: a stale proposal must get the server's 409, not be re-based (review M1)");
   assert.doesNotMatch(chat(), /savePlan|tripApi/, "the dialog only asks the page to save");
@@ -156,7 +156,7 @@ test("T61-P21 UX S2: after Apply, focus moves to the Applied line; after a 409, 
   const src = chat();
   const applied = between(src, 'e.proposal === "applied" ? (', ") : (");
   assert.match(applied, /tabIndex=\{-1\}/, "the Applied line can take focus");
-  assert.match(applied, /outline-none/);
+  assert.doesNotMatch(applied, /outline-/, "the design system's own focus rules: T14 bans outline-none, like StopChange's heading");
   assert.match(applied, /data-chat-focus=\{[^}]*"applied"/, "the newest applied line is the target");
   assert.match(applied, /\{APPLIED\}/);
   const again = between(src, "{e.again && i === log.length - 1 && lastAsked && (", "Ask again");
@@ -180,7 +180,8 @@ test("T61-P23 audit G1: the chat is the page's, not the map's, so it stays open 
   const map = read("src/components/LevelMap.tsx");
   assert.doesNotMatch(map, /<PlanChat\b|import PlanChat/, "the map's slot unmounts LevelMap while the trip's new copy loads");
   assert.match(map, /editor\.chat\?\.open\(null\)/, "Ask the chatbot opens the page's chat");
-  assert.match(map, /editor\.chat\?\.open\(\{ text, focus \}\)/, "and so does a proposal's");
+  assert.match(map, /editor\??\.chat\?\.open\(\{ text, focus \}\)/, "and so does a proposal's");
+  assert.match(map, /editor\?\.chat\?\.took\(ask\.n\);\s*linkFor\(ask\.need\);/, "Paste a Google Maps link reaches the map, once per tap");
   const v = view();
   assert.match(v, /\{chatting && chatTools && \(\s*<PlanChat /, "drawn by the page whatever the map's slot holds");
   assert.match(v, /<PlanChat editor=\{\{ can: editable, online, status: barStatus \}\}/, "with the page's own lines, which exist without the map");
