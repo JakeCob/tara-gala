@@ -288,7 +288,9 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
   const [applying, setApplying] = useState(false);
   const [problem, setProblem] = useState("");
   const heading = useRef<HTMLParagraphElement>(null);
-  useEffect(() => heading.current?.focus(), []);
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
   const words = rippleWords(s, rowName, rowTime);
   const off = !editor.can || applying;
 
