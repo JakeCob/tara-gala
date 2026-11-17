@@ -10,7 +10,9 @@ import { type ChangeLine, type Said, changeRows, legLines, lineParts } from "@/l
 /** A failed step, under its control. It brings itself into view: a long dialog may have it below the fold (TG-53). */
 export function PlanProblem({ text }: { text: string }) {
   const here = useRef<HTMLDivElement>(null);
-  useEffect(() => here.current?.scrollIntoView({ block: "nearest" }), [text]);
+  useEffect(() => {
+    here.current?.scrollIntoView({ block: "nearest" }); // a block: Chrome 158 returns a Promise here (effects.test.ts)
+  }, [text]);
   return (
     <div ref={here}>
       <PixelBox as="p" tone="alertText" role="alert" className="whitespace-pre-line p-3 text-sm">

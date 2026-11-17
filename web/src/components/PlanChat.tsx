@@ -54,7 +54,9 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   useEffect(() => {
     if (!saveLog(chatStorage(), chat.slug, log)) console.info("[tg-trip] chat store kept=page"); // the log lasts as long as the page
   }, [log, chat.slug]);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [log.length, sending]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" }); // a block: Chrome 158 returns a Promise here (effects.test.ts)
+  }, [log.length, sending]);
   useEffect(() => {
     const to = focusNext.current;
     const el = to && dialog.current?.querySelector<HTMLElement>(`[data-chat-focus="${to}"]`);

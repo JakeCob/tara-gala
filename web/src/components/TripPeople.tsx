@@ -31,7 +31,9 @@ const answerId = (id: string) => `people-answer-${id}`;
 /** The alert under a row or form. It brings itself into view: on the last of 20 rows, below it may be under the tab bar. */
 function Alert({ text }: { text: string }) {
   const here = useRef<HTMLDivElement>(null);
-  useEffect(() => here.current?.scrollIntoView({ block: "nearest" }), [text]);
+  useEffect(() => {
+    here.current?.scrollIntoView({ block: "nearest" }); // a block: Chrome 158 returns a Promise here (effects.test.ts)
+  }, [text]);
   return (
     <div ref={here} className="scroll-mt-16 scroll-mb-24 pb-1">
       <PixelBox as="p" tone="alertText" role="alert" className="p-3 text-sm">
