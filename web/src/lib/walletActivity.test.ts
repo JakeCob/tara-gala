@@ -663,3 +663,34 @@ test("TG66-W2-34 review S1: a full refresh that doesn't reach the newest row on 
   const short = A.mergeActivity(onScreen, { rev: 103, rows: page(103, 101) }, false);
   assert.deepEqual(ids(short).slice(0, 4), [103, 102, 101, 100], "a short page is everything newer: it merges");
 });
+
+test("TG66-W2-35 a comment delete names who did it: by goes as ?by= (A2's shape), and is left out when the phone hasn't picked", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const calls: { url: string; method?: string; body?: unknown }[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (u: string, init?: RequestInit) => {
+    calls.push({ url: String(u), method: init?.method, body: init?.body });
+    return new Response(JSON.stringify({ wallet: wallet(), comments: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const W = "a".repeat(32);
+    await walletApi.deleteComment(W, E1, "c1", BEN);
+    await walletApi.deleteComment(W, E1, "c1", null);
+    await walletApi.deleteComment(W, E1, "c1");
+    await walletApi.deleteComment(W, E1, "c/1", "m b");
+    assert.deepEqual(
+      calls.map((c) => [c.method, c.url.slice(c.url.indexOf("/wallets/")), c.body]),
+      [
+        ["DELETE", `/wallets/${W}/expenses/${E1}/comments/c1?by=${BEN}`, undefined],
+        ["DELETE", `/wallets/${W}/expenses/${E1}/comments/c1`, undefined],
+        ["DELETE", `/wallets/${W}/expenses/${E1}/comments/c1`, undefined],
+        ["DELETE", `/wallets/${W}/expenses/${E1}/comments/c%2F1?by=m%20b`, undefined],
+      ],
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+  const src = details();
+  assert.match(src, /walletApi\.deleteComment\(slug, expense\.id, commentId, me\)/, "Details sends this phone's person");
+  assert.match(src, /walletApi\.addComment\(slug, expense\.id, \{ body, by: me \}\)/, "as the post does, in its body");
+});

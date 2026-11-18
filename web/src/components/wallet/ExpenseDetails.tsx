@@ -146,7 +146,7 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
     holding.current = true;
     setWriting(true);
     setNotice(null);
-    const r = await walletApi.deleteComment(slug, expense.id, commentId);
+    const r = await walletApi.deleteComment(slug, expense.id, commentId, me);
     console.info("[tg-wallet] comment delete ok=%s count=%d", r.ok ? "yes" : r.why, r.ok ? r.comments.length : 0);
     holding.current = false;
     setWriting(false);

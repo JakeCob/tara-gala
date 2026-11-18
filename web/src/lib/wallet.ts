@@ -240,8 +240,9 @@ export const walletApi = {
     request<CommentsResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments`, undefined, (b) => ({ ok: true, ...(b as { rev: number; comments: Comment[] }) })),
   addComment: (slug: string, id: string, body: { body: string; by?: string | null }) =>
     request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments`, { method: "POST", body }, (b) => ({ ok: true, ...(b as { wallet: Wallet; comments: Comment[] }) })),
-  deleteComment: (slug: string, id: string, commentId: string) =>
-    request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: "DELETE" }, (b) => ({
+  /** `by`: this phone's person, as ?by= (a DELETE has no body), so the activity line names them; none is "Someone". */
+  deleteComment: (slug: string, id: string, commentId: string, by?: string | null) =>
+    request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}${by ? `?by=${encodeURIComponent(by)}` : ""}`, { method: "DELETE" }, (b) => ({
       ok: true,
       ...(b as { wallet: Wallet; comments: Comment[] }),
     })),
