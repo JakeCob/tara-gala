@@ -11,6 +11,7 @@ export type Flags = {
   walletSplits: boolean;
   walletMultiPayer: boolean;
   walletActivity: boolean;
+  chatbotLive: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -23,6 +24,7 @@ export const FLAG_DEFAULTS: Flags = {
   walletSplits: false, // TG-66: the split modes, edit and categories; off sends today's add body, byte for byte
   walletMultiPayer: false, // TG-66: several payers, which ships last
   walletActivity: false, // TG-66: the activity list and comments
+  chatbotLive: false, // TG-61 PR 2: the chatbot, inside the hand editor, until the API's CHATBOT_LIVE is on
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -51,6 +53,7 @@ export function readFlags(): Flags {
     walletSplits: parseFlag(process.env.NEXT_PUBLIC_WALLET_SPLITS, FLAG_DEFAULTS.walletSplits),
     walletMultiPayer: parseFlag(process.env.NEXT_PUBLIC_WALLET_MULTI_PAYER, FLAG_DEFAULTS.walletMultiPayer),
     walletActivity: parseFlag(process.env.NEXT_PUBLIC_WALLET_ACTIVITY, FLAG_DEFAULTS.walletActivity),
+    chatbotLive: parseFlag(process.env.NEXT_PUBLIC_CHATBOT_LIVE, FLAG_DEFAULTS.chatbotLive),
   };
 }
 

@@ -25,7 +25,9 @@ const CHOICE = "flex min-w-0 items-center justify-center px-4 py-2 text-center t
 
 function Alert({ text }: { text: string }) {
   const here = useRef<HTMLDivElement>(null);
-  useEffect(() => here.current?.scrollIntoView({ block: "nearest" }), [text]);
+  useEffect(() => {
+    here.current?.scrollIntoView({ block: "nearest" }); // a block: Chrome 158 returns a Promise here (effects.test.ts)
+  }, [text]);
   return (
     <div ref={here} className="scroll-mt-16 scroll-mb-24">
       <PixelBox as="p" tone="alertText" role="alert" className="p-3 text-sm">

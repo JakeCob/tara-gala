@@ -21,8 +21,8 @@ test("T61-L1 one display for a change line: the word, its World, the server's te
   assert.deepEqual(lineParts({ word: "Copied", day: null, text: "the plan" }), { word: null, rest: "Copied the plan" });
   assert.equal(linePlain(L("Later", "Burnham Park to 4:00 PM", 3)), "Later · World 3 · Burnham Park to 4:00 PM", "the time is never stripped");
   assert.deepEqual(changeRows([L("New", "Cafe at 3:00 PM"), { word: "More", day: null, text: "and 3 more changes" }]), [
-    { word: "New", rest: " · World 1 · Cafe at 3:00 PM" }, { word: null, rest: "and 3 more changes" },
-  ], "proposals use the same display");
+    { word: "New", rest: " · World 1 · Cafe at 3:00 PM", why: null }, { word: null, rest: "and 3 more changes", why: null },
+  ], "proposals use the same display; a line with no why gets none (TG-61 why, planWhy.test.ts)");
 });
 
 test("T61-L2 the bar: a lead for what happened, then the first line; more lines are counted, a removal says Undo brings it back", () => {
@@ -48,7 +48,7 @@ test("T61-L2 the bar: a lead for what happened, then the first line; more lines 
 });
 
 test("T61-L3 Changes, the plan just changed line and their times: no level numbers, the same display", () => {
-  assert.deepEqual(historyRow(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]), "2026-11-09"), { at: "3:12 PM", lead: "", line: L("New", "Café Yagam at 3:00 PM") });
+  assert.deepEqual(historyRow(v(3, "hand", [L("New", "Café Yagam at 3:00 PM")]), "2026-11-09"), { at: "3:12 PM", lead: "", line: L("New", "Café Yagam at 3:00 PM"), why: null, more: null });
   assert.equal(historyRow(v(3, "hand", [L("New", "x")]), "2026-11-10").at, "Nov 9", "before today: the date");
   assert.equal(historyRow(v(4, "chat", [L("New", "Cafe")]), "2026-11-09").lead, "Chatbot: ");
   assert.equal(historyRow(v(5, "undo", [L("Dropped", "Cafe")]), "2026-11-09").lead, "Undo: ", "UX review Must 2: an undo or redo version says so, with its own lines");

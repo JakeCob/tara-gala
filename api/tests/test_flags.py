@@ -56,7 +56,7 @@ def fresh_cache():
 
 
 def test_defaults_when_unset():
-    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP", "PLAN_EDITING", "WALLET_SPLITS", "WALLET_MULTI_PAYER", "WALLET_ACTIVITY"}
+    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP", "PLAN_EDITING", "WALLET_SPLITS", "WALLET_MULTI_PAYER", "WALLET_ACTIVITY", "CHATBOT_LIVE"}
     flags = load_flags({})
     assert flags == Flags()
     assert flags.planner_live is False
@@ -64,6 +64,7 @@ def test_defaults_when_unset():
     assert flags.real_map is False
     assert flags.plan_editing is False  # TG-61
     assert (flags.wallet_splits, flags.wallet_multi_payer, flags.wallet_activity) == (False, False, False)  # TG-66: every PR merges with them off
+    assert flags.chatbot_live is False  # TG-61 PR 2
 
 
 @pytest.mark.parametrize("name", sorted(ENV_NAMES))

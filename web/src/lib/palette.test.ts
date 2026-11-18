@@ -310,6 +310,7 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/PlaceInput.tsx", "farLine(", "alert"], // TG-61 ux §4.3: a pinned place far from Baguio, before it's added
   ["src/components/StopChange.tsx", "{lead}", "alert"], // TG-61 ux §6: someone else changed the plan first
   ["src/components/LevelMap.tsx", "busNotice(", "alert"], // TG-61 ux §7: a bus in the plan isn't on the schedule any more
+  ["src/components/PlanChat.tsx", "{lines.map(", "alertText"], // TG-61 PR 2 ux §10: the chat's states (limits, no signal, no fit, a clash)
 ];
 const tsxFiles = () =>
   git("ls-files", "src/**/*.tsx", "src/*.tsx").split("\n").filter(Boolean).map((f) => f.replace(/^web\//, ""));
