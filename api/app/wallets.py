@@ -319,9 +319,47 @@ def _store_split(conn, expense_id: UUID, body, shares: dict[UUID, int], payers: 
 
 
 def _money_and_words(e: ExpenseOut) -> tuple:
-    """B12: what an edit must change to be one: amount, payer(s), final shares, note and category. Not the mode."""
+    """Amount, payer(s), final shares (a person at 0 is no person), note and category."""
     return (e.amount_centavos, e.paid_by, {p.member_id: p.paid_centavos for p in e.payers},
             {s.member_id: s.share_centavos for s in e.shares if s.share_centavos}, e.note, e.category)
+
+
+def _form(e: ExpenseOut) -> tuple:
+    """The split as it was typed: mode, inputs, items (seq, name, price, who) and charges. _load lists them in wallet
+    order, items by seq, and charges service then VAT."""
+    return (e.mode, tuple((i.member_id, i.value) for i in e.inputs),
+            tuple((i.seq, i.name, i.price_centavos, tuple(i.who)) for i in e.items),
+            tuple((c.kind, c.basis, c.value) for c in e.charges))
+
+
+def _form_of(body, order: list[UUID]) -> tuple:
+    """_form() of a PATCH body, put in _load's order, so the same expense typed in another order compares equal."""
+    rank = {m: i for i, m in enumerate(order)}
+    inputs = sorted(((i.member_id, i.value) for i in getattr(body, "inputs", None) or []), key=lambda r: rank[r[0]])
+    items = [(seq, it.name, it.price_centavos, tuple(sorted(it.who, key=rank.__getitem__)))
+             for seq, it in enumerate(getattr(body, "items", None) or [], start=1)]
+    charges = sorted(((c.kind, c.basis, c.value) for c in getattr(body, "charges", None) or []),
+                     key=lambda c: CHARGE_ORDER[c[0]])
+    return (body.mode, tuple(inputs), tuple(items), tuple(charges))
+
+
+def _inferred_mode(e: ExpenseOut, order: list[UUID]) -> str:
+    """A legacy expense's mode as the form reopens it (B22): equal when its shares are split_equal over its people in
+    wallet order, else exact."""
+    people = [s.member_id for s in e.shares]  # _load lists them in wallet order
+    equal = split_equal(e.amount_centavos, people, e.paid_by) if people else {}
+    return "equal" if {s.member_id: s.share_centavos for s in e.shares} == equal else "exact"
+
+
+def _is_noop(old: ExpenseOut, new_money: tuple, body, order: list[UUID]) -> bool:
+    """B12 (tg-review2's M1 on #91): an edit is a no-op only when the whole expense is the same apart from its version:
+    money, words, and the split as typed (mode, inputs, item names, charges). One exception keeps a legacy expense
+    (mode null) saved unchanged as its inferred mode a no-op, so it never writes "changed the split"."""
+    if new_money != _money_and_words(old):
+        return False
+    if old.mode is None:
+        return body.mode == _inferred_mode(old, order) and not getattr(body, "items", None)
+    return _form_of(body, order) == _form(old)
 
 
 # ---------------------------------------------------------------- routes
@@ -481,7 +519,7 @@ def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request:
             raise _refuse(share_slug, "edit", 409, "expense_changed", _with_wallet("expense_changed", current))
         amount, shares, paid_by, payers = _v2_split(conn, wallet_id, body, share_slug, "edit")
         new = (amount, paid_by, payers or {}, {m: v for m, v in shares.items() if v}, body.note, body.category)
-        if new == _money_and_words(old):
+        if _is_noop(old, new, body, [m.id for m in current.members]):
             _private(response)
             logger.info("wallet expense edit noop share_slug=%s mode=%s %s", share_slug, body.mode, _counts(current))
             return current
