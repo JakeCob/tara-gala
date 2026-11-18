@@ -744,3 +744,46 @@ test("W3-A3 the feed never ends on a bare `: items.`: a first field with no arro
   assert.equal(A.lineText(A.activityLine(edit, w, [])), "Ben changed who paid on Lunch at Good Taste.", "the same people, other amounts: no arrow");
   for (const r of [edit]) assert.doesNotMatch(A.lineText(A.activityLine(r, w, [])), /: \w+\.$/);
 });
+
+// ---------------------------------------------------------------- TG-62 GW1: the budget line in Changes (G26, ux §5, tg-ux2's answer 2)
+
+const LINES = {
+  trip_name: "Baguio barkada (made up)",
+  lines: [
+    { key: "meals", item: "Meals and merienda, 2.5 days", category: "food" as const },
+    { key: "taxis", item: "Taxis and jeeps", category: "transport" as const },
+  ],
+};
+
+test("GW1-A1 G26 a line-only edit is one Changes line with `the budget line`, before and after from lineLabel", () => {
+  const w = wallet({ budget: LINES });
+  const v1 = expense({ category: "food", budget_key: null });
+  const v2 = { ...v1, budget_key: "meals", version: 2 };
+  const list = A.changes(v1, v2, w);
+  assert.deepEqual(list, [{ field: "budget", before: "Not sorted yet", after: "Meals and merienda, 2.5 days" }]);
+  assert.equal(A.changeLine("Ana", list), "Ana changed the budget line: Not sorted yet → Meals and merienda, 2.5 days.");
+  const edit = row({ action: "expense_edit", actor: ANA, expense_id: E1, before: v1, after: v2 });
+  assert.equal(A.lineText(A.activityLine(edit, w, [])), "Ana changed Lunch at Good Taste: budget line Not sorted yet → Meals and merienda, 2.5 days.");
+});
+
+test("GW1-A2 G9c (an old phone's category change clears the line): one edit, two fields, the category first", () => {
+  const w = wallet({ budget: LINES });
+  const v1 = expense({ category: "food", budget_key: "meals" });
+  const v2 = { ...v1, category: "transport" as const, budget_key: null, version: 2 };
+  assert.equal(A.changeLine("Ben", A.changes(v1, v2, w)), "Ben changed the category: Food → Transport. The budget line: Meals and merienda, 2.5 days → Not sorted yet.");
+});
+
+test("GW1-A3 a removed line reads `A line no longer in the plan`; _none reads `Not in the budget`", () => {
+  const w = wallet({ budget: LINES });
+  const v1 = expense({ category: "food", budget_key: "pasalubong" }); // the plan no longer has it
+  const v2 = { ...v1, budget_key: "_none", version: 2 };
+  assert.equal(A.changeLine("Ana", A.changes(v1, v2, w)), "Ana changed the budget line: A line no longer in the plan → Not in the budget.");
+});
+
+test("GW1-A4 G27 without a budget on the wallet (the flag off, or not one trip) Changes is TG-66's: no budget line field", () => {
+  const v1 = expense({ category: "food", budget_key: null });
+  const v2 = { ...v1, budget_key: "meals", note: "Lunch, edited", version: 2 };
+  for (const w of [wallet({ budget: null }), wallet()]) {
+    assert.deepEqual(A.changes(v1, v2, w).map((c) => c.field), ["note"]);
+  }
+});

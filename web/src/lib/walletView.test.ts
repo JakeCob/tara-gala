@@ -321,3 +321,57 @@ test("W3-V24 tg-ux2 W3 S2: itemized Details say a percent charge's pesos (the se
   assert.match(src, /from "@\/lib\/walletSplit"/, "the same integer chargeAmount as the server's twin");
   assert.match(src, /\{expense\.mode === "itemized" && <h4 className="mt-1 text-sm font-semibold">Each person<\/h4>\}/);
 });
+
+// ---------------------------------------------------------------- TG-62 GW1: the budget line on the wallet screen
+
+const FORM_SRC = "src/components/wallet/ExpenseForm.tsx";
+const DETAILS_SRC = "src/components/wallet/ExpenseDetails.tsx";
+
+test("GW1-V1 G27 WalletView hands the budget down only with NEXT_PUBLIC_BUDGET_LINES on; off, every part sees no budget", () => {
+  const src = read(VIEW);
+  assert.match(src, /const lineWallet = flags\.budgetLines \? wallet : \{ \.\.\.wallet, budget: null \};/);
+  assert.match(src, /<ExpenseForm\b[\s\S]*?budget=\{lineWallet\.budget \?\? null\}[\s\S]*?\/>/);
+  assert.match(src, /<ExpenseForm\b[\s\S]*?lineReset=\{lineReset\}[\s\S]*?\/>/);
+  assert.match(src, /<ExpenseDetails\b[\s\S]*?wallet=\{lineWallet\}[\s\S]*?\/>/, "Details and its Changes");
+  assert.match(src, /<ActivityList\b[^>]*wallet=\{lineWallet\}/, "the activity list's Changes words");
+});
+
+test("GW1-V2 G24 the form's row (TG-66 ux §2 item 3): a fieldset after Category, full-width pills, the trip meta; never picked from the note", () => {
+  const src = read(FORM_SRC);
+  assert.match(src, /<legend[^>]*>\s*Which budget line\?\s*<span className=\{PX\.meta\}> \(optional\)<\/span>\s*<\/legend>/);
+  const cat = src.indexOf("<legend className=\"mb-1 text-sm font-semibold\">Category</legend>");
+  const row = src.indexOf("Which budget line?");
+  const paid = src.indexOf("{paidBy}", cat);
+  assert.ok(cat > 0 && cat < row && row < paid, "after Category, before Paid by");
+  for (const fn of ["showLineRow(", "linesFor(", "fromPlan(", "editLineMeta(", "initialLine(", "lineAfterCategory(", "withBudgetKey("]) assert.ok(src.includes(fn), fn);
+  assert.match(src, /name="budget-line"/);
+  assert.match(src, /from "@\/lib\/budgetLines"/);
+  const lineCode = src.split("\n").filter((l) => /\bsetLine\(|initialLine\(|lineAfterCategory\(/.test(l)).join("\n");
+  assert.doesNotMatch(lineCode, /\bnote\b/, "a line is never chosen from the note");
+});
+
+test("GW1-V3 G24 G25: the line resets after an add, clears on a category change, and the body carries it through withBudgetKey", () => {
+  const src = read(FORM_SRC);
+  assert.match(src, /withBudgetKey\(built\.body, \{ on: budgetOn, line \}\)/, "on = NEXT_PUBLIC_BUDGET_LINES, so an edit resends the stored line even when the row is hidden");
+  assert.match(src, /lineAfterCategory\(/);
+  assert.match(src, /setLine\(null\)/, "after an add");
+});
+
+test("GW1-V4 G26 Details shows the line beside the category chip, or its meta line", () => {
+  const src = read(DETAILS_SRC);
+  assert.match(src, /detailsLine\(wallet\.budget \?\? null, expense\.budget_key\)/);
+  assert.match(src, /from "@\/lib\/budgetLines"/);
+});
+
+test("GW1-V5 ux §9: an add or edit refused for its line shows the line's alert, clears the pick and reloads the lines", () => {
+  const src = read(VIEW);
+  assert.match(src, /budgetRefusal\(/);
+  assert.match(src, /setLineReset\(\(n\) => n \+ 1\)/);
+  assert.equal((src.match(/budgetRefusal\(/g) ?? []).length >= 2, true, "both the add and the edit");
+});
+
+test("GW1-V6 logs: the form says whether a line went, never which (G10a's rule on the web)", () => {
+  const src = read(FORM_SRC);
+  assert.match(src, /console\.info\("\[tg-wallet\] expense form submit [^"]*line=%s/);
+  for (const [, args] of src.matchAll(/console\.\w+\(([^;]*)\);/g)) assert.doesNotMatch(args, /budget_key|\bline\)/, args);
+});
