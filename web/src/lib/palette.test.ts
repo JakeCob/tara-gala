@@ -296,6 +296,7 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/TicketWallet.tsx", "can&apos;t save tickets here", "alertText"], // TG-50: no IndexedDB
   ["src/components/WalletView.tsx", "{notice.text}", "alertText"], // TG-50: a write that failed
   ["src/components/WalletView.tsx", "No signal, and this wallet", "alertText"], // TG-50: the wallet didn't load
+  ["src/components/WalletView.tsx", "{formAlert.text}", "alertText"], // TG-66 W3: the form's own alert (a 409, a refused split or edit)
   ["src/components/WalletHome.tsx", "{error}", "alertText"], // TG-50: start-a-wallet problems
   ["src/components/PayoutQr.tsx", "{notice.text}", "alertText"], // TG-50: a refused or failed QR save
   ["src/components/ProofDialog.tsx", "{problem}", "alertText"], // TG-53: a save, upload or remove that failed, in the dialog

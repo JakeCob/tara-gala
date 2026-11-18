@@ -162,6 +162,17 @@ export function afterGet(prev: WalletLoad, r: WalletResult, slug: string, overta
   return prev.state === "ready" && (r.why === "offline" || dialogOpen) ? prev : { state: "error", why: r.why }; // offline with a copy on screen: the offline banner says so
 }
 
+/**
+ * TG-66 B27: what a write's wallet does to the screen. An answer with a lower rev than the wallet on screen is older
+ * (another tab's slower write, or a raced fresh GET), so the screen stays. Only when both carry a rev, as afterGet.
+ */
+export function afterWrite(prev: WalletLoad, wallet: Wallet): WalletLoad {
+  const showing = prev.state === "ready" && prev.wallet.share_slug === wallet.share_slug;
+  const [mine, shown] = [wallet.rev, showing ? prev.wallet.rev : undefined];
+  if (typeof mine === "number" && typeof shown === "number" && mine < shown) return prev;
+  return { state: "ready", wallet };
+}
+
 const DETAIL: Record<string, string> = {
   shares_mismatch: "The amounts don't add up to the total.",
   unknown_member: "That person isn't in this wallet any more. Reload and try again.",
@@ -232,15 +243,17 @@ function call(path: string, init?: Init): Promise<WalletResult> {
 }
 
 const at = (slug: string) => `/wallets/${encodeURIComponent(slug)}`;
+/** TG-66: who's writing, as ?by= (A2, A3: these routes' bodies forbid extra keys, and a DELETE has none). None: today's URL. */
+const byQuery = (by: string | null | undefined, sep = "?") => (by ? `${sep}by=${encodeURIComponent(by)}` : "");
 
 export const walletApi = {
   create: (name: string, members: string[]) => call("/wallets", { method: "POST", body: { name, members } }),
   get: (slug: string) => call(at(slug)),
-  addMember: (slug: string, name: string) => call(`${at(slug)}/members`, { method: "POST", body: { name } }),
+  addMember: (slug: string, name: string, by?: string | null) => call(`${at(slug)}/members${byQuery(by)}`, { method: "POST", body: { name } }),
   addExpense: (slug: string, body: LegacyExpenseBody | ExpenseBodyV2) => call(`${at(slug)}/expenses`, { method: "POST", body }),
   /** TG-66: `version` is the one the screen showed; a stale one is 409 expense_changed with the wallet as it is now. */
-  deleteExpense: (slug: string, id: string, version?: number) =>
-    call(`${at(slug)}/expenses/${encodeURIComponent(id)}${version === undefined ? "" : `?version=${version}`}`, { method: "DELETE" }),
+  deleteExpense: (slug: string, id: string, version?: number, by?: string | null) =>
+    call(`${at(slug)}/expenses/${encodeURIComponent(id)}${version === undefined ? byQuery(by) : `?version=${version}${byQuery(by, "&")}`}`, { method: "DELETE" }),
   editExpense: (slug: string, id: string, body: ExpensePatch) => call(`${at(slug)}/expenses/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   comments: (slug: string, id: string) =>
     request<CommentsResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments`, undefined, (b) => ({ ok: true, ...(b as { rev: number; comments: Comment[] }) })),
@@ -266,10 +279,11 @@ export const walletApi = {
     ].join("&");
     return request<ActivityResult>(`${at(slug)}/activity?${q}`, undefined, (b) => ({ ok: true, ...(b as { rev: number; rows: Activity[] }) }));
   },
-  settle: (slug: string, t: Transfer) => call(`${at(slug)}/settlements`, { method: "POST", body: t }),
-  undoSettlement: (slug: string, id: string) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  addProof: (slug: string, id: string, picture: Blob) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { method: "POST", raw: picture }),
-  removeProof: (slug: string, id: string) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { method: "DELETE" }),
+  settle: (slug: string, t: Transfer, by?: string | null) => call(`${at(slug)}/settlements${byQuery(by)}`, { method: "POST", body: t }),
+  undoSettlement: (slug: string, id: string, by?: string | null) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}${byQuery(by)}`, { method: "DELETE" }),
+  addProof: (slug: string, id: string, picture: Blob, by?: string | null) =>
+    call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof${byQuery(by)}`, { method: "POST", raw: picture }),
+  removeProof: (slug: string, id: string, by?: string | null) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof${byQuery(by)}`, { method: "DELETE" }),
 };
 
 /** A payment's proof. Rows never call this on load: files come at full size, and no copy stays on the phone. */
@@ -316,17 +330,24 @@ export type MarkPaid =
   | { stage: "upload_failed"; wallet: Wallet | null; settlementId: string; failure: Failure };
 
 /** Marks a transfer paid, then uploads its picture. With settlementId it only uploads, so a retry can't pay twice. */
-export async function markPaid(api: Pick<typeof walletApi, "settle" | "addProof">, slug: string, t: Transfer, picture: Blob | null, settlementId?: string): Promise<MarkPaid> {
+export async function markPaid(
+  api: Pick<typeof walletApi, "settle" | "addProof">,
+  slug: string,
+  t: Transfer,
+  picture: Blob | null,
+  settlementId?: string,
+  by?: string | null, // TG-66: who's writing, on both calls
+): Promise<MarkPaid> {
   let id = settlementId ?? null;
   let wallet: Wallet | null = null;
   if (!id) {
-    const r = await api.settle(slug, t);
+    const r = await api.settle(slug, t, by);
     if (!r.ok) return { stage: "not_saved", failure: r };
     if (!picture) return { stage: "done", wallet: r.wallet };
     wallet = r.wallet;
     id = newestSettlement(r.wallet, t) as string; // settle's own response holds the row it just made
   }
-  const up = await api.addProof(slug, id, picture as Blob);
+  const up = await api.addProof(slug, id, picture as Blob, by);
   return up.ok ? { stage: "done", wallet: up.wallet } : { stage: "upload_failed", wallet, settlementId: id, failure: up };
 }
 

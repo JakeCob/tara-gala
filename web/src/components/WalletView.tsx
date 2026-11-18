@@ -1,36 +1,58 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { PX, PixelBox, PixelButton, PixelChoice, PixelLink, SectionTitle, cx } from "@/components/pixel";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { PX, PixelBox, PixelButton, PixelLink, SectionTitle, cx } from "@/components/pixel";
 import PayoutQr, { loadMyQr } from "@/components/PayoutQr";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import ProofDialog, { type ProofTarget } from "@/components/ProofDialog";
+import ActivityList from "@/components/wallet/ActivityList";
+import CategoryBox from "@/components/wallet/CategoryBox";
+import ExpenseDetails from "@/components/wallet/ExpenseDetails";
+import ExpenseForm, { type ExpenseSubmit, type SubmitContext } from "@/components/wallet/ExpenseForm";
+import { flags } from "@/lib/flags";
+import { cardMeta, payersWords } from "@/lib/walletActivity";
+import { categoryLabel, showingLine } from "@/lib/walletCategories";
+import { addOutcome, addedBy, editOutcome, screenParts, visibleExpenses } from "@/lib/walletView";
 import { type TripFile, fetchFile, knownTrips, tripApi } from "@/lib/trip";
 import { runShare, shareDeps, type ShareOutcome } from "@/lib/itinerary";
 import {
   afterGet,
+  afterWrite,
   failureMessage,
   fetchProof,
   formatPeso,
-  leftToAssign,
   netLine,
-  parsePeso,
   proofControls,
   proofState,
   rememberWallet,
-  splitEqual,
   walletApi,
   whenLine,
   whoAmI,
+  type Expense,
+  type ExpensePatch,
   type Settlement,
   type Transfer,
   type Wallet,
+  type WalletFailed,
   type WalletLoad,
   type WalletResult,
 } from "@/lib/wallet";
 
 type Notice = { text: string; error: boolean };
-type ExpenseBody = Parameters<typeof walletApi.addExpense>[1];
+/** The form's own alert (ux §6, §9): a 409, a refused split or edit. `asAmounts`: ux §9's Save as Amounts under it. */
+type FormAlert = { text: string; asAmounts: boolean };
+type Editing = { expense: Expense; addedBy: string | null };
+
+const parts = screenParts(flags);
+// navigator.onLine, kept live: Details' Edit, Delete and Post need signal (ux §5)
+const subscribeOnline = (on: () => void) => {
+  window.addEventListener("online", on);
+  window.addEventListener("offline", on);
+  return () => {
+    window.removeEventListener("online", on);
+    window.removeEventListener("offline", on);
+  };
+};
 
 const SHARED: Record<ShareOutcome, string> = {
   done: "",
@@ -55,140 +77,6 @@ function NoticeArea({ notice, className }: { notice: Notice | null; className: s
   );
 }
 
-/** The add-an-expense form. Equal by default among everyone; custom amounts per person on request. */
-function ExpenseForm({ wallet, me, busy, onAdd, onError }: {
-  wallet: Wallet;
-  me: string;
-  busy: boolean;
-  onAdd: (body: ExpenseBody) => Promise<boolean>;
-  onError: (text: string) => void;
-}) {
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  const [paidBy, setPaidBy] = useState(me);
-  const [mode, setMode] = useState<"equal" | "custom">("equal");
-  const [left, setLeft] = useState<Set<string>>(new Set()); // people left out of an equal split; newcomers are in
-  const [custom, setCustom] = useState<Record<string, string>>({});
-  const members = wallet.members;
-  const payer = members.some((m) => m.id === paidBy) ? paidBy : me;
-  const total = parsePeso(amount);
-  const among = members.filter((m) => !left.has(m.id)).map((m) => m.id);
-  const preview = total ? splitEqual(total, among, payer) : {};
-  const parts = members.map((m) => (custom[m.id]?.trim() ? parsePeso(custom[m.id], { allowZero: true }) : 0));
-  const remaining = total && parts.every((p) => p !== null) ? leftToAssign(total, parts as number[]) : null;
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (total === null) return onError("Enter an amount, like 450 or 1,151.50.");
-    if (!note.trim()) return onError("Say what it was for, like Taxi to Burnham Park.");
-    let body: ExpenseBody;
-    if (mode === "equal") {
-      if (among.length === 0) return onError("Pick at least one person to split it with.");
-      body = { paid_by: payer, amount_centavos: total, note: note.trim(), split_among: among };
-    } else {
-      if (parts.some((p) => p === null)) return onError("Check the amounts: pesos, like 300 or 150.50.");
-      if (remaining !== 0) return onError(`The amounts need to add up to ${formatPeso(total)}. ${remaining! > 0 ? `${formatPeso(remaining!)} is left.` : `They're ${formatPeso(-remaining!)} over.`}`);
-      body = {
-        paid_by: payer,
-        amount_centavos: total,
-        note: note.trim(),
-        shares: members.map((m, i) => ({ member_id: m.id, share_centavos: parts[i] as number })).filter((s) => s.share_centavos > 0),
-      };
-    }
-    if (await onAdd(body)) {
-      setAmount("");
-      setNote("");
-      setCustom({});
-    }
-  }
-
-  return (
-    <PixelBox as="form" onSubmit={onSubmit} noValidate aria-labelledby="add-title" className="flex flex-col gap-3 p-4">
-      <SectionTitle id="add-title">Add an expense</SectionTitle>
-      <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-2">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-semibold">Amount</span>
-          <span className="flex">
-            <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
-            <input id="expense-amount" className={cx(PX.input, "w-full min-w-0")} inputMode="decimal" autoComplete="off" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-semibold">What for</span>
-          <input className={cx(PX.input, "w-full min-w-0")} maxLength={60} placeholder="Taxi, dinner, entrance" value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-      </div>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-semibold">Paid by</span>
-        <select className={PX.input} value={payer} onChange={(e) => setPaidBy(e.target.value)}>
-          {members.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.id === me ? `${m.name} (you)` : m.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-sm font-semibold">Split</legend>
-        <div className="grid grid-cols-2 gap-2">
-          <PixelChoice name="split-mode" value="equal" checked={mode === "equal"} onChange={() => setMode("equal")}>
-            Equally
-          </PixelChoice>
-          <PixelChoice name="split-mode" value="custom" checked={mode === "custom"} onChange={() => setMode("custom")}>
-            Custom amounts
-          </PixelChoice>
-        </div>
-        <ul className="flex flex-col gap-2">
-          {members.map((m, i) => (
-            <li key={m.id} className="flex min-h-11 items-center justify-between gap-3 text-sm">
-              {mode === "equal" ? (
-                <>
-                  <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 shrink-0 accent-[var(--primary)]"
-                      checked={!left.has(m.id)}
-                      onChange={(e) => setLeft((s) => {
-                        const next = new Set(s);
-                        if (e.target.checked) next.delete(m.id);
-                        else next.add(m.id);
-                        return next;
-                      })}
-                    />
-                    <span className="min-w-0 break-words">{m.name}</span>
-                  </label>
-                  <span className="tabular-nums text-muted">{preview[m.id] !== undefined ? formatPeso(preview[m.id]) : ""}</span>
-                </>
-              ) : (
-                <label className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                  <span className="min-w-0 break-words">{m.name}</span>
-                  <input
-                    className={cx(PX.input, "w-28 text-right tabular-nums")}
-                    inputMode="decimal"
-                    autoComplete="off"
-                    placeholder="0"
-                    aria-invalid={parts[i] === null || undefined}
-                    value={custom[m.id] ?? ""}
-                    onChange={(e) => setCustom((c) => ({ ...c, [m.id]: e.target.value }))}
-                  />
-                </label>
-              )}
-            </li>
-          ))}
-        </ul>
-        {mode === "custom" && remaining !== null && (
-          <p className="text-sm tabular-nums" aria-live="polite">
-            {remaining === 0 ? "Adds up." : remaining > 0 ? `${formatPeso(remaining)} left to assign.` : `${formatPeso(-remaining)} too much.`}
-          </p>
-        )}
-      </fieldset>
-      <PixelButton type="submit" variant="primary" className="px-4 py-3" disabled={busy}>
-        {busy ? "Saving..." : "Add expense"}
-      </PixelButton>
-    </PixelBox>
-  );
-}
-
 /**
  * TG-50: one shared trip wallet, opened by its secret link. Anyone with the link reads and writes; this phone
  * remembers which person it is. The API recomputes balances and the settle-up on every write.
@@ -201,7 +89,19 @@ export default function WalletView({ slug }: { slug: string }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [settleNotice, setSettleNotice] = useState<Notice | null>(null); // TG-53: in view of the Settle up box
   const [proof, setProof] = useState<ProofTarget | null>(null);
-  const proofOpen = useRef(false); // a failed reload mustn't take an open dialog and its picture with the page
+  const proofOpen = useRef(false); // a failed reload mustn't take an open dialog (a proof's, or TG-66's Details) with the page
+  // TG-66 W3: the form (W1's), Details (W2's) and the Categories filter
+  const [editing, setEditing] = useState<Editing | null>(null);
+  const [formKey, setFormKey] = useState(0); // a new key remounts the form: back to Add, or on a newer version after a 409
+  const [formAlert, setFormAlert] = useState<FormAlert | null>(null);
+  const lastSubmit = useRef<SubmitContext | null>(null); // the form's last submit: its asAmounts is ux §9's Save as Amounts
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const opener = useRef<HTMLElement | null>(null); // what opened Details: focus goes back there (tg-ux2 W2 S1)
+  const neighbor = useRef<string | null>(null); // the expense next to the open one: focus goes there if this one is deleted
+  const deletedHere = useRef<string | null>(null); // Details' own Delete, so it isn't also announced as someone else's
+  const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
+  const [alertFocus, setAlertFocus] = useState(0); // a 409's alert takes focus (tg-ux2 W3 M1): bumped after the form remounts
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
   const shownAt = useRef(0); // TG-65: how new the wallet on screen is: when its GET left, or when a write landed
   const [opening, setOpening] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -227,6 +127,40 @@ export default function WalletView({ slug }: { slug: string }) {
       live = false;
     };
   }, [slug, reloads]);
+
+  // tg-review2 S1: the open expense left the wallet on screen (Details' own Delete, or a refresh with another phone's).
+  // Details unmounts without its close event, so do onClosed's clean-up here. The state changes run in the frame
+  // callback, after the render that dropped it
+  const shownWallet = load.state === "ready" ? load.wallet : null;
+  const detailsGone = detailsId !== null && shownWallet !== null && !shownWallet.expenses.some((e) => e.id === detailsId);
+  useEffect(() => {
+    if (!detailsGone) return;
+    proofOpen.current = false;
+    const id = detailsId;
+    const ours = deletedHere.current === id;
+    const back = opener.current;
+    const next = neighbor.current;
+    const frame = requestAnimationFrame(() => {
+      setDetailsId(null);
+      deletedHere.current = null;
+      if (!ours) setNotice({ text: "This expense was deleted.", error: false });
+      console.info("[tg-wallet] details gone ours=%s", ours ? "yes" : "no");
+      (back?.isConnected ? back : ((next ? document.getElementById(`details-${next}`) : null) ?? document.getElementById("expense-amount")))?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detailsGone, detailsId]);
+
+  // tg-ux2 W3 M1: after a 409 the form remounts on their version and its own effect focuses the title, which leaves the
+  // alert ~900px below, unseen and unannounced. Parent effects run after the child's, so this frame wins: the alert.
+  useEffect(() => {
+    if (!alertFocus) return;
+    const frame = requestAnimationFrame(() => {
+      const box = document.getElementById("form-alert");
+      box?.scrollIntoView({ block: "center" });
+      box?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [alertFocus]);
 
   // Others add expenses from their phones: fetch again whenever this one comes back to the app
   useEffect(() => {
@@ -263,6 +197,7 @@ export default function WalletView({ slug }: { slug: string }) {
   const me = wallet.members.some((m) => m.id === remembered) ? remembered : null;
   const nameOf = (id: string) => wallet.members.find((m) => m.id === id)?.name ?? "Someone";
   const sharedQr = (memberId: string) => tripQrs?.files.find((f) => f.member_id === memberId);
+  const by = me; // who's writing, as ?by= on settle, undo, delete and proofs, whatever the flags (plan §2 addendum); never in a body
   const paymentLine = (s: Transfer) => `${nameOf(s.from_member)} paid ${nameOf(s.to_member)} ${formatPeso(s.amount_centavos)}`;
 
   async function showTheirQr(memberId: string) {
@@ -290,11 +225,23 @@ export default function WalletView({ slug }: { slug: string }) {
       say({ text: failureMessage(r), error: true });
       return r;
     }
-    shownAt.current = Date.now();
-    setLoad({ state: "ready", wallet: r.wallet });
+    landWallet(r.wallet);
     say({ text: done, error: false });
-    void walletApi.get(slug); // the service worker saves GETs, not this write: refresh the offline copy
     return r;
+  }
+
+  /**
+   * Every wallet a write brings back (TG-66 B27): marked newest before its state, so no GET answer can slip between,
+   * then the rev rule, so an older write answer never replaces a newer screen. The worker saves GETs, not writes:
+   * refresh the offline copy.
+   */
+  function landWallet(next: Wallet) {
+    // Only ever called from event handlers and write callbacks, never while rendering; the compiler can't see that
+    // through proofSaved and the children's onWallet, so it flags the clock
+    // eslint-disable-next-line react-hooks/purity
+    shownAt.current = Date.now();
+    setLoad((prev) => afterWrite(prev, next));
+    void walletApi.get(slug);
   }
 
   function openProof(target: ProofTarget) {
@@ -305,10 +252,8 @@ export default function WalletView({ slug }: { slug: string }) {
   }
 
   function proofSaved(next: Wallet, text?: string) {
-    shownAt.current = Date.now();
-    setLoad({ state: "ready", wallet: next });
+    landWallet(next);
     if (text) setSettleNotice({ text, error: false });
-    void walletApi.get(slug);
   }
 
   /** Settle up's results sit under its heading, which may be far from the button that asked. Call it after the frame. */
@@ -337,6 +282,148 @@ export default function WalletView({ slug }: { slug: string }) {
     if (blob) return setQr({ blob, label });
     setSettleNotice({ text: "Couldn't open that proof. Try again with signal.", error: true });
     requestAnimationFrame(toSettleUp);
+  }
+
+  // ---------------------------------------------------------------- TG-66 W3: add, edit, Details
+
+  /** Back to the expense after an edit or a Cancel: its Details button, in view (ux §6). After the frame: it re-rendered. */
+  function toExpense(id: string) {
+    requestAnimationFrame(() => {
+      const button = document.getElementById(`details-${id}`);
+      button?.scrollIntoView({ block: "center" });
+      button?.focus({ preventScroll: true });
+    });
+  }
+
+  function closeForm(backTo: string | null) {
+    setEditing(null);
+    setFormAlert(null);
+    setFormKey((k) => k + 1);
+    if (backTo) toExpense(backTo);
+  }
+
+  /** W1's form hands over the body it built (by flag: today's byte for byte, or v2) and, for an edit, a PATCH. */
+  async function submitExpense(body: ExpenseSubmit, ctx: SubmitContext): Promise<boolean> {
+    lastSubmit.current = ctx;
+    setFormAlert(null);
+    if (ctx.edit) return editing ? saveEdit(editing, body as ExpensePatch) : false;
+    setBusy(true);
+    setNotice(null);
+    setSettleNotice(null);
+    const before = load.state === "ready" ? load.wallet : wallet;
+    const r = await walletApi.addExpense(slug, body);
+    setBusy(false);
+    console.info("[tg-wallet] expense add ok=%s", r.ok ? "yes" : r.why);
+    const out = addOutcome(before, body, r);
+    if (out.ok && out.text !== "Expense added.") console.info("[tg-wallet] expense add category dropped=yes"); // the server's WALLET_SPLITS is off
+    if (!out.ok) {
+      // Today's body keeps today's place for its refusal (the wallet's alert); a v2 one goes in the form (ux §9)
+      if ("mode" in body) setFormAlert({ text: out.alert, asAmounts: out.asAmounts });
+      else setNotice({ text: out.alert, error: true });
+      return false;
+    }
+    landWallet(out.wallet);
+    setNotice({ text: out.text, error: false });
+    return true;
+  }
+
+  async function saveEdit(current: Editing, body: ExpensePatch): Promise<boolean> {
+    setBusy(true);
+    setNotice(null);
+    setSettleNotice(null);
+    const r = await walletApi.editExpense(slug, current.expense.id, body);
+    let actor: string | null = null;
+    if (!r.ok && r.detail === "expense_changed" && flags.walletActivity && online) {
+      // Who changed it, for the alert's line: the newest edit among the expense's last rows (a comment may be newer)
+      const h = await walletApi.activity(slug, { expenseId: current.expense.id, limit: 10 });
+      const row = h.ok ? h.rows.find((x) => x.action === "expense_edit") : undefined;
+      if (row?.action === "expense_edit") actor = wallet.members.find((m) => m.id === row.actor)?.name ?? null;
+    }
+    setBusy(false);
+    const out = editOutcome(r, body, current.expense, actor);
+    console.info("[tg-wallet] expense edit ok=%s outcome=%s", r.ok ? "yes" : r.why, out.kind);
+    if (out.kind === "saved") {
+      landWallet(out.wallet);
+      setNotice({ text: out.text, error: false });
+      closeForm(current.expense.id);
+      return true;
+    }
+    if (out.kind === "changed") {
+      // Their version in the form, and what they changed in its alert: never a silent overwrite (B26)
+      landWallet(out.wallet);
+      setEditing({ expense: out.expense, addedBy: current.addedBy });
+      setFormKey((k) => k + 1);
+      setFormAlert({ text: out.alert, asAmounts: false });
+      setAlertFocus((n) => n + 1);
+      return false;
+    }
+    if (out.kind === "gone") {
+      if (out.wallet) landWallet(out.wallet);
+      closeForm(null);
+      setNotice({ text: out.alert, error: true });
+      return false;
+    }
+    setFormAlert({ text: out.alert, asAmounts: out.asAmounts }); // the form stays open with what was typed
+    return false;
+  }
+
+  /** Details' Edit: the form at the top switches to this expense, scrolls into view and takes focus (ux §6). */
+  function startEdit(expense: Expense) {
+    opener.current = null; // focus goes to the form's title, not back into the list
+    setEditing({ expense, addedBy: null });
+    setFormAlert(null);
+    setFormKey((k) => k + 1);
+    requestAnimationFrame(() => document.getElementById("add-title")?.scrollIntoView({ block: "start" }));
+    if (!flags.walletActivity || !online) return;
+    void walletApi.activity(slug, { expenseId: expense.id, limit: 50 }).then((h) => {
+      if (!h.ok) return;
+      const who = addedBy(h.rows, wallet);
+      setEditing((e) => (e && e.expense.id === expense.id ? { ...e, addedBy: who } : e));
+    });
+  }
+
+  /** The Categories nudge's link (ux §7): the list shows only the expenses with no category, with a Show all line above. */
+  function showUncategorized() {
+    setUncategorizedOnly(true);
+    // Focus the line that says what's shown, so the next Tab goes into that list (tg-ux2 W3 S1)
+    requestAnimationFrame(() => {
+      const line = document.getElementById("showing-line");
+      line?.scrollIntoView({ block: "start" });
+      line?.focus({ preventScroll: true });
+    });
+  }
+
+  /** `Show all` removes itself: focus goes to the Expenses heading, not <body> (tg-ux2 W3 S1). */
+  function showAll() {
+    setUncategorizedOnly(false);
+    requestAnimationFrame(() => document.getElementById("expenses-title")?.focus());
+  }
+
+  function openDetails(id: string, from: HTMLElement | null) {
+    opener.current = from;
+    const list = load.state === "ready" ? load.wallet.expenses : [];
+    const at = list.findIndex((e) => e.id === id);
+    neighbor.current = list[at + 1]?.id ?? list[at - 1]?.id ?? null;
+    proofOpen.current = true;
+    setNotice(null);
+    setDetailsId(id);
+  }
+
+  /** Details' Delete, already confirmed there. With the version shown, so a stale one is refused (B13). */
+  async function deleteFromDetails(e: Expense): Promise<true | WalletFailed> {
+    setBusy(true);
+    const r = await walletApi.deleteExpense(slug, e.id, e.version, by);
+    setBusy(false);
+    console.info("[tg-wallet] expense delete ok=%s", r.ok ? "yes" : r.why);
+    if (!r.ok) {
+      if (r.wallet) landWallet(r.wallet); // expense_changed or expense_gone: the wallet as it is now
+      return r;
+    }
+    deletedHere.current = e.id;
+    landWallet(r.wallet);
+    setNotice({ text: "Expense deleted.", error: false });
+    if (editing?.expense.id === e.id) closeForm(null);
+    return true;
   }
 
   async function addMe(e: React.FormEvent) {
@@ -392,6 +479,23 @@ export default function WalletView({ slug }: { slug: string }) {
   }
 
   const owedToMe = wallet.transfers.filter((t) => t.to_member === me).length;
+  const detailsExpense = detailsId ? (wallet.expenses.find((e) => e.id === detailsId) ?? null) : null;
+  const filtering = parts.categories && uncategorizedOnly;
+  const listed = visibleExpenses(wallet.expenses, filtering);
+  const formNotice: ReactNode = (
+    <div aria-live="polite" className="flex flex-col gap-2 empty:hidden">
+      {formAlert && (
+        <PixelBox as="p" tone="alertText" id="form-alert" tabIndex={-1} className="focus-pixel p-4 text-sm">
+          {formAlert.text}
+        </PixelBox>
+      )}
+      {formAlert?.asAmounts && (
+        <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" aria-disabled={busy || undefined} onClick={() => !busy && void lastSubmit.current?.asAmounts()}>
+          Save as Amounts
+        </PixelButton>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -425,11 +529,16 @@ export default function WalletView({ slug }: { slug: string }) {
       <div className="flex flex-col gap-5 md:grid md:grid-cols-2 md:gap-6 md:items-start">
         <div className="flex flex-col gap-5">
           <ExpenseForm
+            key={formKey}
             wallet={wallet}
             me={me}
             busy={busy}
+            flags={flags}
+            editing={editing}
+            notice={flags.walletSplits || flags.walletMultiPayer ? formNotice : undefined} // flags off: today's form, element for element (B28)
+            onSubmit={submitExpense}
+            onCancel={() => closeForm(editing?.expense.id ?? null)}
             onError={(text) => setNotice({ text, error: true })}
-            onAdd={async (body) => (await write("expense add", () => walletApi.addExpense(slug, body), "Expense added.")).ok}
           />
 
           <PixelBox as="section" aria-labelledby="settle-title" className="flex flex-col gap-3 p-4">
@@ -514,7 +623,7 @@ export default function WalletView({ slug }: { slug: string }) {
                               ? "Undo this payment? It goes back on the settle-up list, and its proof is deleted for everyone."
                               : "Undo this payment? It goes back on the settle-up list.";
                             if (!window.confirm(ask)) return;
-                            void write("settle undo", () => walletApi.undoSettlement(slug, s.id), "Payment undone.", setSettleNotice).then(() => requestAnimationFrame(toSettleUp));
+                            void write("settle undo", () => walletApi.undoSettlement(slug, s.id, by), "Payment undone.", setSettleNotice).then(() => requestAnimationFrame(toSettleUp));
                           }}
                         >
                           Undo
@@ -547,10 +656,54 @@ export default function WalletView({ slug }: { slug: string }) {
             </ul>
           </PixelBox>
 
+          {parts.categories && <CategoryBox wallet={wallet} me={me} onShowUncategorized={showUncategorized} />}
+
           <section aria-labelledby="expenses-title" className="flex flex-col gap-3">
-            <SectionTitle id="expenses-title">Expenses</SectionTitle>
+            <SectionTitle id="expenses-title" tabIndex={parts.categories ? -1 : undefined} className={parts.categories ? "focus-pixel" : undefined}>
+              Expenses
+            </SectionTitle>
+            {filtering && (
+              <p id="showing-line" tabIndex={-1} className="focus-pixel text-sm">
+                {showingLine(listed.length).text}{" "}
+                <button type="button" className={cx(PX.inlineLink, "min-h-11")} onClick={showAll}>
+                  {showingLine(listed.length).link}
+                </button>
+              </p>
+            )}
             {wallet.expenses.length === 0 ? (
               <p className="text-sm text-muted">Nothing yet.</p>
+            ) : parts.compactCards ? (
+              <ul className="flex flex-col gap-3">
+                {listed.map((e) => (
+                  <PixelBox as="li" key={e.id} className="flex flex-col gap-1 p-4">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className={cx(PX.dataHeading, "min-w-0 break-words")}>{e.note}</p>
+                      <p className="tabular-nums font-bold">{formatPeso(e.amount_centavos)}</p>
+                    </div>
+                    {parts.categories &&
+                      (e.category ? (
+                        <p>
+                          <span className={PX.chip}>{categoryLabel(e.category)}</span>
+                        </p>
+                      ) : (
+                        <p className={PX.meta}>No category yet</p>
+                      ))}
+                    <p className={PX.meta}>
+                      Paid by {payersWords(e, wallet)} · {whenLine(e.created_at)}
+                    </p>
+                    <p className={cx(PX.meta, "break-words")}>{cardMeta(e, wallet)}</p>
+                    <PixelButton
+                      id={`details-${e.id}`}
+                      variant="secondary"
+                      className="mt-1 inline-flex items-center self-start px-4 text-sm"
+                      aria-label={`Details of ${e.note}`}
+                      onClick={(ev) => openDetails(e.id, ev.currentTarget)}
+                    >
+                      Details
+                    </PixelButton>
+                  </PixelBox>
+                ))}
+              </ul>
             ) : (
               <ul className="flex flex-col gap-3">
                 {wallet.expenses.map((e) => (
@@ -572,7 +725,7 @@ export default function WalletView({ slug }: { slug: string }) {
                       disabled={busy}
                       onClick={() => {
                         if (!window.confirm(`Delete "${e.note}" (${formatPeso(e.amount_centavos)}) for everyone?`)) return;
-                        void write("expense delete", () => walletApi.deleteExpense(slug, e.id), "Expense deleted.").then(() =>
+                        void write("expense delete", () => walletApi.deleteExpense(slug, e.id, undefined, by), "Expense deleted.").then(() =>
                           document.getElementById("expense-amount")?.focus(),
                         );
                       }}
@@ -586,10 +739,43 @@ export default function WalletView({ slug }: { slug: string }) {
           </section>
 
           <PayoutQr />
+
+          {parts.activity && <ActivityList slug={slug} wallet={wallet} online={online} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
         </div>
       </div>
 
-      {proof && <ProofDialog slug={slug} wallet={wallet} target={proof} nameOf={nameOf} onWallet={proofSaved} onClosed={proofClosed} />}
+      {detailsExpense && (
+        <ExpenseDetails
+          key={detailsExpense.id}
+          slug={slug}
+          wallet={wallet}
+          expense={detailsExpense}
+          me={me}
+          online={online}
+          activity={flags.walletActivity}
+          splits={flags.walletSplits}
+          multiPayer={flags.walletMultiPayer}
+          busy={busy}
+          onWallet={landWallet}
+          onEdit={startEdit}
+          onDelete={deleteFromDetails}
+          onClosed={() => {
+            const id = detailsExpense.id;
+            const back = opener.current;
+            proofOpen.current = false;
+            setDetailsId(null);
+            if (!back) return; // Edit: the form's title has focus
+            // After the frame: the opener may have re-rendered (an activity line) or gone (a deleted expense)
+            const next = neighbor.current;
+            requestAnimationFrame(() =>
+              (back.isConnected ? back : (document.getElementById(`details-${id}`) ?? (next ? document.getElementById(`details-${next}`) : null) ?? document.getElementById("expense-amount")))?.focus(),
+            );
+          }}
+        />
+      )}
+      {proof && (
+        <ProofDialog slug={slug} wallet={wallet} target={proof} nameOf={nameOf} by={me} onWallet={proofSaved} onClosed={proofClosed} />
+      )}
       <PhotoViewer photo={qr} onClose={() => setQr(null)} logTag="tg-wallet" />
     </div>
   );

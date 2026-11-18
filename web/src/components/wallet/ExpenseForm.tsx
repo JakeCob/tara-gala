@@ -120,7 +120,8 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
         {s.mode === "itemized" ? (
           <input
             id="expense-amount"
-            className={cx(PX.input, "w-full min-w-0")}
+            // Read-only, and it looks it: the page's background in the same frame, at full text contrast (tg-ux2 W3 S3)
+            className="min-h-11 w-full min-w-0 rounded-none border-3 border-frame bg-background px-3 py-2 text-base text-foreground focus-pixel"
             readOnly
             aria-describedby="expense-amount-meta"
             value={check.amount !== null ? formatPeso(check.amount).replace("₱", "") + (check.amount % 100 ? "" : ".00") : ""} // ux 66-04: "1,188.00"
@@ -283,7 +284,7 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
         <div className="grid grid-cols-3 gap-2">
           {(Object.keys(MODE_LABEL) as SplitMode[]).map((mode) => (
             <PixelChoice key={mode} name="split-mode" value={mode} checked={s.mode === mode} onChange={() => setS((x) => switchMode(x, mode))}>
-              {MODE_LABEL[mode]}
+              {MODE_LABEL[mode].replace("Equal +", "Equal\u00a0+") /* breaks at most once at 320 (tg-ux2 W3 S6) */}
             </PixelChoice>
           ))}
         </div>
@@ -306,9 +307,9 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
         ) : (
           <ul className="flex flex-col gap-2">
             {members.map((m) => (
-              <li key={m.id} className="flex min-h-11 items-center justify-between gap-3 text-sm">
+              <li key={m.id} className={cx("flex min-h-11 items-center justify-between text-sm", s.mode === "adjust" ? "flex-wrap gap-x-3 gap-y-1" : "gap-3")}>
                 {s.mode === "equal" || s.mode === "adjust" ? (
-                  <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
+                  <label className={cx("flex min-h-11 flex-1 cursor-pointer items-center gap-2", s.mode === "adjust" ? "min-w-[5.5rem]" : "min-w-0")}>
                     <input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--primary)]" checked={ticked(m.id)} onChange={(e) => tick(m.id, e.target.checked)} />
                     <span className="min-w-0 break-words">{label(m.id, m.name)}</span>
                   </label>
@@ -367,22 +368,26 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
                   </span>
                 )}
                 {s.mode === "adjust" && (
-                  <label className="flex items-center gap-1">
-                    <span className={PX.meta}>extra</span>
-                    <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
-                    <input
-                      className={cx(PX.input, "w-24 text-right tabular-nums")}
-                      aria-label={`Extra for ${m.name}`}
-                      inputMode="text"
-                      autoComplete="off"
-                      placeholder="0"
-                      disabled={!ticked(m.id)}
-                      value={s.extras[m.id] ?? ""}
-                      onChange={(e) => setIn("extras", m.id, e.target.value)}
-                    />
-                  </label>
+                  // Equal + extra: the field and its preview stay together, right-aligned; at 320 they wrap under the name
+                  <span className="ml-auto flex shrink-0 items-center gap-2">
+                    <label className="flex items-center gap-1">
+                      <span className={PX.meta}>extra</span>
+                      <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
+                      <input
+                        className={cx(PX.input, "w-20 text-right tabular-nums")}
+                        aria-label={`Extra for ${m.name}`}
+                        inputMode="text"
+                        autoComplete="off"
+                        placeholder="0"
+                        disabled={!ticked(m.id)}
+                        value={s.extras[m.id] ?? ""}
+                        onChange={(e) => setIn("extras", m.id, e.target.value)}
+                      />
+                    </label>
+                    <span className="text-right tabular-nums text-muted">{preview(m.id)}</span>
+                  </span>
                 )}
-                {s.mode !== "exact" && <span className="w-20 text-right tabular-nums text-muted">{preview(m.id)}</span>}
+                {s.mode !== "exact" && s.mode !== "adjust" && <span className="w-20 text-right tabular-nums text-muted">{preview(m.id)}</span>}
               </li>
             ))}
           </ul>

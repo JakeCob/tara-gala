@@ -26,6 +26,7 @@ import {
   type CommentsState,
   type HistoryLine,
 } from "@/lib/walletActivity";
+import { chargeAmount } from "@/lib/walletSplit";
 import { failureMessage, formatPeso, walletApi, type Activity, type Expense, type Wallet, type WalletFailed } from "@/lib/wallet";
 
 type Load<T> = { state: "loading" } | { state: "ready"; value: T } | { state: "failed"; text: string };
@@ -178,6 +179,7 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
   }
 
   const severalPayers = (expense.payers?.length ?? 0) > 1;
+  const itemsTotal = (expense.items ?? []).reduce((a, i) => a + i.price_centavos, 0); // the charges' base (plan §2)
   const editable = splits && (multiPayer || !severalPayers);
   const rows = history.state === "ready" ? history.value.rows : null;
   const lines: HistoryLine[] = rows ? historyLines(rows, expense, wallet) : [];
@@ -221,10 +223,15 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
                 </li>
               ))}
               {(expense.charges ?? []).map((c) => (
-                <li key={c.kind}>{chargeLabel(c)}</li>
+                <li key={c.kind}>
+                  {chargeLabel(c)}
+                  {/* a percent charge also says its pesos, as the form's totals block does (tg-ux2 W3 S2) */}
+                  {c.basis === "percent" && <span className="tabular-nums"> · {formatPeso(chargeAmount(itemsTotal, c.basis, c.value))}</span>}
+                </li>
               ))}
             </ul>
           )}
+          {expense.mode === "itemized" && <h4 className="mt-1 text-sm font-semibold">Each person</h4>}
           <ul className="flex flex-col gap-1 text-sm">
             {splitRows(expense, wallet).map((r) => (
               <li key={r.member_id} className="flex items-baseline justify-between gap-3">

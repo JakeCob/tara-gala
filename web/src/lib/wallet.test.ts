@@ -143,8 +143,12 @@ test("V9 the wallet pages: noindex capability link, one shell, and the service w
 test("V10 the wallet screen: one primary (Add expense), Show my QR on the payments I receive, and confirms before deleting", () => {
   const src = read("src/components/WalletView.tsx");
   assert.match(src, /^"use client";/);
-  assert.equal(src.match(/variant="primary"/g)?.length, 1, "one primary per screen");
-  assert.match(src, /Add expense/);
+  // TG-66 W3: the add form is W1's ExpenseForm, which holds the screen's one primary (one of two, by flag)
+  assert.equal(src.match(/variant="primary"/g)?.length ?? 0, 0, "no primary of its own");
+  const form = read("src/components/wallet/ExpenseForm.tsx");
+  assert.match(form, /const submitButton = v2 \? \(\s*<PixelButton type="submit" variant="primary"[\s\S]*?\) : \(\s*<PixelButton type="submit" variant="primary"/, "one primary, whichever form shows");
+  assert.equal(form.match(/variant="primary"/g)?.length, 2);
+  assert.match(form, /Add expense/);
   assert.match(src, /t\.to_member === me/, "Show my QR only on payments to me");
   assert.match(src, /<PayoutQr\b/);
   assert.equal(src.match(/window\.confirm\(/g)?.length, 2, "delete expense and undo confirm; Mark paid opens ProofDialog (TG-53)");
@@ -209,13 +213,14 @@ test("TG65-4 WalletView: every GET goes through afterGet, aged against the last 
   assert.match(view, /setLoad\(\(prev\) => afterGet\(prev, r, slug, overtaken, proofOpen\.current\)\);/);
   assert.match(view, /console\.info\("\[tg-wallet\] load ok=%s", r\.ok \? \(overtaken \? "overtaken" : r\.saved \? "saved" : "yes"\) : r\.why\);/);
   assert.match(view, /if \(r\.ok && !overtaken\) \{\s+if \(!r\.saved\) shownAt\.current = left;\s+rememberWallet\(/, "an overtaken answer leaves everything alone");
-  for (const [from, to] of [["async function write(", "function openProof("], ["function proofSaved(", "/** Settle up"]]) {
-    const body = view.slice(view.indexOf(from), view.indexOf(to));
-    assert.ok(body.includes("shownAt.current = Date.now();"), `${from} marks the screen as new`);
-    assert.ok(body.indexOf("shownAt.current = Date.now();") < body.indexOf("setLoad("), `${from}: before its state, so no answer can slip between`);
-    if (from.startsWith("async")) assert.ok(body.indexOf("shownAt.current = Date.now();") > body.indexOf("if (!r.ok)"), "only a write that landed");
-  }
-  assert.equal(view.match(/setLoad\(/g)?.length, 3, "afterGet, a write and a saved proof: nothing else sets the wallet");
+  // TG-66 W3: every wallet a write brings back lands through landWallet, which marks the screen new before its state
+  const land = view.slice(view.indexOf("function landWallet("), view.indexOf("function openProof("));
+  assert.ok(land.includes("shownAt.current = Date.now();"), "landWallet marks the screen as new");
+  assert.ok(land.indexOf("shownAt.current = Date.now();") < land.indexOf("setLoad("), "before its state, so no answer can slip between");
+  const write = view.slice(view.indexOf("async function write("), view.indexOf("function landWallet("));
+  assert.ok(write.indexOf("landWallet(") > write.indexOf("if (!r.ok)"), "only a write that landed");
+  assert.match(view.slice(view.indexOf("function proofSaved("), view.indexOf("/** Settle up")), /landWallet\(next\)/);
+  assert.equal(view.match(/setLoad\(/g)?.length, 2, "afterGet and landWallet: nothing else sets the wallet");
 });
 
 test("TG65-5 the repro, in order: a return-to-app GET, then a delete and an add, then the old answers land", async () => {
@@ -380,4 +385,77 @@ test("TG66-5 the new expense fields are optional, so a wallet saved before TG-66
   assert.match(src, /\brev\?: number;/, "Wallet.rev is optional");
   assert.match(src, /export type SplitMode = "equal" \| "exact" \| "percent" \| "shares" \| "adjust" \| "itemized";/);
   assert.match(src, /export type Category = "transport" \| "hotel" \| "food" \| "activities" \| "other";/);
+});
+
+// ---------------------------------------------------------------- TG-66 W3: `by` on every write, and the rev rule for write answers
+
+test("TG66-W3-1 B28c walletApi sends `by` (A3/A2: ?by= on settle, undo, delete, proofs and member add; never in those bodies), and leaves today's request alone without it", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const M = "00000000-0000-4000-8000-000000000002";
+  const S = "11111111-1111-4111-8111-111111111111";
+  const t = { from_member: "a", to_member: "b", amount_centavos: 500 };
+  const pic = new Blob(["made up"], { type: "image/jpeg" });
+  await withFetch(Array.from({ length: 13 }, (_, i) => json(200, revWallet(i + 1))), async (sent) => {
+    await walletApi.deleteExpense(W, E, 3, M);
+    await walletApi.deleteExpense(W, E, undefined, M);
+    await walletApi.settle(W, t, M);
+    await walletApi.undoSettlement(W, S, M);
+    await walletApi.addProof(W, S, pic, M);
+    await walletApi.removeProof(W, S, M);
+    // without a by: today's requests, byte for byte
+    await walletApi.deleteExpense(W, E);
+    await walletApi.settle(W, t);
+    await walletApi.settle(W, t, null);
+    await walletApi.undoSettlement(W, S);
+    await walletApi.addMember(W, "Eli", M);
+    await walletApi.addMember(W, "Eli");
+    await walletApi.deleteExpense(W, E, 4, null);
+    const at = (i: number) => sent[i].url.slice(sent[i].url.indexOf("/wallets"));
+    assert.equal(at(0), `/wallets/${W}/expenses/${E}?version=3&by=${M}`);
+    assert.equal(at(1), `/wallets/${W}/expenses/${E}?by=${M}`);
+    assert.equal(at(2), `/wallets/${W}/settlements?by=${M}`);
+    assert.equal(sent[2].body, JSON.stringify(t), "SettlementIn forbids extra keys: by is a query, the body is today's");
+    assert.equal(at(3), `/wallets/${W}/settlements/${S}?by=${M}`);
+    assert.equal(at(4), `/wallets/${W}/settlements/${S}/proof?by=${M}`);
+    assert.equal(sent[4].method, "POST");
+    assert.equal(at(5), `/wallets/${W}/settlements/${S}/proof?by=${M}`);
+    assert.equal(sent[5].method, "DELETE");
+    assert.equal(at(6), `/wallets/${W}/expenses/${E}`);
+    assert.equal(sent[7].body, JSON.stringify(t), "today's settle body");
+    assert.equal(sent[8].body, JSON.stringify(t), "a null by is no by");
+    assert.equal(at(8), `/wallets/${W}/settlements`, "tg-test3 S1: never ?by=null (the API would 422 it)");
+    assert.equal(at(12), `/wallets/${W}/expenses/${E}?version=4`, "a null by on a DELETE: no by at all");
+    assert.equal(at(9), `/wallets/${W}/settlements/${S}`);
+    assert.equal(at(10), `/wallets/${W}/members?by=${M}`);
+    assert.equal(sent[10].body, JSON.stringify({ name: "Eli" }));
+    assert.equal(at(11), `/wallets/${W}/members`);
+    assert.equal(at(7), `/wallets/${W}/settlements`);
+  });
+});
+
+test("TG66-W3-2 B28c markPaid passes `by` to the settle and the upload", async () => {
+  const { markPaid } = await import("./wallet.ts");
+  const calls: unknown[][] = [];
+  const w = { ...revWallet(2), settlements: [{ id: "s1", from_member: "a", to_member: "b", amount_centavos: 500, created_at: "2026-11-06T05:00:00Z" }] } as unknown as import("./wallet.ts").Wallet;
+  const api = {
+    settle: async (...args: unknown[]) => (calls.push(["settle", ...args]), { ok: true as const, wallet: w }),
+    addProof: async (...args: unknown[]) => (calls.push(["addProof", ...args]), { ok: true as const, wallet: w }),
+  };
+  const t = { from_member: "a", to_member: "b", amount_centavos: 500 };
+  const pic = new Blob(["x"]);
+  await markPaid(api, W, t, pic, undefined, "m-b");
+  assert.deepEqual(calls, [["settle", W, t, "m-b"], ["addProof", W, "s1", pic, "m-b"]]);
+});
+
+test("TG66-W3-3 B27 afterWrite: a write's wallet with a lower rev than the screen never replaces it; otherwise it shows", async () => {
+  const { afterWrite } = await import("./wallet.ts");
+  const screen = { state: "ready" as const, wallet: revWallet(8, ["Taxi", "Jeep"]) };
+  assert.equal(afterWrite(screen, revWallet(7, ["Taxi"])), screen, "an older answer (another tab's slower write) keeps the newer screen");
+  assert.deepEqual(afterWrite(screen, revWallet(9, ["Taxi"])), { state: "ready", wallet: revWallet(9, ["Taxi"]) });
+  assert.deepEqual(afterWrite(screen, revWallet(8, ["Bus"])), { state: "ready", wallet: revWallet(8, ["Bus"]) }, "equal rev: the write's own answer");
+  const noRev = { ...revWallet(1), rev: undefined };
+  assert.deepEqual(afterWrite(screen, noRev), { state: "ready", wallet: noRev }, "an API without rev (reverted): it shows, as afterGet's S1");
+  assert.deepEqual(afterWrite({ state: "loading" }, revWallet(1)), { state: "ready", wallet: revWallet(1) });
+  const other = { state: "ready" as const, wallet: { ...revWallet(50), share_slug: "d".repeat(32) } };
+  assert.deepEqual(afterWrite(other, revWallet(1)), { state: "ready", wallet: revWallet(1) }, "another wallet's screen isn't this one's");
 });

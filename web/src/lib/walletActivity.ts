@@ -217,6 +217,8 @@ export type Field = "amount" | "note" | "category" | "split" | "payers" | "items
 export type Change = { field: Field; before?: string; after?: string };
 
 const FIELD_LONG: Record<Field, string> = { amount: "the amount", note: "the note", category: "the category", split: "the split", payers: "Paid by", items: "the items", charges: "the charges" };
+// The activity list's line when its first field has no arrow: "Ana changed the items on Dinner." (ux §5, tg-ux2 W3)
+const FIELD_FEED: Record<Field, string> = { ...FIELD_LONG, payers: "who paid" };
 const FIELD_SHORT: Record<Field, string> = { amount: "amount", note: "note", category: "category", split: "split", payers: "Paid by", items: "items", charges: "charges" };
 
 /** A list as a key → value map, so order never counts. */
@@ -251,9 +253,30 @@ export function changes(before: Snapshot, after: Snapshot, w: Wallet): Change[] 
     out.push(change("split", splitWords(before, w, short), splitWords(after, w, short)));
   }
   if (payersKey(before) !== payersKey(after)) out.push(change("payers", payersWords(before, w), payersWords(after, w)));
-  if (itemsKey(before) !== itemsKey(after)) out.push(change("items", itemsWords(before), itemsWords(after)));
+  if (itemsKey(before) !== itemsKey(after)) {
+    const renamed = oneRename(before.items, after.items);
+    out.push(renamed ? { field: "items", before: `"${renamed[0]}"`, after: `"${renamed[1]}"` } : change("items", itemsWords(before), itemsWords(after)));
+  }
   if (chargesKey(before) !== chargesKey(after)) out.push(change("charges", chargesWords(before), chargesWords(after)));
   return out;
+}
+
+/**
+ * The one item whose name, and only its name, changed: same seqs, prices and people (tg-ux2 W3). A rename keeps the
+ * count and the total, so the items' words read the same both sides; this gives the line its arrow. Null otherwise.
+ */
+function oneRename(before: Item[] | undefined, after: Item[] | undefined): [string, string] | null {
+  if (!before || !after || before.length !== after.length) return null;
+  const bySeq = new Map(before.map((i) => [i.seq, i]));
+  let found: [string, string] | null = null;
+  for (const a of after) {
+    const b = bySeq.get(a.seq);
+    if (!b || b.price_centavos !== a.price_centavos || [...b.who].sort().join() !== [...a.who].sort().join()) return null;
+    if (b.name === a.name) continue;
+    if (found) return null; // several renames: "changed the items."
+    found = [b.name, a.name];
+  }
+  return found;
 }
 
 const more = (n: number) => (n > 0 ? `, and ${plural(n, "more change", "more changes")}` : "");
@@ -424,7 +447,9 @@ export function activityLine(r: Activity, w: Wallet, known: Activity[]): Activit
     case "expense_edit": {
       const list = before && after ? changes(before, after, w) : [];
       const first = list[0];
-      const what = first ? `: ${FIELD_SHORT[first.field]}${first.before !== undefined ? ` ${first.before} → ${first.after}` : ""}${more(list.length - 1)}` : "";
+      // A first field with no arrow reads "changed the items on <note>", never a bare ": items." (tg-ux2 W3)
+      if (first && first.before === undefined) return { who, segs: [`changed ${FIELD_FEED[first.field]} on `, note(), `${more(list.length - 1)}.`] };
+      const what = first ? `: ${FIELD_SHORT[first.field]} ${first.before} → ${first.after}${more(list.length - 1)}` : "";
       return { who, segs: ["changed ", note(), `${what}.`] };
     }
     case "expense_delete":
