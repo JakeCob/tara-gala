@@ -387,6 +387,25 @@ test("GW1-V7 tg-ux2 (ux §2 item 3): the edit meta reads the saved category and 
   assert.match(row, /onChange=\{\(\) => \{[\s\S]*?setLinePicked\(true\)[\s\S]*?\}\}/, "set by a pick in the row");
 });
 
+test("GW1-V8 (tg-ux2 S1) with BUDGET_LINES off, a 409's alert never names the budget line: saveEdit nulls the budget as lineWallet does", async () => {
+  const { editOutcome } = await load();
+  const mine = expense({ budget_key: "meals" });
+  const theirs = expense({ mode: "shares", inputs: [{ member_id: A, value: 2 }, { member_id: B, value: 2 }, { member_id: C, value: 1 }], budget_key: null, version: 2 });
+  const budget = { trip_name: "Baguio barkada (made up)", lines: [{ key: "meals", item: "Meals and merienda, 2.5 days", category: "food" as const }] };
+  const r = (b: Wallet["budget"]): WalletResult => ({ ok: false, why: "rejected", detail: "expense_changed", wallet: { ...wallet([theirs], 9), budget: b } });
+  // The premise: the answer's wallet decides whether the line is named (GA1 sends it with the flag on server side)
+  const named = editOutcome(r(budget), patch(), mine, "Ben");
+  assert.ok(named.kind === "changed" && /budget line/.test(named.alert), "with a budget on screen the line is named");
+  const plain = editOutcome(r(null), patch(), mine, "Ben");
+  assert.ok(plain.kind === "changed" && !/budget line/.test(plain.alert), "TG-66's alert exactly");
+  // The gate: WalletView hands editOutcome the answer with the budget nulled when the flag is off
+  const src = read(VIEW);
+  assert.match(src, /const out = editOutcome\(lineSeen\(r\), body, current\.expense, actor\);/);
+  const seen = src.match(/const lineSeen = [^\n]*/)?.[0] ?? "";
+  assert.match(seen, /flags\.budgetLines/, "gated on the flag, as lineWallet is");
+  assert.match(seen, /budget: null/);
+});
+
 test("GW1-V6 logs: the form says whether a line went, never which (G10a's rule on the web)", () => {
   const src = read(FORM_SRC);
   assert.match(src, /console\.info\("\[tg-wallet\] expense form submit [^"]*line=%s/);

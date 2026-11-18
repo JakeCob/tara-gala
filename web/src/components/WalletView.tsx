@@ -359,7 +359,9 @@ export default function WalletView({ slug }: { slug: string }) {
     setBusy(false);
     const lineAlert = r.ok ? null : budgetRefusal(r.detail);
     if (lineAlert) return refuseLine(lineAlert, r);
-    const out = editOutcome(r, body, current.expense, actor);
+    // TG-62 GW1 (tg-ux2 S1): the 409's Changes line reads the wallet as the screen does, so flag off is TG-66's alert exactly
+    const lineSeen = (x: WalletResult): WalletResult => (flags.budgetLines || x.ok || !x.wallet ? x : { ...x, wallet: { ...x.wallet, budget: null } });
+    const out = editOutcome(lineSeen(r), body, current.expense, actor);
     console.info("[tg-wallet] expense edit ok=%s outcome=%s", r.ok ? "yes" : r.why, out.kind);
     if (out.kind === "saved") {
       landWallet(out.wallet);
