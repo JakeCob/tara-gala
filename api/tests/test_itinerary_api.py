@@ -315,6 +315,7 @@ OTHER_ROUTES = {
     ("POST", "/wallets/{share_slug}/members"),
     ("POST", "/wallets/{share_slug}/expenses"),
     ("DELETE", "/wallets/{share_slug}/expenses/{expense_id}"),
+    ("PATCH", "/wallets/{share_slug}/expenses/{expense_id}"),  # TG-66 A3: edit, with the version the form opened
     ("POST", "/wallets/{share_slug}/settlements"),
     ("DELETE", "/wallets/{share_slug}/settlements/{settlement_id}"),
     # TG-53: a payment's proof screenshot, added or replaced, and removed

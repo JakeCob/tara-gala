@@ -3,6 +3,7 @@
 // stands at the latest-ticked row that has a place.
 
 import type { Trip } from "./api.ts";
+import type { Category } from "./wallet.ts";
 import type { SpriteName } from "./sprites.ts";
 import { placeSprite } from "./sprites.ts";
 
@@ -45,6 +46,8 @@ export type GuideDay = {
 export type BusWarning = "gone" | "retired" | "not_running";
 export type BusRow = { trip_id: string; date: string; trip: Trip | null; note: string; booked: boolean; warning?: BusWarning | null };
 export type BusTable = { title: string; intro: string; buses: BusRow[]; tips: string[] };
+/** TG-62: key and category are missing on a plan stored before the backfill; every write path stores a key after it. */
+export type BudgetRow = { item: string; estimate: string; key?: string | null; category?: Category | null };
 export type Guide = {
   title: string;
   summary: string;
@@ -52,7 +55,7 @@ export type Guide = {
   getting_there: BusTable;
   days: GuideDay[];
   getting_home: BusTable;
-  budget: { summary: string; rows: { item: string; estimate: string }[]; excluded: string };
+  budget: { summary: string; rows: BudgetRow[]; excluded: string };
   todo: { key: string; text: string; done: boolean }[];
   sources: { label: string; url: string | null }[];
 };

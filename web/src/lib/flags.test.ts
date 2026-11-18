@@ -15,6 +15,7 @@ const ENV_KEYS: Record<keyof Flags, string> = {
   walletMultiPayer: "NEXT_PUBLIC_WALLET_MULTI_PAYER",
   walletActivity: "NEXT_PUBLIC_WALLET_ACTIVITY",
   chatbotLive: "NEXT_PUBLIC_CHATBOT_LIVE",
+  budgetLines: "NEXT_PUBLIC_BUDGET_LINES",
 };
 
 // [raw, fallback, expected]. Keep identical to CASES in api/tests/test_flags.py.
@@ -57,7 +58,7 @@ afterEach(() => {
 
 test("defaults when unset", () => {
   clearFlagEnv();
-  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false });
+  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false, budgetLines: false });
   assert.deepEqual(readFlags(), FLAG_DEFAULTS);
 });
 

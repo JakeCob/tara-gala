@@ -192,9 +192,10 @@ def test_activity_pages_by_before_without_gaps_or_repeats(on, dsn):
             break
         pages.append([row["id"] for row in rows])
         before = rows[-1]["id"]
-    assert [len(p) for p in pages] == [15, 15, 10]
+    assert [len(p) for p in pages] == [15, 15, 11]  # A3 (B16): made_up()'s expense add is a row too
     flat = [i for p in pages for i in p]
-    assert flat == sorted(seeded, reverse=True)
+    added = activity_rows(dsn, slug)[0]["id"]  # that expense_add, the wallet's first row
+    assert flat == sorted(seeded + [added], reverse=True)
 
 
 def test_activity_limit_is_at_most_50(on, dsn):
@@ -214,8 +215,8 @@ def test_activity_is_one_wallets_own(on, dsn):
     other, _, _ = made_up(on)
     seed(dsn, slug, 3)
     seed(dsn, other, 2)
-    assert len(on.get(f"/wallets/{slug}/activity").json()["rows"]) == 3
-    assert len(on.get(f"/wallets/{other}/activity").json()["rows"]) == 2
+    assert len(on.get(f"/wallets/{slug}/activity").json()["rows"]) == 4  # A3 (B16): + made_up()'s expense_add
+    assert len(on.get(f"/wallets/{other}/activity").json()["rows"]) == 3
 
 
 def second_expense(client, slug, people):
@@ -243,7 +244,7 @@ def test_activity_for_one_expense(on, dsn):
             record_for(dsn, slug, "settle", None)
     post(on, slug, e1, by=people["Ugo Testname"])
     mine = [r["id"] for r in activity_rows(dsn, slug) if r["expense_id"] == e1]
-    assert len(mine) == 21
+    assert len(mine) == 22  # A3 (B16): 20 edits, the comment, and e1's own expense_add
 
     first = on.get(f"/wallets/{slug}/activity?expense_id={e1}")
     assert first.status_code == 200, first.text
@@ -261,16 +262,19 @@ def test_activity_for_one_expense(on, dsn):
             break
         pages.append([r["id"] for r in rows])
         before = rows[-1]["id"]
-    assert [len(p) for p in pages] == [8, 8, 5]
+    assert [len(p) for p in pages] == [8, 8, 6]
     assert [i for p in pages for i in p] == sorted(mine, reverse=True)
-    assert len(on.get(f"/wallets/{slug}/activity?expense_id={e1}&limit=50").json()["rows"]) == 21
+    assert len(on.get(f"/wallets/{slug}/activity?expense_id={e1}&limit=50").json()["rows"]) == 22
     assert on.get(f"/wallets/{slug}/activity?expense_id={e1}&limit=51").status_code == 422
 
 
 def test_activity_for_an_expense_that_isnt_here_is_empty_not_404(on, dsn):
     """B6a: another wallet's expense, a made-up id and an expense with no rows all give {rev, rows: []}"""
     slug, people, e1 = made_up(on)
-    quiet = second_expense(on, slug, people)
+    # A3 (B16): every API add now records expense_add, so the expense with no rows is made by SQL
+    quiet = sql(dsn, """insert into expenses (wallet_id, paid_by, amount_centavos, note)
+                        select w.id, m.id, 300, 'Taho' from wallets w join wallet_members m on m.wallet_id = w.id
+                        where w.share_slug = %s limit 1 returning id""", (slug,))[0]["id"]
     other, _, o1 = made_up(on)
     record_for(dsn, other, "expense_edit", o1)
     record_for(dsn, slug, "expense_edit", e1)
@@ -567,7 +571,8 @@ def test_deleting_an_expense_deletes_its_comments_and_keeps_their_lines(on, dsn)
     post(on, slug, expense)
     assert on.delete(f"/wallets/{slug}/expenses/{expense}").status_code == 200
     assert comment_rows(dsn, expense) == []
-    assert [r["action"] for r in activity_rows(dsn, slug) if r["expense_id"] == expense] == ["comment_add", "comment_add"]
+    assert [r["action"] for r in activity_rows(dsn, slug) if r["expense_id"] == expense] == [
+        "expense_add", "comment_add", "comment_add", "expense_delete"]  # A3 (B16): the add and the delete are rows too
 
 
 def test_comment_writes_take_the_wallet_rate_limit(on, monkeypatch):

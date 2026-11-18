@@ -12,6 +12,7 @@ export type Flags = {
   walletMultiPayer: boolean;
   walletActivity: boolean;
   chatbotLive: boolean;
+  budgetLines: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -25,6 +26,7 @@ export const FLAG_DEFAULTS: Flags = {
   walletMultiPayer: false, // TG-66: several payers, which ships last
   walletActivity: false, // TG-66: the activity list and comments
   chatbotLive: false, // TG-61 PR 2: the chatbot, inside the hand editor, until the API's CHATBOT_LIVE is on
+  budgetLines: false, // TG-62: the wallet's budget line and the trip's Budget panel; off sends no budget_key and makes no budget request
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -54,6 +56,7 @@ export function readFlags(): Flags {
     walletMultiPayer: parseFlag(process.env.NEXT_PUBLIC_WALLET_MULTI_PAYER, FLAG_DEFAULTS.walletMultiPayer),
     walletActivity: parseFlag(process.env.NEXT_PUBLIC_WALLET_ACTIVITY, FLAG_DEFAULTS.walletActivity),
     chatbotLive: parseFlag(process.env.NEXT_PUBLIC_CHATBOT_LIVE, FLAG_DEFAULTS.chatbotLive),
+    budgetLines: parseFlag(process.env.NEXT_PUBLIC_BUDGET_LINES, FLAG_DEFAULTS.budgetLines),
   };
 }
 
