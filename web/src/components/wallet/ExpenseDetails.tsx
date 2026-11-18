@@ -27,6 +27,7 @@ import {
   type HistoryLine,
 } from "@/lib/walletActivity";
 import { chargeAmount } from "@/lib/walletSplit";
+import { detailsLine } from "@/lib/budgetLines";
 import { failureMessage, formatPeso, walletApi, type Activity, type Expense, type Wallet, type WalletFailed } from "@/lib/wallet";
 
 type Load<T> = { state: "loading" } | { state: "ready"; value: T } | { state: "failed"; text: string };
@@ -179,6 +180,7 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
   }
 
   const severalPayers = (expense.payers?.length ?? 0) > 1;
+  const budgetLine = detailsLine(wallet.budget ?? null, expense.budget_key); // null without a budget: TG-66's Details exactly
   const itemsTotal = (expense.items ?? []).reduce((a, i) => a + i.price_centavos, 0); // the charges' base (plan §2)
   const editable = splits && (multiPayer || !severalPayers);
   const rows = history.state === "ready" ? history.value.rows : null;
@@ -206,7 +208,18 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
 
         <div className="flex flex-col gap-1">
           <p className="text-2xl font-extrabold tabular-nums">{formatPeso(expense.amount_centavos)}</p>
-          {expense.category ? <p><span className={PX.chip}>{categoryWords(expense.category)}</span></p> : <p className={PX.meta}>{categoryWords(null)}</p>}
+          {budgetLine && !budgetLine.meta && expense.category ? (
+            // TG-62 GW1 (G26, ux §5): "Food · Meals and merienda, 2.5 days" / "Food · Not in the budget"
+            <p className="flex flex-wrap items-baseline gap-x-2">
+              <span className={PX.chip}>{categoryWords(expense.category)}</span>
+              <span className="text-sm break-words">· {budgetLine.text}</span>
+            </p>
+          ) : expense.category ? (
+            <p><span className={PX.chip}>{categoryWords(expense.category)}</span></p>
+          ) : (
+            <p className={PX.meta}>{categoryWords(null)}</p>
+          )}
+          {budgetLine && (budgetLine.meta || !expense.category) && <p className={budgetLine.meta ? PX.meta : "text-sm break-words"}>{budgetLine.text}</p>}
           <p className="text-sm break-words">Paid by {payersDetail(expense, wallet)}</p>
           <p className={PX.meta}>{addedLine(expense, rows, wallet)}</p>
         </div>
