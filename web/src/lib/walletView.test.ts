@@ -313,3 +313,7 @@ test("W3-V22 tg-ux2 W3 S3: Items' Amount is read-only and looks it (the page bac
   assert.match(src, /className="min-h-11 w-full min-w-0 rounded-none border-3 border-frame bg-background px-3 py-2 text-base text-foreground focus-pixel"\s*readOnly/);
   assert.doesNotMatch(src.slice(src.indexOf('id="expense-amount"'), src.indexOf("readOnly")), /text-muted|disabled/);
 });
+
+test("W3-V23 tg-ux2 W3 S6: the Equal + extra pill holds `Equal +` together, so at 320 it breaks at most once", () => {
+  assert.match(read("src/components/wallet/ExpenseForm.tsx"), /\{MODE_LABEL\[mode\]\.replace\("Equal \+", "Equal\\u00a0\+"\)/);
+});

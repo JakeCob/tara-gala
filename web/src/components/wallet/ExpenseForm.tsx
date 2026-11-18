@@ -284,7 +284,7 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
         <div className="grid grid-cols-3 gap-2">
           {(Object.keys(MODE_LABEL) as SplitMode[]).map((mode) => (
             <PixelChoice key={mode} name="split-mode" value={mode} checked={s.mode === mode} onChange={() => setS((x) => switchMode(x, mode))}>
-              {MODE_LABEL[mode]}
+              {MODE_LABEL[mode].replace("Equal +", "Equal\u00a0+") /* breaks at most once at 320 (tg-ux2 W3 S6) */}
             </PixelChoice>
           ))}
         </div>
