@@ -26,6 +26,7 @@ export default function PayersEditor({ members, me, paid, line, onChange, onJust
                 <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
                 <input
                   className={cx(PX.input, "w-28 text-right tabular-nums")}
+                  aria-label={`What ${m.name} paid`}
                   inputMode="decimal"
                   autoComplete="off"
                   placeholder="0"

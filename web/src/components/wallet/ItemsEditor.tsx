@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { PX, PixelButton, PixelChoice, cx } from "@/components/pixel";
 import { formatPeso, type Member } from "@/lib/wallet";
-import type { Bill, FormItem } from "@/lib/walletRequest";
+import { itemLine, type Bill, type FormItem } from "@/lib/walletRequest";
 
 /**
  * TG-66 ux.md §3, Items (66-04-items): each item is a name, Remove, a price and a person pill per member. A shared
@@ -72,6 +72,7 @@ export default function ItemsEditor({ items, members, me, service, vat, bill, sh
                 <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
                 <input
                   className={cx(PX.input, "w-28 text-right tabular-nums")}
+                  aria-label={`Price of ${label(it, i)}`}
                   inputMode="decimal"
                   autoComplete="off"
                   placeholder="0"
@@ -94,6 +95,7 @@ export default function ItemsEditor({ items, members, me, service, vat, bill, sh
                 </PixelChoice>
               ))}
             </div>
+            {itemLine(it, i) && <p className="text-sm text-danger-text">{itemLine(it, i)}</p>}
           </li>
         ))}
       </ul>
@@ -112,11 +114,11 @@ export default function ItemsEditor({ items, members, me, service, vat, bill, sh
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-semibold">Service charge</span>
-          <input className={cx(PX.input, "w-full min-w-0")} autoComplete="off" placeholder="10%" value={service} onChange={(e) => onCharge("service", e.target.value)} />
+          <input className={cx(PX.input, "w-full min-w-0")} autoComplete="off" value={service} onChange={(e) => onCharge("service", e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-semibold">VAT, other charges</span>
-          <input className={cx(PX.input, "w-full min-w-0")} autoComplete="off" placeholder="0 or 12%" value={vat} onChange={(e) => onCharge("vat", e.target.value)} />
+          <input className={cx(PX.input, "w-full min-w-0")} autoComplete="off" value={vat} onChange={(e) => onCharge("vat", e.target.value)} />
         </label>
       </div>
       <p className={PX.meta}>

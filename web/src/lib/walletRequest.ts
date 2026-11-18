@@ -69,6 +69,12 @@ export function pickWhoHad(name: string | undefined): string {
   return name?.trim() ? `Pick who had ${name.trim()}.` : "Pick who had each item.";
 }
 
+/** An item's own line under its pills (ux.md §3): only once it has a name or a price, so a fresh row doesn't shout. */
+export function itemLine(item: FormItem, index: number): string | null {
+  if (item.who.length > 0 || (!item.name.trim() && !item.price.trim())) return null;
+  return `Pick who had ${item.name.trim() || `item ${index + 1}`}.`;
+}
+
 let nextKey = 0;
 const freshKey = () => `item-${++nextKey}`;
 
@@ -334,6 +340,10 @@ export function checkForm(s: FormState, members: Member[], flags: FormFlags): Fo
     }
   }
   out.amount = amount;
+  // Items: while there's no bill, the status line says why the totals aren't there (tg-ux2 M1)
+  if (s.mode === "itemized" && !out.bill) {
+    out.status = parsedItems && !parsedItems.ok ? parsedItems.problem : result && !result.ok ? splitProblem(result.error, result.seq, s) : null;
+  }
 
   // Several payers' line, once the amount is known
   if (several) {

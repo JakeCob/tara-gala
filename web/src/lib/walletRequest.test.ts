@@ -548,3 +548,32 @@ test("W1-R32 B22 a legacy reopen compares in wallet order, not the shares' store
   assert.deepEqual(s.exact, { [A]: "3.33", [B]: "3.34", [C]: "3.34" });
   assert.equal(s.paidBy, D);
 });
+
+// ---------------------------------------------------------------- tg-ux2's UX review M1 and M2 (added in GREEN)
+
+test("W1-R33 ux M1: an item with nobody gets its own line once it has a name or a price; a fresh row stays quiet", async () => {
+  const { itemLine } = await load();
+  assert.equal(itemLine({ key: "a", name: "", price: "", who: [] }, 0), null, "an empty row doesn't shout");
+  assert.equal(itemLine({ key: "a", name: " Pinikpikan ", price: "", who: [] }, 0), "Pick who had Pinikpikan.");
+  assert.equal(itemLine({ key: "a", name: "", price: "120", who: [] }, 1), "Pick who had item 2.");
+  assert.equal(itemLine({ key: "a", name: "Rice", price: "160", who: [A] }, 3), null);
+});
+
+test("W1-R34 ux M1: in Items, the status line says why there's no bill, and is empty once there is one", async () => {
+  const { checkForm } = await load();
+  const status = async (patch: Record<string, unknown>) => {
+    const c = checkForm(await form({ mode: "itemized", ...patch }), MEMBERS, SPLITS);
+    return [c.status, c.bill === null];
+  };
+  assert.deepEqual(await status({ items: [BILL[0], { ...BILL[1], who: [] }] }), ["Pick who had Strawberry taho.", true]);
+  assert.deepEqual(await status({ items: [BILL[0], { key: "n", name: "", price: "", who: [] }] }), ["Give item 2 a name.", true]);
+  assert.deepEqual(await status({ items: [{ ...BILL[0], price: "0" }] }), ["The items come to ₱0. Type a price for at least one.", true]);
+  assert.deepEqual(await status({ items: BILL, service: "10%" }), [null, false]);
+  assert.deepEqual(await status({ items: BILL, service: "10%", note: "" }), [null, false], "the note isn't the bill's problem");
+});
+
+test("W1-R35 ux M2: payer and price fields have their own names", () => {
+  assert.match(read(PAYERS), /aria-label=\{`What \$\{m\.name\} paid`\}/);
+  assert.match(read(ITEMS), /aria-label=\{`Price of \$\{label\(it, i\)\}`\}/);
+  assert.doesNotMatch(read(ITEMS), /placeholder="(10%|0 or 12%)"/, "ux S1: no charge placeholders that read like values");
+});
