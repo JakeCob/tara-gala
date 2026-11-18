@@ -126,6 +126,9 @@ def get_activity(
                 order by a.id desc""",
             params,
         ).fetchall()
+    if not found:  # the wallet went between the two statements
+        logger.info("wallet not found share_slug=%s", share_slug)
+        raise HTTPException(404, wallets.NOT_FOUND, headers=wallets.NOINDEX)
     rows = [ActivityRowOut(**{k: v for k, v in r.items() if k != "rev"}) for r in found if r["id"] is not None]
     page = ActivityOut(rev=found[0]["rev"], rows=rows)
     wallets._private(response)
@@ -183,7 +186,10 @@ def add_comment(share_slug: str, expense_id: UUID, body: CommentIn, request: Req
         record(conn, wallet_id, "comment_add", by=body.by, expense_id=expense_id)  # never the text
         answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id), comments=_comments(conn, expense_id))
     wallets._private(response)
-    logger.info("wallet comment add share_slug=%s comments=%d rev=%d", share_slug, len(answer.comments), answer.wallet.rev)
+    logger.info(
+        "wallet comment add share_slug=%s comments=%d rev=%d by=%s",
+        share_slug, len(answer.comments), answer.wallet.rev, "yes" if body.by else "no",
+    )
     return answer
 
 
@@ -211,5 +217,8 @@ def delete_comment(
         record(conn, wallet_id, "comment_delete", by=by, expense_id=expense_id)
         answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id), comments=_comments(conn, expense_id))
     wallets._private(response)
-    logger.info("wallet comment delete share_slug=%s comments=%d rev=%d", share_slug, len(answer.comments), answer.wallet.rev)
+    logger.info(
+        "wallet comment delete share_slug=%s comments=%d rev=%d by=%s",
+        share_slug, len(answer.comments), answer.wallet.rev, "yes" if by else "no",
+    )
     return answer
