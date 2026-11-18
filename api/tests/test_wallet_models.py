@@ -34,7 +34,8 @@ SNAPSHOT = json.loads((Path(__file__).parent / "fixtures" / "wallet_models_pre_t
 MOVED = ["WalletIn", "MemberIn", "ShareIn", "ExpenseIn", "SettlementIn", "MemberOut", "ShareOut", "ExpenseOut",
          "SettlementOut", "BalanceOut", "TransferOut", "WalletOut"]
 NEW_EXPENSE_FIELDS = {"category": None, "mode": None, "inputs": [], "items": [], "charges": [], "payers": [], "version": 1,
-                      "updated_at": None, "comment_count": 0}
+                      "updated_at": None, "comment_count": 0,
+                      "budget_key": None}  # TG-62 G0: the expense's budget line (test_tg62_models.py)
 A, B, C = (str(uuid4()) for _ in range(3))
 
 
@@ -73,7 +74,7 @@ def test_unchanged_models_have_the_same_schema(name):
 
 def test_expense_and_wallet_out_only_gain_defaulted_fields():
     """Every old field keeps its schema, and each new one has a default, so today's _load still validates."""
-    for name, new in (("ExpenseOut", NEW_EXPENSE_FIELDS), ("WalletOut", {"rev": 0})):
+    for name, new in (("ExpenseOut", NEW_EXPENSE_FIELDS), ("WalletOut", {"rev": 0, "budget": None})):
         old, now = SNAPSHOT[name], getattr(m, name).model_json_schema()
         for field, spec in old["properties"].items():
             assert now["properties"][field] == spec, f"{name}.{field}"
