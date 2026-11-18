@@ -306,9 +306,9 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
         ) : (
           <ul className="flex flex-col gap-2">
             {members.map((m) => (
-              <li key={m.id} className="flex min-h-11 items-center justify-between gap-3 text-sm">
+              <li key={m.id} className={cx("flex min-h-11 items-center justify-between text-sm", s.mode === "adjust" ? "flex-wrap gap-x-3 gap-y-1" : "gap-3")}>
                 {s.mode === "equal" || s.mode === "adjust" ? (
-                  <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2">
+                  <label className={cx("flex min-h-11 flex-1 cursor-pointer items-center gap-2", s.mode === "adjust" ? "min-w-[5.5rem]" : "min-w-0")}>
                     <input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--primary)]" checked={ticked(m.id)} onChange={(e) => tick(m.id, e.target.checked)} />
                     <span className="min-w-0 break-words">{label(m.id, m.name)}</span>
                   </label>
@@ -367,22 +367,26 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
                   </span>
                 )}
                 {s.mode === "adjust" && (
-                  <label className="flex items-center gap-1">
-                    <span className={PX.meta}>extra</span>
-                    <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
-                    <input
-                      className={cx(PX.input, "w-24 text-right tabular-nums")}
-                      aria-label={`Extra for ${m.name}`}
-                      inputMode="text"
-                      autoComplete="off"
-                      placeholder="0"
-                      disabled={!ticked(m.id)}
-                      value={s.extras[m.id] ?? ""}
-                      onChange={(e) => setIn("extras", m.id, e.target.value)}
-                    />
-                  </label>
+                  // Equal + extra: the field and its preview stay together, right-aligned; at 320 they wrap under the name
+                  <span className="ml-auto flex shrink-0 items-center gap-2">
+                    <label className="flex items-center gap-1">
+                      <span className={PX.meta}>extra</span>
+                      <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
+                      <input
+                        className={cx(PX.input, "w-18 text-right tabular-nums")}
+                        aria-label={`Extra for ${m.name}`}
+                        inputMode="text"
+                        autoComplete="off"
+                        placeholder="0"
+                        disabled={!ticked(m.id)}
+                        value={s.extras[m.id] ?? ""}
+                        onChange={(e) => setIn("extras", m.id, e.target.value)}
+                      />
+                    </label>
+                    <span className="text-right tabular-nums text-muted">{preview(m.id)}</span>
+                  </span>
                 )}
-                {s.mode !== "exact" && <span className="w-20 text-right tabular-nums text-muted">{preview(m.id)}</span>}
+                {s.mode !== "exact" && s.mode !== "adjust" && <span className="w-20 text-right tabular-nums text-muted">{preview(m.id)}</span>}
               </li>
             ))}
           </ul>

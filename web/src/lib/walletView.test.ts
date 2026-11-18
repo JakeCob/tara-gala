@@ -274,3 +274,12 @@ test("W3-V17 tg-review2 S1: an open expense that leaves the wallet closes Detail
   assert.match(effect, /document\.getElementById\("expense-amount"\)/);
   assert.match(src, /deletedHere\.current = e\.id;/);
 });
+
+test("W3-V18 Equal + extra rows fit at 320 and 380 (render check): the row wraps, the field and preview stay together", () => {
+  const src = read("src/components/wallet/ExpenseForm.tsx");
+  assert.match(src, /s\.mode === "adjust" \? "flex-wrap gap-x-3 gap-y-1" : "gap-3"/, "only the adjust row wraps");
+  assert.match(src, /s\.mode === "adjust" \? "min-w-\[5\.5rem\]" : "min-w-0"/, "the name keeps a readable width");
+  assert.match(src, /<span className="ml-auto flex shrink-0 items-center gap-2">\s*<label className="flex items-center gap-1">\s*<span className=\{PX\.meta\}>extra<\/span>/);
+  assert.match(src, /cx\(PX\.input, "w-18 text-right tabular-nums"\)/);
+  assert.match(src, /s\.mode !== "exact" && s\.mode !== "adjust" && <span className="w-20 /, "other modes keep their preview column");
+});
