@@ -71,7 +71,7 @@ class Trip:
         for r in curated:
             self.curated[r["item"]].append(r)
         self.by_text: dict[tuple[str, int], tuple[str, str | None]] = {}
-        self.keyed = self.already = 0
+        self.keyed = self.already = self.curated_keyed = 0
 
     def key(self, plan: dict) -> None:
         rows = _rows(plan)
@@ -89,6 +89,7 @@ class Trip:
                 key, category = known
             elif same and same["key"] not in here:
                 key, category = same["key"], same.get("category")
+                self.curated_keyed += 1
             else:
                 key, category = unique_key(r["item"], self.taken | here), None
             self.by_text.setdefault((r["item"], n), (key, category))
@@ -112,7 +113,7 @@ def _strip(plan: dict) -> int:
 
 class Counts:
     def __init__(self):
-        self.plans = self.keyed = self.already = self.stripped = 0
+        self.plans = self.keyed = self.already = self.stripped = self.curated = 0
         self.writes: list[tuple[str, object, dict]] = []
 
     def group(self, group: list[tuple[str, object, dict]], curated: list[dict] | None, strip: bool) -> None:
@@ -126,6 +127,7 @@ class Counts:
             for _, _, p in group:
                 trip.key(p)
             self.keyed, self.already = self.keyed + trip.keyed, self.already + trip.already
+            self.curated += trip.curated_keyed
         self.writes += [g for g, b in zip(group, before, strict=True) if json.dumps(g[2], sort_keys=True) != b]
 
 
@@ -154,6 +156,7 @@ def run(dsn: str, *, apply: bool, strip: bool = False, folder: Path = ITINERARIE
         print(f"rows stripped: {c.stripped}")
     else:
         print(f"rows keyed: {c.keyed}")
+        print(f"  of them from a curated file's line: {c.curated}")  # the rest by their own text (plan G21)
         print(f"rows already keyed: {c.already}")
     print(f"plans {'saved' if apply else 'that would change'}: {len(c.writes)}")
     return 0
