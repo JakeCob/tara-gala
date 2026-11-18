@@ -441,12 +441,12 @@ test("T53-W27 change mode: its own copy, and Remove proof only shows behind a co
 
 // ---------------------------------------------------------------- TG-66 W3, B28c: who wrote it, and the fresh GET's rev
 
-test("T66-P1 B28c ProofDialog sends `by` on mark-paid and every proof write; WalletView gives it only with WALLET_ACTIVITY on", () => {
+test("T66-P1 B28c ProofDialog sends `by` on mark-paid and every proof write; WalletView gives it this phone's person (plan §2 addendum: any flags)", () => {
   const src = dialog();
   assert.match(src, /\bby\b: string \| null;/, "a `by` prop: this phone's person, or null");
   assert.match(src, /markPaid\(walletApi, slug, transfer, picture, paymentId \?\? undefined, by\)/);
   assert.match(src, /walletApi\.removeProof\(slug, target\.settlementId, by\)/);
-  assert.match(view(), /<ProofDialog\b[^>]*\bby=\{parts\.sendBy \? me : null\}/, "flags off: today's requests");
+  assert.match(view(), /<ProofDialog\b[^>]*\bby=\{me\}/, "?by= whenever a person is picked; a null by sends none (wallet.test.ts TG66-W3-1)");
 });
 
 test("T66-P2 B28c ProofDialog's fresh GET after a raced remove hands on only a live answer, which the parent lands with the rev rule", () => {

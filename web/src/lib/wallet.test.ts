@@ -395,7 +395,7 @@ test("TG66-W3-1 B28c walletApi sends `by` (A3/A2: ?by= on settle, undo, delete, 
   const S = "11111111-1111-4111-8111-111111111111";
   const t = { from_member: "a", to_member: "b", amount_centavos: 500 };
   const pic = new Blob(["made up"], { type: "image/jpeg" });
-  await withFetch(Array.from({ length: 12 }, (_, i) => json(200, revWallet(i + 1))), async (sent) => {
+  await withFetch(Array.from({ length: 13 }, (_, i) => json(200, revWallet(i + 1))), async (sent) => {
     await walletApi.deleteExpense(W, E, 3, M);
     await walletApi.deleteExpense(W, E, undefined, M);
     await walletApi.settle(W, t, M);
@@ -409,6 +409,7 @@ test("TG66-W3-1 B28c walletApi sends `by` (A3/A2: ?by= on settle, undo, delete, 
     await walletApi.undoSettlement(W, S);
     await walletApi.addMember(W, "Eli", M);
     await walletApi.addMember(W, "Eli");
+    await walletApi.deleteExpense(W, E, 4, null);
     const at = (i: number) => sent[i].url.slice(sent[i].url.indexOf("/wallets"));
     assert.equal(at(0), `/wallets/${W}/expenses/${E}?version=3&by=${M}`);
     assert.equal(at(1), `/wallets/${W}/expenses/${E}?by=${M}`);
@@ -422,6 +423,8 @@ test("TG66-W3-1 B28c walletApi sends `by` (A3/A2: ?by= on settle, undo, delete, 
     assert.equal(at(6), `/wallets/${W}/expenses/${E}`);
     assert.equal(sent[7].body, JSON.stringify(t), "today's settle body");
     assert.equal(sent[8].body, JSON.stringify(t), "a null by is no by");
+    assert.equal(at(8), `/wallets/${W}/settlements`, "tg-test3 S1: never ?by=null (the API would 422 it)");
+    assert.equal(at(12), `/wallets/${W}/expenses/${E}?version=4`, "a null by on a DELETE: no by at all");
     assert.equal(at(9), `/wallets/${W}/settlements/${S}`);
     assert.equal(at(10), `/wallets/${W}/members?by=${M}`);
     assert.equal(sent[10].body, JSON.stringify({ name: "Eli" }));
