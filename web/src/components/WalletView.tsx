@@ -97,6 +97,8 @@ export default function WalletView({ slug }: { slug: string }) {
   const lastSubmit = useRef<SubmitContext | null>(null); // the form's last submit: its asAmounts is ux §9's Save as Amounts
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null); // what opened Details: focus goes back there (tg-ux2 W2 S1)
+  const neighbor = useRef<string | null>(null); // the expense next to the open one: focus goes there if this one is deleted
+  const deletedHere = useRef<string | null>(null); // Details' own Delete, so it isn't also announced as someone else's
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
   const shownAt = useRef(0); // TG-65: how new the wallet on screen is: when its GET left, or when a write landed
@@ -124,6 +126,28 @@ export default function WalletView({ slug }: { slug: string }) {
       live = false;
     };
   }, [slug, reloads]);
+
+  // tg-review2 S1: the open expense left the wallet on screen (Details' own Delete, or a refresh with another phone's).
+  // Details unmounts without its close event, so do onClosed's clean-up here. The state changes run in the frame
+  // callback, after the render that dropped it
+  const shownWallet = load.state === "ready" ? load.wallet : null;
+  const detailsGone = detailsId !== null && shownWallet !== null && !shownWallet.expenses.some((e) => e.id === detailsId);
+  useEffect(() => {
+    if (!detailsGone) return;
+    proofOpen.current = false;
+    const id = detailsId;
+    const ours = deletedHere.current === id;
+    const back = opener.current;
+    const next = neighbor.current;
+    const frame = requestAnimationFrame(() => {
+      setDetailsId(null);
+      deletedHere.current = null;
+      if (!ours) setNotice({ text: "This expense was deleted.", error: false });
+      console.info("[tg-wallet] details gone ours=%s", ours ? "yes" : "no");
+      (back?.isConnected ? back : ((next ? document.getElementById(`details-${next}`) : null) ?? document.getElementById("expense-amount")))?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detailsGone, detailsId]);
 
   // Others add expenses from their phones: fetch again whenever this one comes back to the app
   useEffect(() => {
@@ -352,6 +376,9 @@ export default function WalletView({ slug }: { slug: string }) {
 
   function openDetails(id: string, from: HTMLElement | null) {
     opener.current = from;
+    const list = load.state === "ready" ? load.wallet.expenses : [];
+    const at = list.findIndex((e) => e.id === id);
+    neighbor.current = list[at + 1]?.id ?? list[at - 1]?.id ?? null;
     proofOpen.current = true;
     setNotice(null);
     setDetailsId(id);
@@ -367,6 +394,7 @@ export default function WalletView({ slug }: { slug: string }) {
       if (r.wallet) landWallet(r.wallet); // expense_changed or expense_gone: the wallet as it is now
       return r;
     }
+    deletedHere.current = e.id;
     landWallet(r.wallet);
     setNotice({ text: "Expense deleted.", error: false });
     if (editing?.expense.id === e.id) closeForm(null);
@@ -711,7 +739,10 @@ export default function WalletView({ slug }: { slug: string }) {
             setDetailsId(null);
             if (!back) return; // Edit: the form's title has focus
             // After the frame: the opener may have re-rendered (an activity line) or gone (a deleted expense)
-            requestAnimationFrame(() => (back.isConnected ? back : (document.getElementById(`details-${id}`) ?? document.getElementById("expense-amount")))?.focus());
+            const next = neighbor.current;
+            requestAnimationFrame(() =>
+              (back.isConnected ? back : (document.getElementById(`details-${id}`) ?? (next ? document.getElementById(`details-${next}`) : null) ?? document.getElementById("expense-amount")))?.focus(),
+            );
           }}
         />
       )}

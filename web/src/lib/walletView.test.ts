@@ -262,3 +262,15 @@ test("W3-V16 logs: wallet writes and the new paths log outcomes and counts only,
   }
   assert.match(read(VIEW), /console\.info\("\[tg-wallet\] expense edit ok=%s/);
 });
+
+test("W3-V17 tg-review2 S1: an open expense that leaves the wallet closes Details' state, frees the dialog flag and places focus", () => {
+  const src = read(VIEW);
+  const effect = src.slice(src.indexOf("const detailsGone ="), src.indexOf("// Others add expenses from their phones"));
+  assert.match(effect, /detailsId !== null && shownWallet !== null && !shownWallet\.expenses\.some\(\(e\) => e\.id === detailsId\)/);
+  assert.match(effect, /proofOpen\.current = false;/, "a later failed GET doesn't keep an old screen for a dialog that's gone");
+  assert.match(effect, /setDetailsId\(null\)/);
+  assert.match(effect, /"This expense was deleted\."/, "another phone's delete is said; this phone's own already says Expense deleted.");
+  assert.match(effect, /neighbor\.current/, "focus to the next expense's Details, not <body>");
+  assert.match(effect, /document\.getElementById\("expense-amount"\)/);
+  assert.match(src, /deletedHere\.current = e\.id;/);
+});
