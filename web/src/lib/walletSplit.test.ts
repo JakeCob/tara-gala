@@ -146,7 +146,7 @@ test("W1-S8 random cases: the shares sum to the amount, none below 0, each withi
     if (mode === "equal") weights = among.map(() => 1);
     else if (mode === "shares") {
       weights = among.map(() => r(21));
-      if (weights.every((w) => w === 0)) weights[0] = 1;
+      if (!weights.some((w) => w > 0)) weights[0] = 1; // not every(w => w === 0): TS infers a predicate and narrows to 0[]
     } else {
       weights = among.map(() => 0);
       let left = 10000;
