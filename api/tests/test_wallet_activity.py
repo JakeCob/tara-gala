@@ -439,6 +439,7 @@ def test_each_comment_write_is_one_rev_above_the_last(on, dsn):
     assert on.get(comments_url(slug, expense)).json()["rev"] == r0 + 1
     second = post(on, slug, expense, body="TESTCOMMENT b").json()
     gone = on.delete(comments_url(slug, expense, first["comments"][0]["id"])).json()
+    assert [c["body"] for c in second["comments"]] == ["TESTCOMMENT a", "TESTCOMMENT b"]  # a write's answer is oldest first too
     assert [first["wallet"]["rev"], second["wallet"]["rev"], gone["wallet"]["rev"]] == [r0 + 1, r0 + 2, r0 + 3]
     assert [c["body"] for c in gone["comments"]] == ["TESTCOMMENT b"]
     assert next(e for e in gone["wallet"]["expenses"] if e["id"] == expense)["comment_count"] == 1
