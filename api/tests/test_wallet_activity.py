@@ -728,17 +728,20 @@ def test_no_log_line_has_a_name_text_or_member_id(on, dsn, caplog):
     sid = pay(on, slug, people, frm="Ugo Testname", to="Tessa Testname")
     cid = post(on, slug, expense, by=ugo).json()["comments"][0]["id"]
     post(on, slug, expense, by=vida)
-    post(on, slug, expense, by=str(uuid4()))  # refused: the stranger's id mustn't reach a log either
+    stranger = str(uuid4())
+    assert post(on, slug, expense, by=stranger).status_code == 422  # refused: the stranger's id mustn't reach a log either
     on.get(comments_url(slug, expense))
+    assert on.delete(comments_url(slug, expense, cid) + f"?by={stranger}").status_code == 422  # the query form's refusal too
     on.delete(comments_url(slug, expense, cid) + f"?by={vida}")
     on.post(proof_url(slug, sid) + f"?by={ugo}", content=PNG, headers={"content-type": "image/png"})
     on.post(proof_url(slug, sid) + f"?by={vida}", content=PNG2, headers={"content-type": "image/png"})
+    assert on.delete(proof_url(slug, sid) + f"?by={stranger}").status_code == 422
     on.delete(proof_url(slug, sid) + f"?by={ugo}")
     on.get(f"/wallets/{slug}/activity")
 
     text = "\n".join(r.getMessage() for r in caplog.records)
     wallet_id = str(wallet_uuid(dsn, slug))
-    secrets = [*MEMBERS, "Testname", "TESTCOMMENT", "TESTPLACE", wallet_id, *people.values()]
+    secrets = [*MEMBERS, "Testname", "TESTCOMMENT", "TESTPLACE", wallet_id, stranger, *people.values()]
     assert [s for s in secrets if s in text] == []
 
     api = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api"]
