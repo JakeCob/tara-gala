@@ -373,6 +373,20 @@ test("GW1-V5 ux §9: an add or edit refused for its line shows the line's alert,
   assert.match(refuse, /setReloads\(\(n\) => n \+ 1\)/, "refuseLine reloads when the answer has no wallet");
 });
 
+test("GW1-V7 tg-ux2 (ux §2 item 3): the edit meta reads the saved category and goes for good once anything is picked in the row", () => {
+  const src = read(FORM_SRC);
+  assert.match(src, /const \[linePicked, setLinePicked\] = useState\(false\)/);
+  assert.match(src, /const lineMeta = editing && line === null && !linePicked \? /, "a pick hides it, and clearing the pick doesn't bring it back");
+  assert.match(
+    src,
+    /editLineMeta\(budget, editing\.expense\.budget_key, editing\.expense\.category \?\? null\)/,
+    "the plan's change, not the form's: with s.category an unmoved line would read 'now lists under Food'",
+  );
+  assert.doesNotMatch(src, /editLineMeta\([^)]*s\.category/);
+  const row = src.match(/name="budget-line"[\s\S]*?<\/PixelChoice>/)?.[0] ?? "";
+  assert.match(row, /onChange=\{\(\) => \{[\s\S]*?setLinePicked\(true\)[\s\S]*?\}\}/, "set by a pick in the row");
+});
+
 test("GW1-V6 logs: the form says whether a line went, never which (G10a's rule on the web)", () => {
   const src = read(FORM_SRC);
   assert.match(src, /console\.info\("\[tg-wallet\] expense form submit [^"]*line=%s/);
