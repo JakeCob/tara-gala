@@ -406,6 +406,40 @@ def test_set_budget_drops_a_made_up_key_and_keeps_known_ones():  # pure: plan_op
                                      {"item": "E2E odd", "estimate": "4"}]
 
 
+def test_the_set_budget_category_is_an_enum_of_tg66s_words():  # tg-review N1
+    from app import plan_ops
+
+    cat = plan_ops.REPLY_SCHEMA["properties"]["ops"]["items"]["properties"]["budget_rows"]["items"]["properties"]["category"]
+    assert cat["enum"] == ["transport", "hotel", "food", "activities", "other", None]
+
+
+def _one_budget_guide(rows):
+    return guides.Guide.model_validate({
+        "title": "T", "getting_there": {"title": "Out", "buses": []}, "getting_home": {"title": "Back", "buses": []},
+        "days": [{"day": 1, "title": "D1", "rows": [{"key": "d1-01", "time": "09:00", "plan": "x"}]}], "budget": {"rows": rows}})
+
+
+def test_set_budget_drops_a_long_made_up_key_instead_of_failing_the_reply():  # tg-review N2
+    from app import plan_ops
+
+    g = _one_budget_guide([{"item": "E2E meals", "estimate": "1", "key": "meals", "category": "food"}])
+    o = plan_ops.Op.model_validate(op("set_budget", budget_rows=[{"item": "E2E new", "estimate": "3", "key": "x" * 80, "category": None}]))
+    out, codes = plan_ops.apply(g, [o])
+    assert codes == [] and out["budget"]["rows"] == [{"item": "E2E new", "estimate": "3"}]
+
+
+def test_set_budget_gives_a_known_key_to_its_first_row_only():  # tg-review N3
+    from app import plan_ops
+
+    g = _one_budget_guide([{"item": "E2E meals", "estimate": "1", "key": "meals", "category": "food"}])
+    o = plan_ops.Op.model_validate(op("set_budget", budget_rows=[
+        {"item": "E2E meals", "estimate": "1", "key": "meals", "category": None},
+        {"item": "E2E more meals", "estimate": "2", "key": "meals", "category": "food"}]))
+    out, codes = plan_ops.apply(g, [o])
+    assert codes == []
+    assert [(r.get("key"), r.get("category")) for r in out["budget"]["rows"]] == [("meals", None), (None, "food")]
+
+
 def test_renaming_the_meals_line_through_the_chat_keeps_meals_and_food(chat, t, client, keyed):
     it = plan_of(client, t)
     chat.script(say("Pinalitan ko ang pangalan ng meals line.",

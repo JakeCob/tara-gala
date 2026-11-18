@@ -33,9 +33,13 @@ NEEDS_WHY = ("remove_row", "remove_todo")
 MAY_HAVE_WHY = ("move_row", "set_row", "swap_bus")
 
 
+CATEGORIES = ("transport", "hotel", "food", "activities", "other")  # TG-66's words, as the strict schema's enum
+
+
 class OpBudgetRow(BudgetRow):
-    """A set_budget row as the model sends it: any short key, since a made-up one is dropped rather than refused."""
-    key: Annotated[str, StringConstraints(max_length=40)] | None = None
+    """A set_budget row as the model sends it: any key, since a made-up one is dropped rather than refused (tg-review
+    N2: no length cap, so a long one doesn't fail the whole reply)."""
+    key: str | None = None
 
 
 class Op(BaseModel):
@@ -102,7 +106,8 @@ _OP = _obj(
     budget_rows={"type": ["array", "null"], "items": _obj(
         item={"type": "string"}, estimate={"type": "string"},
         key=_maybe("string", "the row's key from <budget>; null for a new row"),
-        category=_maybe("string", "transport, hotel, food, activities or other; null keeps the row's category"),
+        category={**_maybe("string", "transport, hotel, food, activities or other; null keeps the row's category"),
+                  "enum": [*CATEGORIES, None]},  # tg-review N1: a word outside these would fail the whole reply
     ), "description": "set_budget: every budget row"},
     budget_summary=_maybe("string", "set_budget: the budget's one-line summary"),
     why=_maybe("string", f"remove_row, remove_todo, and set_row with a new place: required, why it goes, at most {MAX_WHY} "
@@ -227,8 +232,12 @@ def _one(g: dict, o: Op) -> None:
     elif o.op == "set_budget":
         _need(o, "budget_rows")
         known = {r["key"] for r in g["budget"]["rows"] if r.get("key")}
-        g["budget"]["rows"] = [BudgetRow.model_validate({**b.model_dump(), "key": b.key if b.key in known else None}).model_dump()
-                               for b in o.budget_rows]
+        rows = []
+        for b in o.budget_rows:
+            # a made-up key, or a second row naming one key (tg-review N3), goes as null: inherit by text, or minted
+            rows.append(BudgetRow.model_validate({**b.model_dump(), "key": b.key if b.key in known else None}).model_dump())
+            known.discard(b.key)
+        g["budget"]["rows"] = rows
         if o.budget_summary is not None:
             g["budget"]["summary"] = o.budget_summary
 
