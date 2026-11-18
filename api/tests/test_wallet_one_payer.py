@@ -31,6 +31,7 @@ from test_wallets_v2 import (  # noqa: F401  fixtures: flags, on, and the autous
 
 NOTE = "Van to TESTPLACE"
 LINE = re.compile(r"^share_slug=[0-9a-f]{32} expenses=\d+$")
+FAILED = "FAILED, nothing was written (database error): "  # load_data.db_failure
 
 
 @pytest.fixture
@@ -142,6 +143,19 @@ def test_apply_resaves_each_as_one_payer_with_the_same_shares(script, two_wallet
     assert paid == {a: 500, b: 100000 + 1001, c: 0, d: 0}, "Ben now paid the whole of both; Ana her own ₱5"
 
 
+def test_apply_keeps_the_first_payer_in_wallet_order_even_when_they_paid_the_smaller_part(script, on, dsn):
+    """tg-test3's RED should S1: Ben is first in wallet order but paid only 30%; Carla paid 70%. paid_by stays Ben."""
+    slug, (a, b, c, d) = new_wallet(on)
+    body = equal([a, b, c, d], amount=1000, note=NOTE)
+    del body["paid_by"]
+    body["payers"] = [{"member_id": c, "paid_centavos": 700}, {"member_id": b, "paid_centavos": 300}]
+    eid = add(on, slug, body).json()["expenses"][0]["id"]
+    assert script.run(TEST_DSN, apply=True) == 0
+    e = expense(on.get(f"/wallets/{slug}").json(), eid)
+    assert (e["paid_by"], e["payers"]) == (b, [])
+    assert {x["member_id"]: x["paid_centavos"] for x in on.get(f"/wallets/{slug}").json()["balances"]}[b] == 1000
+
+
 def test_apply_leaves_single_payer_expenses_and_other_wallets_alone(script, two_wallets, dsn):
     one, _, _, single1 = two_wallets["one"]
     three = two_wallets["three"][0]
@@ -174,7 +188,7 @@ def test_apply_is_all_or_nothing(script, two_wallets, dsn, capsys):
     finally:
         sql(dsn, "drop trigger tg66_a3b_fail on wallets")
     assert {k: state(dsn, v[0]) for k, v in two_wallets.items()} == before
-    assert "nothing was changed" in capsys.readouterr().err.lower()
+    assert capsys.readouterr().err.startswith(FAILED)
 
 
 def test_after_apply_the_expense_can_be_edited_with_multi_payer_off(script, two_wallets, client, flags):
@@ -229,3 +243,4 @@ def test_a_database_error_is_one_redacted_line(script, capsys):
     err = capsys.readouterr().err
     assert "Traceback" not in err and "postgres:postgres@" not in err
     assert len(err.strip().splitlines()) == 1
+    assert err.startswith(FAILED), "load_data.db_failure's redacted line, not str(e)"  # tg-test3's RED nit
