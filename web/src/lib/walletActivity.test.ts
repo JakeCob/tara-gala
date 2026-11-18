@@ -539,7 +539,8 @@ test("TG66-W2-31 addendum: lists diff by member_id, seq or kind, never by positi
   const s = snap(SHARES_221);
   assert.deepEqual(A.changes(s, { ...s, inputs: [...s.inputs].reverse() }, w), []);
   const renamed = { ...a, items: a.items.map((i) => (i.seq === 2 ? { ...i, name: "Ube taho" } : i)) };
-  assert.deepEqual(A.changes(a, renamed, w), [{ field: "items" }], "same count and total, different item: the field with no arrow");
+  // TG-66 W3 (tg-ux2, ux §5): one item renamed now has its own arrow, quoted like the note
+  assert.deepEqual(A.changes(a, renamed, w), [{ field: "items", before: '"Strawberry taho"', after: '"Ube taho"' }], "same count and total, one item renamed: its names");
 });
 
 // ---------------------------------------------------------------- the components, by source
@@ -698,4 +699,48 @@ test("TG66-W2-35 a comment delete names who did it: by goes as ?by= (A2's shape)
 test("TG66-W2-36 ux re-review nit: while a delete is out, Edit and Delete expense read as unavailable", () => {
   const src = details();
   assert.equal((src.match(/aria-disabled=\{busy \|\| deleting \|\| !online \|\| undefined\}/g) ?? []).length, 2);
+});
+
+// ---------------------------------------------------------------- TG-66 W3 (tg-ux2's ask, ux §5): an item rename gets a real line
+
+test("W3-A1 one item renamed: the details and the feed show its old and new name, quoted like the note", () => {
+  const items = [
+    { seq: 1, name: "Rice", price_centavos: 16000, who: [ANA, BEN, CARLA, DAN] },
+    { seq: 2, name: "Pinikpikan", price_centavos: 42000, who: [ANA, BEN] },
+  ];
+  const v1 = expense({ id: "e-dinner", note: "Dinner", amount_centavos: 58000, mode: "itemized", inputs: [], items });
+  const v2 = { ...v1, items: [{ ...items[0], name: "Rice, 4 cups" }, items[1]], version: 2 };
+  const w = wallet({ expenses: [v2] });
+  const list = A.changes(v1, v2, w);
+  assert.deepEqual(list, [{ field: "items", before: '"Rice"', after: '"Rice, 4 cups"' }]);
+  assert.equal(A.changeLine("Ana", list), 'Ana changed the items: "Rice" → "Rice, 4 cups".');
+  const edit = row({ action: "expense_edit", actor: ANA, expense_id: "e-dinner", before: v1, after: v2 });
+  assert.equal(A.lineText(A.activityLine(edit, w, [])), 'Ana changed Dinner: items "Rice" → "Rice, 4 cups".');
+});
+
+test("W3-A2 two renames, or a who-had change with the same total, fall back to `changed the items` (details) and `changed the items on <note>` (feed)", () => {
+  const items = [
+    { seq: 1, name: "Rice", price_centavos: 16000, who: [ANA, BEN, CARLA, DAN] },
+    { seq: 2, name: "Pinikpikan", price_centavos: 42000, who: [ANA, BEN] },
+  ];
+  const v1 = expense({ id: "e-dinner", note: "Dinner", amount_centavos: 58000, mode: "itemized", inputs: [], items });
+  const w = wallet({ expenses: [v1] });
+  const twoRenames = { ...v1, items: [{ ...items[0], name: "Rice, 4 cups" }, { ...items[1], name: "Pinikpikan, big" }], version: 2 };
+  const whoHad = { ...v1, items: [items[0], { ...items[1], who: [ANA, CARLA] }], version: 2 };
+  for (const [label, v2] of [["two renames", twoRenames], ["who had it", whoHad]] as const) {
+    const list = A.changes(v1, v2, w);
+    assert.equal(A.changeLine("Ana", list), "Ana changed the items.", label);
+    const edit = row({ action: "expense_edit", actor: ANA, expense_id: "e-dinner", before: v1, after: v2 });
+    assert.equal(A.lineText(A.activityLine(edit, w, [])), "Ana changed the items on Dinner.", label);
+  }
+});
+
+test("W3-A3 the feed never ends on a bare `: items.`: a first field with no arrow names it, and payers read `who paid`", () => {
+  const v1 = expense();
+  const v2 = { ...v1, payers: [{ member_id: ANA, paid_centavos: 64000 }, { member_id: BEN, paid_centavos: 64000 }], version: 2 };
+  const v3 = { ...v2, payers: [{ member_id: ANA, paid_centavos: 100000 }, { member_id: BEN, paid_centavos: 28000 }], version: 3 };
+  const w = wallet({ expenses: [v3] });
+  const edit = row({ action: "expense_edit", actor: BEN, expense_id: E1, before: v2, after: v3 });
+  assert.equal(A.lineText(A.activityLine(edit, w, [])), "Ben changed who paid on Lunch at Good Taste.", "the same people, other amounts: no arrow");
+  for (const r of [edit]) assert.doesNotMatch(A.lineText(A.activityLine(r, w, [])), /: \w+\.$/);
 });
