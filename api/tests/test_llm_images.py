@@ -149,14 +149,14 @@ def test_anthropic_reply_mapping_is_unchanged_with_images(astub):
 
 # --- R5 (review S1): OpenRouter refuses pictures ------------------------------------------------
 
-def test_openrouter_refuses_images_without_sending_anything(orstub):
+def test_openrouter_refuses_images_without_sending_anything(orstub, caplog):
     from app.llm import LLMUnavailable
 
     with pytest.raises(LLMUnavailable) as e:
         call(openrouter_client(orstub), model=OR_HAIKU, images=[("image/jpeg", JPEG)])
     assert e.value.kind == "images_unsupported"
     assert orstub.requests == []  # the picture never leaves the server for a second company
-    assert_no_image_in([], e.value)
+    assert_no_image_in(caplog.get_records("call"), e.value)
 
 
 def test_openrouter_without_images_sends_todays_request(orstub):

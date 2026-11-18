@@ -47,6 +47,7 @@ def post_process(reply, line_keys=("meals", "transport")):
     ("GCash Ref 1234 5678 9012", f"GCash Ref {MASK}"),  # one run broken by spaces is one mask
     ("card ending 4321", f"card ending {MASK}"),
     ("Acct 1234-5678", f"Acct {MASK}"),  # broken by a dash
+    ("Ref \uff11\uff12\uff13\uff14 \uff15\uff16\uff17\uff18", f"Ref {MASK}"),  # full-width digits are digits too
     ("Ref no. 9876 5432 at Good Taste", f"Ref no. {MASK} at Good Taste"),
     (f"Transfer {MADE_UP_ACCOUNT}", f"Transfer {MASK}"),
     ("Lunch 2026", f"Lunch {MASK}"),  # a 4-digit year is masked too: accepted, a note can't carry 4 digits
