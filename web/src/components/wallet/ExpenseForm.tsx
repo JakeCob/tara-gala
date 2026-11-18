@@ -5,7 +5,7 @@ import { PX, PixelBox, PixelButton, PixelChoice, SectionTitle, cx } from "@/comp
 import ItemsEditor from "@/components/wallet/ItemsEditor";
 import PayersEditor from "@/components/wallet/PayersEditor";
 import { formatPeso, type Category, type SplitMode, type Expense, type ExpenseBodyV2, type ExpensePatch, type LegacyExpenseBody, type Wallet, type WalletBudget } from "@/lib/wallet";
-import { editLineMeta, fromPlan, initialLine, lineAfterCategory, linesFor, showLineRow, withBudgetKey } from "@/lib/budgetLines";
+import { editLineMeta, fromPlan, initialLine, lineAfterCategory, linesFor, logLine, showLineRow, withBudgetKey } from "@/lib/budgetLines";
 import {
   MAX_SHARE_WEIGHT,
   addItem,
@@ -91,7 +91,7 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
 
   async function submit(state: FormState): Promise<boolean> {
     const built = edit ? buildPatch(state, members, flags, me, editing!.expense.version ?? 1) : buildBody(state, members, flags, me);
-    const lineWord = !budgetOn ? "off" : line === null ? "null" : line === "_none" ? "none" : "line"; // never the key (G10a)
+    const lineWord = logLine(budgetOn, line); // four fixed words, never the key (G10a)
     console.info("[tg-wallet] expense form submit mode=%s edit=%s items=%d payers=%s ok=%s line=%s", state.mode, edit, state.mode === "itemized" ? state.items.length : 0, several, built.ok, lineWord);
     if (!built.ok) {
       onError(built.problem);

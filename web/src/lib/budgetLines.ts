@@ -84,6 +84,16 @@ export function detailsLine(b: WalletBudget | null, key: string | null | undefin
   return line ? { text: line.item, meta: false } : { text: "A line no longer in the plan", meta: true };
 }
 
+/**
+ * G10a on the web (tg-test S1): the submit log's word for the line. A key is a slug of the group's own line text, so it
+ * never reaches a log: whatever the key, the answer is one of four fixed words.
+ */
+export function logLine(on: boolean, line: string | null): "off" | "null" | "none" | "line" {
+  if (!on) return "off";
+  if (line === null) return "null";
+  return line === NONE ? "none" : "line";
+}
+
 /** ux §9: the two refusals GA1 adds. Anything else is someone else's line. */
 export function budgetRefusal(code: string | undefined): string | null {
   if (code === "unknown_budget_line") return "That budget line isn't in the plan any more. Pick another, or leave it for later.";

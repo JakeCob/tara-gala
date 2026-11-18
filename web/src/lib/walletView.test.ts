@@ -406,6 +406,15 @@ test("GW1-V8 (tg-ux2 S1) with BUDGET_LINES off, a 409's alert never names the bu
   assert.match(seen, /budget: null/);
 });
 
+test("GW1-V9 (tg-test S1, privacy) the submit log's line= takes logLine's word and nothing else from the line", () => {
+  const src = read(FORM_SRC);
+  assert.match(src, /const lineWord = logLine\(budgetOn, line\);/);
+  const log = src.match(/console\.info\("\[tg-wallet\] expense form submit [^;]*\);/)?.[0] ?? "";
+  assert.match(log, /line=%s", [^;]*, lineWord\);$/, "the line word is the last argument");
+  assert.equal((src.match(/\blineWord\b/g) ?? []).length, 2, "defined once, logged once: never reassigned or rebuilt");
+  for (const [, args] of src.matchAll(/console\.\w+\(([^;]*)\);/g)) assert.doesNotMatch(args, /\bline\b(?!=)|budget_key|editing\.expense\.budget/, args);
+});
+
 test("GW1-V6 logs: the form says whether a line went, never which (G10a's rule on the web)", () => {
   const src = read(FORM_SRC);
   assert.match(src, /console\.info\("\[tg-wallet\] expense form submit [^"]*line=%s/);

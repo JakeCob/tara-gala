@@ -137,6 +137,24 @@ test("GW1-L9 ux §9: the two refusals' lines; anything else is someone else's", 
   for (const other of ["percent_total", "feature_off", undefined]) assert.equal(budgetRefusal(other), null, String(other));
 });
 
+test("GW1-L11 (tg-test S1, privacy) the submit log's line word is one of four fixed words, never the key (a slug of the group's own line text)", async () => {
+  const { logLine } = await load();
+  const WORDS = new Set(["off", "null", "none", "line"]);
+  assert.equal(logLine(false, "meals"), "off");
+  assert.equal(logLine(false, null), "off");
+  assert.equal(logLine(true, null), "null");
+  assert.equal(logLine(true, "_none"), "none");
+  assert.equal(logLine(true, "meals"), "line");
+  for (const key of ["meals", "pasalubong", "tips", "van", "gas-and-tolls", "Lunch at Good Taste", "x".repeat(80), "", " "]) {
+    for (const on of [true, false]) {
+      const word = logLine(on, key);
+      assert.ok(WORDS.has(word), `${JSON.stringify(word)} is a fixed word`);
+      if (!WORDS.has(key)) assert.notEqual(word, key);
+      assert.ok(!word.includes(key) || WORDS.has(key) || key.trim() === "", "no part of the key");
+    }
+  }
+});
+
 test("GW1-L10 the row's meta names the trip: From the plan of <trip>.", async () => {
   const { fromPlan } = await load();
   assert.equal(fromPlan(BUDGET), "From the plan of Baguio barkada (made up).");
