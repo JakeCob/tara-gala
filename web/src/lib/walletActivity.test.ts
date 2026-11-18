@@ -626,3 +626,40 @@ test("TG66-W2-28 the components' logs carry counts and outcomes only: no note, n
     }
   }
 });
+
+test("TG66-W2-32 ux review M1: a failed Delete expense is said inside the details, in ux's words", () => {
+  assert.equal(A.deleteFailure({ why: "not_found", detail: "expense_gone" }), "This expense was already deleted.");
+  assert.equal(
+    A.deleteFailure({ why: "rejected", detail: "expense_changed" }),
+    "Someone changed this expense while you were looking. Check it, then delete again if you still want to.",
+  );
+  assert.match(A.deleteFailure({ why: "offline" }), /No signal/);
+  assert.match(A.deleteFailure({ why: "server" }), /server had a problem/);
+  const src = details();
+  assert.match(src, /onDelete: \(expense: Expense\) => Promise<true \| WalletFailed>/, "onDelete hands back the failure");
+  const remove = src.slice(src.indexOf("async function remove()"), src.indexOf("function edit()"));
+  assert.match(remove, /setNotice\(\{ text: deleteFailure\(r\), error: true \}\)/, "into the dialog's own notice");
+  assert.match(remove, /if \(r === true\) return close\(\)/, "only a delete that worked closes the dialog");
+  assert.match(src, /\{deleting \? "Deleting\.\.\." : "Delete expense"\}/, "S4: the label while it's out");
+});
+
+test("TG66-W2-33 ux review S2 and S3: the comment box is described by its count line, and the 300 limit is counted one way", () => {
+  const src = details();
+  assert.match(src, /<textarea[^>]*aria-describedby=\{commentHint\}/);
+  assert.match(src, /<p id=\{commentHint\}/);
+  assert.doesNotMatch(src, /maxLength=/, "no UTF-16 maxLength beside the code-point counter");
+  assert.match(src, /commentTooLong\(body\)/);
+});
+
+test("TG66-W2-34 review S1: a full refresh that doesn't reach the newest row on screen replaces the list, so no rows are skipped", () => {
+  const onScreen = A.mergeActivity(null, { rev: 100, rows: page(100, 86) }, false);
+  const jump = A.mergeActivity(onScreen, { rev: 120, rows: page(120, 106) }, false);
+  assert.deepEqual([ids(jump)[0], ids(jump).at(-1), ids(jump).length, jump.more, jump.rev], [120, 106, 15, true, 120]);
+  assert.equal(A.oldestId(jump), 106, "Show older asks below 106, so 105 to 101 come next");
+  const filled = A.mergeActivity(jump, { rev: 120, rows: page(105, 91) }, true);
+  assert.deepEqual(ids(filled), page(120, 91).map((r) => r.id));
+  const touching = A.mergeActivity(onScreen, { rev: 114, rows: page(114, 100) }, false);
+  assert.deepEqual([ids(touching).length, touching.more], [29, true], "a page that reaches the newest row merges as before");
+  const short = A.mergeActivity(onScreen, { rev: 103, rows: page(103, 101) }, false);
+  assert.deepEqual(ids(short).slice(0, 4), [103, 102, 101, 100], "a short page is everything newer: it merges");
+});

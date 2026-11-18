@@ -14,6 +14,7 @@ import {
   commentTooLong,
   commentsFromWrite,
   commentsLeft,
+  deleteFailure,
   dayTime,
   historyLines,
   itemRows,
@@ -58,19 +59,21 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
   onWallet: (wallet: Wallet) => void;
   /** Edit: the dialog closes, then the parent opens the form on this expense. */
   onEdit: (expense: Expense) => void;
-  /** Delete, already confirmed. Resolves true when it's gone, and the dialog then closes. */
-  onDelete: (expense: Expense) => Promise<boolean>;
+  /** Delete, already confirmed. Resolves true when it's gone (the dialog then closes), else the failure, said in here. */
+  onDelete: (expense: Expense) => Promise<true | WalletFailed>;
   /** After the dialog has closed: the parent puts focus back on this expense's Details. */
   onClosed: () => void;
 }) {
   const titleId = useId();
   const commentId = useId();
+  const commentHint = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const holding = useRef(false); // a comment write is out: set in the handler, so a second tap in the same tick sees it
   const [history, setHistory] = useState<Load<{ rows: Activity[]; complete: boolean }>>({ state: "loading" });
   const [comments, setComments] = useState<Load<CommentsState>>({ state: "loading" });
   const [draft, setDraft] = useState("");
   const [writing, setWriting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const nameOf = (id: string | null | undefined) => wallet.members.find((m) => m.id === id)?.name ?? "Someone";
   const live = online && activity;
@@ -94,7 +97,9 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
     };
   }, [live, slug, expenseId, version]);
 
-  // Comments, again when another phone's comment moves the count. An older answer never replaces a newer list (B24a)
+  // Comments, again after any wallet write (rev), so another phone's delete-then-post shows too. An older answer never
+  // replaces a newer list (B24a)
+  const rev = wallet.rev ?? 0;
   useEffect(() => {
     if (!live) return;
     let current = true;
@@ -107,7 +112,7 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
     return () => {
       current = false;
     };
-  }, [live, slug, expenseId, expense.comment_count]);
+  }, [live, slug, expenseId, rev]);
 
   function close() {
     dialog.current?.close();
@@ -154,9 +159,15 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
   async function remove() {
     if (busy || holding.current || !online) return;
     if (!window.confirm(`Delete "${expense.note}" (${formatPeso(expense.amount_centavos)}) for everyone? It stays in the activity list.`)) return;
-    const gone = await onDelete(expense);
-    console.info("[tg-wallet] details delete ok=%s", gone ? "yes" : "no");
-    if (gone) close();
+    holding.current = true;
+    setDeleting(true);
+    setNotice(null);
+    const r = await onDelete(expense);
+    holding.current = false;
+    setDeleting(false);
+    console.info("[tg-wallet] details delete ok=%s", r === true ? "yes" : r.why);
+    if (r === true) return close();
+    setNotice({ text: deleteFailure(r), error: true }); // the parent's alert is behind the modal (ux review M1)
   }
 
   function edit() {
@@ -285,9 +296,9 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
             <label htmlFor={commentId} className="text-sm font-semibold">
               {me ? `Add a comment as ${nameOf(me)}` : "Add a comment"}
             </label>
-            <textarea id={commentId} className={cx(PX.input, "min-h-20 w-full")} maxLength={COMMENT_MAX} value={draft} onChange={(e) => setDraft(e.target.value)} />
+            <textarea id={commentId} aria-describedby={commentHint} className={cx(PX.input, "min-h-20 w-full")} value={draft} onChange={(e) => setDraft(e.target.value)} />
             <div className="flex items-center justify-between gap-3">
-              <p className={PX.meta}>
+              <p id={commentHint} className={PX.meta}>
                 Everyone with the wallet link sees it.{left ? ` ${left}` : ""}
               </p>
               <PixelButton variant="secondary" aria-disabled={blocked || undefined} onClick={() => void post()}>
@@ -317,7 +328,7 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
               </PixelButton>
             )}
             <PixelButton variant="secondary" aria-disabled={busy || !online || undefined} onClick={() => void remove()}>
-              Delete expense
+              {deleting ? "Deleting..." : "Delete expense"}
             </PixelButton>
           </div>
         </div>

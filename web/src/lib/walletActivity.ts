@@ -3,8 +3,8 @@
 // expense snapshots: ExpenseOut's own fields, lists diffed by member_id, seq or kind, never by position, and any key this
 // file doesn't know (TG-62's budget_key) ignored. Logs carry counts and outcomes only: never a name, a note, a comment,
 // an id or the slug.
-import { formatPeso, splitEqual } from "./wallet.ts";
-import type { Activity, ActivityResult, Category, Charge, Comment, Expense, InputRow, Item, Payer, Share, SplitMode, Wallet } from "./wallet.ts";
+import { failureMessage, formatPeso, splitEqual } from "./wallet.ts";
+import type { Activity, ActivityResult, Category, WalletFailed, Charge, Comment, Expense, InputRow, Item, Payer, Share, SplitMode, Wallet } from "./wallet.ts";
 
 export const ACTIVITY_PAGE = 15; // walletApi.activity's default page
 export const HISTORY_PAGE = 50; // one expense's rows, with ?expense_id= (the API's most)
@@ -345,6 +345,16 @@ export async function loadExpenseHistory(api: HistoryApi, slug: string, e: Pick<
   }
 }
 
+/**
+ * A failed Delete expense, said inside the details: the parent's alert sits behind the modal (ux review M1). A 409 brings
+ * the newer wallet, which the parent shows, so the dialog re-renders with their version.
+ */
+export function deleteFailure(r: Pick<WalletFailed, "why" | "detail">): string {
+  if (r.detail === "expense_gone") return "This expense was already deleted.";
+  if (r.detail === "expense_changed") return "Someone changed this expense while you were looking. Check it, then delete again if you still want to.";
+  return failureMessage(r);
+}
+
 // ---------------------------------------------------------------- comments (B24a)
 
 export type CommentsState = { rev: number; comments: Comment[] };
@@ -461,9 +471,16 @@ export type ActivityState = { rev: number; rows: Activity[]; more: boolean };
 /**
  * A page into the list: rows by id, newest first, no duplicates. A first-page answer with a lower rev than the list is
  * older than it and changes nothing (the same object back). `older`: a Show older page, whose length says if there's more.
+ * A full first page with nothing at or below the newest row on screen replaces the list, so Show older fills the gap.
  */
 export function mergeActivity(prev: ActivityState | null, page: { rev: number; rows: Activity[] }, older: boolean): ActivityState {
   if (prev && !older && page.rev < prev.rev) return prev;
+  // A full refresh that doesn't reach the newest row on screen leaves rows between them that nothing would fetch
+  // (tg-review2 S1). Ids aren't per wallet, so a gap can't be ruled out: start again from this page
+  const newest = prev?.rows[0]?.id;
+  if (prev && !older && newest !== undefined && page.rows.length >= ACTIVITY_PAGE && page.rows.every((r) => r.id > newest)) {
+    return { rev: Math.max(prev.rev, page.rev), rows: [...page.rows].sort((a, b) => b.id - a.id), more: true };
+  }
   const byId = new Map((prev?.rows ?? []).map((r) => [r.id, r]));
   for (const r of page.rows) byId.set(r.id, r);
   const rows = [...byId.values()].sort((a, b) => b.id - a.id);

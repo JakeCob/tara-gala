@@ -146,8 +146,11 @@ test("TG66-W2-C4 B25: over seeded random wallets, the rows sum to total_centavos
   }
 });
 
-test("TG66-W2-C5 Each rounds half up to the centavo, in integers; amounts show without ₱, centavos only when there are some", () => {
-  assert.deepEqual([C.eachOf(100, 3), C.eachOf(5, 2), C.eachOf(1, 2), C.eachOf(0, 4), C.eachOf(450, 0)], [33, 3, 1, 0, 0]);
+test("TG66-W2-C5 Each is whole pesos, rounded half up, in integers (ux review M2); amounts show without ₱, centavos only when there are some", () => {
+  assert.deepEqual(
+    [C.eachOf(278000, 4), C.eachOf(115150, 4), C.eachOf(150, 1), C.eachOf(149, 1), C.eachOf(100, 3), C.eachOf(0, 4), C.eachOf(450, 0)],
+    [69500, 28800, 200, 100, 0, 0, 0],
+  );
   assert.deepEqual([C.tableAmount(115150), C.tableAmount(1), C.tableAmount(0), C.tableAmount(10000000)], ["1,151.50", "0.01", "0", "100,000"]);
 });
 
@@ -181,10 +184,21 @@ test("TG66-W2-C7 the box's lines are ux §7's: the meta, the person column, the 
 
 test("TG66-W2-C8 CategoryBox: a table with a caption, th scopes and a th Total row, from the helpers (ux §7, §10)", () => {
   const src = read("src/components/wallet/CategoryBox.tsx");
-  for (const fn of ["categoryTable(", "personTable(", "showForOptions(", "tableAmount(", "nudge(", "everyoneMeta(", "personMeta(", "personColumn("]) assert.ok(src.includes(fn), fn);
+  for (const fn of ["categoryTable(", "personTable(", "showForOptions(", "tableColumn(", "nudge(", "everyoneMeta(", "personMeta(", "personColumn("]) assert.ok(src.includes(fn), fn);
   for (const s of ["Categories", "Show for", "Category (₱)", "Total", "Each", "<caption", 'scope="col"', 'scope="row"', "<select"]) assert.ok(src.includes(s), s);
   assert.match(src, /onShowUncategorized/, "the list's filter is the parent's");
   assert.ok(!src.includes("dangerouslySetInnerHTML"));
   const logs = src.match(/console\.(info|warn|error|log)\([^;]*;/g) ?? [];
   for (const l of logs) assert.doesNotMatch(l, /\.(note|name)\b|\bslug\b|\bmember/, l);
+});
+
+test("TG66-W2-C9 ux review M2: a column with any centavos shows 2 decimals on every cell; a whole column shows none", () => {
+  assert.deepEqual(C.tableColumn([278000, 115150, 0, 393150]), ["2,780.00", "1,151.50", "0.00", "3,931.50"]);
+  assert.deepEqual(C.tableColumn([278000, 0, 278000]), ["2,780", "0", "2,780"]);
+  assert.deepEqual(C.tableColumn([]), []);
+  assert.equal(C.tableAmount(5, true), "0.05");
+  const t = C.categoryTable(wallet([expense("food", { [ANA]: 57575, [BEN]: 57575 })]));
+  assert.ok(t.rows.every((r) => r.each % 100 === 0) && t.each % 100 === 0, "Each is always whole pesos");
+  const src = read("src/components/wallet/CategoryBox.tsx");
+  assert.match(src, /tableColumn\(\[\.\.\.table\.rows\.map\(\(r\) => r\.total\), table\.total\]\)/, "the Total row shares its column's rule");
 });

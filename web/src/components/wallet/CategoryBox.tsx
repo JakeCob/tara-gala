@@ -4,7 +4,7 @@
 // so it works offline. The nudge's link filters the expense list, which is the parent's (W3).
 import { useId, useState } from "react";
 import { PX, PixelBox, SectionTitle, cx } from "@/components/pixel";
-import { categoryTable, everyoneMeta, nudge, personColumn, personMeta, personTable, showForOptions, tableAmount, uncategorizedCount } from "@/lib/walletCategories";
+import { categoryTable, everyoneMeta, nudge, personColumn, personMeta, personTable, showForOptions, tableColumn, uncategorizedCount } from "@/lib/walletCategories";
 import type { Wallet } from "@/lib/wallet";
 
 export default function CategoryBox({ wallet, me, onShowUncategorized }: {
@@ -19,6 +19,9 @@ export default function CategoryBox({ wallet, me, onShowUncategorized }: {
   const table = person ? personTable(wallet, person.id) : categoryTable(wallet);
   const ask = nudge(uncategorizedCount(wallet));
   const cell = "py-2 text-right tabular-nums";
+  // Each column lines up: the totals (rows, then Total) share one decimals rule, and Each is whole pesos (ux review M2)
+  const totals = tableColumn([...table.rows.map((r) => r.total), table.total]);
+  const eachs = tableColumn([...table.rows.map((r) => r.each), table.each]);
 
   return (
     <PixelBox as="section" aria-labelledby="categories-title" className="flex flex-col gap-3 p-4">
@@ -57,21 +60,21 @@ export default function CategoryBox({ wallet, me, onShowUncategorized }: {
           </tr>
         </thead>
         <tbody>
-          {table.rows.map((r) => (
+          {table.rows.map((r, i) => (
             <tr key={r.key ?? "none"} className="border-b-2 border-border">
               <th scope="row" className="py-2 text-left font-normal">
                 {r.label}
               </th>
-              <td className={cell}>{tableAmount(r.total)}</td>
-              {!person && <td className={cell}>{tableAmount(r.each)}</td>}
+              <td className={cell}>{totals[i]}</td>
+              {!person && <td className={cell}>{eachs[i]}</td>}
             </tr>
           ))}
           <tr>
             <th scope="row" className="py-2 text-left font-bold">
               Total
             </th>
-            <td className={cx(cell, "font-bold")}>{tableAmount(table.total)}</td>
-            {!person && <td className={cx(cell, "font-bold")}>{tableAmount(table.each)}</td>}
+            <td className={cx(cell, "font-bold")}>{totals.at(-1)}</td>
+            {!person && <td className={cx(cell, "font-bold")}>{eachs.at(-1)}</td>}
           </tr>
         </tbody>
       </table>

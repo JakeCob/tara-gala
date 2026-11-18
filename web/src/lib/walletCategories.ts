@@ -20,14 +20,25 @@ export function categoryLabel(c: Category | null | undefined): string {
 export type CategoryRow = { key: Category | null; label: string; total: number; each: number };
 export type CategoryTable = { rows: CategoryRow[]; total: number; each: number };
 
-/** total ÷ n, rounded half up to the centavo, in integers. 0 people gives 0. */
+/**
+ * About each: total ÷ n in whole pesos, rounded half up, in integers, as centavos (ux review M2: it's "about" by
+ * definition, so no centavos). 0 people gives 0.
+ */
 export function eachOf(total: number, n: number): number {
-  return n > 0 ? Math.floor((2 * total + n) / (2 * n)) : 0;
+  return n > 0 ? Math.floor((2 * total + 100 * n) / (200 * n)) * 100 : 0;
 }
 
-/** "2,780", "1,151.50": the table's header says ₱, so the cells don't. */
-export function tableAmount(centavos: number): string {
-  return formatPeso(centavos).replace("₱", "");
+/** "2,780", "1,151.50": the table's header says ₱, so the cells don't. `cents`: always 2 decimals ("2,780.00"). */
+export function tableAmount(centavos: number, cents = false): string {
+  if (!cents) return formatPeso(centavos).replace("₱", "");
+  const abs = Math.abs(centavos);
+  return `${centavos < 0 ? "−" : ""}${Math.floor(abs / 100).toLocaleString("en-US")}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+/** One column's cells: if any has centavos, every cell shows 2 decimals, so the digits line up (ux review M2). */
+export function tableColumn(values: number[]): string[] {
+  const cents = values.some((v) => v % 100 !== 0);
+  return values.map((v) => tableAmount(v, cents));
 }
 
 /** Sums by category in fixed order, then No category yet. Every row shows, even at 0, so the table never jumps. */
