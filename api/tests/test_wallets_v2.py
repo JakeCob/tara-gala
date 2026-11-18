@@ -551,14 +551,73 @@ def test_b12_a_no_op_edit_writes_nothing(on, dsn):
     assert (rev(dsn, slug), rows(dsn, slug)) == (n, before_rows)
 
 
-def test_b12_a_mode_change_with_the_same_money_and_words_is_a_no_op(on, dsn):
+def test_b12_a_mode_change_with_the_same_money_is_an_edit(on, dsn):
+    """tg-review2's M1 on #91 (this test said the opposite at RED): the person chose Shares 1:1:1, so it's saved."""
     slug, (a, b, c, _) = new_wallet(on)
     eid = add(on, slug, equal([a, b, c], amount=900)).json()["expenses"][0]["id"]
     n = rev(dsn, slug)
-    same = {"mode": "shares", "paid_by": a, "amount_centavos": 900, "note": "Dinner", "version": 1,
-            "inputs": [{"member_id": m, "value": 1} for m in (a, b, c)]}
-    assert edit(on, slug, eid, same).status_code == 200
-    assert rev(dsn, slug) == n and stored(dsn, eid)["split_mode"] == "equal"
+    same_money = {"mode": "shares", "paid_by": a, "amount_centavos": 900, "note": "Dinner", "version": 1,
+                  "inputs": [{"member_id": m, "value": 1} for m in (a, b, c)]}
+    r = edit(on, slug, eid, same_money)
+    assert r.status_code == 200, r.text
+    assert rev(dsn, slug) == n + 1 and stored(dsn, eid)["split_mode"] == "shares"
+    assert expense(r.json(), eid)["inputs"] == same_money["inputs"]
+
+
+def itemized_bill(a, b, charge):
+    return {"mode": "itemized", "paid_by": a, "note": "Dinner", "category": "food",
+            "items": [{"name": "Rice", "price_centavos": 1000, "who": [a, b]},
+                      {"name": "Kape", "price_centavos": 80, "who": [b]}], "charges": [charge]}
+
+
+@pytest.mark.parametrize("change", ["item_name", "charge_form", "item_order_of_who", "nothing"])
+def test_b12_an_itemized_edit_compares_the_items_and_charges_too(on, dsn, change):
+    """M1: renaming an item, or a 10% charge typed as the same pesos, changes no money but is a real edit.
+    The same bill with an item's people listed in another order is still a no-op."""
+    slug, (a, b, *_) = new_wallet(on)
+    first = itemized_bill(a, b, {"kind": "service", "basis": "percent", "value": 1000})
+    eid = add(on, slug, first).json()["expenses"][0]["id"]
+    body = {**first, "version": 1}
+    if change == "item_name":
+        body["items"] = [{**first["items"][0], "name": "Rice, 4 cups"}, first["items"][1]]
+    elif change == "charge_form":
+        body["charges"] = [{"kind": "service", "basis": "amount", "value": 108}]  # 10% of 1080 is 108: the same money
+    elif change == "item_order_of_who":
+        body["items"] = [{**first["items"][0], "who": [b, a]}, first["items"][1]]
+    n = rev(dsn, slug)
+    r = edit(on, slug, eid, body)
+    assert r.status_code == 200, r.text
+    e = expense(r.json(), eid)
+    if change in ("item_name", "charge_form"):
+        assert rev(dsn, slug) == n + 1 and e["version"] == 2
+        assert (e["items"][0]["name"], e["charges"]) == (body["items"][0]["name"], body["charges"])
+    else:
+        assert rev(dsn, slug) == n and e["version"] == 1
+
+
+def test_b12_a_legacy_tie_given_in_another_order_infers_exact_as_the_web_does(on, dsn):
+    """tg-review2: the inferred mode is B22's rule exactly (split_equal over the shares' people in wallet order, the
+    stored paid_by as payer), as the web's formFromExpense does. Old order C, B, A stored C334 B334 A333; wallet order
+    would give A334, so it reopens as Amounts, and Amounts saved unchanged is a no-op."""
+    slug, (a, b, c, d) = new_wallet(on)
+    eid = add(on, slug, legacy_equal([c, b, a], amount=1001, payer=d)).json()["expenses"][0]["id"]
+    e = expense(on.get(f"/wallets/{slug}").json(), eid)
+    assert shares(e) == {a: 333, b: 334, c: 334}
+    n = rev(dsn, slug)
+    r = edit(on, slug, eid, {**exact([(a, 333), (b, 334), (c, 334)], payer=d), "version": 1})
+    assert r.status_code == 200 and rev(dsn, slug) == n, "saved as its inferred mode (exact): a no-op"
+    assert stored(dsn, eid)["split_mode"] is None
+    r = edit(on, slug, eid, {**equal([a, b, c], amount=1001, payer=d), "version": 1})
+    assert r.status_code == 200 and rev(dsn, slug) == n + 1, "Equally moves a centavo from C to A: an edit"
+
+
+def test_b12_a_legacy_expense_saved_as_the_other_mode_is_an_edit(on, dsn):
+    """The legacy exception covers only the inferred mode: a legacy equal saved as Amounts is the person's choice."""
+    slug, (a, b, *_) = new_wallet(on)
+    eid = add(on, slug, legacy_equal([a, b], amount=1000)).json()["expenses"][0]["id"]
+    n = rev(dsn, slug)
+    assert edit(on, slug, eid, {**exact([(a, 500), (b, 500)], payer=a), "version": 1}).status_code == 200
+    assert rev(dsn, slug) == n + 1 and stored(dsn, eid)["split_mode"] == "exact"
 
 
 @pytest.mark.parametrize("change", ["note", "category", "amount", "payer", "shares", "payers"])
