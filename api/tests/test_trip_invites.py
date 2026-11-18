@@ -186,6 +186,10 @@ def test_invite_slug_opens_nothing_else(client):  # I7
         ("PUT", "/sessions/{share_slug}/attendees/{attendee_id}/arrival"): {"json": {}},
         ("POST", "/wallets/{share_slug}/members"): {"json": {"name": "Zed"}},
         ("POST", "/wallets/{share_slug}/expenses"): {"json": {"paid_by": u1, "amount_centavos": 100, "note": "x", "split_among": [u1]}},
+        # TG-66 A3: a valid edit body, so with WALLET_SPLITS on the slug is what answers 404, not a 422 on the body
+        ("PATCH", "/wallets/{share_slug}/expenses/{expense_id}"): {"json": {"mode": "equal", "paid_by": u1, "amount_centavos": 100, "note": "x", "inputs": [{"member_id": u1, "value": 1}], "version": 1}},
+        # TG-66 A2's comment POST, the same reason with WALLET_ACTIVITY on (rollout step 4 turns it on with WALLET_SPLITS)
+        ("POST", "/wallets/{share_slug}/expenses/{expense_id}/comments"): {"json": {"body": "x"}},
         ("POST", "/wallets/{share_slug}/settlements"): {"json": {"from_member": u1, "to_member": u2, "amount_centavos": 100}},
         ("POST", "/wallets/{share_slug}/settlements/{settlement_id}/proof"): {"content": PNG, "headers": {"content-type": "image/png"}},
     }
