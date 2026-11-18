@@ -85,10 +85,22 @@ test("GW1-L5 tg-ux2's question: in edit, a saved line the plan moved or removed 
 
 test("GW1-L6 G24 changing the category clears the line (none picked); keeping it keeps the line", async () => {
   const { lineAfterCategory } = await load();
-  assert.equal(lineAfterCategory("meals", "food", "transport"), null);
-  assert.equal(lineAfterCategory("_none", "food", "transport"), null, "the new category's lines, none picked");
-  assert.equal(lineAfterCategory("meals", "food", null), null, "category cleared: the row hides and the line goes");
-  assert.equal(lineAfterCategory("meals", "food", "food"), "meals");
+  assert.equal(lineAfterCategory(BUDGET, "meals", "food", "transport"), null);
+  assert.equal(lineAfterCategory(BUDGET, "_none", "food", "transport"), null, "the new category's lines, none picked");
+  assert.equal(lineAfterCategory(BUDGET, "meals", "food", null), null, "category cleared: the row hides and the line goes");
+  assert.equal(lineAfterCategory(BUDGET, "meals", "food", "food"), "meals");
+});
+
+test("GW1-L6b (tg-test F1) with no budget on screen the row is hidden, so a category change never clears the line unseen", async () => {
+  const { lineAfterCategory } = await load();
+  // The flag on and the wallet now on two trips: budget is null. The stored key rides along, as on a reopen (L4), and
+  // GA1 keeps a key it can't compare (G9c). The new web clears a line only where the person sees it (tg-ux2).
+  assert.equal(lineAfterCategory(null, "meals", "food", "transport"), "meals");
+  assert.equal(lineAfterCategory(null, "_none", "food", "transport"), "_none");
+  assert.equal(lineAfterCategory(null, "meals", "food", null), "meals");
+  assert.equal(lineAfterCategory(null, null, "food", "transport"), null);
+  // A trip with no keyed lines shows no row either (L3)
+  assert.equal(lineAfterCategory({ trip_name: "x", lines: [] }, "meals", "food", "transport"), "meals");
 });
 
 // ---------------------------------------------------------------- the body (G24, G25, G27)

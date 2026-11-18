@@ -368,6 +368,9 @@ test("GW1-V5 ux §9: an add or edit refused for its line shows the line's alert,
   assert.match(src, /budgetRefusal\(/);
   assert.match(src, /setLineReset\(\(n\) => n \+ 1\)/);
   assert.equal((src.match(/budgetRefusal\(/g) ?? []).length >= 2, true, "both the add and the edit");
+  // tg-test S1: GA1's two 422s carry no wallet, so the fresh GET is what reloads the row's lines
+  const refuse = src.match(/function refuseLine\([\s\S]*?\n  \}/)?.[0] ?? "";
+  assert.match(refuse, /setReloads\(\(n\) => n \+ 1\)/, "refuseLine reloads when the answer has no wallet");
 });
 
 test("GW1-V6 logs: the form says whether a line went, never which (G10a's rule on the web)", () => {
