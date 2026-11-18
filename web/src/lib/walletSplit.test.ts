@@ -192,6 +192,108 @@ test("W1-S9 random itemized bills: the shares sum to the amount, and the amount 
   }
 });
 
+test("W1-S11 the edges the vectors don't reach answer as A1's wallet_splits does (audit S1)", async () => {
+  const { split, chargeAmount, SplitError } = await load();
+  const code = (f: () => unknown) => {
+    try {
+      f();
+    } catch (e) {
+      assert.ok(e instanceof SplitError, String(e));
+      return [e.code, e.seq];
+    }
+    return ["no refusal", undefined];
+  };
+  // An amount over the cap is amount_too_big in every mode, before any other check (A1: test_an_amount_over_the_cap…)
+  const over = 10_000_001;
+  const value = { equal: 1, exact: over, percent: 10000, shares: 1, adjust: 0 } as const;
+  for (const mode of ["equal", "exact", "percent", "shares", "adjust"] as const) {
+    assert.deepEqual(code(() => split(mode, over, [{ member_id: ANA, value: value[mode] }], null, null, ANA, ORDER4)), ["amount_too_big", undefined], mode);
+  }
+  // A negative exact input is shares_mismatch, even when the sum matches
+  assert.deepEqual(code(() => split("exact", 100, [{ member_id: ANA, value: 150 }, { member_id: BEN, value: -50 }], null, null, ANA, ORDER4)), ["shares_mismatch", undefined]);
+  // A negative charge of either basis is charge_too_big
+  for (const [basis, v] of [["percent", 10001], ["percent", -1], ["amount", -1]] as const) {
+    assert.deepEqual(code(() => chargeAmount(1000, basis, v)), ["charge_too_big", undefined], `${basis} ${v}`);
+  }
+  // Itemized refusals in a fixed order: too_many_items, item_no_one (the first seq), charge_too_big, items_zero,
+  // amount_too_big, amount_mismatch (A1: test_itemized_refusals_come_in_a_fixed_order)
+  const nobody = { name: "TESTITEM", price_centavos: 0, who: [] };
+  const free = { name: "Water", price_centavos: 0, who: [ANA] };
+  const big = { name: "Van", price_centavos: 10_000_000, who: [ANA] };
+  const tooBig = { kind: "vat" as const, basis: "percent" as const, value: 10001 };
+  const items = (its: typeof free[], charges: Parameters<typeof split>[4] = [], amount: number | null = null) => code(() => split("itemized", amount, null, its, charges, ANA, ORDER4));
+  assert.deepEqual(items([...Array(40).fill(free), nobody]), ["too_many_items", undefined]);
+  assert.deepEqual(items([free, nobody, nobody], [tooBig]), ["item_no_one", 2]);
+  assert.deepEqual(items([free], [tooBig]), ["charge_too_big", undefined]);
+  assert.deepEqual(items([free], [{ kind: "service", basis: "amount", value: 5 }]), ["items_zero", undefined]);
+  assert.deepEqual(items([big], [{ kind: "service", basis: "amount", value: 1 }], 5), ["amount_too_big", undefined]);
+  assert.deepEqual(items([{ ...free, price_centavos: 10 }], [], 11), ["amount_mismatch", undefined]);
+});
+
+test("W1-S12 the leftover follows the payer then wallet order, whatever order the rows come in (audit S2)", async () => {
+  const { split } = await load();
+  const rows = (pairs: [string, number][]) => pairs.map(([member_id, value]) => ({ member_id, value }));
+  // 1003 at 1:1:1:1, rows backwards, payer Carla: 3 leftover centavos to Carla, then Ana, then Ben
+  assert.deepEqual(split("shares", 1003, rows([[DAN, 1], [CARLA, 1], [BEN, 1], [ANA, 1]]), null, null, CARLA, ORDER4).shares, { [ANA]: 251, [BEN]: 251, [CARLA]: 251, [DAN]: 250 });
+  assert.deepEqual(split("percent", 1003, rows([[DAN, 2500], [BEN, 2500], [CARLA, 2500], [ANA, 2500]]), null, null, DAN, ORDER4).shares, { [ANA]: 251, [BEN]: 251, [CARLA]: 250, [DAN]: 251 });
+  // Random: the same rows shuffled give the same shares as in wallet order
+  const r = rng(6612);
+  const people = [ANA, BEN, CARLA, DAN, ELI, FE];
+  for (let i = 0; i < 400; i++) {
+    const mode = (["equal", "percent", "shares", "adjust"] as const)[i % 4];
+    const among = people.filter(() => r(3) > 0);
+    if (among.length < 2) continue;
+    let values: number[];
+    if (mode === "equal") values = among.map(() => 1);
+    else if (mode === "shares") values = among.map(() => 1 + r(20));
+    else if (mode === "adjust") values = among.map(() => r(3) - 1);
+    else {
+      values = among.map(() => 0);
+      let left = 10000;
+      for (let k = 0; k < among.length - 1; k++) left -= values[k] = r(left + 1);
+      values[among.length - 1] = left;
+    }
+    const inOrder = among.map((m, k) => ({ member_id: m, value: values[k] }));
+    const shuffled = [...inOrder].sort(() => r(3) - 1).reverse();
+    const amount = 1 + r(1_000_000);
+    const payer = people[r(people.length)];
+    assert.deepEqual(split(mode, amount, shuffled, null, null, payer, people), split(mode, amount, inOrder, null, null, payer, people), `case ${i} (${mode})`);
+  }
+});
+
+test("W1-S13 itemized is each item through allocate, then each charge on the integer item subtotals (B4a, audit S3)", async () => {
+  const { split, allocate, chargeAmount } = await load();
+  const r = rng(6630);
+  const people = [ANA, BEN, CARLA, DAN, ELI, FE];
+  for (let i = 0; i < 300; i++) {
+    const payer = people[r(people.length)];
+    const order = [payer, ...people.filter((m) => m !== payer)];
+    const items = Array.from({ length: 1 + r(12) }, (_, k) => {
+      const who = people.filter(() => r(2) === 1);
+      return { name: `TESTITEM${k}`, price_centavos: r(10000), who: who.length ? who : [people[r(people.length)]] };
+    });
+    items[0].price_centavos += 1;
+    const charges = [
+      { kind: "service" as const, basis: "percent" as const, value: r(10001) },
+      { kind: "vat" as const, basis: "amount" as const, value: r(5001) },
+    ].slice(0, r(3));
+    const sub: Record<string, number> = {};
+    for (const it of items) {
+      for (const [m, v] of Object.entries(allocate(it.price_centavos, Object.fromEntries(it.who.map((w) => [w, 1])), order))) sub[m] = (sub[m] ?? 0) + v;
+    }
+    const S = items.reduce((a, it) => a + it.price_centavos, 0);
+    const shares = { ...sub };
+    let total = S;
+    for (const c of charges) {
+      const C = chargeAmount(S, c.basis, c.value);
+      total += C;
+      if (C === 0) continue;
+      for (const [m, v] of Object.entries(allocate(C, sub, order))) shares[m] += v;
+    }
+    assert.deepEqual(split("itemized", null, null, items, charges, payer, people), { amount: total, shares }, `case ${i}`);
+  }
+});
+
 test("W1-S10 source guard (B18): walletSplit.ts has no float rounding, toFixed, parseFloat or a division by 100", () => {
   const src = readFileSync(new URL("src/lib/walletSplit.ts", WEB), "utf8").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   assert.doesNotMatch(src, /Math\.round/);

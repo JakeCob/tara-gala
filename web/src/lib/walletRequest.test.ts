@@ -205,8 +205,11 @@ test("W1-R10 an edit is the v2 body plus the version the form opened with; edits
   const patch = body(buildPatch(s, MEMBERS, SPLITS, A, 3)) as Record<string, unknown>;
   assert.equal(patch.version, 3);
   assert.equal(patch.mode, "shares");
-  const off = buildPatch(s, MEMBERS, OFF, A, 3);
-  assert.equal(off.ok, false);
+  // An Equally form, which buildBody takes with the flags off: only buildPatch's own flag check can refuse it (audit S4)
+  const equally = await form();
+  assert.equal((body(buildPatch(equally, MEMBERS, SPLITS, A, 3)) as { mode: string }).mode, "equal");
+  assert.deepEqual(buildPatch(equally, MEMBERS, OFF, A, 3), { ok: false, problem: "Editing isn't switched on right now. Your changes weren't saved." });
+  assert.equal(buildPatch(equally, MEMBERS, { walletSplits: false, walletMultiPayer: true }, A, 3).ok, false);
 });
 
 // ---------------------------------------------------------------- B19: switching modes
@@ -531,4 +534,17 @@ test("W1-R31 logs (plan §2, CLAUDE rules): the form logs counts and the mode on
     }
   }
   assert.match(read(FORM), /console\.info\("\[tg-wallet\] expense form/, "the form says what it did");
+});
+
+test("W1-R32 B22 a legacy reopen compares in wallet order, not the shares' stored order (audit S5)", async () => {
+  const { formFromExpense } = await load();
+  // ₱10.01 among Ana, Ben and Carla, paid by Dan. Today's order-given rule stored Carla 334, Ben 334, Ana 333; in wallet
+  // order the equal split is Ana 334, Ben 334, Carla 333, so it isn't Equally: it reopens as Amounts, with each share
+  const s = formFromExpense(
+    expense({ paid_by: D, amount_centavos: 1001, shares: [{ member_id: C, share_centavos: 334 }, { member_id: B, share_centavos: 334 }, { member_id: A, share_centavos: 333 }] }),
+    MEMBERS,
+  );
+  assert.equal(s.mode, "exact");
+  assert.deepEqual(s.exact, { [A]: "3.33", [B]: "3.34", [C]: "3.34" });
+  assert.equal(s.paidBy, D);
 });
