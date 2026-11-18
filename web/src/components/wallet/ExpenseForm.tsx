@@ -120,7 +120,8 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
         {s.mode === "itemized" ? (
           <input
             id="expense-amount"
-            className={cx(PX.input, "w-full min-w-0")}
+            // Read-only, and it looks it: the page's background in the same frame, at full text contrast (tg-ux2 W3 S3)
+            className="min-h-11 w-full min-w-0 rounded-none border-3 border-frame bg-background px-3 py-2 text-base text-foreground focus-pixel"
             readOnly
             aria-describedby="expense-amount-meta"
             value={check.amount !== null ? formatPeso(check.amount).replace("₱", "") + (check.amount % 100 ? "" : ".00") : ""} // ux 66-04: "1,188.00"
