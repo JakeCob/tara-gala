@@ -14,6 +14,14 @@ the balances shift: that's why it needs the owner's yes.
 Prefer fixing forward (plan §6). With WALLET_MULTI_PAYER off and no revert, nothing needs this: such expenses stay
 readable and deletable.
 
+The order, if a revert is unavoidable:
+    1. WALLET_MULTI_PAYER off on the API (web first, plan §6), so no new multi-payer expense appears after the listing:
+       with it on, a wallet that gets its first one after this script reads the list is left out.
+    2. The dry run here, then the owner's yes.
+    3. --apply here, still on the TG-66 code: it uses the API's own snapshot() and record(), so it can't run after
+       the revert.
+    4. Then the code revert.
+
 All or nothing: one transaction, and each wallet's row is locked as the API locks it. Prints counts and slugs only,
 never a name, a note, an amount or an id. Reads DATABASE_URL like data/load_data.py.
 """
