@@ -317,3 +317,11 @@ test("W3-V22 tg-ux2 W3 S3: Items' Amount is read-only and looks it (the page bac
 test("W3-V23 tg-ux2 W3 S6: the Equal + extra pill holds `Equal +` together, so at 320 it breaks at most once", () => {
   assert.match(read("src/components/wallet/ExpenseForm.tsx"), /\{MODE_LABEL\[mode\]\.replace\("Equal \+", "Equal\\u00a0\+"\)/);
 });
+
+test("W3-V24 tg-ux2 W3 S2: itemized Details say a percent charge's pesos (the server's rounding) and head the people `Each person`", () => {
+  const src = read("src/components/wallet/ExpenseDetails.tsx");
+  assert.match(src, /c\.basis === "percent" && <span className="tabular-nums"> · \{formatPeso\(chargeAmount\(itemsTotal, c\.basis, c\.value\)\)\}<\/span>/);
+  assert.match(src, /const itemsTotal = \(expense\.items \?\? \[\]\)\.reduce\(\(a, i\) => a \+ i\.price_centavos, 0\);/);
+  assert.match(src, /from "@\/lib\/walletSplit"/, "the same integer chargeAmount as the server's twin");
+  assert.match(src, /\{expense\.mode === "itemized" && <h4 className="mt-1 text-sm font-semibold">Each person<\/h4>\}/);
+});
