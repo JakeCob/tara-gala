@@ -245,9 +245,20 @@ export const walletApi = {
       ok: true,
       ...(b as { wallet: Wallet; comments: Comment[] }),
     })),
-  /** Newest first, 15 a page; `before` is the oldest row's id on screen. Never cached by the worker (needs signal). */
-  activity: (slug: string, before?: number) =>
-    request<ActivityResult>(`${at(slug)}/activity?${before === undefined ? "" : `before=${before}&`}limit=15`, undefined, (b) => ({ ok: true, ...(b as { rev: number; rows: Activity[] }) })),
+  /**
+   * Newest first, 15 a page; `before` is the oldest row's id on screen. Never cached by the worker (needs signal).
+   * TG-66 W2: `expenseId` asks for one expense's rows only (plan §2 addendum), with `limit` up to 50. A bare number is
+   * `before`, as first written.
+   */
+  activity: (slug: string, opts?: number | { before?: number; expenseId?: string; limit?: number }) => {
+    const o = typeof opts === "number" ? { before: opts } : (opts ?? {});
+    const q = [
+      ...(o.before === undefined ? [] : [`before=${o.before}`]),
+      ...(o.expenseId === undefined ? [] : [`expense_id=${encodeURIComponent(o.expenseId)}`]),
+      `limit=${o.limit ?? 15}`,
+    ].join("&");
+    return request<ActivityResult>(`${at(slug)}/activity?${q}`, undefined, (b) => ({ ok: true, ...(b as { rev: number; rows: Activity[] }) }));
+  },
   settle: (slug: string, t: Transfer) => call(`${at(slug)}/settlements`, { method: "POST", body: t }),
   undoSettlement: (slug: string, id: string) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}`, { method: "DELETE" }),
   addProof: (slug: string, id: string, picture: Blob) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { method: "POST", raw: picture }),

@@ -241,7 +241,7 @@ test("TG66-W2-7 B23: Changes is a pure diff of before and after, one entry per f
   assert.deepEqual(A.changes(exactA, exactB, w), [{ field: "split" }], "the same words both sides: the field, with no arrow");
 
   const everything = A.changes(
-    snap(expense({ amount_centavos: 108000, note: "Lunch", mode: "itemized", inputs: [], items: ITEMIZED.items.slice(0, 3), charges: [] })),
+    snap(expense({ amount_centavos: 108000, note: "Lunch", mode: "itemized", inputs: [], items: ITEMIZED.items!.slice(0, 3), charges: [] })),
     snap(expense({ amount_centavos: 118800, note: "Dinner at Hill Station", category: "food", mode: "itemized", inputs: [], items: ITEMIZED.items, charges: ITEMIZED.charges, paid_by: BEN })),
     w,
   );
@@ -401,7 +401,8 @@ test("TG66-W2-17 B24a: a comment list is replaced only by an answer with rev ≥
   assert.deepEqual(afterDelete, { rev: 8, comments: [c1] });
   const oldGet = A.mergeComments(afterDelete, { rev: 7, comments: [c1, c2] }); // left before the delete, landed after it
   assert.equal(oldGet, afterDelete, "the deleted comment doesn't come back");
-  assert.deepEqual(A.mergeComments(afterDelete, { rev: 8, comments: [c1] }).comments, [c1], "an equal rev replaces");
+  const c3 = c("c3", "TESTCOMMENT three");
+  assert.deepEqual(A.mergeComments(afterDelete, { rev: 8, comments: [c1, c3] }).comments, [c1, c3], "an equal rev replaces (>=, not >)");
   assert.deepEqual(A.mergeComments(afterDelete, { rev: 9, comments: [c1, c2] }).comments, [c1, c2], "a newer one replaces");
   assert.equal(A.commentsFromWrite({ wallet: wallet({ rev: undefined }), comments: [] }).rev, 0);
 });
