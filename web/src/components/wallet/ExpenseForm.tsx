@@ -53,7 +53,7 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
 }) {
   const members = wallet.members;
   const [s, setS] = useState<FormState>(() => (editing ? formFromExpense(editing.expense, members) : emptyForm(me)));
-  const edit = !!editing && flags.walletSplits;
+  const edit = !!editing; // with WALLET_SPLITS off, buildPatch refuses (never an add in its place: tg-review2 nit 1)
   const v2 = flags.walletSplits;
   const check = checkForm(s, members, flags);
   const payer = members.some((m) => m.id === s.paidBy) ? s.paidBy : me;

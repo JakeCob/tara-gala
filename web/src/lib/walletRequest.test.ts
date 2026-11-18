@@ -577,3 +577,9 @@ test("W1-R35 ux M2: payer and price fields have their own names", () => {
   assert.match(read(ITEMS), /aria-label=\{`Price of \$\{label\(it, i\)\}`\}/);
   assert.doesNotMatch(read(ITEMS), /placeholder="(10%|0 or 12%)"/, "ux S1: no charge placeholders that read like values");
 });
+
+test("W1-R36 tg-review2 nit 1: an editing form always saves through buildPatch, so with WALLET_SPLITS off it's refused, never added", () => {
+  const src = read(FORM);
+  assert.match(src, /const edit = !!editing;/);
+  assert.match(src, /edit \? buildPatch\(/);
+});
