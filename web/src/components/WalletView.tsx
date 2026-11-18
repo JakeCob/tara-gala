@@ -278,6 +278,7 @@ export default function WalletView({ slug }: { slug: string }) {
     setBusy(false);
     console.info("[tg-wallet] expense add ok=%s", r.ok ? "yes" : r.why);
     const out = addOutcome(before, body, r);
+    if (out.ok && out.text !== "Expense added.") console.info("[tg-wallet] expense add category dropped=yes"); // the server's WALLET_SPLITS is off
     if (!out.ok) {
       // Today's body keeps today's place for its refusal (the wallet's alert); a v2 one goes in the form (ux §9)
       if ("mode" in body) setFormAlert({ text: out.alert, asAmounts: out.asAmounts });
