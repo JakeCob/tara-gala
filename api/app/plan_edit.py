@@ -11,6 +11,8 @@ gets that save's answer, and nothing is written (F2). Any other request on that 
 
 Only the server mints keys: a new row, to-do or pick option comes with a null key, and gets one that no version,
 tick or photo of this trip has used, so it can't inherit an old row's ticks. A row keeps its key when it moves day.
+TG-62 GP1: a budget row's key too (budget_keys.py). A keyless budget row first inherits the key of the base row with
+the same text, since today's web drops keys on every save (plan.md G18a); only a row that matches nothing is minted.
 
 Logs carry the trip slug, seqs, codes and counts, never a name, a note, a change line or a place.
 """
@@ -18,7 +20,7 @@ Logs carry the trip slug, seqs, codes and counts, never a name, a note, a change
 import json
 import logging
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -28,7 +30,7 @@ from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from . import db, plan_diff
+from . import budget_keys, db, plan_diff
 from . import guide as guides
 from . import itineraries as its
 from .guide import ROW_KEY, TODO_KEY
@@ -160,12 +162,14 @@ class Taken:
     rows: set[str]
     todos: set[str]
     letters: dict[str, set[str]]  # by pick key
+    budget: set[str] = field(default_factory=set)  # TG-62: budget row keys, never minted again for this trip
 
 
 def taken(conn, session_id: UUID, cur: Current) -> Taken:
     """Every key this trip has used: in any version of its copy, in the plan it holds, in a tick or on a photo."""
     t = Taken(rows={r.key for d in cur.guide.days for r in d.rows}, todos={x.key for x in cur.guide.todo},
-              letters={d.pick.key: {o.id for o in d.pick.options} for d in cur.guide.days if d.pick})
+              letters={d.pick.key: {o.id for o in d.pick.options} for d in cur.guide.days if d.pick},
+              budget={b.key for b in cur.guide.budget.rows if b.key})
     if cur.copy:
         iid = cur.row["id"]
         t.rows |= {r["k"] for r in conn.execute(
@@ -174,6 +178,9 @@ def taken(conn, session_id: UUID, cur: Current) -> Taken:
         t.todos |= {r["k"] for r in conn.execute(
             "select distinct k #>> '{}' as k from itinerary_versions v, jsonb_path_query(v.plan, '$.guide.todo[*].key') k"
             " where v.itinerary_id = %s", (iid,))}
+        t.budget |= {r["k"] for r in conn.execute(
+            "select distinct k #>> '{}' as k from itinerary_versions v, jsonb_path_query(v.plan, '$.guide.budget.rows[*].key') k"
+            " where v.itinerary_id = %s", (iid,)) if r["k"]}
         for r in conn.execute(
             "select distinct p #>> '{key}' as pick, o #>> '{id}' as id from itinerary_versions v,"
             " jsonb_path_query(v.plan, '$.guide.days[*].pick') p, jsonb_path_query(p, '$.options[*]') o where v.itinerary_id = %s", (iid,)):
@@ -203,12 +210,23 @@ def _known_keys(g: GuideIn, base: guides.Guide) -> bool:
     rows = {r.key for d in base.days for r in d.rows}
     todos = {t.key for t in base.todo}
     options = {d.pick.key: {o.id for o in d.pick.options} for d in base.days if d.pick}
+    budget = {b.key for b in base.budget.rows if b.key}
     for d in g.days:
         if any(r.key is not None and r.key not in rows for r in d.rows):
             return False
         if d.pick and (d.pick.key not in options or any(o.id is not None and o.id not in options[d.pick.key] for o in d.pick.options)):
             return False
+    if any(b.key is not None and b.key not in budget for b in g.budget.rows):
+        return False  # TG-62: a removed line's key can't come back, and with it the spend of an old line
     return all(t.key is None or t.key in todos for t in g.todo)
+
+
+def _inherited(g: GuideIn, base: guides.Guide) -> tuple[GuideIn, int]:
+    """TG-62 G18a: the guide with its keyless budget rows given their base row's key by text. Also how many were."""
+    rows_in = [b.model_dump() for b in g.budget.rows]
+    rows = budget_keys.inherit(rows_in, [b.model_dump() for b in base.budget.rows])
+    budget = g.budget.model_copy(update={"rows": [guides.BudgetRow.model_validate(r) for r in rows]})
+    return g.model_copy(update={"budget": budget}), budget_keys.by_text(rows_in, rows)
 
 
 def mint(g: GuideIn, t: Taken) -> tuple[dict, int]:
@@ -361,6 +379,8 @@ class Prepared:
     changes: list[ChangeLine]
     minted: int
     size: int
+    budget_minted: int = 0  # TG-62: budget keys minted, and inherited by text (an old phone's save, plan §8)
+    budget_by_text: int = 0
 
 
 def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, whys: dict[str, str] | None = None,
@@ -370,7 +390,10 @@ def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, whys: dict[
     lines. `used` is the keys already taken, when they aren't what taken() reads now (a replay). Raises Refused."""
     if not _known_keys(guide_in, cur.guide):
         raise Refused(422, "unknown_key")
-    raw, minted = mint(guide_in, used or taken(conn, session_id, cur))
+    guide_in, by_text = _inherited(guide_in, cur.guide)
+    t = used or taken(conn, session_id, cur)
+    raw, minted = mint(guide_in, t)
+    budget_minted = budget_keys.mint_keys(raw.get("budget", {}).get("rows", []), t.budget)
     new, problems = guides.parse_guide(raw)
     if new is None:
         raise Refused(422, "bad_guide", problems=len(problems))
@@ -386,7 +409,7 @@ def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, whys: dict[
     size = len(json.dumps(plan).encode())
     if size > MAX_PLAN_BYTES:
         raise Refused(422, "too_big")
-    return Prepared(guide=new, plan=plan, changes=changes, minted=minted, size=size)
+    return Prepared(guide=new, plan=plan, changes=changes, minted=minted, size=size, budget_minted=budget_minted, budget_by_text=by_text)
 
 
 # ---------------------------------------------------------------- replays (F2)
@@ -415,11 +438,15 @@ def _without_minted(used: Taken, before: guides.Guide, after: guides.Guide) -> T
     def letters(g: guides.Guide) -> dict[str, set[str]]:
         return {d.pick.key: {o.id for o in d.pick.options} for d in g.days if d.pick}
 
+    def budget(g: guides.Guide) -> set[str]:
+        return {b.key for b in g.budget.rows if b.key}
+
     was = letters(before)
     return Taken(
         rows=used.rows - ({r.key for d in after.days for r in d.rows} - {r.key for d in before.days for r in d.rows}),
         todos=used.todos - ({t.key for t in after.todo} - {t.key for t in before.todo}),
         letters={k: v - (letters(after).get(k, set()) - was.get(k, set())) for k, v in used.letters.items()},
+        budget=used.budget - (budget(after) - budget(before)),
     )
 
 
@@ -498,9 +525,11 @@ def save_plan(share_slug: str, body: PlanIn, request: Request, response: Respons
         slug, seq = _write(conn, session_id, cur, p.plan, body.source, p.changes)
         saved = _answer(conn, slug, p.changes)
         logger.info(
-            "plan save share_slug=%s source=%s base_seq=%d seq=%d copied=%s rows=%d todos=%d new_keys=%d bytes=%d whys=%d",
+            "plan save share_slug=%s source=%s base_seq=%d seq=%d copied=%s rows=%d todos=%d new_keys=%d bytes=%d whys=%d"
+            " budget_minted=%d budget_by_text=%d",
             share_slug, body.source, body.base.seq, seq, not cur.copy, sum(len(d.rows) for d in p.guide.days), len(p.guide.todo),
             p.minted, p.size, len(body.whys or {}),  # a count: a why is the trip's own text, never logged
+            p.budget_minted, p.budget_by_text,  # counts: a budget key is a slug of the group's own line text (TG-62 N2)
         )
         return saved
 

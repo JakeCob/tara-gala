@@ -765,19 +765,27 @@
    "rows": [
     {
      "item": "Meals and merienda, 2.5 days",
-     "estimate": "1,500 to 2,200"
+     "estimate": "1,500 to 2,200",
+     "key": "meals",
+     "category": "food"
     },
     {
      "item": "Pasalubong and strawberries",
-     "estimate": "500 to 1,000"
+     "estimate": "500 to 1,000",
+     "key": "pasalubong",
+     "category": "other"
     },
     {
      "item": "Entrance fees (BenCab, Tam-awan, Yangbew)",
-     "estimate": "350 to 450"
+     "estimate": "350 to 450",
+     "key": "entrance",
+     "category": "activities"
     },
     {
      "item": "Taxis, split 4 per cab",
-     "estimate": "300 to 500"
+     "estimate": "300 to 500",
+     "key": "taxis",
+     "category": "transport"
     }
    ],
    "excluded": "Not included: the condo and the bus (the bus tables show the operator's current fare)."
