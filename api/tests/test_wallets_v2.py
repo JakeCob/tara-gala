@@ -488,6 +488,57 @@ def test_b11b_a_legacy_expenses_first_before_has_mode_null_and_no_inputs(on, dsn
     assert (before["mode"], before["inputs"], before["version"]) == (None, [], 1)
 
 
+class SneakyConn:
+    """Wraps the request's connection. Just before the edit's `update expenses`, after its version check, a second phone
+    tries the same expense: it takes the wallet lock first, as every API write does, then edits and commits."""
+
+    def __init__(self, conn, sneak):
+        self._conn, self._sneak = conn, sneak
+
+    def execute(self, query, *args, **kwargs):
+        if str(query).lstrip().startswith("update expenses"):
+            self._sneak()
+        return self._conn.execute(query, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def test_b11_the_version_check_and_the_write_are_one_step_under_the_wallet_lock(on, dsn, monkeypatch):
+    """tg-test3's RED nit: without the lock, a second phone's edit between the check and the write would be lost."""
+    from contextlib import contextmanager
+
+    from app import db
+
+    slug, (a, b, *_) = new_wallet(on)
+    eid = add(on, slug, equal([a, b], amount=1000)).json()["expenses"][0]["id"]
+    outcome = []
+
+    def sneak():
+        with psycopg.connect(dsn) as other:
+            other.execute("set lock_timeout = '1s'")
+            try:
+                other.execute("select id from wallets where share_slug = %s for update", (slug,))
+                other.execute("update expenses set version = version + 1, note = 'Sneaky' where id = %s", (eid,))
+                outcome.append("wrote")
+            except psycopg.errors.LockNotAvailable:
+                outcome.append("blocked")
+
+    real = db.get_conn
+
+    @contextmanager
+    def get_conn():
+        with real() as conn:
+            yield SneakyConn(conn, sneak)
+
+    monkeypatch.setattr(db, "get_conn", get_conn)
+    r = edit(on, slug, eid, {**equal([a, b], amount=1200), "version": 1})
+    monkeypatch.setattr(db, "get_conn", real)
+    assert r.status_code == 200, r.text
+    assert outcome == ["blocked"], "the second phone waits for the wallet lock"
+    assert (stored(dsn, eid)["version"], stored(dsn, eid)["amount_centavos"]) == (2, 1200)
+
+
 # ---------------------------------------------------------------- B12: a no-op edit
 
 def test_b12_a_no_op_edit_writes_nothing(on, dsn):
@@ -510,11 +561,15 @@ def test_b12_a_mode_change_with_the_same_money_and_words_is_a_no_op(on, dsn):
     assert rev(dsn, slug) == n and stored(dsn, eid)["split_mode"] == "equal"
 
 
-@pytest.mark.parametrize("change", ["note", "category", "amount", "payer", "shares"])
+@pytest.mark.parametrize("change", ["note", "category", "amount", "payer", "shares", "payers"])
 def test_b12_any_change_to_money_or_words_is_an_edit(on, dsn, change):
     slug, (a, b, c, _) = new_wallet(on)
-    eid = add(on, slug, equal([a, b], amount=1000, category="food")).json()["expenses"][0]["id"]
-    body = {**equal([a, b], amount=1000, category="food"), "version": 1}
+    first = equal([a, b], amount=1000, category="food")
+    if change == "payers":  # tg-test3's S1: same amount, first payer and shares; only the payers' amounts move
+        del first["paid_by"]
+        first["payers"] = [{"member_id": b, "paid_centavos": 700}, {"member_id": c, "paid_centavos": 300}]
+    eid = add(on, slug, first).json()["expenses"][0]["id"]
+    body = {**first, "version": 1}
     if change == "note":
         body["note"] = "Dinner, really"
     elif change == "category":
@@ -523,11 +578,16 @@ def test_b12_any_change_to_money_or_words_is_an_edit(on, dsn, change):
         body["amount_centavos"] = 1002
     elif change == "payer":
         body["paid_by"] = b
-    else:
+    elif change == "shares":
         body = {**exact([(a, 400), (b, 600)], payer=a, category="food"), "version": 1}
+    else:
+        body["payers"] = [{"member_id": b, "paid_centavos": 500}, {"member_id": c, "paid_centavos": 500}]
     n = rev(dsn, slug)
-    assert edit(on, slug, eid, body).status_code == 200
+    r = edit(on, slug, eid, body)
+    assert r.status_code == 200, r.text
     assert rev(dsn, slug) == n + 1 and stored(dsn, eid)["version"] == 2
+    if change == "payers":
+        assert expense(r.json(), eid)["payers"] == body["payers"]
 
 
 def test_b12_a_legacy_equal_expense_saved_unchanged_as_equal_is_a_no_op(on, dsn):
@@ -658,6 +718,18 @@ def test_b15_splits_off_refuses_every_edit(client, dsn, flags):
     assert (r.status_code, detail(r)) == (404, "feature_off")
     assert rev(dsn, slug) == n
     r = edit(client, slug, eid, {**equal([a, b], amount=1000), "version": 1})  # even a no-op
+    assert (r.status_code, detail(r)) == (404, "feature_off")
+
+
+def test_b15_splits_off_refuses_an_edit_before_judging_its_body(client, flags):
+    """feature_off, not 422, for a body an old build might send, and for none at all (TG-58's I7 sends none)."""
+    flags()
+    slug, (a, b, *_) = new_wallet(client)
+    eid = add(client, slug, equal([a, b], amount=1000)).json()["expenses"][0]["id"]
+    for body in ({"version": 1, "mode": "thirds"}, {}):
+        r = edit(client, slug, eid, body)
+        assert (r.status_code, detail(r)) == (404, "feature_off"), r.text
+    r = client.patch(f"/wallets/{slug}/expenses/{eid}")  # no body
     assert (r.status_code, detail(r)) == (404, "feature_off")
 
 

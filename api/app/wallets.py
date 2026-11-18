@@ -6,6 +6,14 @@ adds up exactly. Payout QRs never come here: they stay on each person's phone. P
 are the one file a wallet holds.
 
 Logs carry the slug and counts, never a person's name or an expense note.
+
+TG-66: an expense also takes the new shape (`mode`: equal, exact, percent, shares, adjust or itemized; one payer or
+several; a category), split by wallet_splits.py. It can be edited (PATCH, with the version the form opened) and deleted
+with a version too. Every write calls wallet_activity.record() in its own transaction, so the wallet's rev and its
+activity list move together. An expense's before/after in that list is snapshot(): ExpenseOut cut to SNAPSHOT_FIELDS.
+`by` is the phone's pick of who's writing, in the v2 body or as `?by=` where the body has no room for it. The logs add
+the mode, the category, the people and item counts and the centavo totals (options §8): still never a name, a note, an
+item's name, `by` or a member id.
 """
 
 import logging
@@ -13,22 +21,31 @@ import math
 import re
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from typing import Union
 
-from . import db, storage
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+
+from . import db, storage, wallet_activity, wallet_splits
 from .limits import RateLimiter, client_ip, ip_hash
+from .wallet_activity import record  # defined above wallet_activity's own import of this module, so either loads first
 from .wallet_models import (  # TG-66: the models moved, and every name is still importable from here
     MAX_CENTAVOS,
     MAX_MEMBERS,
     BalanceOut,
     Centavos,
+    ChargeOut,
     ExpenseIn,
     ExpenseInLegacy,
+    ExpenseInV2,
     ExpenseOut,
+    ExpensePatch,
+    InputOut,
+    ItemOut,
     MemberIn,
     MemberName,
     MemberOut,
     Note,
+    PayerOut,
     SettlementIn,
     SettlementOut,
     ShareIn,
@@ -38,6 +55,7 @@ from .wallet_models import (  # TG-66: the models moved, and every name is still
     WalletName,
     WalletOut,
 )
+from .wallet_splits import SplitError
 
 router = APIRouter(tags=["wallets"])
 logger = logging.getLogger("tara_gala.api")
@@ -46,6 +64,12 @@ SLUG = re.compile(r"^[0-9a-f]{32}$")
 NOT_FOUND = "Wallet not found"
 NOINDEX = {"X-Robots-Tag": "noindex"}
 MAX_EXPENSES = 500
+
+# TG-66: an activity row's before/after (plan §2): ExpenseOut's own names, no id, timestamps or comment count
+SNAPSHOT_FIELDS = frozenset({"amount_centavos", "note", "category", "paid_by", "payers", "mode", "inputs", "items",
+                             "charges", "shares", "version"})
+FREE_MODES = ("equal", "exact")  # what WALLET_SPLITS off still takes (category dropped): the common case, after a rollback
+CHARGE_ORDER = {"service": 0, "vat": 1}
 
 # Per-IP limits, in process memory like the planner's (limits.py): reset on every deploy
 CREATE_PER_HOUR = 20
@@ -116,6 +140,13 @@ def _member_ids(conn, wallet_id: UUID) -> set[UUID]:
     return {r["id"] for r in conn.execute("select id from wallet_members where wallet_id = %s", (wallet_id,))}
 
 
+def _by_expense(conn, sql: str, wallet_id: UUID) -> dict[UUID, list[dict]]:
+    out: dict[UUID, list[dict]] = {}
+    for r in conn.execute(sql, (wallet_id,)):
+        out.setdefault(r["expense_id"], []).append(r)
+    return out
+
+
 def _load(conn, wallet_id: UUID) -> WalletOut:
     wallet = conn.execute("select share_slug, name, created_at, rev from wallets where id = %s", (wallet_id,)).fetchone()
     members = conn.execute("select id, name from wallet_members where wallet_id = %s order by seq", (wallet_id,)).fetchall()
@@ -128,10 +159,39 @@ def _load(conn, wallet_id: UUID) -> WalletOut:
         (wallet_id,),
     ):
         shares.setdefault(r["expense_id"], []).append(ShareOut(member_id=r["member_id"], share_centavos=r["share_centavos"]))
+    # TG-66: the split's inputs, items (with who had each), charges and several payers
+    inputs = _by_expense(conn, """select i.expense_id, i.member_id, i.value from expense_inputs i
+                                  join expenses e on e.id = i.expense_id where e.wallet_id = %s""", wallet_id)
+    payers = _by_expense(conn, """select p.expense_id, p.member_id, p.paid_centavos from expense_payers p
+                                  join expenses e on e.id = p.expense_id where e.wallet_id = %s""", wallet_id)
+    charges = _by_expense(conn, """select c.expense_id, c.kind, c.basis, c.value from expense_charges c
+                                   join expenses e on e.id = c.expense_id where e.wallet_id = %s""", wallet_id)
+    items = _by_expense(conn, """select it.expense_id, it.id, it.seq, it.name, it.price_centavos from expense_items it
+                                 join expenses e on e.id = it.expense_id where e.wallet_id = %s order by it.seq""", wallet_id)
+    who: dict[UUID, list[UUID]] = {}
+    for r in conn.execute(
+        """select p.item_id, p.member_id from expense_item_people p join expense_items it on it.id = p.item_id
+           join expenses e on e.id = it.expense_id where e.wallet_id = %s""",
+        (wallet_id,),
+    ):
+        who.setdefault(r["item_id"], []).append(r["member_id"])
+
+    def by_rank(rows: list[dict]) -> list[dict]:
+        return sorted(rows, key=lambda r: rank[r["member_id"]])
+
     expenses = [
-        ExpenseOut(**r, shares=sorted(shares.get(r["id"], []), key=lambda s: rank[s.member_id]))
+        ExpenseOut(
+            **r,
+            shares=sorted(shares.get(r["id"], []), key=lambda s: rank[s.member_id]),
+            inputs=[InputOut(member_id=i["member_id"], value=i["value"]) for i in by_rank(inputs.get(r["id"], []))],
+            payers=[PayerOut(member_id=p["member_id"], paid_centavos=p["paid_centavos"]) for p in by_rank(payers.get(r["id"], []))],
+            charges=[ChargeOut(kind=c["kind"], basis=c["basis"], value=c["value"])
+                     for c in sorted(charges.get(r["id"], []), key=lambda c: CHARGE_ORDER[c["kind"]])],
+            items=[ItemOut(seq=i["seq"], name=i["name"], price_centavos=i["price_centavos"],
+                           who=sorted(who.get(i["id"], []), key=lambda m: rank[m])) for i in items.get(r["id"], [])],
+        )
         for r in conn.execute(
-            """select id, paid_by, amount_centavos, note, created_at,
+            """select id, paid_by, amount_centavos, note, created_at, split_mode as mode, category, version, updated_at,
                       (select count(*) from expense_comments c where c.expense_id = expenses.id) as comment_count  -- TG-66
                from expenses where wallet_id = %s order by created_at desc, id desc""",
             (wallet_id,),
@@ -148,7 +208,11 @@ def _load(conn, wallet_id: UUID) -> WalletOut:
     paid = dict.fromkeys(order, 0)
     owed = dict.fromkeys(order, 0)
     for e in expenses:
-        paid[e.paid_by] += e.amount_centavos
+        if e.payers:  # TG-66: several payers, each counted for what they paid
+            for p in e.payers:
+                paid[p.member_id] += p.paid_centavos
+        else:
+            paid[e.paid_by] += e.amount_centavos
         for s in e.shares:
             owed[s.member_id] += s.share_centavos
     net = {m: paid[m] - owed[m] for m in order}
@@ -187,7 +251,77 @@ def forget_proof(path: str | None, share_slug: str) -> None:
 
 def _counts(w: WalletOut) -> str:
     proofs = sum(1 for s in w.settlements if s.has_proof)
-    return f"members={len(w.members)} expenses={len(w.expenses)} settlements={len(w.settlements)} open={len(w.transfers)} proofs={proofs}"
+    return f"members={len(w.members)} expenses={len(w.expenses)} settlements={len(w.settlements)} open={len(w.transfers)} proofs={proofs} rev={w.rev}"
+
+
+# ---------------------------------------------------------------- TG-66: the new expense shape, edits and activity
+
+def snapshot(e: ExpenseOut) -> dict:
+    """An expense as an activity row's before/after: plain JSON, ExpenseOut's names, SNAPSHOT_FIELDS only."""
+    return e.model_dump(mode="json", include=set(SNAPSHOT_FIELDS))
+
+
+def _find(wallet: WalletOut, expense_id: UUID) -> ExpenseOut | None:
+    return next((e for e in wallet.expenses if e.id == expense_id), None)
+
+
+def _refuse(share_slug: str, what: str, status: int, code: str, detail=None) -> HTTPException:
+    logger.info("wallet expense %s refused share_slug=%s reason=%s", what, share_slug, code)
+    return HTTPException(status, code if detail is None else detail)
+
+
+def _with_wallet(code: str, wallet: WalletOut) -> dict:
+    """409 expense_changed and 404 expense_gone: the code and the wallet as it is now, so the phone shows the newer one."""
+    return {"code": code, "wallet": wallet.model_dump(mode="json")}
+
+
+def _v2_split(conn, wallet_id: UUID, body, share_slug: str, what: str):
+    """(amount, shares, paid_by, payers or None) for a v2 body, or a 422 with ux.md §9's code."""
+    order = [r["id"] for r in conn.execute("select id from wallet_members where wallet_id = %s order by seq", (wallet_id,))]
+    inputs, items, charges = getattr(body, "inputs", None) or [], getattr(body, "items", None) or [], getattr(body, "charges", None) or []
+    payers = {p.member_id: p.paid_centavos for p in body.payers} if body.payers is not None else None
+    people = {i.member_id for i in inputs} | {m for it in items for m in it.who} | set(payers or ())
+    people |= {m for m in (body.paid_by, body.by) if m is not None}
+    if not people <= set(order):
+        raise _refuse(share_slug, what, 422, "unknown_member")
+    try:
+        payer = wallet_splits.first_payer(body.paid_by, payers, order)
+        amount, shares = wallet_splits.split(body.mode, body.amount_centavos, inputs, items, charges, payer, order)
+        if payers is not None:
+            wallet_splits.check_payers(amount, payers)
+    except SplitError as e:
+        detail = {"code": e.code, "seq": e.seq} if e.seq is not None else None
+        raise _refuse(share_slug, what, 422, e.code, detail) from None
+    return amount, shares, payer, payers
+
+
+def _store_split(conn, expense_id: UUID, body, shares: dict[UUID, int], payers: dict[UUID, int] | None) -> None:
+    """The expense's child rows: final shares, then the mode's own inputs, items and charges, and several payers."""
+    for member_id, part in shares.items():
+        conn.execute("insert into expense_shares (expense_id, member_id, share_centavos) values (%s, %s, %s)",
+                     (expense_id, member_id, part))
+    for i in getattr(body, "inputs", None) or []:
+        conn.execute("insert into expense_inputs (expense_id, member_id, value) values (%s, %s, %s)",
+                     (expense_id, i.member_id, i.value))
+    for seq, item in enumerate(getattr(body, "items", None) or [], start=1):
+        item_id = conn.execute(
+            "insert into expense_items (expense_id, seq, name, price_centavos) values (%s, %s, %s, %s) returning id",
+            (expense_id, seq, item.name, item.price_centavos),
+        ).fetchone()["id"]
+        for member_id in item.who:
+            conn.execute("insert into expense_item_people (item_id, member_id) values (%s, %s)", (item_id, member_id))
+    for c in getattr(body, "charges", None) or []:
+        conn.execute("insert into expense_charges (expense_id, kind, basis, value) values (%s, %s, %s, %s)",
+                     (expense_id, c.kind, c.basis, c.value))
+    for member_id, part in (payers or {}).items():
+        conn.execute("insert into expense_payers (expense_id, member_id, paid_centavos) values (%s, %s, %s)",
+                     (expense_id, member_id, part))
+
+
+def _money_and_words(e: ExpenseOut) -> tuple:
+    """B12: what an edit must change to be one: amount, payer(s), final shares, note and category. Not the mode."""
+    return (e.amount_centavos, e.paid_by, {p.member_id: p.paid_centavos for p in e.payers},
+            {s.member_id: s.share_centavos for s in e.shares if s.share_centavos}, e.note, e.category)
 
 
 # ---------------------------------------------------------------- routes
@@ -215,10 +349,12 @@ def get_wallet(share_slug: str, response: Response) -> WalletOut:
 
 
 @router.post("/wallets/{share_slug}/members", status_code=201, response_model=WalletOut)
-def add_member(share_slug: str, body: MemberIn, request: Request, response: Response) -> WalletOut:
+def add_member(share_slug: str, body: MemberIn, request: Request, response: Response,
+               by: UUID | None = Query(None)) -> WalletOut:
     _limit(WRITE_LIMITER, request, "member")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
+        wallet_activity.check_by(conn, wallet_id, by, share_slug, "member")
         names = [r["name"].lower() for r in conn.execute("select name from wallet_members where wallet_id = %s", (wallet_id,))]
         if len(names) >= MAX_MEMBERS:
             logger.info("wallet member refused share_slug=%s reason=party_full", share_slug)
@@ -226,16 +362,67 @@ def add_member(share_slug: str, body: MemberIn, request: Request, response: Resp
         if body.name.lower() in names:
             logger.info("wallet member refused share_slug=%s reason=name_taken", share_slug)
             raise HTTPException(409, "name_taken")
-        conn.execute("insert into wallet_members (wallet_id, name) values (%s, %s)", (wallet_id, body.name))
+        member_id = conn.execute(
+            "insert into wallet_members (wallet_id, name) values (%s, %s) returning id", (wallet_id, body.name)
+        ).fetchone()["id"]
+        record(conn, wallet_id, "member_join", by=by, member_id=member_id)
         wallet = _load(conn, wallet_id)
     _private(response)
     logger.info("wallet member add share_slug=%s %s", share_slug, _counts(wallet))
     return wallet
 
 
+def _feature_off(share_slug: str, what: str) -> HTTPException:
+    return _refuse(share_slug, what, 404, "feature_off")
+
+
 @router.post("/wallets/{share_slug}/expenses", status_code=201, response_model=WalletOut)
-def add_expense(share_slug: str, body: ExpenseIn, request: Request, response: Response) -> WalletOut:
+def add_expense(share_slug: str, body: Union[ExpenseIn, ExpenseInV2], request: Request, response: Response) -> WalletOut:
+    """The old body (no `mode`), as before, or TG-66's: a mode, one payer or several, a category and `by`."""
     _limit(WRITE_LIMITER, request, "expense")
+    if isinstance(body, ExpenseIn):
+        return _add_legacy(share_slug, body, response)
+    flags = request.app.state.flags
+    if body.payers is not None and not flags.wallet_multi_payer:
+        raise _feature_off(share_slug, "add")
+    if body.mode not in FREE_MODES and not flags.wallet_splits:
+        raise _feature_off(share_slug, "add")
+    category = body.category if flags.wallet_splits else None  # dropped, not refused (plan §2's flag table)
+    with db.get_conn() as conn:
+        wallet_id = _wallet_id(conn, share_slug, lock=True)
+        amount, shares, paid_by, payers = _v2_split(conn, wallet_id, body, share_slug, "add")
+        _wallet_has_room(conn, wallet_id, share_slug)
+        expense_id = conn.execute(
+            """insert into expenses (wallet_id, paid_by, amount_centavos, note, split_mode, category)
+               values (%s, %s, %s, %s, %s, %s) returning id""",
+            (wallet_id, paid_by, amount, body.note, body.mode, category),
+        ).fetchone()["id"]
+        _store_split(conn, expense_id, body, shares, payers)
+        wallet = _recorded(conn, wallet_id, "expense_add", body.by, expense_id)
+    _private(response)
+    logger.info("wallet expense add share_slug=%s mode=%s payers=%d people=%d items=%d amount=%d category=%s %s",
+                share_slug, body.mode, len(payers or {}) or 1, len(shares), len(getattr(body, "items", None) or []),
+                amount, category, _counts(wallet))
+    return wallet
+
+
+def _wallet_has_room(conn, wallet_id: UUID, share_slug: str) -> None:
+    count = conn.execute("select count(*) as n from expenses where wallet_id = %s", (wallet_id,)).fetchone()["n"]
+    if count >= MAX_EXPENSES:
+        logger.info("wallet expense refused share_slug=%s reason=wallet_full", share_slug)
+        raise HTTPException(409, "wallet_full")
+
+
+def _recorded(conn, wallet_id: UUID, action: str, by: UUID | None, expense_id: UUID, before: dict | None = None) -> WalletOut:
+    """The wallet after an expense add or edit, with its activity row written: `after` is the expense as saved."""
+    wallet = _load(conn, wallet_id)
+    wallet.rev = record(conn, wallet_id, action, by=by, expense_id=expense_id, before=before,
+                        after=snapshot(_find(wallet, expense_id)))
+    return wallet
+
+
+def _add_legacy(share_slug: str, body: ExpenseIn, response: Response) -> WalletOut:
+    """Today's body, unchanged: stored with split_mode null (B9). It records expense_add, so rev still moves."""
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
         members = _member_ids(conn, wallet_id)
@@ -249,10 +436,7 @@ def add_expense(share_slug: str, body: ExpenseIn, request: Request, response: Re
         if body.paid_by not in members or not set(shares) <= members:
             logger.info("wallet expense refused share_slug=%s reason=unknown_member", share_slug)
             raise HTTPException(422, "unknown_member")
-        count = conn.execute("select count(*) as n from expenses where wallet_id = %s", (wallet_id,)).fetchone()["n"]
-        if count >= MAX_EXPENSES:
-            logger.info("wallet expense refused share_slug=%s reason=wallet_full", share_slug)
-            raise HTTPException(409, "wallet_full")
+        _wallet_has_room(conn, wallet_id, share_slug)
         expense_id = conn.execute(
             "insert into expenses (wallet_id, paid_by, amount_centavos, note) values (%s, %s, %s, %s) returning id",
             (wallet_id, body.paid_by, body.amount_centavos, body.note),
@@ -262,40 +446,106 @@ def add_expense(share_slug: str, body: ExpenseIn, request: Request, response: Re
                 "insert into expense_shares (expense_id, member_id, share_centavos) values (%s, %s, %s)",
                 (expense_id, member_id, part),
             )
-        wallet = _load(conn, wallet_id)
+        wallet = _recorded(conn, wallet_id, "expense_add", None, expense_id)
     _private(response)
     split = "equal" if body.split_among is not None else "custom"
-    logger.info("wallet expense add share_slug=%s split=%s people=%d %s", share_slug, split, len(shares), _counts(wallet))
+    logger.info("wallet expense add share_slug=%s mode=legacy split=%s people=%d amount=%d %s", share_slug, split,
+                len(shares), body.amount_centavos, _counts(wallet))
+    return wallet
+
+
+def splits_on(request: Request, share_slug: str) -> None:
+    """WALLET_SPLITS off: every edit is 404 feature_off, before the body is judged (as A2's activity_on), so an old
+    phone build's body gets ux.md §9's line, not a 422."""
+    if not request.app.state.flags.wallet_splits:
+        raise _feature_off(share_slug if SLUG.fullmatch(share_slug) else "<invalid>", "edit")
+
+
+@router.patch("/wallets/{share_slug}/expenses/{expense_id}", response_model=WalletOut, dependencies=[Depends(splits_on)])
+def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request: Request, response: Response) -> WalletOut:
+    """The whole new expense plus the version the form opened. Stale: 409 expense_changed; deleted: 404 expense_gone,
+    both with the wallet as it is now. A change to neither money nor words is a no-op: no row, no rev (B12)."""
+    _limit(WRITE_LIMITER, request, "expense_edit")
+    flags = request.app.state.flags  # WALLET_SPLITS: splits_on, above
+    if body.payers is not None and not flags.wallet_multi_payer:
+        raise _feature_off(share_slug, "edit")
+    with db.get_conn() as conn:
+        wallet_id = _wallet_id(conn, share_slug, lock=True)
+        current = _load(conn, wallet_id)
+        old = _find(current, expense_id)
+        if old is None:
+            raise _refuse(share_slug, "edit", 404, "expense_gone", _with_wallet("expense_gone", current))
+        if old.payers and not flags.wallet_multi_payer:  # S4: a one-payer form would drop the stored payers
+            raise _feature_off(share_slug, "edit")
+        if body.version != old.version:
+            raise _refuse(share_slug, "edit", 409, "expense_changed", _with_wallet("expense_changed", current))
+        amount, shares, paid_by, payers = _v2_split(conn, wallet_id, body, share_slug, "edit")
+        new = (amount, paid_by, payers or {}, {m: v for m, v in shares.items() if v}, body.note, body.category)
+        if new == _money_and_words(old):
+            _private(response)
+            logger.info("wallet expense edit noop share_slug=%s mode=%s %s", share_slug, body.mode, _counts(current))
+            return current
+        conn.execute(
+            """update expenses set paid_by = %s, amount_centavos = %s, note = %s, split_mode = %s, category = %s,
+                      version = version + 1, updated_at = now() where id = %s""",
+            (paid_by, amount, body.note, body.mode, body.category, expense_id),
+        )
+        for table in ("expense_shares", "expense_inputs", "expense_items", "expense_charges", "expense_payers"):
+            conn.execute(f"delete from {table} where expense_id = %s", (expense_id,))  # items' people cascade
+        _store_split(conn, expense_id, body, shares, payers)
+        wallet = _recorded(conn, wallet_id, "expense_edit", body.by, expense_id, before=snapshot(old))
+    _private(response)
+    logger.info("wallet expense edit share_slug=%s mode=%s version=%d amount_before=%d amount_after=%d people=%d %s",
+                share_slug, body.mode, old.version + 1, old.amount_centavos, amount, len(shares), _counts(wallet))
     return wallet
 
 
 @router.delete("/wallets/{share_slug}/expenses/{expense_id}", response_model=WalletOut)
-def delete_expense(share_slug: str, expense_id: UUID, request: Request, response: Response) -> WalletOut:
+def delete_expense(share_slug: str, expense_id: UUID, request: Request, response: Response,
+                   version: int | None = Query(None, ge=1), by: UUID | None = Query(None)) -> WalletOut:
+    """Without `version`, today's answers. With it: stale is 409 expense_changed, gone is 404 expense_gone (B13)."""
     _limit(WRITE_LIMITER, request, "expense_delete")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
-        gone = conn.execute("delete from expenses where id = %s and wallet_id = %s returning id", (expense_id, wallet_id)).fetchone()
-        if gone is None:
+        wallet_activity.check_by(conn, wallet_id, by, share_slug, "expense delete")
+        current = _load(conn, wallet_id)
+        old = _find(current, expense_id)
+        if old is None:
+            if version is not None:
+                raise _refuse(share_slug, "delete", 404, "expense_gone", _with_wallet("expense_gone", current))
             logger.info("wallet expense delete not found share_slug=%s", share_slug)
             raise HTTPException(404, "Expense not found")
+        if version is not None and version != old.version:
+            raise _refuse(share_slug, "delete", 409, "expense_changed", _with_wallet("expense_changed", current))
+        conn.execute("delete from expenses where id = %s and wallet_id = %s", (expense_id, wallet_id))
+        record(conn, wallet_id, "expense_delete", by=by, expense_id=expense_id, before=snapshot(old))
         wallet = _load(conn, wallet_id)
     _private(response)
-    logger.info("wallet expense delete share_slug=%s %s", share_slug, _counts(wallet))
+    logger.info("wallet expense delete share_slug=%s amount=%d %s", share_slug, old.amount_centavos, _counts(wallet))
     return wallet
 
 
+def _payment(row) -> dict:
+    """A settle/settle_undo row's `after`: ids and the amount, never names, so the line reads after an undo."""
+    return {"from_member": str(row["from_member"]), "to_member": str(row["to_member"]), "amount_centavos": row["amount_centavos"]}
+
+
 @router.post("/wallets/{share_slug}/settlements", status_code=201, response_model=WalletOut)
-def add_settlement(share_slug: str, body: SettlementIn, request: Request, response: Response) -> WalletOut:
+def add_settlement(share_slug: str, body: SettlementIn, request: Request, response: Response,
+                   by: UUID | None = Query(None)) -> WalletOut:
     _limit(WRITE_LIMITER, request, "settlement")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
         if not {body.from_member, body.to_member} <= _member_ids(conn, wallet_id):
             logger.info("wallet settlement refused share_slug=%s reason=unknown_member", share_slug)
             raise HTTPException(422, "unknown_member")
-        conn.execute(
-            "insert into settlements (wallet_id, from_member, to_member, amount_centavos) values (%s, %s, %s, %s)",
+        wallet_activity.check_by(conn, wallet_id, by, share_slug, "settlement")
+        row = conn.execute(
+            """insert into settlements (wallet_id, from_member, to_member, amount_centavos) values (%s, %s, %s, %s)
+               returning id, from_member, to_member, amount_centavos""",
             (wallet_id, body.from_member, body.to_member, body.amount_centavos),
-        )
+        ).fetchone()
+        record(conn, wallet_id, "settle", by=by, settlement_id=row["id"], after=_payment(row))
         wallet = _load(conn, wallet_id)
     _private(response)
     logger.info("wallet settlement add share_slug=%s %s", share_slug, _counts(wallet))
@@ -303,16 +553,20 @@ def add_settlement(share_slug: str, body: SettlementIn, request: Request, respon
 
 
 @router.delete("/wallets/{share_slug}/settlements/{settlement_id}", response_model=WalletOut)
-def delete_settlement(share_slug: str, settlement_id: UUID, request: Request, response: Response) -> WalletOut:
+def delete_settlement(share_slug: str, settlement_id: UUID, request: Request, response: Response,
+                      by: UUID | None = Query(None)) -> WalletOut:
     _limit(WRITE_LIMITER, request, "settlement_delete")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
+        wallet_activity.check_by(conn, wallet_id, by, share_slug, "settlement delete")
         gone = conn.execute(
-            "delete from settlements where id = %s and wallet_id = %s returning id, proof_path", (settlement_id, wallet_id)
+            """delete from settlements where id = %s and wallet_id = %s
+               returning id, proof_path, from_member, to_member, amount_centavos""", (settlement_id, wallet_id)
         ).fetchone()
         if gone is None:
             logger.info("wallet settlement delete not found share_slug=%s", share_slug)
             raise HTTPException(404, "Payment not found")
+        record(conn, wallet_id, "settle_undo", by=by, settlement_id=gone["id"], after=_payment(gone))
         wallet = _load(conn, wallet_id)
     forget_proof(gone["proof_path"], share_slug)
     _private(response)
