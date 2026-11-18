@@ -10,7 +10,7 @@ export const MAX_MEMBERS = 20;
 export type Member = { id: string; name: string };
 export type Share = { member_id: string; share_centavos: number };
 // TG-66: how an expense's shares were worked out. A wallet saved before TG-66 (the API's or the worker's copy) has none
-// of these, so every new field is optional: a missing mode is a legacy expense, a missing category is "Not sorted yet".
+// of these, so every new field is optional: a missing mode is a legacy expense, a missing category is "No category yet" (ux.md).
 export type SplitMode = "equal" | "exact" | "percent" | "shares" | "adjust" | "itemized";
 export type Category = "transport" | "hotel" | "food" | "activities" | "other";
 /** One row per person: 1 (equal, the rows are among), centavos (exact), basis points (percent), weight (shares), extra centavos (adjust). */
@@ -246,14 +246,26 @@ export const walletApi = {
     request<CommentsResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments`, undefined, (b) => ({ ok: true, ...(b as { rev: number; comments: Comment[] }) })),
   addComment: (slug: string, id: string, body: { body: string; by?: string | null }) =>
     request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments`, { method: "POST", body }, (b) => ({ ok: true, ...(b as { wallet: Wallet; comments: Comment[] }) })),
-  deleteComment: (slug: string, id: string, commentId: string) =>
-    request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: "DELETE" }, (b) => ({
+  /** `by`: this phone's person, as ?by= (a DELETE has no body), so the activity line names them; none is "Someone". */
+  deleteComment: (slug: string, id: string, commentId: string, by?: string | null) =>
+    request<CommentWriteResult>(`${at(slug)}/expenses/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}${by ? `?by=${encodeURIComponent(by)}` : ""}`, { method: "DELETE" }, (b) => ({
       ok: true,
       ...(b as { wallet: Wallet; comments: Comment[] }),
     })),
-  /** Newest first, 15 a page; `before` is the oldest row's id on screen. Never cached by the worker (needs signal). */
-  activity: (slug: string, before?: number) =>
-    request<ActivityResult>(`${at(slug)}/activity?${before === undefined ? "" : `before=${before}&`}limit=15`, undefined, (b) => ({ ok: true, ...(b as { rev: number; rows: Activity[] }) })),
+  /**
+   * Newest first, 15 a page; `before` is the oldest row's id on screen. Never cached by the worker (needs signal).
+   * TG-66 W2: `expenseId` asks for one expense's rows only (plan §2 addendum), with `limit` up to 50. A bare number is
+   * `before`, as first written.
+   */
+  activity: (slug: string, opts?: number | { before?: number; expenseId?: string; limit?: number }) => {
+    const o = typeof opts === "number" ? { before: opts } : (opts ?? {});
+    const q = [
+      ...(o.before === undefined ? [] : [`before=${o.before}`]),
+      ...(o.expenseId === undefined ? [] : [`expense_id=${encodeURIComponent(o.expenseId)}`]),
+      `limit=${o.limit ?? 15}`,
+    ].join("&");
+    return request<ActivityResult>(`${at(slug)}/activity?${q}`, undefined, (b) => ({ ok: true, ...(b as { rev: number; rows: Activity[] }) }));
+  },
   settle: (slug: string, t: Transfer) => call(`${at(slug)}/settlements`, { method: "POST", body: t }),
   undoSettlement: (slug: string, id: string) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}`, { method: "DELETE" }),
   addProof: (slug: string, id: string, picture: Blob) => call(`${at(slug)}/settlements/${encodeURIComponent(id)}/proof`, { method: "POST", raw: picture }),
