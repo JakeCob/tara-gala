@@ -76,7 +76,7 @@ test("GW1-L5 tg-ux2's question: in edit, a saved line the plan moved or removed 
   // The plan removed "meals": its item text is gone with it, so the line says so without a name
   const removed: WalletBudget = { ...BUDGET, lines: BUDGET.lines.filter((l) => l.key !== "meals") };
   assert.equal(initialLine(removed, "meals", "food"), null);
-  assert.equal(editLineMeta(removed, "meals", "food"), "Its line isn't in the plan any more. Pick again, or leave it for later.");
+  assert.equal(editLineMeta(removed, "meals", "food"), "Its budget line isn't in the plan any more. Pick another, or leave it for later.");
   // No meta when the saved line is listed, for _none, for null, or with no budget
   for (const [b, key, cat] of [[BUDGET, "meals", "food"], [BUDGET, "_none", "food"], [BUDGET, null, "food"], [null, "meals", "food"]] as const) {
     assert.equal(editLineMeta(b, key, cat), null, `${key}`);
