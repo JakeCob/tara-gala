@@ -243,6 +243,8 @@ def test_a_person_outside_the_wallet_order_is_a_caller_bug(ws):
     stranger = UUID("00000000-0000-4000-8000-0000000000ff")
     with pytest.raises(ValueError):
         ws.split("equal", 300, [{"member_id": stranger, "value": 1}], [], [], ANA, MEMBERS)
+    with pytest.raises(ValueError):  # exact never calls allocate, so this pins the wallet check on its own
+        ws.split("exact", 300, [{"member_id": stranger, "value": 300}], [], [], ANA, MEMBERS)
     with pytest.raises(ValueError):
         ws.split("itemized", None, [], [{"name": "X", "price_centavos": 300, "who": [stranger]}], [], ANA, MEMBERS)
 
