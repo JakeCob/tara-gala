@@ -34,6 +34,7 @@ export type Expense = {
   version?: number;
   updated_at?: string | null;
   comment_count?: number;
+  budget_key?: string | null; // TG-62: a budget line's key, "_none" (Not in the budget) or null/missing (Not sorted yet)
 };
 export type Settlement = { id: string; from_member: string; to_member: string; amount_centavos: number; created_at: string; has_proof?: boolean; proof_at?: string | null };
 export type Balance = { member_id: string; paid_centavos: number; share_centavos: number; net_centavos: number };
@@ -49,11 +50,16 @@ export type Wallet = {
   transfers: Transfer[];
   total_centavos: number;
   rev?: number; // TG-66: the wallet's write counter; missing on a wallet saved before it, so afterGet's rev rule needs it on both sides
+  budget?: WalletBudget | null; // TG-62: the lines of the wallet's one trip; null or missing hides the line row
 };
+/** TG-62: the trip plan's budget lines, for the "Which budget line?" row. Lines only, never estimates or amounts. */
+export type BudgetLine = { key: string; item: string; category: Category | null }; // null category: listed under other
+export type WalletBudget = { trip_name: string; lines: BudgetLine[] }; // plan order
 
 /** TG-66: the add and edit bodies. The web with WALLET_SPLITS off sends LegacyExpenseBody, byte for byte as before. */
 export type LegacyExpenseBody = { paid_by: string; amount_centavos: number; note: string } & ({ split_among: string[] } | { shares: Share[] });
-type V2Base = { note: string; category?: Category | null; by?: string | null } & ({ paid_by: string } | { payers: Payer[] });
+// TG-62: budget_key is a line's key, "_none" or null. On an edit, leaving it out keeps the stored line (the API's G9a).
+type V2Base = { note: string; category?: Category | null; by?: string | null; budget_key?: string | null } & ({ paid_by: string } | { payers: Payer[] });
 export type ExpenseBodyV2 = V2Base &
   (
     | { mode: Exclude<SplitMode, "itemized">; amount_centavos: number; inputs: InputRow[] }

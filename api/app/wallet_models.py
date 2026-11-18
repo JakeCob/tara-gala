@@ -23,6 +23,11 @@ Note = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max
 Centavos = Annotated[int, Field(ge=1, le=MAX_CENTAVOS)]
 SplitMode = Literal["equal", "exact", "percent", "shares", "adjust", "itemized"]  # TG-66
 Category = Literal["transport", "hotel", "food", "activities", "other"]  # TG-66; null is "Not sorted yet"
+# TG-62: a budget line's key, the slug a guide budget row carries (guide.BudgetRow.key) and expenses.budget_key's check.
+# An expense also takes "_none" ("Not in the budget"); null is "Not sorted yet". Never logged: it's the group's own text.
+BUDGET_KEY = r"^[a-z][a-z0-9-]{1,20}$"
+BudgetKey = Annotated[str, StringConstraints(pattern=BUDGET_KEY)]
+NONE_KEY = "_none"
 
 
 # ---------------------------------------------------------------- request and response shapes (TG-50, TG-53)
@@ -135,6 +140,7 @@ class ExpenseOut(BaseModel):
     version: int = 1
     updated_at: datetime | None = None
     comment_count: int = 0
+    budget_key: str | None = None  # TG-62: a line key, "_none" or null (Not sorted yet)
 
 
 class SettlementOut(BaseModel):
@@ -160,6 +166,21 @@ class TransferOut(BaseModel):
     amount_centavos: int
 
 
+class BudgetLine(BaseModel):
+    """TG-62: one of the trip plan's budget lines, for the wallet's "Which budget line?" row. Never an estimate or amount."""
+
+    key: str
+    item: str
+    category: Category | None  # null: listed under other
+
+
+class WalletBudget(BaseModel):
+    """TG-62: the lines of the wallet's one trip (GA1's budget_lines()); null on WalletOut when there isn't exactly one."""
+
+    trip_name: str
+    lines: list[BudgetLine]  # plan order
+
+
 class WalletOut(BaseModel):
     share_slug: str
     name: str
@@ -171,6 +192,7 @@ class WalletOut(BaseModel):
     transfers: list[TransferOut]  # what's left to pay, fewest payments
     total_centavos: int
     rev: int = 0  # TG-66: the wallet's write counter
+    budget: WalletBudget | None = None  # TG-62: null with BUDGET_LINES off, or unless the wallet is on exactly one trip with keyed lines
 
 
 # ---------------------------------------------------------------- TG-66: the new request shapes
@@ -205,6 +227,9 @@ class _ExpenseV2(BaseModel):
     note: Note
     category: Category | None = None
     by: UUID | None = None  # the phone's picked person; the route checks it's a member (422 unknown_member)
+    # TG-62: the budget line. On a patch, a body that leaves it out keeps the stored line (GA1 reads model_fields_set,
+    # plan Rev 1 M2); only an explicit null clears it. The old request shape never has it (extra="forbid").
+    budget_key: Literal["_none"] | BudgetKey | None = None
 
     @model_validator(mode="after")
     def one_payer_form(self):

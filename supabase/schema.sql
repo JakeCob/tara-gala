@@ -224,7 +224,11 @@ create table expenses (
   split_mode      text check (split_mode in ('equal', 'exact', 'percent', 'shares', 'adjust', 'itemized')),
   category        text check (category in ('transport', 'hotel', 'food', 'activities', 'other')),
   version         integer not null default 1 check (version >= 1),
-  updated_at      timestamptz
+  updated_at      timestamptz,
+  -- TG-62: the plan's budget line this expense counts against (a guide budget row's key), '_none' for "Not in the
+  -- budget", null for "Not sorted yet". Last, as the migration adds it.
+  budget_key      text constraint expenses_budget_key_check
+                    check (budget_key is null or budget_key = '_none' or budget_key ~ '^[a-z][a-z0-9-]{1,20}$')
 );
 create index expenses_wallet on expenses (wallet_id);
 

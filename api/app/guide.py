@@ -13,11 +13,12 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, model_serializer, model_validator
 
 from .models import Trip
 from .schedule import runs_on
 from .trip_rows import trip_from_row
+from .wallet_models import BUDGET_KEY, BudgetKey, Category  # noqa: F401 (BUDGET_KEY: TG-62's one pattern, re-exported)
 
 logger = logging.getLogger("tara_gala.api")
 
@@ -123,12 +124,33 @@ class BusTable(_M):
 class BudgetRow(_M):
     item: Short
     estimate: Annotated[str, StringConstraints(min_length=1, max_length=40)]
+    # TG-62: the row's stable key, which expenses.budget_key points at, and the TG-66 category it sits under (null: other).
+    # Optional on read only: plans stored before the backfill have neither. Every write path stores a key (plan §2).
+    key: BudgetKey | None = None
+    category: Category | None = None
+
+    @model_serializer(mode="wrap")
+    def _as_before_when_unkeyed(self, handler):
+        """A row with neither (a plan from before the backfill) writes and reads back exactly as before TG-62, so stored
+        plans, their versions and the trip's GET don't change until a row gets a key (TG-61's set_budget stores dumps)."""
+        out = handler(self)
+        if self.key is None and self.category is None:
+            out.pop("key", None)
+            out.pop("category", None)
+        return out
 
 
 class Budget(_M):
     summary: Text = ""
     rows: list[BudgetRow] = []
     excluded: Text = ""
+
+    @model_validator(mode="after")
+    def _keys_once(self):
+        keys = [r.key for r in self.rows if r.key is not None]
+        if len(set(keys)) != len(keys):
+            raise ValueError("duplicate_budget_key")  # never the key itself: it's the group's own line text
+        return self
 
 
 class Todo(_M):
