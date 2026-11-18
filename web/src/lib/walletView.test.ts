@@ -303,3 +303,7 @@ test("W3-V20 tg-ux2 W3 S1 and S4: Show them / Show all move focus; the 409's act
   assert.match(src, /onClick=\{showAll\}/);
   assert.match(src, /limit: 10 \}\);\s*const row = h\.ok \? h\.rows\.find\(\(x\) => x\.action === "expense_edit"\) : undefined;/);
 });
+
+test("W3-V21 tg-ux2 W3 S5: Equal + extra previews keep a minimum column, so the extra fields line up row to row", () => {
+  assert.match(read("src/components/wallet/ExpenseForm.tsx"), /<span className="min-w-16 text-right tabular-nums text-muted">\{preview\(m\.id\)\}<\/span>/);
+});

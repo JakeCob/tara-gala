@@ -383,7 +383,7 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
                         onChange={(e) => setIn("extras", m.id, e.target.value)}
                       />
                     </label>
-                    <span className="text-right tabular-nums text-muted">{preview(m.id)}</span>
+                    <span className="min-w-16 text-right tabular-nums text-muted">{preview(m.id)}</span>
                   </span>
                 )}
                 {s.mode !== "exact" && s.mode !== "adjust" && <span className="w-20 text-right tabular-nums text-muted">{preview(m.id)}</span>}
