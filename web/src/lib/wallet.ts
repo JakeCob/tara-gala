@@ -10,7 +10,7 @@ export const MAX_MEMBERS = 20;
 export type Member = { id: string; name: string };
 export type Share = { member_id: string; share_centavos: number };
 // TG-66: how an expense's shares were worked out. A wallet saved before TG-66 (the API's or the worker's copy) has none
-// of these, so every new field is optional: a missing mode is a legacy expense, a missing category is "Not sorted yet".
+// of these, so every new field is optional: a missing mode is a legacy expense, a missing category is "No category yet" (ux.md).
 export type SplitMode = "equal" | "exact" | "percent" | "shares" | "adjust" | "itemized";
 export type Category = "transport" | "hotel" | "food" | "activities" | "other";
 /** One row per person: 1 (equal, the rows are among), centavos (exact), basis points (percent), weight (shares), extra centavos (adjust). */
