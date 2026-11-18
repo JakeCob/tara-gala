@@ -280,6 +280,7 @@ test("W3-V18 Equal + extra rows fit at 320 and 380 (render check): the row wraps
   assert.match(src, /s\.mode === "adjust" \? "flex-wrap gap-x-3 gap-y-1" : "gap-3"/, "only the adjust row wraps");
   assert.match(src, /s\.mode === "adjust" \? "min-w-\[5\.5rem\]" : "min-w-0"/, "the name keeps a readable width");
   assert.match(src, /<span className="ml-auto flex shrink-0 items-center gap-2">\s*<label className="flex items-center gap-1">\s*<span className=\{PX\.meta\}>extra<\/span>/);
-  assert.match(src, /cx\(PX\.input, "w-18 text-right tabular-nums"\)/);
+  assert.match(src, /aria-label=\{`Extra for \$\{m\.name\}`\}/);
+  assert.match(src, /cx\(PX\.input, "w-20 text-right tabular-nums"\)\}\s*aria-label=\{`Extra for/, "room for -50.50 at 320, still one row at 380");
   assert.match(src, /s\.mode !== "exact" && s\.mode !== "adjust" && <span className="w-20 /, "other modes keep their preview column");
 });

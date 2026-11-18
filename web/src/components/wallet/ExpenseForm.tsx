@@ -373,7 +373,7 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
                       <span className={PX.meta}>extra</span>
                       <span aria-hidden="true" className={PX.inputPrefix}>₱</span>
                       <input
-                        className={cx(PX.input, "w-18 text-right tabular-nums")}
+                        className={cx(PX.input, "w-20 text-right tabular-nums")}
                         aria-label={`Extra for ${m.name}`}
                         inputMode="text"
                         autoComplete="off"
