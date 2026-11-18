@@ -2,15 +2,24 @@
 
 // TG-61 ux.md §8: the pick, to-do, budget and sources lists, changed in edit mode inside their own panels. Each save is
 // one version of the plan, with its line in the edit bar. Ticks stay where they are.
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { PX, PixelButton, cx } from "@/components/pixel";
 import { formatTime } from "@/lib/api";
 import type { Guide, GuideDay } from "@/lib/guide";
-import { editBudget, editPickOption, editSources, editTodo } from "@/lib/planEdit";
+import { budgetCategoryWord, budgetFormStart, editBudget, editPickOption, editSources, editTodo } from "@/lib/planEdit";
+import type { Category } from "@/lib/wallet";
+import { CATEGORIES } from "@/lib/walletCategories";
 import { PlanProblem } from "./PlanBits";
 import type { PlanEditor } from "./PlanEditor";
 
-type Field = { name: string; label: string; max: number; hint?: string; optional?: boolean; prefix?: string; type?: "time"; check?: (v: string) => string | null };
+type Field = {
+  name: string; label: string; max: number; hint?: string; optional?: boolean; prefix?: string; type?: "time"; check?: (v: string) => string | null;
+  /** TG-62 ux.md §4a: a native select instead of a text box. Its hint is wired with aria-describedby, and an empty start
+   * value offers `Pick one` first. */
+  options?: { value: string; label: string }[];
+  /** What an empty required field says, instead of `Fill in <label> first.` */
+  missing?: string;
+};
 type Values = Record<string, string>;
 
 const MAX_OPTIONS = 6; // the API's pick limits
@@ -30,12 +39,13 @@ function ItemForm({ fields, start, submit, onSubmit, onCancel, off, extra }: {
   const [v, setV] = useState(start);
   const [problem, setProblem] = useState("");
   const [saving, setSaving] = useState(false);
+  const uid = useId();
   async function go(e: FormEvent) {
     e.preventDefault();
     if (off || saving) return;
     for (const f of fields) {
       const value = (v[f.name] ?? "").trim();
-      if (!value && !f.optional) return setProblem(`Fill in ${f.label.toLowerCase()} first.`);
+      if (!value && !f.optional) return setProblem(f.missing ?? `Fill in ${f.label.toLowerCase()} first.`);
       const bad = f.check?.(value);
       if (bad) return setProblem(bad);
     }
@@ -48,7 +58,17 @@ function ItemForm({ fields, start, submit, onSubmit, onCancel, off, extra }: {
   }
   return (
     <form onSubmit={go} noValidate className="flex flex-col gap-2">
-      {fields.map((f) => (
+      {fields.map((f) => f.options ? (
+        <div key={f.name} className="flex flex-col gap-1 text-sm">
+          <label htmlFor={`${uid}-${f.name}`} className="font-semibold">{f.label}</label>
+          {f.hint && <span id={`${uid}-${f.name}-hint`} className={PX.meta}>{f.hint}</span>}
+          <select id={`${uid}-${f.name}`} className={cx(PX.input, "w-full min-w-0")} value={v[f.name] ?? ""}
+            aria-describedby={f.hint ? `${uid}-${f.name}-hint` : undefined} onChange={(e) => setV({ ...v, [f.name]: e.target.value })}>
+            {!start[f.name] && <option value="">Pick one</option>}
+            {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      ) : (
         <label key={f.name} className="flex flex-col gap-1 text-sm">
           <span className="font-semibold">{f.label}</span>
           {f.hint && <span className={PX.meta}>{f.hint}</span>}
@@ -169,13 +189,22 @@ export function BudgetEdits({ editor, guide }: { editor: PlanEditor; guide: Guid
   const fields: Field[] = [
     { name: "item", label: "What it's for", max: 120 },
     { name: "estimate", label: "Estimate per person", max: 40, prefix: "₱", hint: "A number or a range, like 1,500 to 2,200." },
+    // TG-62 ux.md §4a: the wallet lists a line under this category, so a new line needs a pick
+    { name: "category", label: "Category", max: 20, hint: "In the wallet, this line shows under this category.", missing: "Pick a category first.",
+      options: CATEGORIES.map((c) => ({ value: c.key, label: c.label })) },
   ];
+  const line = (v: Record<string, string>) => ({ item: v.item, estimate: v.estimate, category: v.category as Category });
   return (
     <div className="flex flex-col gap-3">
       <BudgetText editor={editor} label="Summary" value={guide.budget.summary} part="summary" />
-      <ListEdits editor={editor} items={guide.budget.rows} name={(r) => r.item} addLabel="Add a line" fields={fields} read={(r) => ({ item: r.item, estimate: r.estimate })}
-        show={(r) => <span className="text-sm break-words">{r.item} · <span className="tabular-nums">₱{r.estimate}</span></span>}
-        onSave={(i, v) => failed(editor.save("plan-budget", (g) => editBudget(g, i === null ? { add: { item: v.item, estimate: v.estimate } } : { set: i, row: { item: v.item, estimate: v.estimate } }), { kind: "list", what: "budget" }, null))}
+      <ListEdits editor={editor} items={guide.budget.rows} name={(r) => r.item} addLabel="Add a line" fields={fields} read={budgetFormStart}
+        show={(r) => (
+          <span className="flex flex-col">
+            <span className="text-sm break-words">{r.item} · <span className="tabular-nums">₱{r.estimate}</span></span>
+            <span className={PX.meta}>{budgetCategoryWord(r.category)}</span>
+          </span>
+        )}
+        onSave={(i, v) => failed(editor.save("plan-budget", (g) => editBudget(g, i === null ? { add: line(v) } : { set: i, row: line(v) }), { kind: "list", what: "budget" }, null))}
         onRemove={(i) => failed(editor.save("plan-budget", (g) => editBudget(g, { remove: i }), { kind: "list", what: "budget" }, null))} />
       <BudgetText editor={editor} label="Not included" value={guide.budget.excluded} part="excluded" />
     </div>

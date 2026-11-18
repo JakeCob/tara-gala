@@ -5,6 +5,10 @@ with null keys on what's new), and plan_edit.prepare() then checks it exactly as
 The model names only existing keys. It can't mint a key, and it can't make a pin: a place is a spot or a trip place
 it was given, never coordinates or a link. Pure: no database, no model call.
 
+TG-62 GP1: set_budget's rows carry each line's key and category (plan.md G19). A key the model made up is dropped to
+null here, so the row inherits by its text or gets a fresh key in plan_edit.prepare, instead of the whole proposal
+failing on unknown_key. A null category keeps the line's (G18a step 1).
+
 Every removal says why (owner feedback 2026-11-15): remove_row, remove_todo and a set_row that changes a row's place
 (owner decision 2026-11-15: Out/In takes a stop out too) need a why of 1 to 120 characters. Any other move_row,
 set_row or swap_bus may have one. whys() keys them to the change lines they explain (plan_diff). A why is
@@ -29,6 +33,15 @@ NEEDS_WHY = ("remove_row", "remove_todo")
 MAY_HAVE_WHY = ("move_row", "set_row", "swap_bus")
 
 
+CATEGORIES = ("transport", "hotel", "food", "activities", "other")  # TG-66's words, as the strict schema's enum
+
+
+class OpBudgetRow(BudgetRow):
+    """A set_budget row as the model sends it: any key, since a made-up one is dropped rather than refused (tg-review
+    N2: no length cap, so a long one doesn't fail the whole reply)."""
+    key: str | None = None
+
+
 class Op(BaseModel):
     """One operation, flat: `op` says which fields it reads; the rest stay null."""
     model_config = ConfigDict(extra="forbid")
@@ -45,7 +58,7 @@ class Op(BaseModel):
     index: int | None = None
     trip_id: UUID | None = None
     text: Annotated[str, StringConstraints(min_length=1, max_length=120)] | None = None  # a to-do
-    budget_rows: list[BudgetRow] | None = None
+    budget_rows: list[OpBudgetRow] | None = None
     budget_summary: Text | None = None
     why: str | None = None  # 1 to MAX_WHY, checked in apply so any length retries as long_why (review N2); max_tokens bounds it
 
@@ -90,8 +103,12 @@ _OP = _obj(
     index=_maybe("integer", "swap_bus: the bus row's index in its table"),
     trip_id=_maybe("string", "swap_bus: a trip id from <buses>, same direction and date"),
     text=_maybe("string", "add_todo: the to-do"),
-    budget_rows={"type": ["array", "null"], "items": _obj(item={"type": "string"}, estimate={"type": "string"}),
-                 "description": "set_budget: every budget row"},
+    budget_rows={"type": ["array", "null"], "items": _obj(
+        item={"type": "string"}, estimate={"type": "string"},
+        key=_maybe("string", "the row's key from <budget>; null for a new row"),
+        category={**_maybe("string", "transport, hotel, food, activities or other; null keeps the row's category"),
+                  "enum": [*CATEGORIES, None]},  # tg-review N1: a word outside these would fail the whole reply
+    ), "description": "set_budget: every budget row"},
     budget_summary=_maybe("string", "set_budget: the budget's one-line summary"),
     why=_maybe("string", f"remove_row, remove_todo, and set_row with a new place: required, why it goes, at most {MAX_WHY} "
                          "characters. Other move_row, set_row, swap_bus: optional. Null for the rest"),
@@ -214,7 +231,13 @@ def _one(g: dict, o: Op) -> None:
         g["todo"].remove(todo)
     elif o.op == "set_budget":
         _need(o, "budget_rows")
-        g["budget"]["rows"] = [b.model_dump() for b in o.budget_rows]
+        known = {r["key"] for r in g["budget"]["rows"] if r.get("key")}
+        rows = []
+        for b in o.budget_rows:
+            # a made-up key, or a second row naming one key (tg-review N3), goes as null: inherit by text, or minted
+            rows.append(BudgetRow.model_validate({**b.model_dump(), "key": b.key if b.key in known else None}).model_dump())
+            known.discard(b.key)
+        g["budget"]["rows"] = rows
         if o.budget_summary is not None:
             g["budget"]["summary"] = o.budget_summary
 
