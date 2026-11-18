@@ -1013,7 +1013,9 @@ const APPROVED_PAIRS = new Set([
 const DANGER_TEXT_FILES = ["src/components/pixel/classes.ts", "src/components/TripCard.tsx", "src/components/LegCard.tsx",
   "src/components/PlanResults.tsx", "src/components/ItineraryView.tsx", "src/components/ItineraryList.tsx", "src/components/LastMile.tsx",
   // TG-61: the leads of its three alert boxes (far place, clash, bus off the schedule)
-  "src/components/PlaceInput.tsx", "src/components/StopChange.tsx", "src/components/LevelMap.tsx"];
+  "src/components/PlaceInput.tsx", "src/components/StopChange.tsx", "src/components/LevelMap.tsx",
+  // TG-66 W1: an item with nobody ticked, "Pick who had <item>." under its pills (ux.md §3, tg-ux2's review M1)
+  "src/components/wallet/ItemsEditor.tsx"];
 
 test("T47-C2 every colour pair in the code is approved; red text and Blue links only where ux puts them", async () => {
   const { PX } = await loadPixel();
