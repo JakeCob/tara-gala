@@ -8,19 +8,25 @@ the sweep deleted it, and neither means there never was one, or someone removed 
 The bytes live under wallets/<wallet id>/ in the private bucket (storage.py). Uploads are the raw image as the request
 body, as in trip_files.py. No connection is held during a Storage call: an upload mustn't stop the wallet's other writes,
 the pool is 5, and Storage's timeout is 20 seconds. Logs carry the slug and sizes, never a name, a note or a path.
+
+TG-66: each add, change and remove records proof_add, proof_change or proof_remove (wallet_activity.record) in the same
+transaction as its row change, so the wallet's rev moves with it. The row's `after` is the payment itself, so the line
+still reads once the payment is undone. `?by=` is who's writing (the body of an add is the image). The sweep isn't a
+person's write and records nothing.
 """
 
 import logging
 from datetime import date
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 
 from . import db, storage
 from .limits import RateLimiter
 from .sessions import RETAIN_DAYS
 from .storage import MAX_BYTES, sniff
+from .wallet_activity import check_by, record
 from .wallets import NOINDEX, WalletOut, _limit, _load, _private, _wallet_id, forget_proof
 
 router = APIRouter(tags=["wallets"])
@@ -35,8 +41,15 @@ NO_PROOF = "Proof not found"
 
 def _payment(conn, wallet_id: UUID, settlement_id: UUID):
     return conn.execute(
-        "select proof_path, proof_type from settlements where id = %s and wallet_id = %s", (settlement_id, wallet_id)
+        "select proof_path, proof_type, from_member, to_member, amount_centavos from settlements where id = %s and wallet_id = %s",
+        (settlement_id, wallet_id),
     ).fetchone()
+
+
+def _record(conn, wallet_id: UUID, action: str, by: UUID | None, settlement_id: UUID, payment) -> None:
+    """The activity row: ids, never names. JSON, so the ids are strings."""
+    after = {"from_member": str(payment["from_member"]), "to_member": str(payment["to_member"]), "amount_centavos": payment["amount_centavos"]}
+    record(conn, wallet_id, action, by=by, settlement_id=settlement_id, after=after)
 
 
 def _proofs(wallet: WalletOut) -> int:
@@ -48,12 +61,13 @@ def _not_found(share_slug: str, detail: str, **kwargs) -> HTTPException:
     return HTTPException(404, detail, **kwargs)
 
 
-def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes) -> WalletOut:
+def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes, by: UUID | None = None) -> WalletOut:
     """Stores the bytes first and locks the wallet after, unlike trip_files._save: see the module docstring."""
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug)
         if _payment(conn, wallet_id, settlement_id) is None:
             raise _not_found(share_slug, NOT_FOUND)
+        check_by(conn, wallet_id, by, share_slug, "proof")  # before Storage: a refusal stores nothing
     path = f"wallets/{wallet_id}/{uuid4()}"
     try:
         storage.store().put(path, data, content_type)
@@ -76,6 +90,7 @@ def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes) 
                     "update settlements set proof_path = %s, proof_type = %s, proof_bytes = %s, proof_at = now() where id = %s",
                     (path, content_type, len(data), settlement_id),
                 )
+                _record(conn, wallet_id, "proof_change" if old else "proof_add", by, settlement_id, payment)
                 wallet = _load(conn, wallet_id)
     except Exception:  # no row took these bytes, so nothing would ever find them
         forget_proof(path, share_slug)
@@ -92,8 +107,10 @@ def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes) 
 
 
 @router.post("/wallets/{share_slug}/settlements/{settlement_id}/proof", status_code=201, response_model=WalletOut)
-async def add_proof(share_slug: str, settlement_id: UUID, request: Request, response: Response) -> WalletOut:
-    """Adds a proof to a payment, or replaces its proof. The body is the raw image."""
+async def add_proof(
+    share_slug: str, settlement_id: UUID, request: Request, response: Response, by: UUID | None = Query(None)
+) -> WalletOut:
+    """Adds a proof to a payment, or replaces its proof. The body is the raw image; `by` is who's adding it."""
     _limit(PROOF_LIMITER, request, "proof-add")
     declared = request.headers.get("content-type", "").split(";")[0].strip().lower()
     length = request.headers.get("content-length", "")
@@ -108,7 +125,7 @@ async def add_proof(share_slug: str, settlement_id: UUID, request: Request, resp
     if sniffed is None or sniffed != declared:
         logger.info("wallet proof refused share_slug=%s reason=not_an_image bytes=%d", share_slug, len(data))
         raise HTTPException(422, "not_an_image")
-    wallet = await run_in_threadpool(_save, share_slug, settlement_id, sniffed, data)
+    wallet = await run_in_threadpool(_save, share_slug, settlement_id, sniffed, data, by)
     _private(response)
     return wallet
 
@@ -134,11 +151,14 @@ def get_proof(share_slug: str, settlement_id: UUID) -> Response:
 
 
 @router.delete("/wallets/{share_slug}/settlements/{settlement_id}/proof", response_model=WalletOut)
-def delete_proof(share_slug: str, settlement_id: UUID, request: Request, response: Response) -> WalletOut:
+def delete_proof(
+    share_slug: str, settlement_id: UUID, request: Request, response: Response, by: UUID | None = Query(None)
+) -> WalletOut:
     """Removes a proof and its bytes, and clears proof_at too, so the row doesn't read as swept. The payment stays."""
     _limit(PROOF_LIMITER, request, "proof-delete")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
+        check_by(conn, wallet_id, by, share_slug, "proof")
         payment = _payment(conn, wallet_id, settlement_id)
         if payment is None:
             raise _not_found(share_slug, NOT_FOUND)
@@ -148,6 +168,7 @@ def delete_proof(share_slug: str, settlement_id: UUID, request: Request, respons
             "update settlements set proof_path = null, proof_type = null, proof_bytes = null, proof_at = null where id = %s",
             (settlement_id,),
         )
+        _record(conn, wallet_id, "proof_remove", by, settlement_id, payment)
         wallet = _load(conn, wallet_id)
     forget_proof(payment["proof_path"], share_slug)
     _private(response)

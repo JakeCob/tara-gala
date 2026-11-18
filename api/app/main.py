@@ -31,6 +31,7 @@ from .trip_invites import router as trip_invites_router
 from .trip_marks import router as trip_marks_router
 from .trip_places import router as trip_places_router
 from .trip_people import router as trip_people_router
+from .wallet_activity import router as wallet_activity_router
 from .wallet_proofs import router as wallet_proofs_router
 from .schedule import arrival as _arrival  # noqa: F401  re-exported: TG-12 tests use main._arrival
 from .trip_rows import CONFIRM_NOTE, trip_from_row  # noqa: F401  CONFIRM_NOTE re-exported
@@ -155,6 +156,7 @@ app.include_router(planner_router)
 app.include_router(itineraries_router)
 app.include_router(wallets_router)
 app.include_router(wallet_proofs_router)
+app.include_router(wallet_activity_router)
 app.include_router(sessions_router)
 app.include_router(trip_files_router)
 app.include_router(trip_marks_router)
