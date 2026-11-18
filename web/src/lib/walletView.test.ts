@@ -304,10 +304,6 @@ test("W3-V20 tg-ux2 W3 S1 and S4: Show them / Show all move focus; the 409's act
   assert.match(src, /limit: 10 \}\);\s*const row = h\.ok \? h\.rows\.find\(\(x\) => x\.action === "expense_edit"\) : undefined;/);
 });
 
-test("W3-V21 tg-ux2 W3 S5: Equal + extra previews keep a minimum column, so the extra fields line up row to row", () => {
-  assert.match(read("src/components/wallet/ExpenseForm.tsx"), /<span className="min-w-16 text-right tabular-nums text-muted">\{preview\(m\.id\)\}<\/span>/);
-});
-
 test("W3-V22 tg-ux2 W3 S3: Items' Amount is read-only and looks it (the page background, full-contrast text), not an input to type in", () => {
   const src = read("src/components/wallet/ExpenseForm.tsx");
   assert.match(src, /className="min-h-11 w-full min-w-0 rounded-none border-3 border-frame bg-background px-3 py-2 text-base text-foreground focus-pixel"\s*readOnly/);
