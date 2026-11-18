@@ -284,3 +284,22 @@ test("W3-V18 Equal + extra rows fit at 320 and 380 (render check): the row wraps
   assert.match(src, /cx\(PX\.input, "w-20 text-right tabular-nums"\)\}\s*aria-label=\{`Extra for/, "room for -50.50 at 320, still one row at 380");
   assert.match(src, /s\.mode !== "exact" && s\.mode !== "adjust" && <span className="w-20 /, "other modes keep their preview column");
 });
+
+test("W3-V19 tg-ux2 W3 M1: after a 409 the form's alert takes focus, in view, once the remounted form's title focus has run", () => {
+  const src = read(VIEW);
+  assert.match(src, /<PixelBox as="p" tone="alertText" id="form-alert" tabIndex=\{-1\} className="focus-pixel p-4 text-sm">\s*\{formAlert\.text\}/);
+  const changed = src.slice(src.indexOf('if (out.kind === "changed") {'), src.indexOf('if (out.kind === "gone") {'));
+  assert.match(changed, /setFormKey\([\s\S]*setFormAlert\([\s\S]*setAlertFocus\(\(n\) => n \+ 1\)/, "remount, then the alert, then the focus bump");
+  const effect = src.slice(src.indexOf("if (!alertFocus) return;"), src.indexOf("}, [alertFocus]);"));
+  assert.match(effect, /requestAnimationFrame\([\s\S]*getElementById\("form-alert"\)[\s\S]*scrollIntoView\(\{ block: "center" \}\)[\s\S]*focus\(/);
+  assert.equal((src.match(/setAlertFocus\(/g) ?? []).length, 1, "only the 409: a plain Edit keeps the title focus (ux §6)");
+});
+
+test("W3-V20 tg-ux2 W3 S1 and S4: Show them / Show all move focus; the 409's actor is the newest edit row, not the newest row", () => {
+  const src = read(VIEW);
+  assert.match(src, /<p id="showing-line" tabIndex=\{-1\} className="focus-pixel text-sm">/);
+  assert.match(src.slice(src.indexOf("function showUncategorized("), src.indexOf("function showAll(")), /getElementById\("showing-line"\)[\s\S]*focus\(/);
+  assert.match(src.slice(src.indexOf("function showAll("), src.indexOf("function openDetails(")), /getElementById\("expenses-title"\)\?\.focus\(\)/);
+  assert.match(src, /onClick=\{showAll\}/);
+  assert.match(src, /limit: 10 \}\);\s*const row = h\.ok \? h\.rows\.find\(\(x\) => x\.action === "expense_edit"\) : undefined;/);
+});

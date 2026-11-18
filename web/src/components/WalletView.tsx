@@ -100,6 +100,7 @@ export default function WalletView({ slug }: { slug: string }) {
   const neighbor = useRef<string | null>(null); // the expense next to the open one: focus goes there if this one is deleted
   const deletedHere = useRef<string | null>(null); // Details' own Delete, so it isn't also announced as someone else's
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
+  const [alertFocus, setAlertFocus] = useState(0); // a 409's alert takes focus (tg-ux2 W3 M1): bumped after the form remounts
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
   const shownAt = useRef(0); // TG-65: how new the wallet on screen is: when its GET left, or when a write landed
   const [opening, setOpening] = useState<string | null>(null);
@@ -148,6 +149,18 @@ export default function WalletView({ slug }: { slug: string }) {
     });
     return () => cancelAnimationFrame(frame);
   }, [detailsGone, detailsId]);
+
+  // tg-ux2 W3 M1: after a 409 the form remounts on their version and its own effect focuses the title, which leaves the
+  // alert ~900px below, unseen and unannounced. Parent effects run after the child's, so this frame wins: the alert.
+  useEffect(() => {
+    if (!alertFocus) return;
+    const frame = requestAnimationFrame(() => {
+      const box = document.getElementById("form-alert");
+      box?.scrollIntoView({ block: "center" });
+      box?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [alertFocus]);
 
   // Others add expenses from their phones: fetch again whenever this one comes back to the app
   useEffect(() => {
@@ -321,9 +334,9 @@ export default function WalletView({ slug }: { slug: string }) {
     const r = await walletApi.editExpense(slug, current.expense.id, body);
     let actor: string | null = null;
     if (!r.ok && r.detail === "expense_changed" && flags.walletActivity && online) {
-      // Who changed it, for the alert's line: the expense's newest row
-      const h = await walletApi.activity(slug, { expenseId: current.expense.id, limit: 1 });
-      const row = h.ok ? h.rows[0] : undefined;
+      // Who changed it, for the alert's line: the newest edit among the expense's last rows (a comment may be newer)
+      const h = await walletApi.activity(slug, { expenseId: current.expense.id, limit: 10 });
+      const row = h.ok ? h.rows.find((x) => x.action === "expense_edit") : undefined;
       if (row?.action === "expense_edit") actor = wallet.members.find((m) => m.id === row.actor)?.name ?? null;
     }
     setBusy(false);
@@ -341,6 +354,7 @@ export default function WalletView({ slug }: { slug: string }) {
       setEditing({ expense: out.expense, addedBy: current.addedBy });
       setFormKey((k) => k + 1);
       setFormAlert({ text: out.alert, asAmounts: false });
+      setAlertFocus((n) => n + 1);
       return false;
     }
     if (out.kind === "gone") {
@@ -371,7 +385,18 @@ export default function WalletView({ slug }: { slug: string }) {
   /** The Categories nudge's link (ux §7): the list shows only the expenses with no category, with a Show all line above. */
   function showUncategorized() {
     setUncategorizedOnly(true);
-    requestAnimationFrame(() => document.getElementById("expenses-title")?.scrollIntoView({ block: "start" }));
+    // Focus the line that says what's shown, so the next Tab goes into that list (tg-ux2 W3 S1)
+    requestAnimationFrame(() => {
+      const line = document.getElementById("showing-line");
+      line?.scrollIntoView({ block: "start" });
+      line?.focus({ preventScroll: true });
+    });
+  }
+
+  /** `Show all` removes itself: focus goes to the Expenses heading, not <body> (tg-ux2 W3 S1). */
+  function showAll() {
+    setUncategorizedOnly(false);
+    requestAnimationFrame(() => document.getElementById("expenses-title")?.focus());
   }
 
   function openDetails(id: string, from: HTMLElement | null) {
@@ -460,7 +485,7 @@ export default function WalletView({ slug }: { slug: string }) {
   const formNotice: ReactNode = (
     <div aria-live="polite" className="flex flex-col gap-2 empty:hidden">
       {formAlert && (
-        <PixelBox as="p" tone="alertText" className="p-4 text-sm">
+        <PixelBox as="p" tone="alertText" id="form-alert" tabIndex={-1} className="focus-pixel p-4 text-sm">
           {formAlert.text}
         </PixelBox>
       )}
@@ -634,11 +659,13 @@ export default function WalletView({ slug }: { slug: string }) {
           {parts.categories && <CategoryBox wallet={wallet} me={me} onShowUncategorized={showUncategorized} />}
 
           <section aria-labelledby="expenses-title" className="flex flex-col gap-3">
-            <SectionTitle id="expenses-title">Expenses</SectionTitle>
+            <SectionTitle id="expenses-title" tabIndex={parts.categories ? -1 : undefined} className={parts.categories ? "focus-pixel" : undefined}>
+              Expenses
+            </SectionTitle>
             {filtering && (
-              <p className="text-sm">
+              <p id="showing-line" tabIndex={-1} className="focus-pixel text-sm">
                 {showingLine(listed.length).text}{" "}
-                <button type="button" className={cx(PX.inlineLink, "min-h-11")} onClick={() => setUncategorizedOnly(false)}>
+                <button type="button" className={cx(PX.inlineLink, "min-h-11")} onClick={showAll}>
                   {showingLine(listed.length).link}
                 </button>
               </p>
