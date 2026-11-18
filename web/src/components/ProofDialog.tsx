@@ -29,10 +29,12 @@ const CHANGED = {
 const REMOVE_FAILED = "The proof wasn't removed. Try again in a minute.";
 const PRIVACY = "Everyone with this wallet link can see it. Crop out your balance first. Deleted 14 days after the trip or after you add it, whichever is later.";
 
-export default function ProofDialog({ slug, wallet, target, nameOf, onWallet, onClosed }: {
+export default function ProofDialog({ slug, wallet, target, nameOf, by, onWallet, onClosed }: {
   slug: string;
   wallet: Wallet;
   target: ProofTarget;
+  /** TG-66 B28c: this phone's person, sent as ?by= on the payment and proof writes so the activity names them; null sends none */
+  by: string | null;
   nameOf: (id: string) => string;
   onWallet: (wallet: Wallet, notice?: string) => void;
   /** After the dialog has closed. `saved`: something was stored, so the result, not the opening button, gets focus. */
@@ -109,7 +111,7 @@ export default function ProofDialog({ slug, wallet, target, nameOf, onWallet, on
     holding.current = true;
     setAlert(null);
     setStage("saving");
-    const r = await markPaid(walletApi, slug, transfer, picture, paymentId ?? undefined);
+    const r = await markPaid(walletApi, slug, transfer, picture, paymentId ?? undefined, by);
     if (mode === "mark") console.info("[tg-wallet] proof mark outcome=%s", r.stage);
     else console.info("[tg-wallet] proof %s ok=%s", mode, r.stage === "done" ? "yes" : r.stage === "upload_failed" ? r.failure.why : "no");
     if (r.stage === "done") return finish(r.wallet, mode === "mark" ? (picture ? "Marked as paid, with proof." : "Marked as paid.") : SAVED[mode]);
@@ -135,13 +137,14 @@ export default function ProofDialog({ slug, wallet, target, nameOf, onWallet, on
     holding.current = true;
     setAlert(null);
     setStage("removing");
-    const r = await walletApi.removeProof(slug, target.settlementId);
+    const r = await walletApi.removeProof(slug, target.settlementId, by);
     console.info("[tg-wallet] proof remove ok=%s", r.ok ? "yes" : r.why);
     if (r.ok) return finish(r.wallet, "Proof removed.");
     if (r.why === "not_found" && r.detail === "Proof not found") {
-      // Another phone or the sweep got there first, so what was asked for is true
+      // Another phone or the sweep got there first, so what was asked for is true. Only a live answer goes on: the worker's
+      // saved copy is never newer, and the parent lands it through the rev rule (TG-66 B28c)
       const fresh = await walletApi.get(slug);
-      return finish(fresh.ok ? fresh.wallet : wallet, "Proof removed.");
+      return finish(fresh.ok && !fresh.saved ? fresh.wallet : wallet, "Proof removed.");
     }
     holding.current = false;
     if (r.why === "not_found") {
