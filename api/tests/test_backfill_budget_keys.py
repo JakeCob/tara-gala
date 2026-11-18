@@ -90,6 +90,52 @@ def test_apply_keys_every_row_from_the_curated_file_or_by_its_text(old, barkada,
         assert problems == [], (where, problems)
 
 
+def without_keys(plan: dict) -> dict:
+    out = json.loads(json.dumps(plan))
+    for r in budget_rows(out):
+        r.pop("key", None)
+        r.pop("category", None)
+    return out
+
+
+def test_apply_changes_nothing_but_the_budget_rows_keys_and_categories(old, barkada, capsys):  # tg-test RED F2
+    before = dict(plans(barkada))
+    assert run(barkada, capsys, "--apply")[0] == 0
+    after = dict(plans(barkada))
+    assert after.keys() == before.keys()
+    for where, plan in after.items():
+        assert without_keys(plan) == before[where], where
+    assert any(after[w] != before[w] for w in after), "and it did change something"
+
+
+def test_two_rows_of_one_text_get_two_keys_the_same_in_every_version(t, client, barkada, capsys):  # tg-test RED S1
+    two = "E2E snacks"
+    edit(client, t, lambda g: g["budget"]["rows"].extend([{"item": two, "estimate": "100"}, {"item": two, "estimate": "200"}]))
+    edit(client, t, lambda g: move(g, "d1-03", 2))
+    strip_everything(barkada)
+    slug = copy_slug(barkada, t)
+    assert run(barkada, capsys, "--apply")[0] == 0
+    every = dict(plans(barkada))
+    for where in (f"v:{slug}:1", f"v:{slug}:2", f"it:{slug}"):
+        rs = budget_rows(every[where])
+        assert [(r["key"], r["estimate"]) for r in rs][4:] == [("e2e-snacks", "100"), ("e2e-snacks-2", "200")], where
+        assert guides.parse_guide(every[where]["guide"])[1] == [], where
+
+
+def test_a_slug_held_by_another_version_of_the_trip_isnt_minted_again(old, barkada, capsys):  # tg-test RED S2
+    with psycopg.connect(barkada, autocommit=True) as conn:
+        for seq, item, key in ((1, "E2E snacks", "e2e-snacks"), (2, "E2E snacks!", None)):
+            plan = conn.execute("select v.plan from itinerary_versions v join itineraries i on i.id = v.itinerary_id"
+                                " where i.share_slug = %s and v.seq = %s", (old, seq)).fetchone()[0]
+            budget_rows(plan)[4] = {"item": item, "estimate": "150", **({"key": key} if key else {})}
+            conn.execute("update itinerary_versions v set plan = %s from itineraries i where i.id = v.itinerary_id and i.share_slug = %s and v.seq = %s",
+                         (Jsonb(plan), old, seq))
+    assert run(barkada, capsys, "--apply")[0] == 0
+    every = dict(plans(barkada))
+    assert budget_rows(every[f"v:{old}:1"])[4]["key"] == "e2e-snacks"
+    assert budget_rows(every[f"v:{old}:2"])[4]["key"] == "e2e-snacks-2"
+
+
 def test_a_second_run_keys_nothing(old, barkada, capsys):  # N3: §5 step 4's check
     run(barkada, capsys, "--apply")
     after = plans(barkada)

@@ -76,3 +76,49 @@ test("ux §4a: a listed line's category word, Other when it has none", () => {
   assert.equal(budgetCategoryWord(null), "Other");
   assert.equal(budgetCategoryWord(undefined), "Other");
 });
+
+// ---------------------------------------------------------------- ux.md §4a: the Category select, read from the source
+// (tg-test's RED audit F3), in the style of TG-61's planEditor.test.ts. The real render is in the build log's e2e shots.
+const WEB = new URL("../../", import.meta.url);
+const editors = () => readFileSync(new URL("src/components/PlanTextEditors.tsx", WEB), "utf8");
+const budgetEdits = () => {
+  const src = editors();
+  return src.slice(src.indexOf("export function BudgetEdits("), src.indexOf("/** A day's pick, in edit mode"));
+};
+const itemForm = () => {
+  const src = editors();
+  return src.slice(src.indexOf("function ItemForm("), src.indexOf("/** A list whose items each get Edit"));
+};
+
+test("ux §4a: the line form's third field is a Category select after Estimate per person, with its hint and its own empty-pick line", () => {
+  const b = budgetEdits();
+  const est = b.indexOf('{ name: "estimate", label: "Estimate per person"');
+  const cat = b.indexOf('{ name: "category", label: "Category"');
+  assert.ok(est > 0 && cat > est, "Category comes after Estimate per person");
+  assert.match(b, /hint: "In the wallet, this line shows under this category\.", missing: "Pick a category first\.",/);
+  assert.match(b, /options: CATEGORIES\.map\(\(c\) => \(\{ value: c\.key, label: c\.label \}\)\) \}/);
+});
+
+test("ux §4a: the select's options are TG-66's five words in TG-66's order", async () => {
+  const { CATEGORIES } = await import("./walletCategories.ts");
+  assert.deepEqual(CATEGORIES.map((c) => [c.key, c.label]),
+    [["transport", "Transport"], ["hotel", "Hotel"], ["food", "Food"], ["activities", "Activities"], ["other", "Other"]]);
+});
+
+test("ux §4a and §6: a native select with the PX input class, a visible label, the hint wired by aria-describedby, and Pick one only on a new line", () => {
+  const f = itemForm();
+  assert.match(f, /<label htmlFor=\{`\$\{uid\}-\$\{f\.name\}`\} className="font-semibold">\{f\.label\}<\/label>/);
+  assert.match(f, /\{f\.hint && <span id=\{`\$\{uid\}-\$\{f\.name\}-hint`\} className=\{PX\.meta\}>\{f\.hint\}<\/span>\}/);
+  assert.match(f, /<select id=\{`\$\{uid\}-\$\{f\.name\}`\} className=\{cx\(PX\.input, "w-full min-w-0"\)\}/);
+  assert.match(f, /aria-describedby=\{f\.hint \? `\$\{uid\}-\$\{f\.name\}-hint` : undefined\}/);
+  assert.match(f, /\{!start\[f\.name\] && <option value="">Pick one<\/option>\}/, "a new line starts at Pick one; a line being changed starts at its category");
+  assert.match(f, /if \(!value && !f\.optional\) return setProblem\(f\.missing \?\? `Fill in \$\{f\.label\.toLowerCase\(\)\} first\.`\);/, "an empty pick says Pick a category first.");
+});
+
+test("ux §4a: the form starts from budgetFormStart, a listed line shows its category as meta, and the save sends category on add and set", () => {
+  const b = budgetEdits();
+  assert.match(b, /read=\{budgetFormStart\}/);
+  assert.match(b, /<span className=\{PX\.meta\}>\{budgetCategoryWord\(r\.category\)\}<\/span>/);
+  assert.match(b, /const line = \(v: Record<string, string>\) => \(\{ item: v\.item, estimate: v\.estimate, category: v\.category as Category \}\);/);
+  assert.match(b, /editBudget\(g, i === null \? \{ add: line\(v\) \} : \{ set: i, row: line\(v\) \}\)/);
+});

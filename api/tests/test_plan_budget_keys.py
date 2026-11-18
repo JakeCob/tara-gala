@@ -170,6 +170,14 @@ def test_inherit_claims_keys_then_matches_text_in_order_then_leaves_the_rest():
     assert rows_in[1] == {"item": "Snacks", "estimate": "1"}, "the input isn't changed"
 
 
+def test_inherit_lets_every_keyed_row_claim_first_even_when_it_comes_later():  # tg-test RED F1
+    from app.budget_keys import inherit
+
+    base = [{"item": "Taxis", "estimate": "1", "key": "taxis", "category": "transport"}]
+    out = inherit([{"item": "Taxis", "estimate": "1"}, {"item": "Cabs", "estimate": "1", "key": "taxis"}], base)
+    assert keys_cats(out) == [(None, None), ("taxis", "transport")]
+
+
 def test_inherit_by_text_keeps_a_category_the_row_brings():  # GP1's call: a non-null category is the client's (G19)
     from app.budget_keys import inherit
 
@@ -226,6 +234,16 @@ def test_a_recategorised_row_keeps_its_key(t, client, keyed):
     g = stored(plan_of(client, t)["guide"])
     g["budget"]["rows"][1]["category"] = "food"
     assert keys_cats(budget(save_ok(client, t, g)))[1] == ("pasalubong", "food")
+
+
+def test_a_new_row_above_a_renamed_one_with_the_old_text_is_minted(t, client, keyed):  # tg-test RED F1, through a save
+    g = stored(plan_of(client, t)["guide"])
+    rows = g["budget"]["rows"]
+    rows[3]["item"] = "E2E cabs"  # keeps taxis
+    rows.insert(3, {"item": "Taxis, split 4 per cab", "estimate": "200", "category": "transport"})
+    out = budget(save_ok(client, t, g))
+    assert keys_cats(out) == G20[:3] + [("taxis-split-4-per-cab", "transport"), ("taxis", "transport")]
+    assert [r["item"] for r in out][3:] == ["Taxis, split 4 per cab", "E2E cabs"]
 
 
 def test_a_key_the_base_doesnt_have_is_refused_and_nothing_is_written(t, client, keyed):
