@@ -305,6 +305,8 @@ GET_ROUTES = {
     "/sessions/{share_slug}",  # TG-52: one trip session by exact slug, with its own linked itinerary's slug
     "/sessions/{share_slug}/files/{file_id}",  # TG-52 PR 2: one shared file, inside its own trip only
     "/invites/{invite_slug}",  # TG-58 PR 2: one invite by exact slug: the trip's name, dates and names, never the trip
+    "/wallets/{share_slug}/activity",  # TG-66 A2: one wallet's activity, behind WALLET_ACTIVITY
+    "/wallets/{share_slug}/expenses/{expense_id}/comments",  # TG-66 A2: one expense's comments, inside its own wallet only
 }
 OTHER_ROUTES = {
     ("POST", "/plan"),  # TG-20: inserts a planner row, never reads the table
@@ -318,6 +320,9 @@ OTHER_ROUTES = {
     # TG-53: a payment's proof screenshot, added or replaced, and removed
     ("POST", "/wallets/{share_slug}/settlements/{settlement_id}/proof"),
     ("DELETE", "/wallets/{share_slug}/settlements/{settlement_id}/proof"),
+    # TG-66 A2: a comment on an expense, posted and deleted, behind WALLET_ACTIVITY
+    ("POST", "/wallets/{share_slug}/expenses/{expense_id}/comments"),
+    ("DELETE", "/wallets/{share_slug}/expenses/{expense_id}/comments/{comment_id}"),
     # TG-52 trip sessions: every route is under one exact session slug; there is no session listing. Linking an
     # itinerary needs its exact slug, as reading it does
     ("POST", "/sessions"),
