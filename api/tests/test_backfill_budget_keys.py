@@ -136,6 +136,38 @@ def test_a_slug_held_by_another_version_of_the_trip_isnt_minted_again(old, barka
     assert budget_rows(every[f"v:{old}:2"])[4]["key"] == "e2e-snacks-2"
 
 
+def test_a_save_between_deploy_and_backfill_gets_its_categories_and_keeps_its_keys(t, client, barkada, capsys):  # tg-review S1
+    strip_everything(barkada)  # the stored plans as they are when GP1's API goes out (§5 step 2)
+    edit(client, t, lambda g: move(g, "d1-03", 2))  # a save before the backfill: the editor mints keys, with no category
+    slug = copy_slug(barkada, t)
+    minted = [("meals-and-merienda-2", None), ("pasalubong-and", None), ("entrance-fees-bencab", None), ("taxis-split-4-per-cab", None)]
+    assert keys_cats(budget_rows(dict(plans(barkada))[f"it:{slug}"])) == minted
+    before = dict(plans(barkada))
+    code, out = run(barkada, capsys, "--apply")
+    assert code == 0 and "categories filled: 8" in out and "rows keyed: 8" in out and "rows already keyed: 8" in out, out
+    every = dict(plans(barkada))
+    cats = [c for _, c in G20]
+    for where in (f"v:{slug}:1", f"it:{slug}"):
+        assert keys_cats(budget_rows(every[where])) == [(k, c) for (k, _), c in zip(minted, cats, strict=True)], where
+    assert keys_cats(budget_rows(every[f"v:{slug}:0"])) == G20, "the copy's first version is keyed from the file"
+    for where, plan in every.items():
+        assert without_keys(plan) == without_keys(before[where]), where
+        assert guides.parse_guide(plan["guide"])[1] == [], where
+    code, out = run(barkada, capsys, "--apply")
+    assert "categories filled: 0" in out and "rows keyed: 0" in out, out
+
+
+def test_a_keyed_row_with_a_category_keeps_it(old, barkada, capsys):  # S1's fill never overrides a category
+    run(barkada, capsys, "--apply")
+    with psycopg.connect(barkada, autocommit=True) as conn:
+        plan = conn.execute("select plan from itineraries where share_slug = %s", (old,)).fetchone()[0]
+        budget_rows(plan)[0]["category"] = "other"
+        conn.execute("update itineraries set plan = %s where share_slug = %s", (Jsonb(plan), old))
+    code, out = run(barkada, capsys, "--apply")
+    assert "categories filled: 0" in out, out
+    assert budget_rows(dict(plans(barkada))[f"it:{old}"])[0]["category"] == "other"
+
+
 def test_a_second_run_keys_nothing(old, barkada, capsys):  # N3: §5 step 4's check
     run(barkada, capsys, "--apply")
     after = plans(barkada)

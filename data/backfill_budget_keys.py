@@ -10,8 +10,10 @@ Reads every itineraries.plan and itinerary_versions.plan with a guide, in one tr
   gets that row's key and category;
 - any other keyless row gets budget_keys.slug_key of its text, the same key for the same text in every version of one
   trip's plan, so itineraries.plan still equals its newest version;
-- a row that already has a key is never changed, and two rows of one plan never share a key. Run twice, the second run
-  keys 0 (§5's check that no stored row is keyless).
+- a row that already has a key keeps it, and two rows of one plan never share a key. Run twice, the second run keys 0
+  (§5's check that no stored row is keyless);
+- a keyed row with no category (a plan saved between §5 steps 2 and 4, whose keys the editor minted) gets the category
+  of the curated row with the same text; its key is untouched (tg-review S1).
 
 It prints counts only: plans read, rows keyed, rows already keyed. Never a line's text or key, a slug or an id: they're
 the group's own words. Reads DATABASE_URL like data/load_data.py. Never point it at a database without the owner's yes.
@@ -71,7 +73,7 @@ class Trip:
         for r in curated:
             self.curated[r["item"]].append(r)
         self.by_text: dict[tuple[str, int], tuple[str, str | None]] = {}
-        self.keyed = self.already = self.curated_keyed = 0
+        self.keyed = self.already = self.curated_keyed = self.filled = 0
 
     def key(self, plan: dict) -> None:
         rows = _rows(plan)
@@ -80,11 +82,16 @@ class Trip:
         for r in rows:
             n = seen[r["item"]]
             seen[r["item"]] += 1
+            same = self.curated[r["item"]][n] if n < len(self.curated[r["item"]]) else None
             if r.get("key"):
                 self.already += 1
+                if r.get("category") is None and same and same.get("category"):
+                    # tg-review S1: a save between §5 steps 2 and 4 minted this key with no category. The curated
+                    # line of the same text gives its category; the key is never changed
+                    r["category"] = same["category"]
+                    self.filled += 1
                 continue
             known = self.by_text.get((r["item"], n))
-            same = self.curated[r["item"]][n] if n < len(self.curated[r["item"]]) else None
             if known and known[0] not in here:
                 key, category = known
             elif same and same["key"] not in here:
@@ -113,7 +120,7 @@ def _strip(plan: dict) -> int:
 
 class Counts:
     def __init__(self):
-        self.plans = self.keyed = self.already = self.stripped = self.curated = 0
+        self.plans = self.keyed = self.already = self.stripped = self.curated = self.filled = 0
         self.writes: list[tuple[str, object, dict]] = []
 
     def group(self, group: list[tuple[str, object, dict]], curated: list[dict] | None, strip: bool) -> None:
@@ -128,6 +135,7 @@ class Counts:
                 trip.key(p)
             self.keyed, self.already = self.keyed + trip.keyed, self.already + trip.already
             self.curated += trip.curated_keyed
+            self.filled += trip.filled
         self.writes += [g for g, b in zip(group, before, strict=True) if json.dumps(g[2], sort_keys=True) != b]
 
 
@@ -158,6 +166,7 @@ def run(dsn: str, *, apply: bool, strip: bool = False, folder: Path = ITINERARIE
         print(f"rows keyed: {c.keyed}")
         print(f"  of them from a curated file's line: {c.curated}")  # the rest by their own text (plan G21)
         print(f"rows already keyed: {c.already}")
+        print(f"categories filled: {c.filled}")  # keyed rows with no category, from the curated line of the same text
     print(f"plans {'saved' if apply else 'that would change'}: {len(c.writes)}")
     return 0
 
