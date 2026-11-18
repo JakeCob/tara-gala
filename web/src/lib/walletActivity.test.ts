@@ -694,3 +694,8 @@ test("TG66-W2-35 a comment delete names who did it: by goes as ?by= (A2's shape)
   assert.match(src, /walletApi\.deleteComment\(slug, expense\.id, commentId, me\)/, "Details sends this phone's person");
   assert.match(src, /walletApi\.addComment\(slug, expense\.id, \{ body, by: me \}\)/, "as the post does, in its body");
 });
+
+test("TG66-W2-36 ux re-review nit: while a delete is out, Edit and Delete expense read as unavailable", () => {
+  const src = details();
+  assert.equal((src.match(/aria-disabled=\{busy \|\| deleting \|\| !online \|\| undefined\}/g) ?? []).length, 2);
+});

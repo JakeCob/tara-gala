@@ -171,7 +171,7 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
   }
 
   function edit() {
-    if (busy || holding.current || !online) return;
+    if (busy || deleting || holding.current || !online) return;
     console.info("[tg-wallet] details edit opened");
     close();
     onEdit(expense);
@@ -323,11 +323,11 @@ export default function ExpenseDetails({ slug, wallet, expense, me, online, acti
           {splits && !editable && <p className={PX.meta}>{MULTI_PAYER_LINE}</p>}
           <div className="flex flex-wrap gap-2">
             {editable && (
-              <PixelButton variant="secondary" aria-disabled={busy || !online || undefined} onClick={edit}>
+              <PixelButton variant="secondary" aria-disabled={busy || deleting || !online || undefined} onClick={edit}>
                 Edit
               </PixelButton>
             )}
-            <PixelButton variant="secondary" aria-disabled={busy || !online || undefined} onClick={() => void remove()}>
+            <PixelButton variant="secondary" aria-disabled={busy || deleting || !online || undefined} onClick={() => void remove()}>
               {deleting ? "Deleting..." : "Delete expense"}
             </PixelButton>
           </div>
