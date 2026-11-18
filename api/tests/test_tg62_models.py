@@ -148,16 +148,34 @@ def test_session_budget_out_ok():
     assert set(dumped["members"][0]) == {"member_id", "name", "share_lines", "share_total"}
 
 
-@pytest.mark.parametrize("state", ["no_wallet", "two_trips", "no_budget"])
+COUNTS = {"no_wallet": (0, 0), "two_trips": (3, 900), "no_budget": (3, 900)}
+ONLY_OK = {  # each field that only ok carries, filled on its own (audit G3: one at a time, with the counts given)
+    "lines": [{"key": "meals", "item": "x", "estimate": "1", "min": 1, "max": 1, "readable": True, "spent": 0, "spent_each": 0}],
+    "members": [{"member_id": str(uuid4()), "name": "Ana", "share_lines": 0, "share_total": 0}],
+    "not_in_budget": {"count": 0, "spent": 0},
+    "unsorted": {"count": 0, "spent": 0, "removed": 0},
+}
+
+
+@pytest.mark.parametrize("state", list(COUNTS))
 def test_the_other_states_carry_no_lines(state):
     from app import budget_models as bm
 
-    out = bm.SessionBudgetOut(state=state, member_count=0 if state == "no_wallet" else 3, total_centavos=0 if state == "no_wallet" else 900)
+    members, total = COUNTS[state]
+    out = bm.SessionBudgetOut(state=state, member_count=members, total_centavos=total)
     d = out.model_dump(mode="json")
+    assert (d["state"], d["member_count"], d["total_centavos"]) == (state, members, total)
     assert (d["lines"], d["members"], d["not_in_budget"], d["unsorted"]) == ([], [], None, None)
-    with pytest.raises(ValidationError):  # lines are filled only when the state is ok
-        bm.SessionBudgetOut(state=state, lines=[{"key": "meals", "item": "x", "estimate": "1", "min": 1, "max": 1, "readable": True,
-                                                 "spent": 0, "spent_each": 0}])
+
+
+@pytest.mark.parametrize("field", list(ONLY_OK))
+@pytest.mark.parametrize("state", list(COUNTS))
+def test_only_ok_carries_lines_members_and_buckets(state, field):  # lines etc. are filled only when the state is ok
+    from app import budget_models as bm
+
+    members, total = COUNTS[state]
+    with pytest.raises(ValidationError, match="only ok carries"):
+        bm.SessionBudgetOut(state=state, member_count=members, total_centavos=total, **{field: ONLY_OK[field]})
 
 
 def test_ok_needs_its_buckets_and_a_bad_state_is_refused():
