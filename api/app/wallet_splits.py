@@ -192,15 +192,16 @@ def split(mode: str, amount: int | None, inputs, items, charges, payer_first: UU
     take it. Rows are dicts or wallet_models' request models: inputs [{member_id, value}], items [{name,
     price_centavos, who}] in seq order, charges [{kind, basis, value}]. `payer_first` is first_payer()'s answer.
     """
+    inputs, items, charges = list(inputs or ()), list(items or ()), list(charges or ())  # None is "none" (A3)
     try:
         if mode == "itemized":
-            amount, shares = _itemized(amount, list(items), list(charges), payer_first, wallet_order)
+            amount, shares = _itemized(amount, items, charges, payer_first, wallet_order)
         elif mode in ("equal", "exact", "percent", "shares", "adjust"):
             if amount is None or amount < 1:
                 raise ValueError("this mode needs an amount of at least 1 centavo")
             if amount > MAX_CENTAVOS:
                 raise SplitError("amount_too_big")
-            shares = _by_people(mode, amount, list(inputs), _order(payer_first, wallet_order), wallet_order)
+            shares = _by_people(mode, amount, inputs, _order(payer_first, wallet_order), wallet_order)
         else:
             raise ValueError(f"unknown split mode {mode!r}")
     except SplitError as e:

@@ -254,6 +254,13 @@ def test_the_same_person_twice_is_a_caller_bug(ws):
         ws.split("equal", 300, [{"member_id": ANA, "value": 1}, {"member_id": ANA, "value": 1}], [], [], ANA, MEMBERS)
 
 
+def test_none_for_an_unused_list_means_none(ws):
+    """tg-review2's nit on #86: A3 may pass None for the lists a mode doesn't use (the models default to None or [])."""
+    assert ws.split("equal", 300, [{"member_id": ANA, "value": 1}], None, None, ANA, MEMBERS) == (300, {ANA: 300})
+    items = [{"name": "Lunch", "price_centavos": 900, "who": [BEN, CARLA]}]
+    assert ws.split("itemized", None, None, items, None, BEN, MEMBERS) == (900, {BEN: 450, CARLA: 450})
+
+
 def test_exact_with_a_negative_input_is_shares_mismatch(ws):
     with pytest.raises(ws.SplitError) as caught:
         ws.split("exact", 100, [{"member_id": ANA, "value": 150}, {"member_id": BEN, "value": -50}], [], [], ANA,
