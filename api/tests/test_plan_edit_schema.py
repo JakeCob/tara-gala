@@ -26,6 +26,8 @@ def test_migration_over_mains_schema_matches_schema_sql(dsn):  # G1
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute(sql)
         conn.execute(sql)
+        for later in sorted(m for m in MIGRATION.parent.glob("*.sql") if m.name > MIGRATION.name):  # schema.sql has them too (TG-66)
+            conn.execute(later.read_text(encoding="utf-8"))
     upgraded = schema_shape(dsn)
     build_schema((ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8"))
     assert upgraded == schema_shape(dsn)

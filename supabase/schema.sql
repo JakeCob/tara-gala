@@ -199,7 +199,8 @@ create table wallets (
   id            uuid primary key default gen_random_uuid(),
   share_slug    text unique not null default encode(gen_random_bytes(16), 'hex'),  -- 128 bits: the link is the key
   name          text not null check (char_length(name) between 1 and 40),
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  rev           bigint not null default 0  -- TG-66: the wallet's write counter; an answer with a lower rev never replaces the screen
 );
 
 create table wallet_members (
@@ -217,7 +218,13 @@ create table expenses (
   paid_by         uuid not null references wallet_members(id) on delete cascade,
   amount_centavos integer not null check (amount_centavos between 1 and 10000000),  -- up to PHP 100,000
   note            text not null check (char_length(note) between 1 and 60),
-  created_at      timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+  -- TG-66: how the shares were worked out (null: before TG-66, equal or exact), the category (null: not sorted yet),
+  -- and the edit counter. These come last, as the migration adds them.
+  split_mode      text check (split_mode in ('equal', 'exact', 'percent', 'shares', 'adjust', 'itemized')),
+  category        text check (category in ('transport', 'hotel', 'food', 'activities', 'other')),
+  version         integer not null default 1 check (version >= 1),
+  updated_at      timestamptz
 );
 create index expenses_wallet on expenses (wallet_id);
 
@@ -246,6 +253,76 @@ create table settlements (
   check (from_member <> to_member)
 );
 create index settlements_wallet on settlements (wallet_id);
+
+-- ---------------------------------------------------------------------------
+-- Wallet splitting (TG-66, owner-approved 2026-11-15): the split modes' inputs, several payers, itemized bills,
+-- comments and the activity list. The final shares stay in expense_shares; these say how they were worked out.
+-- ---------------------------------------------------------------------------
+-- one row per person in the form: equal = 1 (among), exact = centavos, percent = basis points, shares = weight,
+-- adjust = extra centavos (among = the rows; may be negative). Not used for itemized.
+create table expense_inputs (
+  expense_id  uuid not null references expenses(id) on delete cascade,
+  member_id   uuid not null references wallet_members(id) on delete cascade,
+  value       integer not null check (value between -10000000 and 10000000),
+  primary key (expense_id, member_id)
+);
+
+-- several payers only (more than one); one payer stays expenses.paid_by. Sum = amount (checked in the API).
+create table expense_payers (
+  expense_id  uuid not null references expenses(id) on delete cascade,
+  member_id   uuid not null references wallet_members(id) on delete cascade,
+  paid_centavos integer not null check (paid_centavos between 1 and 10000000),
+  primary key (expense_id, member_id)
+);
+
+-- itemized bill
+create table expense_items (
+  id          uuid primary key default gen_random_uuid(),
+  expense_id  uuid not null references expenses(id) on delete cascade,
+  seq         smallint not null check (seq between 1 and 40),
+  name        text not null check (char_length(name) between 1 and 40),
+  price_centavos integer not null check (price_centavos between 0 and 10000000),
+  unique (expense_id, seq)
+);
+create table expense_item_people (
+  item_id     uuid not null references expense_items(id) on delete cascade,
+  member_id   uuid not null references wallet_members(id) on delete cascade,
+  primary key (item_id, member_id)
+);
+create table expense_charges (
+  expense_id  uuid not null references expenses(id) on delete cascade,
+  kind        text not null check (kind in ('service', 'vat')),
+  basis       text not null check (basis in ('percent', 'amount')),
+  value       integer not null check (value between 0 and 10000000),  -- basis points or centavos
+  primary key (expense_id, kind)
+);
+
+-- comments on an expense
+create table expense_comments (
+  id          uuid primary key default gen_random_uuid(),
+  expense_id  uuid not null references expenses(id) on delete cascade,
+  author      uuid references wallet_members(id) on delete set null,   -- the phone's pick; null = "Someone"
+  body        text not null check (char_length(body) between 1 and 300),
+  created_at  timestamptz not null default now()
+);
+create index expense_comments_expense on expense_comments (expense_id);
+
+-- the activity list and the edit history (append-only; nothing updates or deletes a row except the wallet's cascade)
+create table wallet_activity (
+  id          bigint generated always as identity primary key,  -- newest first = id desc
+  wallet_id   uuid not null references wallets(id) on delete cascade,
+  at          timestamptz not null default now(),
+  actor       uuid references wallet_members(id) on delete set null,  -- the phone's pick; null = "Someone"
+  action      text not null check (action in ('expense_add', 'expense_edit', 'expense_delete', 'comment_add',
+                'comment_delete', 'settle', 'settle_undo', 'proof_add', 'proof_change', 'proof_remove', 'member_join')),
+  expense_id  uuid,      -- no FK: a deleted expense's lines stay
+  settlement_id uuid,    -- no FK, the same reason
+  member_id   uuid references wallet_members(id) on delete set null,  -- member_join
+  before      jsonb,     -- expense_edit / expense_delete: the expense as it was
+  after       jsonb      -- expense_add / expense_edit: as saved; settle, settle_undo, proof_*: {from_member, to_member, amount_centavos}
+);
+create index wallet_activity_wallet on wallet_activity (wallet_id, id desc);
+create index wallet_activity_expense on wallet_activity (expense_id) where expense_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- Trip sessions (TG-52): one secret link for the whole trip. It points at an itinerary and a wallet, and holds the
@@ -423,6 +500,13 @@ alter table wallet_members     enable row level security;
 alter table expenses           enable row level security;
 alter table expense_shares     enable row level security;
 alter table settlements        enable row level security;
+alter table expense_inputs      enable row level security;
+alter table expense_payers      enable row level security;
+alter table expense_items       enable row level security;
+alter table expense_item_people enable row level security;
+alter table expense_charges     enable row level security;
+alter table expense_comments    enable row level security;
+alter table wallet_activity     enable row level security;
 alter table trip_sessions      enable row level security;
 alter table session_hotels     enable row level security;
 alter table session_attendees  enable row level security;
@@ -444,6 +528,8 @@ create policy public_read on last_mile_routes   for select using (true);
 -- trip_sessions, session_hotels, session_files, session_marks: no public policy (TG-52). Same as the wallets.
 -- session_attendees: no public policy (TG-58). It holds names.
 -- itinerary_versions, trip_places: no public policy (TG-61)
+-- expense_inputs, expense_payers, expense_items, expense_item_people, expense_charges, expense_comments, wallet_activity:
+-- no public policy (TG-66). Same as the wallets.
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP

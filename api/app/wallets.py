@@ -11,15 +11,33 @@ Logs carry the slug and counts, never a person's name or an expense note.
 import logging
 import math
 import re
-from datetime import datetime
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from . import db, storage
 from .limits import RateLimiter, client_ip, ip_hash
+from .wallet_models import (  # TG-66: the models moved, and every name is still importable from here
+    MAX_CENTAVOS,
+    MAX_MEMBERS,
+    BalanceOut,
+    Centavos,
+    ExpenseIn,
+    ExpenseInLegacy,
+    ExpenseOut,
+    MemberIn,
+    MemberName,
+    MemberOut,
+    Note,
+    SettlementIn,
+    SettlementOut,
+    ShareIn,
+    ShareOut,
+    TransferOut,
+    WalletIn,
+    WalletName,
+    WalletOut,
+)
 
 router = APIRouter(tags=["wallets"])
 logger = logging.getLogger("tara_gala.api")
@@ -27,20 +45,13 @@ logger = logging.getLogger("tara_gala.api")
 SLUG = re.compile(r"^[0-9a-f]{32}$")
 NOT_FOUND = "Wallet not found"
 NOINDEX = {"X-Robots-Tag": "noindex"}
-MAX_MEMBERS = 20
 MAX_EXPENSES = 500
-MAX_CENTAVOS = 10_000_000  # PHP 100,000, the same cap as the table's check
 
 # Per-IP limits, in process memory like the planner's (limits.py): reset on every deploy
 CREATE_PER_HOUR = 20
 WRITES_PER_HOUR = 600
 CREATE_LIMITER = RateLimiter(CREATE_PER_HOUR)
 WRITE_LIMITER = RateLimiter(WRITES_PER_HOUR)
-
-WalletName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
-MemberName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]
-Note = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
-Centavos = Annotated[int, Field(ge=1, le=MAX_CENTAVOS)]
 
 
 # ---------------------------------------------------------------- the money: pure
@@ -76,118 +87,6 @@ def settle_up(nets: dict[UUID, int], order: list[UUID]) -> list[tuple[UUID, UUID
     return payments
 
 
-# ---------------------------------------------------------------- request and response shapes
-
-class WalletIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    name: WalletName
-    members: list[MemberName] = Field(min_length=1, max_length=MAX_MEMBERS)
-
-    @field_validator("members")
-    @classmethod
-    def different_names(cls, names: list[str]) -> list[str]:
-        if len({n.lower() for n in names}) != len(names):
-            raise ValueError("each person needs a different name")
-        return names
-
-
-class MemberIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    name: MemberName
-
-
-class ShareIn(BaseModel):
-    member_id: UUID
-    share_centavos: int = Field(ge=0, le=MAX_CENTAVOS)
-
-
-class ExpenseIn(BaseModel):
-    """Split equally among `split_among`, or by the exact `shares` given. One or the other."""
-
-    model_config = ConfigDict(extra="forbid")
-    paid_by: UUID
-    amount_centavos: Centavos
-    note: Note
-    split_among: list[UUID] | None = Field(default=None, min_length=1, max_length=MAX_MEMBERS)
-    shares: list[ShareIn] | None = Field(default=None, min_length=1, max_length=MAX_MEMBERS)
-
-    @model_validator(mode="after")
-    def one_split(self):
-        if (self.split_among is None) == (self.shares is None):
-            raise ValueError("give split_among or shares, not both")
-        people = self.split_among if self.split_among is not None else [s.member_id for s in self.shares]
-        if len(set(people)) != len(people):
-            raise ValueError("each person at most once")
-        return self
-
-
-class SettlementIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    from_member: UUID
-    to_member: UUID
-    amount_centavos: Centavos
-
-    @model_validator(mode="after")
-    def two_people(self):
-        if self.from_member == self.to_member:
-            raise ValueError("a payment needs two different people")
-        return self
-
-
-class MemberOut(BaseModel):
-    id: UUID
-    name: str
-
-
-class ShareOut(BaseModel):
-    member_id: UUID
-    share_centavos: int
-
-
-class ExpenseOut(BaseModel):
-    id: UUID
-    paid_by: UUID
-    amount_centavos: int
-    note: str
-    created_at: datetime
-    shares: list[ShareOut]
-
-
-class SettlementOut(BaseModel):
-    id: UUID
-    from_member: UUID
-    to_member: UUID
-    amount_centavos: int
-    created_at: datetime
-    has_proof: bool
-    proof_at: datetime | None
-
-
-class BalanceOut(BaseModel):
-    member_id: UUID
-    paid_centavos: int  # what they paid for the group
-    share_centavos: int  # their part of everything
-    net_centavos: int  # paid - share, plus payments sent, minus payments received: above zero means they're owed
-
-
-class TransferOut(BaseModel):
-    from_member: UUID
-    to_member: UUID
-    amount_centavos: int
-
-
-class WalletOut(BaseModel):
-    share_slug: str
-    name: str
-    created_at: datetime
-    members: list[MemberOut]  # in the order they were entered
-    expenses: list[ExpenseOut]  # newest first
-    settlements: list[SettlementOut]  # newest first
-    balances: list[BalanceOut]  # party order
-    transfers: list[TransferOut]  # what's left to pay, fewest payments
-    total_centavos: int
-
-
 # ---------------------------------------------------------------- database
 
 def _limit(limiter: RateLimiter, request: Request, action: str) -> None:
@@ -218,7 +117,7 @@ def _member_ids(conn, wallet_id: UUID) -> set[UUID]:
 
 
 def _load(conn, wallet_id: UUID) -> WalletOut:
-    wallet = conn.execute("select share_slug, name, created_at from wallets where id = %s", (wallet_id,)).fetchone()
+    wallet = conn.execute("select share_slug, name, created_at, rev from wallets where id = %s", (wallet_id,)).fetchone()
     members = conn.execute("select id, name from wallet_members where wallet_id = %s order by seq", (wallet_id,)).fetchall()
     order = [m["id"] for m in members]
     rank = {m: i for i, m in enumerate(order)}
@@ -232,8 +131,9 @@ def _load(conn, wallet_id: UUID) -> WalletOut:
     expenses = [
         ExpenseOut(**r, shares=sorted(shares.get(r["id"], []), key=lambda s: rank[s.member_id]))
         for r in conn.execute(
-            """select id, paid_by, amount_centavos, note, created_at from expenses
-               where wallet_id = %s order by created_at desc, id desc""",
+            """select id, paid_by, amount_centavos, note, created_at,
+                      (select count(*) from expense_comments c where c.expense_id = expenses.id) as comment_count  -- TG-66
+               from expenses where wallet_id = %s order by created_at desc, id desc""",
             (wallet_id,),
         )
     ]
@@ -265,6 +165,7 @@ def _load(conn, wallet_id: UUID) -> WalletOut:
         balances=[BalanceOut(member_id=m, paid_centavos=paid[m], share_centavos=owed[m], net_centavos=net[m]) for m in order],
         transfers=[TransferOut(from_member=f, to_member=t, amount_centavos=a) for f, t, a in settle_up(net, order)],
         total_centavos=sum(e.amount_centavos for e in expenses),
+        rev=wallet["rev"],  # TG-66: moved by wallet_activity.record() on every write
     )
 
 
@@ -417,3 +318,8 @@ def delete_settlement(share_slug: str, settlement_id: UUID, request: Request, re
     _private(response)
     logger.info("wallet settlement delete share_slug=%s proof=%d %s", share_slug, 1 if gone["proof_path"] else 0, _counts(wallet))
     return wallet
+
+
+__all__ = [  # the moved names are part of this module's surface (wallet_proofs.py, sessions.py, the tests)
+    "MAX_CENTAVOS", "MAX_MEMBERS", "BalanceOut", "Centavos", "ExpenseIn", "ExpenseInLegacy", "ExpenseOut", "MemberIn", "MemberName", "MemberOut", "Note", "SettlementIn", "SettlementOut", "ShareIn", "ShareOut", "TransferOut", "WalletIn", "WalletName", "WalletOut",
+]
