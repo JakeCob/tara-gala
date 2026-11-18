@@ -93,6 +93,12 @@ def resolve_guide(cur, raw: dict) -> tuple[dict | None, list[str]]:
     parsed, errs = parse_guide(g, keys_follow_days=True)  # TG-61: the owner's files keep each key on its day
     if parsed is None:
         return None, [f"guide.{e}" for e in errs]
+    # TG-62 G20: the guide reads keyless rows (plans stored before the backfill), but a curated row is written here,
+    # and every write path stores a key; the category is the wallet's (TG-66) for the line row
+    problems = [f"guide.budget.rows.{i}: a curated budget row needs a {f}" for i, r in enumerate(parsed.budget.rows)
+                for f in ("key", "category") if getattr(r, f) is None]
+    if problems:
+        return None, problems
     return parsed.model_dump(mode="json", by_alias=True, exclude_none=True), []
 
 

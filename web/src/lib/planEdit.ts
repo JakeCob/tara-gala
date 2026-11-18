@@ -3,7 +3,9 @@
 // with key (or id) null, and a key the phone sends must already be in the plan it was worked out from. Nothing here
 // calls fetch, and no helper changes the guide it's given.
 
-import type { BusTable, Condition, Guide, GuidePlace, LegOut } from "./guide.ts";
+import type { BudgetRow, BusTable, Condition, Guide, GuidePlace, LegOut } from "./guide.ts";
+import type { Category } from "./wallet.ts";
+import { CATEGORIES } from "./walletCategories.ts";
 
 export type PlaceIn = { spot_id: string } | { terminal_id: string } | { trip_place_id: string };
 export type LegIn = { last_mile_route_id: string } | { estimate: { mode: "walk" | "taxi"; minutes: number; km: number } };
@@ -23,6 +25,9 @@ export type OptionIn = { id: string | null; label: string; leave: string; what: 
 export type DayIn = { day: number; title: string; intro: string; pick?: { key: string; title: string; options: OptionIn[] }; rows: RowIn[]; tips: string[] };
 export type BusRowIn = { trip_id: string; date: string; note: string; booked: boolean };
 export type BusTableIn = { title: string; intro: string; buses: BusRowIn[]; tips: string[] };
+/** TG-62: a budget line keeps its key, which the wallet's expenses point at, and its category. A new line has none: the
+ * server inherits one by its text or mints one. A plan from before the backfill has neither. */
+export type BudgetRowIn = { item: string; estimate: string; key?: string | null; category?: Category };
 export type GuideIn = {
   title: string;
   summary: string;
@@ -30,7 +35,7 @@ export type GuideIn = {
   getting_there: BusTableIn;
   days: DayIn[];
   getting_home: BusTableIn;
-  budget: { summary: string; rows: { item: string; estimate: string }[]; excluded: string };
+  budget: { summary: string; rows: BudgetRowIn[]; excluded: string };
   todo: { key: string | null; text: string; done: boolean }[];
   sources: { label: string; url?: string }[];
 };
@@ -99,7 +104,8 @@ export function toStored(g: Guide): GuideIn {
   return some({
     title: g.title, summary: g.summary, lodging: placeIn(g.lodging),
     getting_there: tableIn(g.getting_there), getting_home: tableIn(g.getting_home),
-    budget: { summary: g.budget.summary, rows: g.budget.rows.map((r) => ({ item: r.item, estimate: r.estimate })), excluded: g.budget.excluded },
+    // TG-62 G22: key and category on every save, not only budget edits, so a stop move keeps each line's spend
+    budget: { summary: g.budget.summary, rows: g.budget.rows.map(budgetRowIn), excluded: g.budget.excluded },
     todo: g.todo.map((t) => ({ key: t.key, text: t.text, done: t.done })),
     sources: g.sources.map((x) => some({ label: x.label, url: x.url ?? undefined })),
     days: g.days.map((d) => some({
@@ -230,15 +236,35 @@ export function editTodo(g: GuideIn, op: { add: string } | { set: string; text: 
   return { ...g, todo: g.todo.filter((t) => t.key !== op.remove) };
 }
 
+/** A budget line as the hand editor changes it: a category only when one is picked (ux.md §4a). */
+export type BudgetLine = { item: string; estimate: string; category?: Category };
+
+/** A line as stored: its key only when it has one (a keyless line goes up without, for the server to key). */
+function budgetRowIn(r: BudgetRow): BudgetRowIn {
+  return some({ item: r.item, estimate: r.estimate, key: r.key ?? undefined, category: r.category ?? undefined });
+}
+
+/** TG-62: `add` has no key; `set` keeps the line's key, and its category unless the change has one. */
 export function editBudget(
   g: GuideIn,
-  op: { add: { item: string; estimate: string } } | { set: number; row: { item: string; estimate: string } } | { remove: number } | { summary: string } | { excluded: string },
+  op: { add: BudgetLine } | { set: number; row: BudgetLine } | { remove: number } | { summary: string } | { excluded: string },
 ): GuideIn {
   const b = g.budget;
-  if ("add" in op) return { ...g, budget: { ...b, rows: [...b.rows, op.add] } };
-  if ("set" in op) return { ...g, budget: { ...b, rows: b.rows.map((r, i) => (i === op.set ? op.row : r)) } };
+  if ("add" in op) return { ...g, budget: { ...b, rows: [...b.rows, some({ ...op.add })] } };
+  if ("set" in op) return { ...g, budget: { ...b, rows: b.rows.map((r, i) => (i === op.set ? some({ ...r, ...some(op.row) }) : r)) } };
   if ("remove" in op) return { ...g, budget: { ...b, rows: b.rows.filter((_, i) => i !== op.remove) } };
   return { ...g, budget: { ...b, ...op } };
+}
+
+/** ux.md §4a: the line form's first values. A line with no category starts at Other, which it already reads as; a
+ * new line starts at Pick one (""), so it needs a pick. */
+export function budgetFormStart(r: BudgetRow | null): { item: string; estimate: string; category: Category | "" } {
+  return r ? { item: r.item, estimate: r.estimate, category: r.category ?? "other" } : { item: "", estimate: "", category: "" };
+}
+
+/** The category a listed line shows under in the wallet, in TG-66's words: Other when it has none. */
+export function budgetCategoryWord(c: Category | null | undefined): string {
+  return CATEGORIES.find((x) => x.key === (c ?? "other"))!.label;
 }
 
 export function editSources(g: GuideIn, op: { add: { label: string; url: string | null } } | { set: number; source: { label: string; url: string | null } } | { remove: number }): GuideIn {
