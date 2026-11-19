@@ -374,7 +374,9 @@ def test_the_set_budget_schema_asks_for_key_and_category():
     items = plan_ops.REPLY_SCHEMA["properties"]["ops"]["items"]["properties"]["budget_rows"]["items"]
     assert set(items["properties"]) == {"item", "estimate", "key", "category"}
     assert set(items["required"]) == {"item", "estimate", "key", "category"} and items["additionalProperties"] is False
-    assert items["properties"]["key"]["type"] == ["string", "null"] and items["properties"]["category"]["type"] == ["string", "null"]
+    assert items["properties"]["key"]["type"] == ["string", "null"]
+    # Nullable as anyOf: a type list with an enum is refused by Anthropic (TG-62 chat schema fix; test_llm_schemas.py)
+    assert {"type": "null"} in items["properties"]["category"]["anyOf"]
     assert "null for a new row" in items["properties"]["key"]["description"]
     assert "null keeps the row's category" in items["properties"]["category"]["description"]
     for word in ("transport", "hotel", "food", "activities", "other"):
