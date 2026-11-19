@@ -406,11 +406,8 @@ def test_set_budget_drops_a_made_up_key_and_keeps_known_ones():  # pure: plan_op
                                      {"item": "E2E odd", "estimate": "4"}]
 
 
-def test_the_set_budget_category_is_an_enum_of_tg66s_words():  # tg-review N1
-    from app import plan_ops
-
-    cat = plan_ops.REPLY_SCHEMA["properties"]["ops"]["items"]["properties"]["budget_rows"]["items"]["properties"]["category"]
-    assert cat["enum"] == ["transport", "hotel", "food", "activities", "other", None]
+# tg-review N1 (the set_budget category takes TG-66's words or null, nothing else) moved to test_llm_schemas.py: the
+# old pin held the type-list-plus-enum shape that Anthropic refuses (TG-62 chat schema fix).
 
 
 def _one_budget_guide(rows):
