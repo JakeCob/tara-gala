@@ -343,7 +343,7 @@ def test_the_recap_never_carries_private_data(guide_trip, client, dsn):  # R12, 
     assert r.status_code == 200, r.text
     text = r.text
     strings = list(walk(r.json()))
-    secrets = [slug, invite, wallet["share_slug"], ITINERARY_SLUG, *hotel.values(), "E2E secret note", "Zed", "Nora", "E2E bus ticket"]
+    secrets = [slug, invite, wallet["share_slug"], ITINERARY_SLUG, *hotel.values(), "E2E secret note", "Zed", "Nora", "E2E bus ticket", "Jacob"]  # Jacob: a wallet member, not an attendee
     secrets += [f["id"] for f in trip["files"] if f["kind"] != "photo"]
     for secret in secrets:
         assert secret not in text, secret
@@ -375,6 +375,13 @@ def make_cases(client, dsn) -> dict:
     rslug = on(client, slug, people="names")
     other = new_trip(client)
     other_photo = upload(client, other, kind="photo").json()
+    bea = person(client, other, "Bea")  # said yes, has an avatar: every check but "this trip" passes
+    say(client, other, bea, "yes")
+    avatar(client, other, bea)
+    theirs = on(client, other, people="names_photos")
+    assert client.get(f"/recaps/{theirs}/avatars/{bea}").status_code == 200, "through her own trip's recap it's served"
+    mine = new_trip(client)
+    full = on(client, mine, people="names_photos")
     ticket = upload(client, slug, kind="ticket", label="Bus").json()
     aid = person(client, slug, "Ana")
     say(client, slug, aid, "yes")
@@ -398,6 +405,7 @@ def make_cases(client, dsn) -> dict:
         "a photo of another trip": f"/recaps/{rslug}/photos/{photo_of_other}",
         "a ticket's id": f"/recaps/{rslug}/photos/{files['ticket']}",
         "an avatar without names_photos": f"/recaps/{rslug}/avatars/{aid}",
+        "an avatar of another trip": f"/recaps/{full}/avatars/{bea}",
         "not a file id": f"/recaps/{rslug}/photos/not-a-uuid",
     }
 
@@ -529,3 +537,21 @@ def test_public_reads_are_rate_limited(client, caplog, monkeypatch):  # plan §2
     [hit] = [x for x in caplog.records if "rate limited" in x.getMessage()]
     assert hit.levelno == logging.WARNING and rslug not in hit.getMessage()
     assert recaps.RECAP_PER_HOUR == 600
+
+
+def test_the_photo_and_avatar_bytes_share_the_read_limit(client, monkeypatch):  # plan §2.2 Limits: one counter, three GETs
+    from app import recaps
+
+    slug = new_trip(client)
+    rslug = on(client, slug, photos=True, people="names_photos")
+    pid = photo_id(upload(client, slug, kind="photo"))
+    aid = person(client, slug, "Ana")
+    say(client, slug, aid, "yes")
+    avatar(client, slug, aid)
+    for path in (f"/recaps/{rslug}/photos/{pid}", f"/recaps/{rslug}/avatars/{aid}"):
+        monkeypatch.setattr(recaps, "RECAP_LIMITER", RateLimiter(1))
+        assert client.get(path).status_code == 200, f"{path} is served under the limit"
+        monkeypatch.setattr(recaps, "RECAP_LIMITER", RateLimiter(1))
+        assert client.get(f"/recaps/{rslug}").status_code == 200
+        r = client.get(path)
+        assert r.status_code == 429 and "retry-after" in r.headers, f"{path} counts on the recap's limit"
