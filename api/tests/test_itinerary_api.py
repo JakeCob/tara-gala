@@ -394,8 +394,10 @@ def test_only_exact_slug_and_premade_reads_touch_itineraries():
     # the trip's own copy with the trip (model trip-edit, owned through itinerary_versions.session_id). plan_edit.py's
     # second is the shared plan's slug that the trip's own copy was made from (F2: a replay of the first edit)
     # TG-64 recaps.py: the trip's own linked itinerary again (a join on the trip found by its exact recap slug)
-    assert readers == {"itineraries.py": 1, "plan_edit.py": 2, "plan_suggest.py": 1, "premade.py": 1, "recaps.py": 1, "sessions.py": 3, "trip_marks.py": 1}
+    # TG-62 GA1 wallets.py: the budget lines of the wallet's own one trip's linked itinerary (a join on the wallet's id)
+    assert readers == {"itineraries.py": 1, "plan_edit.py": 2, "plan_suggest.py": 1, "premade.py": 1, "recaps.py": 1, "sessions.py": 3, "trip_marks.py": 1, "wallets.py": 1}
     assert "left join itineraries i on i.id = s.itinerary_id where s.recap_slug = %s" in (APP / "recaps.py").read_text(encoding="utf-8")
+    assert "from trip_sessions s left join itineraries i on i.id = s.itinerary_id where s.wallet_id = %s limit 2" in (APP / "wallets.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_suggest.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_edit.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "trip_marks.py").read_text(encoding="utf-8")
