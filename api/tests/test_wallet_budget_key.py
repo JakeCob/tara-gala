@@ -299,6 +299,26 @@ def test_g8_the_snapshot_carries_the_line_and_a_no_op_still_writes_nothing(on, d
     assert (rev(dsn, slug), rows(dsn, slug)) == (n, before)
 
 
+
+@pytest.mark.parametrize("flag", ["on", "off"])
+def test_g8_an_unchanged_edit_without_the_field_writes_nothing(client, flags, dsn, flag):
+    """tg-test F1 (G8 with G9a): a W3 phone without GW1 saves an expense unchanged, with no budget_key in the body. The
+    kept line is the stored one, so it's a no-op: no version, rev or expense_edit row, and the line stays."""
+    flags(wallet_splits=True, budget_lines=True)
+    slug, (a, b, *_) = new_wallet(client)
+    trip(dsn, slug)
+    eid = add(client, slug, on_line([a, b])).json()["expenses"][0]["id"]
+    if flag == "off":
+        flags(wallet_splits=True)
+    body = {**equal([a, b], amount=1000, category="food"), "version": 1}
+    assert "budget_key" not in body
+    n, before = rev(dsn, slug), rows(dsn, slug)
+    r = edit(client, slug, eid, body)
+    assert r.status_code == 200, r.text
+    assert (rev(dsn, slug), rows(dsn, slug)) == (n, before)
+    assert stored(dsn, eid)["version"] == 1 and key_of(dsn, eid) == "meals"
+
+
 # ---------------------------------------------------------------- G9: the flags, and the kept line
 
 def test_g9_budget_lines_off_drops_the_key_on_an_add(client, flags, dsn):
@@ -392,6 +412,27 @@ def test_g9c_a_kept_key_that_isnt_a_line_any_more_stays(on, dsn, why):
     assert key_of(dsn, eid) == "meals", "no line to compare with, so it's kept"
 
 
+@pytest.mark.parametrize("why", ["two trips", "line removed"])
+def test_g9c_gw1s_hidden_row_resends_the_stored_key_with_a_new_category_and_it_is_kept(on, dsn, why):
+    """tg-test F1 / GW1 N1: with no line to show, the form's row is hidden and `lineAfterCategory` keeps the line, so the
+    body resends the stored key unchanged beside the new category. G5 (M2) accepts it and G9c has no category to compare
+    with, so the key is kept: no 422, not cleared."""
+    slug, (a, b, *_) = new_wallet(on)
+    itinerary = trip(dsn, slug)
+    eid = add(on, slug, on_line([a, b])).json()["expenses"][0]["id"]
+    if why == "two trips":
+        trip(dsn, slug, name="Another trip")
+    else:
+        set_rows(dsn, itinerary, [r for r in ROWS if r.get("key") != "meals"])
+    body = {**on_line([a, b], key="meals", category="hotel"), "version": 1}
+    r = edit(on, slug, eid, body)
+    assert r.status_code == 200, r.text
+    assert expense(r.json(), eid)["budget_key"] == "meals" == key_of(dsn, eid)
+    assert stored(dsn, eid)["category"] == "hotel" and stored(dsn, eid)["version"] == 2
+    row = rows(dsn, slug)[-1]
+    assert (row["before"]["budget_key"], row["after"]["budget_key"]) == ("meals", "meals"), "Changes shows no line"
+
+
 def test_g9c_none_is_kept_with_any_category(on, dsn):
     slug, (a, b, *_) = new_wallet(on)
     trip(dsn, slug)
@@ -419,6 +460,7 @@ def test_g10a_logs_say_line_none_or_null_and_never_the_key(on, dsn, caplog):
     e1 = add(on, slug, on_line([a, b], key="ana-s-birthday-dinner")).json()["expenses"][0]["id"]
     e2 = add(on, slug, on_line([a, b], key="_none")).json()["expenses"][0]["id"]
     add(on, slug, on_line([a, b], key=None))
+    assert add(on, slug, legacy_equal([a, b], amount=1000)).status_code == 201  # tg-test S1: today's shape says null
     edit(on, slug, e1, {**on_line([a, b], key="_none", amount=1100), "version": 1})
     edit(on, slug, e2, {**on_line([a, b], key="meals", amount=1100), "version": 1})
     on.get(f"/wallets/{slug}")
@@ -428,5 +470,27 @@ def test_g10a_logs_say_line_none_or_null_and_never_the_key(on, dsn, caplog):
         assert secret not in text, secret
     adds = [x for x in lines if x.startswith("wallet expense add ")]
     edits = [x for x in lines if x.startswith("wallet expense edit ")]
-    assert [re.search(r"\bbudget=(\w+)", x).group(1) for x in adds] == ["line", "none", "null"]
+    assert [re.search(r"\bbudget=(\w+)", x).group(1) for x in adds] == ["line", "none", "null", "null"]
     assert [re.search(r"\bbudget=(\w+)", x).group(1) for x in edits] == ["none", "line"], "the value after the edit"
+
+
+def test_g10a_a_refused_key_is_never_logged(on, dsn, caplog):
+    """tg-test F2 (N2): a key the server refuses is the group's own text too. The refusal logs its reason, not the key."""
+    caplog.set_level(logging.DEBUG)
+    slug, (a, b, *_) = new_wallet(on)
+    trip(dsn, slug)
+    eid = add(on, slug, on_line([a, b])).json()["expenses"][0]["id"]
+    caplog.clear()
+    for key, category, code in (("ana-s-surprise-gift", "food", "unknown_budget_line"),
+                                ("ana-s-birthday-dinner", "hotel", "budget_line_category")):
+        r = add(on, slug, on_line([a, b], key=key, category=category))
+        assert (r.status_code, detail(r)) == (422, code), ("add", key)
+        r = edit(on, slug, eid, {**on_line([a, b], key=key, category=category), "version": 1})
+        assert (r.status_code, detail(r)) == (422, code), ("edit", key)
+    lines = [r.getMessage() for r in caplog.records if r.name.startswith("tara_gala")]
+    text = "\n".join(lines)
+    for secret in ("ana-s-surprise-gift", "ana-s-birthday-dinner", "surprise", "birthday", BIRTHDAY, *NAMES):
+        assert secret not in text, secret
+    refusals = [x for x in lines if " refused " in x]
+    assert [re.search(r"\breason=(\w+)", x).group(1) for x in refusals] == [
+        "unknown_budget_line", "unknown_budget_line", "budget_line_category", "budget_line_category"]
