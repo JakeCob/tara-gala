@@ -417,11 +417,12 @@ def _sent_line(key: str | None, category: str | None, lines: dict | None, share_
     return key
 
 
-def _kept_line(stored: str | None, category: str | None, lines: dict | None) -> str | None:
-    """An edit that doesn't set the line (the field left out, or BUDGET_LINES off) keeps the stored one, unless it's a
-    current line whose category the edit moved away from: then it's cleared, not refused, since an old phone can't fix
-    that (G9c). "_none", and a key that isn't a line any more, stay."""
-    if stored in (None, "_none") or lines is None or stored not in lines:
+def _kept_line(stored: str | None, category: str | None, lines: dict | None, old_category: str | None) -> str | None:
+    """An edit that doesn't set the line (the field left out, or BUDGET_LINES off) keeps the stored one, unless the edit
+    changed the category away from that current line's: then it's cleared, not refused, since an old phone can't fix
+    that (G9c). "_none", a key that isn't a line any more, and an edit that keeps the category stay (review S1: a line
+    the plan moved isn't cleared by a save that didn't move the expense, so G8's no-op holds)."""
+    if stored in (None, "_none") or lines is None or stored not in lines or category == old_category:
         return stored
     return stored if lines[stored] == category else None
 
@@ -596,7 +597,7 @@ def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request:
         if flags.budget_lines and "budget_key" in body.model_fields_set:
             key = _sent_line(body.budget_key, body.category, lines, share_slug, "edit", stored=old.budget_key)
         else:
-            key = _kept_line(old.budget_key, body.category, lines)
+            key = _kept_line(old.budget_key, body.category, lines, old.category)
         new = (amount, paid_by, payers or {}, {m: v for m, v in shares.items() if v}, body.note, body.category, key)
         if _is_noop(old, new, body, [m.id for m in current.members]):
             _private(response)
