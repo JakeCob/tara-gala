@@ -58,6 +58,8 @@ type Props = {
   /** TG-62 GW2: the wallet's spending for the Budget panel. Only the trip page passes it, and only with
    * NEXT_PUBLIC_BUDGET_LINES on; without it the panel is today's table */
   spending?: Spending;
+  /** TG-67: the plan's city, for the province in a spot's Google Maps search. Without it, Baguio's */
+  city?: string;
 };
 
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
@@ -73,7 +75,7 @@ const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of t
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap, spending }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap, spending, city }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -383,7 +385,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
       {open && current && (
         // Keyed by tap: each one gets its own dialog, because showModal runs once on mount. close() shuts a dialog at once
         // but its close event waits for the next frame, so that event only clears its own tap (TG-54).
-        <LevelDialog key={open.tap} level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)}
+        <LevelDialog key={open.tap} level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)} city={city}
           doneMark={recap && current.done ? byKey.get(rowMark(current.row)) : undefined}
           onClose={() => setOpen((o) => (o?.tap === open.tap ? null : o))} onTick={onTick}
           change={editor && { editor, guide, marks: marks ?? [], files: photos?.files ?? [], world: day.day, onDone: changed, onAsk: editor.chat ? askChat : undefined }} />
@@ -455,12 +457,14 @@ function bookedFor(guide: Guide, row: GuideRow) {
   return table ? guide[table].buses.find((b) => b.booked) : undefined;
 }
 
-function LevelDialog({ level, live, busy, problem, said, photos, shots, doneMark, onClose, onTick, change }: {
+function LevelDialog({ level, live, busy, problem, said, photos, shots, doneMark, onClose, onTick, change, city }: {
   level: Level; live: boolean; busy?: boolean; problem?: string | null; said?: string; photos?: Photos; shots: TripFile[];
   /** TG-64: the recap's dialog says when the stop was ticked */
   doneMark?: Mark;
   onClose: () => void; onTick?: (key: string, done: boolean) => void;
   change?: Change;
+  /** TG-67: the plan's city, for the province in the Google Maps search */
+  city?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -506,7 +510,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, doneMark
           <div className="flex flex-col gap-2">
             <p className="text-sm font-semibold break-words">{r.place.name}</p>
             <span className={cx(PX.chip, "self-start")}>Added by your group, not verified</span>
-            <a className={cx(PX.btn.secondary.skin, PX.btn.secondary.layout, "self-start")} href={placeMapsUrl({ name: r.place.name, kind: r.place.kind, lat: r.place.lat, lng: r.place.lng })}
+            <a className={cx(PX.btn.secondary.skin, PX.btn.secondary.layout, "self-start")} href={placeMapsUrl({ name: r.place.name, kind: r.place.kind, lat: r.place.lat, lng: r.place.lng, city })}
               target="_blank" rel="noopener noreferrer">
               Directions in Google Maps<span aria-hidden="true">&nbsp;↗</span>
             </a>
@@ -514,7 +518,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, doneMark
         ) : r.place?.name && (
           <p className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-semibold">{r.place.name}</span>
-            <a className={PX.inlineLink} href={placeMapsUrl({ name: r.place.name, kind: r.place.kind })} target="_blank" rel="noopener noreferrer">
+            <a className={PX.inlineLink} href={placeMapsUrl({ name: r.place.name, kind: r.place.kind, city })} target="_blank" rel="noopener noreferrer">
               Google Maps<span aria-hidden="true">&nbsp;↗</span>
             </a>
           </p>

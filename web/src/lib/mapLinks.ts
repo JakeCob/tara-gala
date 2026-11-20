@@ -39,9 +39,12 @@ export function sakayUrl(_t: TerminalPlace): string {
   return SAKAY_HOME;
 }
 
-/** Sakay routes Metro Manila transit; every non-Baguio origin in the data is in Metro Manila. */
+// TG-67: a copy of itinerary.ts DESTINATIONS, as this module has no imports (mapLinks.test.ts T67-W7 ties the two)
+const TOWNS: readonly string[] = ["Baguio", "Sagada"];
+
+/** Sakay routes Metro Manila transit; every terminal outside the destination towns (TG-67: Baguio, Sagada) is in Metro Manila. */
 export function showSakay(city: string): boolean {
-  return city.trim() !== "Baguio";
+  return !TOWNS.includes(city.trim());
 }
 
 export function mapsLabel(name: string): string {

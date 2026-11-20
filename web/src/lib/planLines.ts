@@ -132,9 +132,9 @@ export function swapWindow<T extends { departure_time: string }>(old: string | n
   return { window: { from: hhmm(lo), to: hhmm(hi) }, near: all.filter((t) => toMin(t.departure_time) >= lo && toMin(t.departure_time) <= hi), all };
 }
 
-/** The query is by city, so the header names the cities, not the old bus's terminal (UX review Must 1). */
-export function swapHeader(up: boolean, date: string, w: SwapWindow | null): string {
-  const way = up ? "from Metro Manila to Baguio" : "from Baguio to Metro Manila";
+/** The query is by city, so the header names the cities, not the old bus's terminal (UX review Must 1). TG-67: the plan's city */
+export function swapHeader(up: boolean, date: string, w: SwapWindow | null, city = "Baguio"): string {
+  const way = up ? `from Metro Manila to ${city}` : `from ${city} to Metro Manila`;
   return `Buses on file ${way} on ${weekday(date)}${w ? `, ${formatTime(w.from)} to ${formatTime(w.to)}` : ""}.`;
 }
 
@@ -190,9 +190,9 @@ export function legLines(leg: LegOut): { line: string; note: string } {
 }
 
 /** The far warning: rounded to 10 km over 100 km, else to the km (review nit 2). */
-export function farLine(km: number): string {
+export function farLine(km: number, city = "Baguio"): string {
   const shown = km > 100 ? Math.round(km / 10) * 10 : Math.round(km);
-  return `This is about ${shown} km from Baguio. Add it anyway?`;
+  return `This is about ${shown} km from ${city}. Add it anyway?`;
 }
 
 /** The confirm before a stop is removed (ux.md §4.7): its tick and photos are hidden, not deleted. */
@@ -282,10 +282,11 @@ export function fitFooter(fits: readonly Fit[], pinned: boolean): string[] {
 // ---------------------------------------------------------------- round 5: links with no pin (ux.md §4.3)
 
 /** The line under a link's chip: where its pin came from. An address pin links to itself, so the group can check it. */
-export function pinLine(s: { pin_source?: "link" | "address" | "typed" | null; lat: number | null; lng: number | null; km_from_baguio: number | null }):
+export function pinLine(s: { pin_source?: "link" | "address" | "typed" | null; lat: number | null; lng: number | null; km_from_baguio: number | null }, city = "Baguio"):
   { lead: string; link: string | null; href: string | null; rest: string } | null {
   if (!s.pin_source) return null;
-  const km = s.km_from_baguio != null ? `, about ${Math.round(s.km_from_baguio)} km from Baguio` : "";
+  // TG-67: the API's km_from_baguio is the distance from the plan's centre (S3), so it names the plan's city
+  const km = s.km_from_baguio != null ? `, about ${Math.round(s.km_from_baguio)} km from ${city}` : "";
   if (s.pin_source === "address" && s.lat != null && s.lng != null) {
     return { lead: "Pin from the address, ", link: "check it on Google Maps", href: `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`, rest: "" };
   }

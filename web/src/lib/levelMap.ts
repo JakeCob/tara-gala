@@ -3,6 +3,7 @@
 // screen from START to GOAL (TG-55), and snakes across a desktop row (TG-56). Pure geometry here, so it's tested without a browser.
 
 import { type Guide, type GuideDay, type GuidePlace, type GuideRow, type Mark, rowMark, rowShows, whereNow } from "./guide.ts";
+import { PROVINCE } from "./itinerary.ts";
 import type { SpriteName } from "./sprites.ts";
 
 export const GAP_PX = 120; // between two levels, down the screen; the longest sign is 82px tall at 320
@@ -302,9 +303,10 @@ export function startWorld(guide: Guide, marks: readonly Mark[]): number {
   return open?.day ?? guide.days[0]?.day ?? 1;
 }
 
-/** A Google Maps search for a level's place, by its name. Spots get Benguet (ones outside the city, like BenCab, still resolve); terminals don't, as Cubao is in Quezon City. */
-export function placeMapsUrl({ name, kind, lat, lng }: { name: string; kind: GuidePlace["kind"]; lat?: number | null; lng?: number | null }): string {
+/** A Google Maps search for a level's place, by its name. Spots get the plan's province (Benguet for Baguio: ones outside the
+ * city, like BenCab, still resolve; Mountain Province for Sagada, TG-67); terminals don't, as Cubao is in Quezon City. */
+export function placeMapsUrl({ name, kind, lat, lng, city = "Baguio" }: { name: string; kind: GuidePlace["kind"]; lat?: number | null; lng?: number | null; city?: string }): string {
   // TG-61: a trip place has the pin the server read from the group's link, so directions go straight to it
   if (kind === "trip_place" && lat != null && lng != null) return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${kind === "terminal" ? "" : "Benguet, "}Philippines`)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${kind === "terminal" ? "" : `${PROVINCE[city] ?? "Benguet"}, `}Philippines`)}`;
 }

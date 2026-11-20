@@ -2,17 +2,20 @@
 // with its version, from one answer, and never lets an older answer, or another plan's, replace it.
 
 import type { Guide } from "./guide.ts";
+import type { Itinerary } from "./itinerary.ts";
 import type { PlanVersion } from "./planLines.ts";
 import type { PlanBase, PlanSaved, Trip } from "./trip.ts";
 
-/** The plan on screen: always from one ItineraryOut. seq is null for a shared plan, which has no versions. */
-export type Shown = { slug: string; seq: number | null; guide: Guide | null; edited: boolean };
+/** The plan on screen: always from one ItineraryOut. seq is null for a shared plan, which has no versions.
+ * TG-67: city only when the answer has one; read it with cityOf, which makes a missing one Baguio. */
+export type Shown = { slug: string; seq: number | null; guide: Guide | null; edited: boolean; city?: string };
 
 const VERSIONS_KEPT = 5; // as SessionOut.plan_edits lists them
 
 /** The plan on screen, from one answer: the live GET, the worker's saved copy, or a save's own answer. */
-export function shownFrom(it: { share_slug: string; seq?: number | null; guide?: Guide | null; edited?: boolean }): Shown {
-  return { slug: it.share_slug, seq: it.seq ?? null, guide: it.guide ?? null, edited: !!it.edited };
+export function shownFrom(it: { share_slug: string; seq?: number | null; guide?: Guide | null; edited?: boolean; city?: Itinerary["city"] | null }): Shown {
+  const shown: Shown = { slug: it.share_slug, seq: it.seq ?? null, guide: it.guide ?? null, edited: !!it.edited };
+  return it.city ? { ...shown, city: it.city } : shown;
 }
 
 /** The base for the next change: always the plan on screen, so a change is never sent against a plan nobody saw (M1). */

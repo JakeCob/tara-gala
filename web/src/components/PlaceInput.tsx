@@ -139,7 +139,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
   }
 
   const s = pinned?.suggestion;
-  const said = s ? pinLine(s) : null;
+  const said = s ? pinLine(s, editor.city) : null;
   // UX review should 1: once a place is found, its Next is the step's one Red action; Find is Red again if the field changes
   const shownFor = needPin ?? (s ? pinned?.link : null);
   const findFirst = !shownFor || text.trim() !== shownFor;
@@ -213,16 +213,16 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
                 onClick={() => { console.info("[tg-trip] plan find wrong-spot"); setNeedPin(pinned!.link); setPinned(null); }}>
                 Wrong spot? Paste the pin instead.
               </button>
-              <p className={PX.meta}>{s.km_from_baguio != null && !s.far ? `About ${Math.round(s.km_from_baguio)} km from Baguio. ` : ""}{ON_FILE}</p>
+              <p className={PX.meta}>{s.km_from_baguio != null && !s.far ? `About ${Math.round(s.km_from_baguio)} km from ${editor.city}. ` : ""}{ON_FILE}</p>
             </>
           ) : (
             <p className={PX.meta}>
-              {said?.lead ?? `Pinned from your link${s.km_from_baguio != null && !s.far ? `, about ${Math.round(s.km_from_baguio)} km from Baguio` : ""}.`} {ON_FILE}
+              {said?.lead ?? `Pinned from your link${s.km_from_baguio != null && !s.far ? `, about ${Math.round(s.km_from_baguio)} km from ${editor.city}` : ""}.`} {ON_FILE}
             </p>
           )}
           {s.far ? (
             <PixelBox tone="alert" className="flex flex-col gap-2 p-3">
-              <p className="text-sm font-semibold text-danger-text">{farLine(s.km_from_baguio ?? 0)}</p>
+              <p className="text-sm font-semibold text-danger-text">{farLine(s.km_from_baguio ?? 0, editor.city)}</p>
               <p className="text-sm">That&apos;s fine for a stop on the way.</p>
               <div className="flex flex-wrap gap-2">
                 <PixelButton variant="secondary" onClick={onNext}>Add it anyway</PixelButton>
@@ -339,7 +339,7 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
       <p ref={heading} tabIndex={-1} className="sr-only">Proposed change</p>
       {/* Round 5: an address pin is said again here, so it's seen before Apply (ux.md §4.3) */}
       {(() => {
-        const p = pinLine(s);
+        const p = pinLine(s, editor.city);
         return p?.href ? (
           <p className={PX.meta}>
             {p.lead}
