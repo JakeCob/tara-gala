@@ -23,6 +23,8 @@ import { LegLine } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import { BudgetEdits, PickEdits, SourcesEdits, TodoEdits } from "./PlanTextEditors";
 import StopChange, { PlanDialog } from "./StopChange";
+import BudgetPanel, { SpendingNote } from "./BudgetPanel";
+import type { Spending } from "./BudgetPanel";
 
 export type Photos = {
   files: TripFile[];
@@ -53,6 +55,9 @@ type Props = {
   /** TG-64: the recap's map. No next level, no trip menu, and each done level says when it was ticked. Pass no onTick,
    * onPick or editor with it, so nothing can be changed */
   recap?: true;
+  /** TG-62 GW2: the wallet's spending for the Budget panel. Only the trip page passes it, and only with
+   * NEXT_PUBLIC_BUDGET_LINES on; without it the panel is today's table */
+  spending?: Spending;
 };
 
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
@@ -68,7 +73,7 @@ const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of t
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap, spending }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -105,6 +110,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const current = found || (open && kept?.row.key === open.key ? kept : undefined);
   const next = marks && !recap ? nextLevel(list) : null; // a record has no next level: every tile not done is plain
   const atStart = !!marks && !list.some((l) => l.done); // no ticks in this world yet: the group waits at START
+  const shownSpending = recap ? undefined : spending; // TG-62 Rev 1 S1: the recap never shows the budget (TG-64 §2.2)
 
   // The road draws on the screen's real width, so it stays chunky pixels at any size. Measured before paint, or a
   // desktop would flash the phone's map first (TG-56)
@@ -347,7 +353,10 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
           {([["buses", "Buses"], ["budget", "Budget"], ["todo", "To-do"], ["sources", "Sources"], ...(photos ? [["album", "Album"]] : [])] as [Menu, string][]).map(([key, name]) => (
             <PixelButton key={key} variant={menu === key ? "primary" : "secondary"} aria-pressed={menu === key} className="px-3 text-sm"
-              onClick={() => setMenu(menu === key ? null : key)}>
+              onClick={() => {
+                if (key === "budget" && menu !== "budget") shownSpending?.onOpen();
+                setMenu(menu === key ? null : key);
+              }}>
               <span className="font-bold">{name}</span>
             </PixelButton>
           ))}
@@ -359,7 +368,14 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
           <Buses table={guide.getting_home} onSwap={editor && ((index) => setSwapping({ table: "getting_home", index }))} can={!!editor?.can} />
         </div>
       )}
-      {menu === "budget" && (editing && editor ? <EditPanel title="Budget per person"><BudgetEdits editor={editor} guide={guide} /></EditPanel> : <Budget guide={guide} />)}
+      {menu === "budget" &&
+        (editing && editor ? (
+          <EditPanel title="Budget per person"><BudgetEdits editor={editor} guide={guide} /></EditPanel>
+        ) : shownSpending?.load !== undefined && shownSpending.load !== "loading" && shownSpending.load.ok && shownSpending.load.budget.state === "ok" ? (
+          <BudgetPanel guide={guide} budget={shownSpending.load.budget} walletSlug={shownSpending.walletSlug} me={shownSpending.me} returnDate={shownSpending.returnDate} today={shownSpending.today} />
+        ) : (
+          <Budget guide={guide}>{shownSpending && <SpendingNote load={shownSpending.load} />}</Budget>
+        ))}
       {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} editor={editing ? editor : undefined} />}
       {menu === "sources" && (editing && editor ? <EditPanel title="Sources"><SourcesEdits editor={editor} guide={guide} /></EditPanel> : <Sources guide={guide} />)}
       {menu === "album" && photos && <Album photos={photos} guide={guide} busy={busy} />}
@@ -607,7 +623,8 @@ function Buses({ table, onSwap, can }: { table: BusTable; onSwap?: (index: numbe
   );
 }
 
-function Budget({ guide }: { guide: Guide }) {
+/** Today's table. TG-62 GW2: `children` is ux §5's line under it (SpendingNote); with the flag off there's none */
+function Budget({ guide, children }: { guide: Guide; children?: ReactNode }) {
   return (
     <section className="flex flex-col gap-2 md:max-w-2xl">
       <h3 className={PX.dataHeading}>Budget per person</h3>
@@ -631,6 +648,7 @@ function Budget({ guide }: { guide: Guide }) {
         </table>
       </PixelBox>
       {guide.budget.excluded && <p className={PX.meta}>{guide.budget.excluded}</p>}
+      {children}
     </section>
   );
 }

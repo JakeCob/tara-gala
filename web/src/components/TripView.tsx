@@ -24,6 +24,9 @@ import TripRecap from "./TripRecap";
 import { fetchItinerary, savedItinerary } from "@/lib/api";
 import { fitPhoto } from "@/lib/shrink";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
+import { afterRefetch, cardLine, newestOnly } from "@/lib/budgetPanel";
+import { type BudgetResult, getBudget } from "@/lib/sessionBudget";
+import type { Spending } from "./BudgetPanel";
 
 type Notice = { text: string; error: boolean };
 const subscribeNothing = () => () => {};
@@ -169,6 +172,28 @@ export default function TripView({ slug }: { slug: string }) {
     };
   }, [planSlug, planSeq, retry]);
 
+  // TG-62 GW2: the wallet's spending, for the Budget panel and the Shared expenses card. Loaded with the trip and when
+  // its wallet changes, then again each time the Budget menu opens (ux §5). Flag off: no request at all (G32)
+  const [spend, setSpend] = useState<"loading" | BudgetResult | null>(flags.budgetLines ? "loading" : null);
+  const walletOf = load.state === "ready" ? (load.trip.wallet?.share_slug ?? "") : null; // "": the trip has no wallet
+  const fetchBudget = useCallback(async (): Promise<BudgetResult> => {
+    console.info("[tg-trip] budget load"); // a request that stalls shows as a load with no answer
+    const r = await getBudget(slug);
+    console.info("[tg-trip] budget ok=%s state=%s lines=%d members=%d", r.ok ? "yes" : r.why, r.ok ? r.budget.state : "none", r.ok ? r.budget.lines.length : 0, r.ok ? r.budget.member_count : 0);
+    return r;
+  }, [slug]);
+  const [newest] = useState(() => newestOnly<BudgetResult>()); // tg-review N1: an older answer that lands last is dropped
+  useEffect(() => {
+    if (!flags.budgetLines) return;
+    if (walletOf === null) return; // once the trip is on screen, so a trip with a wallet loads it once, not twice
+    let live = true;
+    void newest(fetchBudget()).then((r) => live && r && setSpend(r));
+    return () => {
+      live = false;
+    };
+  }, [fetchBudget, newest, walletOf]);
+  const knownRaw = useSyncExternalStore(subscribeNothing, knownWalletsRaw, () => null);
+
   // TG-61: editing the plan. Edit mode belongs to this phone only, and isn't remembered (ux.md §3)
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
   const [editing, setEditing] = useState(false);
@@ -251,6 +276,14 @@ export default function TripView({ slug }: { slug: string }) {
     );
   }
   const trip = load.trip;
+  const spending: Spending = {
+    load: spend ?? "loading",
+    walletSlug: trip.wallet?.share_slug ?? null,
+    me: parseKnownWallets(knownRaw).find((w) => w.slug === trip.wallet?.share_slug)?.me ?? null,
+    returnDate: trip.return_date,
+    today: manilaToday(),
+    onOpen: () => void newest(fetchBudget()).then((r) => r && setSpend((prev) => afterRefetch(prev, r))),
+  };
 
   async function write(action: string, op: () => Promise<TripResult>, done: string): Promise<boolean> {
     setBusy(true);
@@ -481,6 +514,7 @@ export default function TripView({ slug }: { slug: string }) {
           marks={trip.marks}
           editor={editor}
           copyLine={copyLine(!!shown?.edited, trip.plan_edits)}
+          spending={flags.budgetLines ? spending : undefined}
           photos={{
             files: trip.files,
             fetch: fetchPhoto,
@@ -521,7 +555,8 @@ export default function TripView({ slug }: { slug: string }) {
       <div className="flex flex-col gap-5">
         <PlanSection trip={trip} busy={busy || planWriting} write={write} />
         <SharedTickets trip={trip} busy={busy} write={write} onFail={onFail} />
-        <WalletSection trip={trip} busy={busy} write={write} setNotice={setNotice} />
+        <WalletSection trip={trip} busy={busy} write={write} setNotice={setNotice}
+          spent={flags.budgetLines && spend !== "loading" && spend?.ok ? cardLine(spend.budget) : null} />
         <PayoutQrs trip={trip} busy={busy} write={write} onFail={onFail} />
       </div>
       <div className="flex flex-col gap-5">
@@ -726,7 +761,11 @@ function PlanSection({ trip, busy, write }: { trip: Trip; busy: boolean; write: 
   );
 }
 
-function WalletSection({ trip, busy, write, setNotice }: { trip: Trip; busy: boolean; write: Write; setNotice: (n: Notice | null) => void }) {
+function WalletSection({ trip, busy, write, setNotice, spent }: {
+  trip: Trip; busy: boolean; write: Write; setNotice: (n: Notice | null) => void;
+  /** TG-62 GW2 (G30): `₱18,000 spent · about ₱4,500 each`, or null (flag off, nothing spent, not loaded) */
+  spent: string | null;
+}) {
   const raw = useSyncExternalStore(subscribeNothing, knownWalletsRaw, () => null);
   const mine = useMemo(() => parseKnownWallets(raw), [raw]);
   const [me, setMe] = useState("");
@@ -764,6 +803,7 @@ function WalletSection({ trip, busy, write, setNotice }: { trip: Trip; busy: boo
           <PixelCardLink href={`/w/${trip.wallet.share_slug}`} className="flex items-center justify-between gap-3 p-4">
             <span className="flex min-w-0 flex-col gap-1">
               <span className="break-words font-bold">{trip.wallet.name}</span>
+              {spent && <span className="text-sm tabular-nums">{spent}</span>}
               <span className={PX.meta}>Who paid what, and who pays whom at the end.</span>
             </span>
             <span aria-hidden="true">→</span>
