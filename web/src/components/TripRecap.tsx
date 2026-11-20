@@ -125,8 +125,8 @@ export default function TripRecap({ trip, busy, online, apply }: {
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-semibold">Photos</legend>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5 h-6 w-6 shrink-0" checked={shown.photos} aria-disabled={!online || held}
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm has-[[aria-disabled=true]]:opacity-60">
+          <input type="checkbox" className="h-6 w-6 shrink-0 accent-[var(--primary)]" checked={shown.photos} aria-disabled={!online || held}
             onChange={(e) => change("photos", e.target.checked, e.target.checked ? "shows the album now" : "hides the album now")} />
           <span>Show the album. Faces of the group may be in it.</span>
         </label>
@@ -157,7 +157,7 @@ export default function TripRecap({ trip, busy, online, apply }: {
       {failed && <Failed text={failed} />}
       <p className={PX.meta}>{NEVER}{on ? "" : ANYONE}</p>
       {!online && <p className={PX.meta}>Changing the recap needs signal.</p>}
-      <PixelButton variant="secondary" className="self-start" aria-disabled={!online || held} onClick={on ? onTurnOff : onTurnOn}>
+      <PixelButton variant="secondary" className="self-start inline-flex items-center px-4 text-sm" aria-disabled={!online || held} onClick={on ? onTurnOff : onTurnOn}>
         {on ? "Turn off the recap link" : "Turn on the recap link"}
       </PixelButton>
     </PixelBox>

@@ -56,7 +56,14 @@ export async function fetchRecap(slug: string): Promise<RecapResult> {
   return { ok: true, recap };
 }
 
+/** As fetchFile's FILES_IN_MEMORY: about 18 MB of pictures at most, the newest kept */
+export const RECAP_FILES_IN_MEMORY = 60;
 const blobs = new Map<string, Promise<Blob | null>>();
+
+/** How many pictures the page holds now (for the cap's test) */
+export function recapFilesInMemory(): number {
+  return blobs.size;
+}
 
 /** One picture's bytes from a recapFileUrl, fetched once per page (the browser keeps no copy: the answers are no-cache) */
 export function fetchRecapFile(url: string): Promise<Blob | null> {
@@ -72,7 +79,22 @@ export function fetchRecapFile(url: string): Promise<Blob | null> {
   })();
   blobs.set(url, got);
   void got.then((blob) => blob || blobs.delete(url)); // offline or gone: try again next time
+  for (const oldest of blobs.keys()) {
+    if (blobs.size <= RECAP_FILES_IN_MEMORY) break;
+    blobs.delete(oldest);
+  }
   return got;
+}
+
+/** The album shows 8 (4 rows on a phone, 2 on desktop), then 24 more a tap, as the trip's album (ux review S1) */
+export const RECAP_FIRST_PHOTOS = 8;
+export const RECAP_PHOTO_PAGE = 24;
+
+/** The next page of the album: how many show after the tap, and the button's words. Null once every photo shows */
+export function morePhotos(shown: number, total: number): { next: number; label: string } | null {
+  const more = Math.min(RECAP_PHOTO_PAGE, total - shown);
+  if (more <= 0) return null;
+  return { next: shown + more, label: `Show ${more} more photo${more === 1 ? "" : "s"}` };
 }
 
 const MANILA_TIME = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit", hour12: true });

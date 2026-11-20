@@ -8,12 +8,13 @@ import { PX, PageTitle, PixelBox, PixelButton, PixelLink, SectionTitle, cx } fro
 import { BlobImage, PhotoViewer } from "@/components/PhotoViewer";
 import LevelMap from "@/components/LevelMap";
 import { arrivalTime } from "@/lib/people";
-import { type Recap, type RecapPhoto, type RecapResult, allLevels, countLine, fetchRecap, fetchRecapFile, recapDates, recapFileUrl } from "@/lib/recap";
+import {
+  type Recap, type RecapPhoto, type RecapResult, RECAP_FIRST_PHOTOS, allLevels, countLine, fetchRecap, fetchRecapFile, morePhotos, recapDates, recapFileUrl,
+} from "@/lib/recap";
 import type { TripFile } from "@/lib/trip";
 
 type Load = { state: "loading" } | RecapResult;
 
-const FIRST_PHOTOS = 6;
 const TILE = "aspect-[3/4] w-full border-2 border-frame bg-screen-paper object-cover";
 const AVATAR_BOX = "h-10 w-10 shrink-0 border-2 border-frame bg-screen-paper object-cover text-screen-ink";
 const peso = (centavos: number) => `₱${(centavos / 100).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
@@ -50,12 +51,12 @@ export default function RecapView({ slug }: { slug: string }) {
         {load.why === "gone" ? (
           <>
             <p className="text-sm">{"This recap isn't shared any more. Ask whoever sent it for a new link."}</p>
-            <PixelLink variant="secondary" href="/" className="self-start">Plan your own trip</PixelLink>
+            <PixelLink variant="secondary" href="/" className="self-start inline-flex items-center px-4 text-sm">Plan your own trip</PixelLink>
           </>
         ) : (
           <>
             <PixelBox as="p" tone="alertText" role="alert" className="p-3 text-sm">{"Couldn't open the recap. Check your signal and try again."}</PixelBox>
-            <PixelButton variant="secondary" className="self-start" onClick={() => { setLoad({ state: "loading" }); setTries((n) => n + 1); }}>
+            <PixelButton variant="secondary" className="self-start inline-flex items-center px-4 text-sm" onClick={() => { setLoad({ state: "loading" }); setTries((n) => n + 1); }}>
               Try again
             </PixelButton>
           </>
@@ -133,32 +134,33 @@ function RecapBody({ slug, recap }: { slug: string; recap: Recap }) {
 }
 
 function Album({ photos, caption, fetchPhoto }: { photos: RecapPhoto[]; caption: (p: RecapPhoto) => string; fetchPhoto: (id: string) => Promise<Blob | null> }) {
-  const [all, setAll] = useState(false);
-  const [shown, setShown] = useState<{ blob: Blob; label: string } | null>(null);
-  const firstNew = useRef<HTMLButtonElement>(null);
-  const list = all ? photos : photos.slice(0, FIRST_PHOTOS);
+  const [shown, setShown] = useState(RECAP_FIRST_PHOTOS); // each tile fetches its photo when it mounts: one page at a time
+  const [firstNew, setFirstNew] = useState<number | null>(null); // the first tile the last tap added
+  const [open, setOpen] = useState<{ blob: Blob; label: string } | null>(null);
+  const firstNewTile = useRef<HTMLButtonElement>(null);
+  const more = morePhotos(shown, photos.length);
 
   useEffect(() => {
-    if (all) firstNew.current?.focus(); // the first tile Show all revealed
-  }, [all]);
+    if (firstNew !== null) firstNewTile.current?.focus();
+  }, [firstNew]);
 
   return (
     <section aria-labelledby="recap-photos" className="flex flex-col gap-3">
       <SectionTitle id="recap-photos">Photos</SectionTitle>
       <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {list.map((p, i) => (
+        {photos.slice(0, shown).map((p, i) => (
           <PixelBox as="li" key={p.id} className="flex flex-col gap-2 p-2">
-            <PhotoTile photo={p} label={caption(p)} fetchPhoto={fetchPhoto} buttonRef={i === FIRST_PHOTOS ? firstNew : undefined}
-              onShow={(blob) => setShown({ blob, label: caption(p) })} />
+            <PhotoTile photo={p} label={caption(p)} fetchPhoto={fetchPhoto} buttonRef={i === firstNew ? firstNewTile : undefined}
+              onShow={(blob) => setOpen({ blob, label: caption(p) })} />
           </PixelBox>
         ))}
       </ul>
-      {!all && photos.length > FIRST_PHOTOS && (
-        <PixelButton variant="secondary" className="self-start px-4 text-sm" onClick={() => setAll(true)}>
-          {`Show all ${photos.length} photos`}
+      {more && (
+        <PixelButton variant="secondary" className="self-start inline-flex items-center px-4 text-sm" onClick={() => { setFirstNew(shown); setShown(more.next); }}>
+          {more.label}
         </PixelButton>
       )}
-      <PhotoViewer photo={shown} onClose={() => setShown(null)} logTag="tg-recap" />
+      <PhotoViewer photo={open} onClose={() => setOpen(null)} logTag="tg-recap" />
     </section>
   );
 }
