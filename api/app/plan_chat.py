@@ -31,6 +31,7 @@ from .guide import ROW_KEY
 from .limits import MANILA_TZ, RateLimiter, SpendTracker, client_ip, ip_hash
 from .llm import LLMClient, LLMConfig, LLMConfigError, LLMUnavailable, _number, make_llm_client
 from .plan_diff import ChangeLine
+from .plan_validation import BAGUIO
 from .plan_chat_prompt import SYSTEM_PROMPT, Turn, build_user_message
 from .schedule import to_minutes
 from .sessions import NOINDEX, SLUG, _session_id
@@ -208,6 +209,12 @@ class Chat:
             with db.get_conn() as conn:  # short-lived: no connection is held during a model call
                 session_id = _session_id(conn, share_slug)
                 cur = plan_edit.current(conn, session_id)
+                # TG-67: the chat knows Baguio's spots and buses only, so another city's plan gets no chat (owner, 11-20),
+                # before the base check, the context and any spend
+                city = plan_edit.guide_city(conn, cur.guide)
+                if city != BAGUIO:
+                    logger.info("plan chat refused share_slug=%s reason=not_baguio city=%s", share_slug, city)
+                    return _flat(422, "chat_not_here")
                 if (body.base.itinerary_slug, body.base.seq) != (cur.row["share_slug"], cur.seq):
                     logger.info("plan chat refused share_slug=%s reason=plan_changed base_seq=%d seq=%d", share_slug, body.base.seq, cur.seq)
                     return _flat(409, "plan_changed", itinerary_slug=cur.row["share_slug"], seq=cur.seq)

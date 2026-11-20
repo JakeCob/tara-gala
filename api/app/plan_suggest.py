@@ -25,7 +25,7 @@ from . import db, maps_link, plan_edit, trip_places  # modules, not names: trip_
 from . import guide as guides
 from .last_mile import spots_by_id
 from .limits import MANILA_TZ, RateLimiter
-from .plan_validation import RETURN_BUFFER_MINUTES
+from .plan_validation import BAGUIO, RETURN_BUFFER_MINUTES
 from .sessions import NOINDEX, _limit, _private, _session_id
 from .trip_rows import TRIP_ROWS_SQL
 
@@ -36,6 +36,9 @@ SUGGEST_PER_HOUR = 120  # per IP; a link in it also counts against trip_places.L
 SUGGEST_LIMITER = RateLimiter(SUGGEST_PER_HOUR)
 
 BAGUIO_CENTRE = (16.4120, 120.5960)  # Session Road: the distance when the lodging has no pin
+# TG-67: each city's centre (plan_validation.CITIES). Sagada's is the Municipal Hall,
+# https://www.openstreetmap.org/way/185305065 (tg-data, data/SOURCES.md "Sagada centre point")
+CITY_CENTRES = {BAGUIO: BAGUIO_CENTRE, "Sagada": (17.084373, 120.900438)}
 EARTH_KM = 6371.0
 FAR_KM = 25  # over this, the group is asked first (ux.md §4.3)
 ROAD_FACTOR = 1.4  # Baguio's winding roads
@@ -652,18 +655,20 @@ def _the_place(conn, share_slug: str, session_id: UUID, ref: PlaceRefIn, resolve
     return "link", resolved.name, (resolved.lat, resolved.lng), STAY_MIN, resolved.maps_url
 
 
-def _km_from_baguio(g: guides.Guide, spots: dict, pin) -> float | None:
+def _km_from_centre(g: guides.Guide, spots: dict, pin, city: str) -> float | None:
+    """From the lodging's pin, else the plan's city centre (TG-67). The API still calls it km_from_baguio."""
     if pin is None:
         return None
     lodge = spots.get(g.lodging.spot_id) if g.lodging and g.lodging.spot_id else None
-    return haversine_km(_pin(lodge.lat, lodge.lng) if lodge and _pin(lodge.lat, lodge.lng) else BAGUIO_CENTRE, pin)
+    centre = CITY_CENTRES.get(city, BAGUIO_CENTRE)
+    return haversine_km(_pin(lodge.lat, lodge.lng) if lodge and _pin(lodge.lat, lodge.lng) else centre, pin)
 
 
 def suggest(conn, share_slug: str, session_id: UUID, g: guides.Guide, at: AtIn, ref: PlaceRefIn,
-            resolved: maps_link.Resolved | None) -> tuple[Suggestion, dict]:
+            resolved: maps_link.Resolved | None, city: str = BAGUIO) -> tuple[Suggestion, dict]:
     """The proposal, and what the log line says about it. One read; nothing is written."""
     if at.anywhere:
-        return _anywhere(conn, share_slug, session_id, g, ref, resolved)
+        return _anywhere(conn, share_slug, session_id, g, ref, resolved, city)
     day, idx = _locate(share_slug, g, at)
     rows = day.rows
     spot_ids = {r.place.spot_id for r in rows if r.place and r.place.spot_id} | {ref.spot_id} - {None}
@@ -693,7 +698,7 @@ def suggest(conn, share_slug: str, session_id: UUID, g: guides.Guide, at: AtIn, 
         moves, ripple_notes = ripple(later, time + stay + TRAVEL_MIN)
 
     notes = [ESTIMATE_NOTE] if leg and leg["kind"] == "estimate" else [NO_LEG_NOTE] if leg is None and prev is not None else []
-    km = _km_from_baguio(g, spots, pin)
+    km = _km_from_centre(g, spots, pin, city)
     at_kind = "replace" if at.replace else "after" if at.after else "first"
     out = Suggestion(
         name=name, lat=pin[0] if pin else None, lng=pin[1] if pin else None, maps_url=link,
@@ -744,7 +749,7 @@ def _fit_days(conn, session_id: UUID, g: guides.Guide, spots: dict) -> tuple[lis
 
 
 def _anywhere(conn, share_slug: str, session_id: UUID, g: guides.Guide, ref: PlaceRefIn,
-              resolved: maps_link.Resolved | None) -> tuple[Suggestion, dict]:
+              resolved: maps_link.Resolved | None, city: str = BAGUIO) -> tuple[Suggestion, dict]:
     """Where does it fit? Every slot in the plan, ranked; the top level repeats the best (options.md §5.5)."""
     spot_ids = {r.place.spot_id for d in g.days for r in d.rows if r.place and r.place.spot_id} | {ref.spot_id} - {None}
     if g.lodging and g.lodging.spot_id:
@@ -761,7 +766,7 @@ def _anywhere(conn, share_slug: str, session_id: UUID, g: guides.Guide, ref: Pla
     today = now_min = None
     if dates and dates["start_date"] <= now.date() <= dates["return_date"]:
         today, now_min = (now.date() - dates["start_date"]).days + 1, now.hour * 60 + now.minute
-    km = _km_from_baguio(g, spots, pin)
+    km = _km_from_centre(g, spots, pin, city)
     is_far = km is not None and far(km)
     fits, counts = best_fit(days, pin, stay, name=name, far=is_far, legs_from=legs_from, blocked=_windows(trips, g),
                             picked=plan_edit.picked(conn, session_id), lodging_pin=lodging_pin, today=today, now_min=now_min)
@@ -815,12 +820,16 @@ def suggest_stop(share_slug: str, body: SuggestIn, request: Request, response: R
                 return trip_places.need_pin(e)
             raise _refuse(share_slug, e.code) from None
     with db.get_conn() as conn:
-        out, kinds = suggest(conn, share_slug, session_id, g, body.at, body.place, resolved)
+        city = plan_edit.guide_city(conn, g)  # TG-67: the far line measures from this city when the lodging has no pin
+        out, kinds = suggest(conn, share_slug, session_id, g, body.at, body.place, resolved, city)
     _private(response)
     line = "plan suggest share_slug=%s place=%s at=%s leg=%s far=%s ripple=%d"
     args = [share_slug, kinds["place"], kinds["at"], kinds["leg"], kinds["far"], kinds["ripple"]]
     if "fits" in kinds:  # where does it fit? counts only
         line += " fits=%d candidates=%d excluded=%d best_day=%s no_pin=%d bus_gone=%d"
         args += [kinds["fits"], kinds["candidates"], kinds["excluded"], kinds["best_day"] or "none", kinds["no_pin"], kinds["bus_gone"]]
+    if city != BAGUIO:  # TG-67: Baguio's line stays exactly as it was (test_trip_places pins it)
+        line += " city=%s"
+        args.append(city)
     logger.info(line, *args)
     return out
