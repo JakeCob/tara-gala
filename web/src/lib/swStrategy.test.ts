@@ -1343,3 +1343,28 @@ test("TG57-S2 the fetch handler uses timeoutFor, and SW_VERSION moved", () => {
   assert.doesNotMatch(src, /timeoutMs: NETWORK_TIMEOUT_MS/);
   assert.notEqual(tg().SW_VERSION, "2026-11-02.2");
 });
+
+// --- TG-62 GW2: the trip's Budget panel offline (plan §3 G31) --------------------------------------------------------
+
+test("GW2-SW1 G31 GET /sessions/{32hex}/budget is network-first into the data cache, like the session", () => {
+  for (const origins of [LOCAL, PROD]) {
+    const at = (path: string) => strategy(req(`${origins.api}${path}`), origins);
+    assert.deepEqual(at("/sessions/fedcba9876543210fedcba9876543210/budget"), API_FIRST, origins.api);
+    for (const look of ["/sessions/abc/budget", "/sessions/fedcba9876543210fedcba9876543210/budget/x", "/sessions/fedcba9876543210fedcba9876543210/budgets", "/sessions/FEDCBA9876543210FEDCBA9876543210/budget", "/sessions/fedcba9876543210fedcba9876543210/budget/"]) {
+      assert.deepEqual(at(look), BYPASS, `${origins.api}${look}`);
+    }
+  }
+  assert.deepEqual(strategy(req(`${API}/sessions/fedcba9876543210fedcba9876543210/budget`, { method: "POST" })), BYPASS, "only GET");
+});
+
+test("GW2-SW2 G31 offline after one load, the saved budget answers; SW_VERSION moved", async () => {
+  const cache = new Map<string, Response>();
+  const get = (network: () => Promise<Response>) =>
+    tg().networkFirst({ network, readCache: async () => cache.get("b")?.clone(), writeCache: async (res: Response) => void cache.set("b", res), timeoutMs: 1000, nowIso: () => "2026-11-07T01:00:00.000Z" });
+  const body = { state: "ok", member_count: 4, total_centavos: 1_200_000 };
+  await get(async () => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })).done;
+  const off = await get(async () => Promise.reject(new TypeError("offline"))).result;
+  assert.equal(off.source, "cache");
+  assert.deepEqual(await off.response!.json(), body);
+  assert.notEqual(tg().SW_VERSION, "2026-11-02.3");
+});
