@@ -193,3 +193,28 @@ test("T64-W9 recapLinks: off by default, read from NEXT_PUBLIC_RECAP_LINKS, and 
   assert.match(read(".env.example"), /^NEXT_PUBLIC_RECAP_LINKS=false$/m);
   assert.match(readFileSync(new URL("../../../README.md", import.meta.url), "utf8"), /\| `RECAP_LINKS` \| `NEXT_PUBLIC_RECAP_LINKS` \| `false` \|/);
 });
+
+// ---------------------------------------------------------------- ux review (ux-review-web.md)
+
+test("T64-W12 ux Must 1: a button or link that sits at the start keeps its layout, so its padding stays", () => {
+  for (const file of ["src/components/TripRecap.tsx", "src/components/RecapView.tsx"]) {
+    const src = read(file);
+    assert.ok(src, file);
+    // A primitive's className replaces its layout (classes.ts): self-start alone drops inline-flex, items-center and px-4
+    const starts = [...src.matchAll(/<Pixel(?:Button|Link)\b[^\n]*className="([^"]*\bself-start\b[^"]*)"/g)].map((m) => m[1]);
+    assert.ok(starts.length > 0, `${file}: its start-aligned controls`);
+    for (const cls of starts) {
+      for (const token of ["inline-flex", "items-center", "px-4"]) assert.ok(cls.split(" ").includes(token), `${file}: "${cls}" keeps ${token}`);
+    }
+  }
+});
+
+test("T64-W13 ux Should 2: the photo checkbox has a 44px label, the theme's accent, and greys out offline like the pills", () => {
+  const src = box();
+  const label = between(src, "<legend className=\"mb-2 text-sm font-semibold\">Photos</legend>", "</label>");
+  assert.match(label, /<label className="[^"]*\bmin-h-11\b[^"]*"/);
+  assert.match(label, /<label className="[^"]*\bitems-center\b[^"]*"/);
+  assert.match(label, /<label className="[^"]*has-\[\[aria-disabled=true\]\]:opacity-60[^"]*"/, "as PixelChoice's pills");
+  assert.match(label, /type="checkbox" className="[^"]*accent-\[var\(--primary\)\][^"]*"/, "as the wallet's checkboxes");
+});
+

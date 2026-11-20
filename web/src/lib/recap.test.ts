@@ -189,7 +189,7 @@ test("T64-W5e RecapView's words are ux.md §7's, with Rev 1's who came", () => {
   ]) {
     assert.ok(src.includes(words), words);
   }
-  assert.match(src, /Show all \$\{/, "Show all <n> photos");
+  assert.doesNotMatch(src, /Show all/, "ux review S1: paging, never everything at once (see W10)");
   assert.match(src, /`Photo: \$\{/, "a tile's name is its caption");
   assert.match(src, /href="\/buses"/);
   assert.match(src, /href="\/"/);
@@ -204,3 +204,60 @@ test("T64-W5f the recap page's own log line is recap.ts's only; RecapView logs n
   assert.ok(src, "src/components/RecapView.tsx exists");
   assert.doesNotMatch(src, /console\.\w+\([^)]*\b(name|slug)\b/);
 });
+
+// ---------------------------------------------------------------- the album pages (ux review S1, tg-review S1)
+
+test("T64-W10 morePhotos: the first 8, then 24 more a tap, with the real number near the end", async () => {
+  const { RECAP_FIRST_PHOTOS, RECAP_PHOTO_PAGE, morePhotos } = await lib();
+  assert.deepEqual([RECAP_FIRST_PHOTOS, RECAP_PHOTO_PAGE], [8, 24]);
+  assert.deepEqual(morePhotos(8, 300), { next: 32, label: "Show 24 more photos" });
+  assert.deepEqual(morePhotos(8, 30), { next: 30, label: "Show 22 more photos" });
+  assert.deepEqual(morePhotos(296, 300), { next: 300, label: "Show 4 more photos" });
+  assert.deepEqual(morePhotos(299, 300), { next: 300, label: "Show 1 more photo" });
+  assert.equal(morePhotos(300, 300), null, "every photo shows: no button, no line");
+  assert.equal(morePhotos(5, 5), null);
+  // A 300-photo album, the cap: the page shows 8, and no tap ever adds more than 24 tiles, so no more than 24 GETs
+  let shown = Math.min(RECAP_FIRST_PHOTOS, 300);
+  let taps = 0;
+  for (let more = morePhotos(shown, 300); more; more = morePhotos(shown, 300)) {
+    assert.ok(more.next - shown > 0 && more.next - shown <= 24, `tap ${taps + 1}: ${shown} to ${more.next}`);
+    shown = more.next;
+    taps++;
+  }
+  assert.deepEqual([shown, taps], [300, 13]);
+});
+
+test("T64-W10b RecapView pages its album: tiles for the shown count only, the next page on a tap, focus on the first new tile", () => {
+  const src = code(view());
+  assert.ok(src, "src/components/RecapView.tsx exists");
+  const album = src.slice(src.indexOf("function Album("));
+  assert.match(album, /useState\(RECAP_FIRST_PHOTOS\)/, "8 to start");
+  assert.match(album, /photos\.slice\(0, shown\)\.map\(/, "a tile, and its one GET, only for what shows");
+  assert.match(album, /const more = morePhotos\(shown, photos\.length\);/);
+  assert.match(album, /\{more && \(/, "no button once every photo shows");
+  assert.match(album, /setShown\(more\.next\)/);
+  assert.match(album, /\{more\.label\}/);
+  assert.doesNotMatch(album, /setAll|photos\.length > FIRST_PHOTOS/, "never everything at once");
+});
+
+test("T64-W11 the recap keeps at most 60 pictures in memory, the newest", async () => {
+  const { RECAP_FILES_IN_MEMORY, fetchRecapFile, recapFileUrl, recapFilesInMemory } = await lib();
+  assert.equal(RECAP_FILES_IN_MEMORY, 60, "fetchFile's FILES_IN_MEMORY");
+  let gets = 0;
+  globalThis.fetch = (async () => {
+    gets++;
+    return new Response(new Blob(["x"], { type: "image/jpeg" }), { status: 200 });
+  }) as typeof fetch;
+  const urls = Array.from({ length: 200 }, (_, i) => recapFileUrl("f".repeat(32), "photo", `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`));
+  for (const url of urls) {
+    await fetchRecapFile(url);
+    assert.ok(recapFilesInMemory() <= 60, `${recapFilesInMemory()} kept`);
+  }
+  assert.equal(gets, 200);
+  await fetchRecapFile(urls[199]);
+  assert.equal(gets, 200, "the newest is still kept");
+  await fetchRecapFile(urls[0]);
+  assert.equal(gets, 201, "the oldest was let go, and is fetched again");
+  assert.ok(recapFilesInMemory() <= 60);
+});
+
