@@ -1,7 +1,8 @@
 // TG-61 W11: the plan editor's wiring, read from the source in the style of guide.test.ts. Run with `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { readdirSync } from "node:fs"; // TG-67 W14
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
