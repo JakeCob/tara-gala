@@ -193,6 +193,8 @@ export default function TripView({ slug }: { slug: string }) {
   const mine = useRef(new Map<number, number>()); // this phone's own versions, and when: Undo asks first otherwise
   const [spots, setSpots] = useState<SpotLite[] | null>(null);
   const spotsAsked = useRef(false);
+  // TG-64 review M2: one function for the page's life, so the map's thumbnails never fetch again on a render or a poll
+  const fetchPhoto = useCallback((id: string) => fetchFile(slug, id), [slug]);
   const wantSpots = useCallback(() => {
     if (spotsAsked.current) return;
     spotsAsked.current = true;
@@ -481,7 +483,7 @@ export default function TripView({ slug }: { slug: string }) {
           copyLine={copyLine(!!shown?.edited, trip.plan_edits)}
           photos={{
             files: trip.files,
-            fetch: (id) => fetchFile(slug, id),
+            fetch: fetchPhoto,
             onAdd: async (rowKey, picked) => {
               let added = 0;
               let skipped = 0;

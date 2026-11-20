@@ -746,14 +746,19 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
 /** One photo's thumbnail, through the map's own fetch: the trip's file route, or the recap's */
 function PhotoThumb({ fetch, file }: { fetch: Photos["fetch"]; file: TripFile }) {
   const [got, setGot] = useState<{ id: string; blob: Blob | null } | null>(null);
+  // review M2: by id only, as useFile was. A caller's new function (an inline fetch, a poll's render) never fetches again:
+  // past 60 thumbs fetchFile's cache can't hold them all, so every render would download the whole album
+  const get = useRef(fetch);
+  useEffect(() => {
+    get.current = fetch;
+  });
   useEffect(() => {
     let live = true;
-    // The same answer keeps the same state: a parent's inline fetch is new on every render, so this runs often
-    fetch(file.id).then((blob) => live && setGot((g) => (g?.id === file.id && g.blob === blob ? g : { id: file.id, blob })));
+    get.current(file.id).then((blob) => live && setGot({ id: file.id, blob }));
     return () => {
       live = false;
     };
-  }, [fetch, file.id]);
+  }, [file.id]);
   const blob = got?.id === file.id ? got.blob : null;
   return blob ? <BlobImage blob={blob} alt="" width={72} height={96} className={THUMB_BOX} /> : <span aria-hidden="true" className={THUMB_BOX} />;
 }

@@ -82,11 +82,25 @@ test("T64-W6d the level dialog in recap mode: Done and its time, its photos, Clo
 test("T64-W7 the trip page passes fetch into the map's photos, so the trip's photos still load", () => {
   const src = tripView();
   const photos = between(src, "photos={{", "busy={");
-  assert.match(photos, /fetch: \(id\) => fetchFile\(slug, id\),/);
+  assert.match(photos, /fetch: fetchPhoto,/, "one memoized function: see W7b");
   assert.doesNotMatch(photos, /^\s+slug,$/m, "no slug in Photos");
   assert.match(photos, /onAdd: async \(rowKey, picked\) => \{/, "the trip keeps Add");
   assert.match(photos, /onDelete: \(file\) => void write\("photo-delete"/, "and Delete");
   assert.doesNotMatch(src, /<LevelMap[^>]*\brecap\b/, "the trip page's map is never in recap mode");
+});
+
+test("T64-W7b review M2: a render or a poll never fetches the album's thumbnails again", () => {
+  // fetchFile keeps 60 pictures. If each thumbnail fetched again whenever its fetch prop changed, an inline fetch (new on
+  // every render, every 30 s poll) would download a 61+ photo album in full each time. So the trip page passes one
+  // memoized function, and the thumbnail's fetch runs by file id only, whatever function it's handed later.
+  const view = tripView();
+  assert.match(view, /const fetchPhoto = useCallback\(\(id: string\) => fetchFile\(slug, id\), \[slug\]\);/);
+  assert.doesNotMatch(between(view, "photos={{", "busy={"), /fetch: \(/, "never an inline function");
+  const thumb = map().slice(map().indexOf("function PhotoThumb("));
+  assert.ok(thumb.length > 0, "PhotoThumb exists");
+  const fetchEffect = thumb.slice(thumb.indexOf("(file.id).then("));
+  assert.match(fetchEffect, /^\(file\.id\)\.then\([^]*?\}, \[file\.id\]\);/, "the fetch effect depends on the file's id only");
+  assert.doesNotMatch(thumb, /\[fetch, file\.id\]|\[file\.id, fetch\]/);
 });
 
 // ---------------------------------------------------------------- the trip page's Trip recap box (W8)
