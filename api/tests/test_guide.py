@@ -276,3 +276,63 @@ def test_the_marks_migration_reruns(dsn):
         conn.execute(sql)
         assert conn.execute("select relrowsecurity from pg_class where relname = 'session_marks'").fetchone()[0]
         assert conn.execute("select count(*) from pg_policies where tablename = 'session_marks'").fetchone()[0] == 0
+
+
+# ---------------------------------------------------------------- TG-67 S2: a curated Sagada file (T67-G1 to G3)
+
+from fixtures import sagada_made_up as sg  # noqa: E402
+from premade_data import load_rows  # noqa: E402
+
+
+@pytest.fixture()
+def sagada_rows(dsn, tmp_path):
+    """Made-up Baguio rows (premade_data) and made-up Sagada rows."""
+    load_rows(dsn, tmp_path / "csv")
+    sg.load(dsn, tmp_path / "sg")
+    return dsn
+
+
+def itinerary_count(dsn) -> int:
+    import psycopg
+    with psycopg.connect(dsn) as conn:
+        return conn.execute("select count(*) from itineraries").fetchone()[0]
+
+
+def test_t67_g1_a_curated_sagada_file_loads_with_its_city(sagada_rows, tmp_path, capsys, client):  # B10
+    path = sg.write_file(tmp_path)
+    slug = "test-sagada-2026-11-25"
+    assert load_itinerary.run(sagada_rows, path, dry_run=True) == 0, capsys.readouterr().err
+    assert capsys.readouterr().out.strip().splitlines()[-1] == f"Dry run OK, nothing saved. Would load {slug}: 3 days, 4 rows, 1 to-dos city=Sagada"
+    assert itinerary_count(sagada_rows) == 0
+    assert load_itinerary.run(sagada_rows, path, dry_run=False) == 0, capsys.readouterr().err
+    assert capsys.readouterr().out.strip().splitlines()[-1] == f"Loaded {slug}: 3 days, 4 rows, 1 to-dos city=Sagada"
+    assert load_itinerary.run(sagada_rows, path, dry_run=False) == 0, "a re-run updates in place"
+    import psycopg
+    with psycopg.connect(sagada_rows) as conn:
+        assert conn.execute("select model, count(*) from itineraries group by model").fetchall() == [("curated", 1)]
+    body = client.get(f"/itineraries/{slug}").json()
+    assert (body["city"], body["issues"]) == ("Sagada", [])
+
+
+@pytest.mark.parametrize("table, trip, expect", [
+    ("getting_there", {"operator": "victory-liner", "origin": "vl-cubao", "departure": "07:00", "date": "2026-11-25"},
+     "guide.getting_there.buses[0]: this bus doesn't go to Sagada"),
+    ("getting_home", {"operator": "victory-liner", "origin": "vl-baguio", "departure": "21:00", "date": "2026-11-28"},
+     "guide.getting_home.buses[0]: this bus doesn't leave from Sagada"),
+    # going home on a bus that goes *to* Sagada: only the origin check catches it (mutant M-G2)
+    ("getting_home", {"operator": "test-sagada-lines", "origin": "test-sg-cubao", "departure": "22:30", "date": "2026-11-25"},
+     "guide.getting_home.buses[0]: this bus doesn't leave from Sagada"),
+])
+def test_t67_g2_a_guide_bus_must_match_the_plans_city(sagada_rows, tmp_path, capsys, table, trip, expect):  # B11
+    g = sg.guide()
+    g[table]["buses"][0]["trip"] = trip
+    assert load_itinerary.run(sagada_rows, sg.write_file(tmp_path, g=g), dry_run=False) == 1
+    err = capsys.readouterr().err
+    assert expect in err, err
+    assert itinerary_count(sagada_rows) == 0, "nothing saved"
+
+
+def test_t67_g3_the_owners_baguio_file_still_dry_runs_as_baguio(barkada, capsys):  # B8
+    capsys.readouterr()
+    assert load_itinerary.run(barkada, ITINERARY, dry_run=True) == 0
+    assert capsys.readouterr().out.strip().splitlines()[-1] == f"Dry run OK, nothing saved. Would load {SLUG}: 3 days, 26 rows, 8 to-dos city=Baguio"

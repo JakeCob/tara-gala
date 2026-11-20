@@ -617,3 +617,36 @@ def test_get_flags_only_in_flags_and_main():
                  and "get_flags" in _names(ast.parse(p.read_text(encoding="utf-8")))}
     assert offenders == set()
     assert (APP / "planner.py").exists()
+
+
+# --- TG-67 S2: the live planner stays Baguio (T67-P1) ---------------------------------------------
+
+def test_t67_p1_a_reply_naming_sagada_trips_is_refused(api, data, dsn, tmp_path, caplog):  # B6
+    """Made-up Sagada trips that run on the request's dates; the planner validates as Baguio, so a reply that names
+    them is wrong_direction on every try and nothing is saved, even though the plan would pass as a Sagada one."""
+    from fixtures import sagada_made_up as sg
+    from premade_data import db_ids
+
+    sg.load(dsn, tmp_path / "sg")
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute("update trips set valid_from = null, valid_to = null where source_url = %s", (sg.SRC,))
+    trips, spots, legs = db_ids(dsn)
+    plan = {
+        "outbound": {"trip_id": str(trips[sg.OUT]), "date": D.isoformat()},
+        "return": {"trip_id": str(trips[sg.RET]), "date": RD.isoformat()},
+        "days": [
+            {"day": 1, "stops": [
+                {"spot_id": str(spots[s]), "arrive": a, "leave": lv, "leg": {"last_mile_route_id": str(legs[leg])}}
+                for s, a, lv, leg in sg.DAYS[0][1]
+            ]},
+            {"day": 2, "stops": []},
+        ],
+    }
+    fake = FakeLLM(ok(plan), ok(plan), ok(plan))
+    use(api, fake, PLANNER_MAX_ATTEMPTS="3")
+    with caplog.at_level(logging.INFO):
+        r = post(api)
+    assert_error(r, 502, "no_valid_plan")
+    assert rows(dsn) == []
+    failed = [x.getMessage() for x in caplog.records if x.getMessage().startswith("planner failed")]
+    assert len(failed) == 1 and "wrong_direction" in failed[0], failed

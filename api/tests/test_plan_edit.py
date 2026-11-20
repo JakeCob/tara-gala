@@ -894,3 +894,118 @@ def test_undo_to_a_version_whose_spot_is_gone_is_refused(t, client, barkada):  #
     r = undo(client, t)
     assert (r.status_code, r.json()["detail"]) == (422, "cannot_undo"), r.text
     assert version_count(barkada) == n and plan_of(client, t)["guide"] == it["guide"], "nothing written"
+
+
+# ---------------------------------------------------------------- TG-67 S2: edits on a Sagada plan (T67-E1 to E5)
+
+from fixtures import sagada_made_up as sg  # noqa: E402
+from premade_data import db_ids, load_rows  # noqa: E402
+
+SG_SESSION = {"name": "E2E Sagada", "start_date": "2026-11-25", "return_date": "2026-11-29"}
+
+
+@pytest.fixture()
+def sg_trip(dsn, tmp_path, editing, monkeypatch):
+    """A made-up trip on a made-up curated Sagada plan, with Baguio's made-up rows loaded too. Editing on."""
+    from app import sessions
+    from app.limits import RateLimiter
+
+    monkeypatch.setattr(sessions, "WRITE_LIMITER", RateLimiter(sessions.WRITES_PER_HOUR))
+    monkeypatch.setattr(sessions, "CREATE_LIMITER", RateLimiter(sessions.CREATE_PER_HOUR))
+    load_rows(dsn, tmp_path / "csv")
+    sg.load(dsn, tmp_path / "sg")
+    plan_slug = sg.insert_curated(dsn)
+    slug = editing.post("/sessions", json=SG_SESSION).json()["share_slug"]
+    assert editing.put(f"/sessions/{slug}/itinerary", json={"share_slug": plan_slug}).status_code == 200
+    return slug
+
+
+def swap_bus(client, slug, table: str, i: int, trip_id):
+    g = stored(plan_of(client, slug)["guide"])
+    g[table]["buses"][i]["trip_id"] = str(trip_id)
+    return save(client, slug, g)
+
+
+def test_t67_e1_a_sagada_trip_swaps_to_another_sagada_bus_only(sg_trip, client, dsn):  # B12
+    trips, _, _ = db_ids(dsn)
+    r = swap_bus(client, sg_trip, "getting_there", 0, trips[sg.OUT_EARLY])
+    assert r.status_code == 200, r.text
+    assert r.json()["itinerary"]["city"] == "Sagada"
+    assert row(r.json()["itinerary"]["guide"], "d1-01")["time"] == "21:00", "the booked bus sets its row's time"
+    r = swap_bus(client, sg_trip, "getting_there", 0, trips[("vl-cubao", "07:00", "regular_aircon")])
+    assert r.status_code == 422 and r.json()["detail"] == "wrong_direction", r.text
+
+
+def test_t67_e2_a_baguio_trip_still_refuses_a_sagada_bus(t, client, barkada, tmp_path):  # B12
+    sg.load(barkada, tmp_path / "sg")
+    trips, _, _ = db_ids(barkada)
+    it = plan_of(client, t)
+    unbooked = next(i for i, b in enumerate(it["guide"]["getting_there"]["buses"]) if not b["booked"])
+    r = swap_bus(client, t, "getting_there", unbooked, trips[sg.OUT])
+    assert r.status_code == 422 and "wrong_direction" in r.json()["codes"], r.text
+
+
+def test_t67_e3_the_city_comes_from_the_base_not_the_new_guide(t, client, barkada, tmp_path):  # §3
+    sg.load(barkada, tmp_path / "sg")
+    trips, _, _ = db_ids(barkada)
+    g = stored(plan_of(client, t)["guide"])
+    g["getting_there"]["buses"][0]["trip_id"] = str(trips[sg.OUT])
+    g["getting_home"]["buses"][0]["trip_id"] = str(trips[sg.RET])
+    r = save(client, t, g)
+    assert r.status_code == 422, r.text
+    assert "wrong_direction" in r.json()["codes"], "both Sagada buses are wrong for a Baguio base"
+
+
+def test_t67_e4_the_save_log_line_carries_the_city(sg_trip, t, client, caplog):  # §7
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    edit(client, sg_trip, retime("d2-01", "10:40"))
+    edit(client, t, retime("d2-08", "15:30"))
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan save share_slug=")]
+    assert len(lines) == 2
+    assert lines[0].startswith(f"plan save share_slug={sg_trip} ") and lines[0].endswith(" city=Sagada"), lines[0]
+    assert lines[1].startswith(f"plan save share_slug={t} ") and lines[1].endswith(" city=Baguio"), lines[1]
+    assert undo(client, sg_trip).status_code == 200
+    undos = [r.getMessage() for r in caplog.records if r.getMessage().startswith(f"plan undo share_slug={sg_trip} ")]
+    assert len(undos) == 1 and undos[0].endswith(" city=Sagada"), undos
+
+
+def test_t67_e5_every_hand_edit_works_on_a_sagada_plan(sg_trip, client):  # §3 table
+    def note(g):
+        row(g, "d2-01")["note"] = "Keep the receipt (made up)"
+
+    def plan_text(g):
+        row(g, "d2-02")["plan"] = "Drop the bags, then rest (made up)"
+
+    def todo(g):
+        g["todo"].append({"key": None, "text": "Flashlight (made up)"})
+
+    def budget(g):
+        g["budget"]["rows"].append({"key": None, "item": "Guides (made up)", "estimate": "₱800", "category": "activities"})
+
+    def pick(g):
+        next(d for d in g["days"] if d["pick"])["pick"]["options"][1]["label"] = "Lodge cafe, upstairs (made up)"
+
+    def remove(g):
+        for d in g["days"]:
+            d["rows"] = [r for r in d["rows"] if r["key"] != "d2-02"]
+
+    for change in (retime("d2-01", "10:45"), note, plan_text, todo, budget, pick, remove):
+        saved = edit(client, sg_trip, change)  # asserts 200
+        assert saved["itinerary"]["city"] == "Sagada" and saved["itinerary"]["issues"] == []
+    r = undo(client, sg_trip)
+    assert r.status_code == 200, r.text
+    assert any(x["key"] == "d2-02" for d in r.json()["itinerary"]["guide"]["days"] for x in d["rows"])
+
+
+def test_t67_e6_guide_city_is_baguio_with_no_guide_or_no_buses_on_file(sg_trip, client, dsn):  # review N6
+    from app import plan_edit
+
+    g = guides.parse_guide(stored(plan_of(client, sg_trip)["guide"]))[0]
+    with psycopg.connect(dsn, row_factory=dict_row) as conn:
+        assert plan_edit.guide_city(conn, g) == "Sagada"
+        assert plan_edit.guide_city(conn, None) == "Baguio"
+        conn.execute("delete from trips where source_url = %s", (sg.SRC,))
+        assert plan_edit.guide_city(conn, g) == "Baguio", "no bus on file"
+        empty = g.model_copy(deep=True)
+        empty.getting_there.buses, empty.getting_home.buses = [], []
+        assert plan_edit.guide_city(conn, empty) == "Baguio", "no buses at all"

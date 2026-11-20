@@ -18,7 +18,7 @@ from . import db, schedule
 from . import guide as guides
 from .last_mile import LastMileLeg, Spot, legs_by_id, spots_by_id
 from .models import Trip
-from .plan_validation import MODEL_PREMADE, MODEL_TRIP_EDIT, BusLeg, PlanError, check_plan, load_refs, parse_plan
+from .plan_validation import BAGUIO, MODEL_PREMADE, MODEL_TRIP_EDIT, BusLeg, PlanError, check_plan, load_refs, parse_plan, plan_city
 from .trip_rows import TRIP_ROWS_SQL, trip_from_row
 
 router = APIRouter(tags=["itineraries"])
@@ -83,6 +83,7 @@ class ItineraryOut(BaseModel):
     edited: bool = False  # TG-61: a trip's own edited copy (model trip-edit)
     seq: int | None = None  # TG-61: the copy's version, read in the same statement as its plan; None for a shared plan
     changed_at: datetime | None = None  # TG-61: when that version was made, from the same statement; None for a shared plan
+    city: str = BAGUIO  # TG-67: the plan's city (plan_validation.plan_city), from its buses
 
 
 # TG-61 (review M2): seq comes from the same statement as plan, so a save between two reads can't pair them. owner is
@@ -147,9 +148,10 @@ def get_itinerary(
     response.headers.update(NOINDEX)
     warnings = sum(1 for t in ((out.guide.getting_there, out.guide.getting_home) if out.guide else ()) for b in t.buses if b.warning)
     logger.info(
-        "itinerary get share_slug=%s premade=%s days=%d stops=%d issues=%d codes=%s guide=%s edited=%s seq=%s warnings=%d",
+        "itinerary get share_slug=%s premade=%s days=%d stops=%d issues=%d codes=%s guide=%s edited=%s seq=%s warnings=%d city=%s",
         share_slug, out.premade, len(out.days), sum(len(d.stops) for d in out.days), len(out.issues),
         ",".join(sorted({i.code for i in out.issues})) or "-", "yes" if out.guide else "no", out.edited, out.seq, warnings,
+        out.city,
     )
     return out
 
@@ -180,7 +182,12 @@ def build_out(conn, row) -> ItineraryOut:
     if plan is None:
         logger.error("itinerary unreadable share_slug=%s codes=%s", share_slug, _codes(errors))
         raise HTTPException(500, "Itinerary is unreadable")
-    errors = check_plan(plan, load_refs(conn, plan), trip_date=row["trip_date"], return_date=row["return_date"])
+    refs = load_refs(conn, plan)
+    out_ref, ret_ref = refs.trips.get(plan.outbound.trip_id), refs.trips.get(plan.return_.trip_id)
+    city = plan_city(out_ref, ret_ref)  # TG-67: what the plan's buses say, so a Baguio plan is checked as before
+    if out_ref is None and ret_ref is None:
+        logger.warning("plan city fallback share_slug=%s", share_slug)
+    errors = check_plan(plan, refs, trip_date=row["trip_date"], return_date=row["return_date"], city=city)
     edited = row["model"] == MODEL_TRIP_EDIT
     if edited:  # TG-61: a copy's bus warnings (BusRowOut.warning) take the place of the core's bus issues
         errors = [e for e in errors if not e.path.startswith(("outbound", "return"))]
@@ -234,4 +241,5 @@ def build_out(conn, row) -> ItineraryOut:
         edited=edited,
         seq=row["seq"] if edited else None,
         changed_at=row["changed_at"] if edited else None,
+        city=city,
     )

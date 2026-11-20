@@ -28,7 +28,8 @@ NOT_FOUND = b'{"detail":"Itinerary not found"}'
 TOP_FIELDS = {
     "share_slug", "premade", "trip_date", "return_date", "party", "budget_php", "vibe", "created_at",
     "outbound", "return", "days", "plan", "issues", "guide",  # TG-52: None unless the itinerary has a guide
-    "edited", "seq", "changed_at"}  # TG-61: a trip's own copy, its version, and when that was made
+    "edited", "seq", "changed_at",  # TG-61: a trip's own copy, its version, and when that was made
+    "city"}  # TG-67: the plan's city
 OUT = ("vl-cubao", "07:00", "regular_aircon")
 NIGHT = ("vl-cubao", "22:00", "regular_aircon")
 NO_MINUTES = ("vl-cubao", "09:00", "deluxe")
@@ -465,7 +466,7 @@ def test_logs_never_carry_party_budget_or_plan(client, planner, caplog):
     caplog.set_level(logging.DEBUG)
     get(client, slug)
     lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.getMessage().startswith("itinerary ")]
-    assert lines == [f"itinerary get share_slug={slug} premade=False days=3 stops=6 issues=0 codes=- guide=no edited=False seq=None warnings=0"]
+    assert lines == [f"itinerary get share_slug={slug} premade=False days=3 stops=6 issues=0 codes=- guide=no edited=False seq=None warnings=0 city=Baguio"]
     first_spot = plan["days"][0]["stops"][0]["spot_id"]
     for rec in caplog.records:
         msg = rec.getMessage()
@@ -565,3 +566,84 @@ def test_readme_lists_the_endpoint():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section5 = text.split("## 5.", 1)[1].split("## 6.", 1)[0]
     assert "GET /itineraries/{share_slug}" in section5
+
+
+# --- TG-67 S2: the plan's city on the share read (test-plan.md §4, T67-I1 to I4) ---------------------
+
+from fixtures import sagada_made_up as sg  # noqa: E402
+
+
+@pytest.fixture()
+def sagada(rows, tmp_path):
+    """Baguio's made-up rows, the made-up Sagada rows, and a curated Sagada plan with its guide."""
+    sg.load(rows, tmp_path / "sg")
+    return rows, sg.insert_curated(rows)
+
+
+def test_t67_i1_every_baguio_itinerary_says_baguio(make_client, planner, tmp_path, caplog):  # B8
+    dsn, slug, _ = planner
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    assert load_premade.run(dsn, write_premade(tmp_path, [chill_entry()]), dry_run=False, prune=False) == 0
+    trips, spots, legs = db_ids(dsn)
+    night = insert_row(dsn, build_plan(trips[NIGHT], THU, trips[RET], SUN, NIGHT_DAYS, spots, legs), trip_date=THU)
+    with make_client() as client:
+        for s in (slug, "premade-test-chill", night):
+            body = get(client, s).json()
+            assert body["city"] == "Baguio", s
+            assert set(body) == TOP_FIELDS
+    assert not [r for r in caplog.records if r.getMessage().startswith("plan city fallback")], "Baguio reads stay quiet"
+
+
+def test_t67_i2_the_city_survives_a_missing_bus_and_falls_back_with_a_warning(client, sagada, caplog):  # B9
+    dsn, slug = sagada
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+
+    def fallbacks():
+        return [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan city fallback")]
+
+    plan = get(client, slug).json()["plan"]
+    assert fallbacks() == [], "no fallback line on a normal read"
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute("delete from trips where id = %s", (plan["outbound"]["trip_id"],))
+    body = get(client, slug).json()
+    assert body["city"] == "Sagada", "from the return trip's origin"
+    assert ("unknown_trip", "outbound.trip_id") in found(body)
+    assert fallbacks() == [], "no fallback line while one bus is still on file"
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute("delete from trips where id = %s", (plan["return"]["trip_id"],))
+    caplog.clear()
+    body = get(client, slug).json()
+    assert body["city"] == "Baguio"
+    warnings = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.levelno == logging.WARNING]
+    assert warnings.count(f"plan city fallback share_slug={slug}") == 1
+
+
+def test_t67_i3_a_sagada_plan_reads_clean_with_its_buses_from_trips(client, sagada):  # B10
+    dsn, slug = sagada
+    r = get(client, slug)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["city"] == "Sagada"
+    assert body["issues"] == []
+    assert [d["date"] for d in body["days"]] == ["2026-11-26", "2026-11-27", "2026-11-28"]
+    g = body["guide"]
+    there, home = g["getting_there"]["buses"][0]["trip"], g["getting_home"]["buses"][0]["trip"]
+    assert (there["departure_time"], home["departure_time"]) == ("22:30", "14:30")
+    for t in (there, home):
+        assert t["fare_php"] == 1232 and t["last_verified_at"] and t["source_url"] == sg.SRC and t["confirm_note"]
+    with psycopg.connect(dsn, autocommit=True) as conn:  # the time is the trip row's, never the file's
+        conn.execute("update trips set departure_time = '22:15' where id = %s", (g["getting_there"]["buses"][0]["trip_id"],))
+    again = get(client, slug).json()
+    assert again["guide"]["getting_there"]["buses"][0]["trip"]["departure_time"] == "22:15"
+    assert again["issues"] == [] and again["city"] == "Sagada"
+
+
+def test_t67_i4_the_get_log_line_carries_the_city(client, sagada, caplog):  # §7
+    dsn, slug = sagada
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    get(client, slug)
+    lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.getMessage().startswith("itinerary get ")]
+    assert len(lines) == 1 and lines[0].endswith(" city=Sagada"), lines
+    assert lines[0] == f"itinerary get share_slug={slug} premade=False days=3 stops=2 issues=0 codes=- guide=yes edited=False seq=None warnings=0 city=Sagada"
+    for bad in ("Test SG", "example.test", "made up"):
+        assert bad not in lines[0]

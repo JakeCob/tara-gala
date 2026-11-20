@@ -28,6 +28,8 @@ ERROR_CODES = frozenset({
 })
 RETURN_BUFFER_MINUTES = 30  # last stop must leave this long before the return bus departs
 BAGUIO = "Baguio"
+# TG-67: the cities a plan can be for. Keep in step with data/load_data.py CITIES and web/src/lib/itinerary.ts DESTINATIONS.
+CITIES = ("Baguio", "Sagada")
 MODEL_PREMADE = "premade"  # itineraries.model for hand-made plans; here so the loader needs no FastAPI
 MODEL_TRIP_EDIT = "trip-edit"  # TG-61: a trip's own edited copy of its plan; the nightly loaders never touch it
 
@@ -87,6 +89,7 @@ class PlanError:
 class ValidationResult:
     plan: Plan | None  # None only when the shape is invalid
     errors: list[PlanError]
+    city: str = BAGUIO  # TG-67: the city the plan was checked for
 
     @property
     def ok(self) -> bool:
@@ -237,9 +240,19 @@ class _Errors:
         return [e for _, e in sorted(self._items, key=lambda item: item[0])]
 
 
-def trip_problems(trip: TripRef | None, d: Date, direction: Literal["outbound", "return"]) -> list[str]:
+def plan_city(outbound: TripRef | None, ret: TripRef | None = None) -> str:
+    """TG-67: the city a plan is for: where its outbound bus goes, else where its return bus leaves from, when that is
+    one of CITIES; otherwise Baguio. Every Baguio plan gets Baguio, so its checks are what they were."""
+    if outbound is not None and outbound.destination_city in CITIES:
+        return outbound.destination_city
+    if ret is not None and ret.origin_city in CITIES:
+        return ret.origin_city
+    return BAGUIO
+
+
+def trip_problems(trip: TripRef | None, d: Date, direction: Literal["outbound", "return"], city: str = BAGUIO) -> list[str]:
     """The codes for a bus that can't be this plan's `direction` bus on date `d`, in check order. TG-61's plan edits
-    use these too (plan_edit.check), for a swapped bus."""
+    use these too (plan_edit.check), for a swapped bus. `city` is the plan's city (TG-67)."""
     if trip is None:
         return ["unknown_trip"]
     codes = []
@@ -247,27 +260,28 @@ def trip_problems(trip: TripRef | None, d: Date, direction: Literal["outbound", 
         codes.append("trip_inactive")
     if not schedule.runs_on(trip.days_of_week, trip.valid_from, trip.valid_to, d):
         codes.append("trip_not_running")
-    # Every non-Baguio terminal in the seed is in Metro Manila; this avoids importing main's city list.
+    # Every non-destination terminal in the data is in Metro Manila; this avoids importing main's city list.
     if direction == "outbound":
-        right_way = trip.destination_city == BAGUIO != trip.origin_city
+        right_way = trip.destination_city == city != trip.origin_city
     else:
-        right_way = trip.origin_city == BAGUIO != trip.destination_city
+        right_way = trip.origin_city == city != trip.destination_city
     if not right_way:
         codes.append("wrong_direction")
     return codes
 
 
-def _check_trip(errors: _Errors, name: str, leg: BusLeg, trip: TripRef | None, expected_date: Date | None) -> None:
+def _check_trip(errors: _Errors, name: str, leg: BusLeg, trip: TripRef | None, expected_date: Date | None,
+                city: str = BAGUIO) -> None:
     position = _Errors.OUTBOUND if name == "outbound" else _Errors.RETURN
     path = f"{name}.trip_id"
-    want = "go to Baguio" if name == "outbound" else "leave from Baguio"
+    want = f"go to {city}" if name == "outbound" else f"leave from {city}"
     messages = {
         "unknown_trip": f"{name} trip {leg.trip_id} does not exist",
         "trip_inactive": f"{name} trip {leg.trip_id} is no longer active",
         "trip_not_running": f"{name} trip {leg.trip_id} does not run on {leg.date}",
         "wrong_direction": f"the {name} trip must {want}",
     }
-    for code in trip_problems(trip, leg.date, name):
+    for code in trip_problems(trip, leg.date, name, city):
         errors.add(position, code, path, messages[code])
     if trip is None:
         return
@@ -275,15 +289,18 @@ def _check_trip(errors: _Errors, name: str, leg: BusLeg, trip: TripRef | None, e
         errors.add(position, "wrong_date", f"{name}.date", f"the {name} date must be {expected_date}, not {leg.date}")
 
 
-def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_date: Date | None = None) -> list[PlanError]:
-    """Every problem with the plan against refs, sorted by plan position, then check order."""
+def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_date: Date | None = None,
+               city: str | None = None) -> list[PlanError]:
+    """Every problem with the plan against refs, sorted by plan position, then check order. `city` is the city the
+    plan must be for (the planner passes Baguio); None takes the plan's own (plan_city, TG-67)."""
     errors = _Errors()
     outbound = refs.trips.get(plan.outbound.trip_id)
     ret = refs.trips.get(plan.return_.trip_id)
+    city = city or plan_city(outbound, ret)
 
     # 1. Trips
-    _check_trip(errors, "outbound", plan.outbound, outbound, trip_date)
-    _check_trip(errors, "return", plan.return_, ret, return_date)
+    _check_trip(errors, "outbound", plan.outbound, outbound, trip_date, city)
+    _check_trip(errors, "return", plan.return_, ret, return_date, city)
     if plan.return_.date < plan.outbound.date:
         errors.add(_Errors.RETURN, "dates_out_of_order", "return.date",
                    f"the return date {plan.return_.date} is before the outbound date {plan.outbound.date}")
@@ -329,7 +346,7 @@ def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_
 
     # 5. Continuity: the party starts at the arrival terminal and is wherever the last stop was,
     # across days, so day 2 starts at the lodging if day 1 ended there. The return bus may leave
-    # from a different Baguio terminal than the one they arrived at; that's allowed on purpose.
+    # from a different terminal in the city than the one they arrived at; that's allowed on purpose.
     position: Place | None = ("terminal", outbound.destination_terminal_id) if outbound is not None else None
     for di, si, s in numbered:
         pos, path, label = where(di, si)
@@ -414,13 +431,15 @@ def check_plan(plan: Plan, refs: Refs, *, trip_date: Date | None = None, return_
 
 
 def validate_plan(conn, raw: Plan | Mapping[str, Any] | str | bytes, *,
-                  trip_date: Date | None = None, return_date: Date | None = None) -> ValidationResult:
-    """Parse, load the referenced rows, check. Never raises for bad input; DB errors propagate."""
+                  trip_date: Date | None = None, return_date: Date | None = None, city: str | None = None) -> ValidationResult:
+    """Parse, load the referenced rows, check. Never raises for bad input; DB errors propagate. `city`: see check_plan."""
     if isinstance(raw, Plan):
         plan, errors = raw, []
     else:
         plan, errors = parse_plan(raw)
     if plan is not None:
-        errors = check_plan(plan, load_refs(conn, plan), trip_date=trip_date, return_date=return_date)
+        refs = load_refs(conn, plan)
+        city = city or plan_city(refs.trips.get(plan.outbound.trip_id), refs.trips.get(plan.return_.trip_id))
+        errors = check_plan(plan, refs, trip_date=trip_date, return_date=return_date, city=city)
     logger.debug("plan validation errors=%d codes=%s", len(errors), ",".join(sorted({e.code for e in errors})) or "-")
-    return ValidationResult(plan=plan, errors=errors)
+    return ValidationResult(plan=plan, errors=errors, city=city or BAGUIO)

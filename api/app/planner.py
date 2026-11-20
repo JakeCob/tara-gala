@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from . import db
 from .limits import MANILA_TZ, RateLimiter, SpendTracker, client_ip, ip_hash
 from .llm import MAX_TOKENS_CEILING, LLMClient, LLMConfig, LLMConfigError, LLMUnavailable, make_llm_client
-from .plan_validation import PlanError, validate_plan
+from .plan_validation import BAGUIO, PlanError, validate_plan
 from .planner_context import load_context
 from .planner_prompt import PLAN_SCHEMA, SYSTEM_PROMPT, Feedback, build_user_message
 
@@ -153,7 +153,8 @@ class Planner:
                 errors = [NO_PLAN_JSON]
             else:
                 with db.get_conn() as conn:
-                    result = self._validate(conn, reply.text, trip_date=req.date, return_date=req.return_date)
+                    # TG-67: live plans stay Baguio's, even if the model names another city's rows
+                    result = self._validate(conn, reply.text, trip_date=req.date, return_date=req.return_date, city=BAGUIO)
                 errors = list(result.errors)
             codes = list(dict.fromkeys(e.code for e in errors))
             logger.info(

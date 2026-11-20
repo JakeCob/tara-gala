@@ -35,7 +35,7 @@ from . import guide as guides
 from . import itineraries as its
 from .guide import ROW_KEY, TODO_KEY
 from .plan_diff import ChangeLine
-from .plan_validation import MODEL_TRIP_EDIT, load_trips, trip_problems
+from .plan_validation import BAGUIO, CITIES, MODEL_TRIP_EDIT, load_trips, trip_problems
 from .sessions import NOINDEX, WRITE_LIMITER, _limit, _private, _session_id
 from .trip_rows import TRIP_ROWS_SQL
 
@@ -296,9 +296,29 @@ def references(conn, session_id: UUID, g: guides.Guide) -> list[str]:
     return codes
 
 
-def check(conn, session_id: UUID, base: guides.Guide, new: guides.Guide, trips: dict) -> list[str]:
+def guide_city(conn, g: guides.Guide | None, trips: dict | None = None) -> str:
+    """TG-67: the city a guide's plan is for: where its first getting-there bus on file goes, else where its first
+    getting-home bus on file leaves from, when that is one of CITIES; otherwise Baguio (also with no guide). `trips`
+    are TripRefs already read, by id; the rest are read here in one query."""
+    if g is None:
+        return BAGUIO
+    trips = dict(trips or {})
+    missing = guides.trip_ids(g) - set(trips)
+    if missing:
+        trips.update(load_trips(conn, missing))
+    for table, end in ((g.getting_there, "destination_city"), (g.getting_home, "origin_city")):
+        for b in table.buses:
+            t = trips.get(b.trip_id)
+            if t is not None and getattr(t, end) in CITIES:
+                return getattr(t, end)
+    return BAGUIO
+
+
+def check(conn, session_id: UUID, base: guides.Guide, new: guides.Guide, trips: dict, city: str | None = None) -> list[str]:
     """Every problem with a new guide against its base, as codes (options.md §3.4). Shared by hand, undo and chat.
-    `trips` are the TripRefs of every bus the new guide names."""
+    `trips` are the TripRefs of every bus the new guide names. A swapped bus must suit `city`, the base's city
+    (guide_city, TG-67), so a swap can't move the plan to another city."""
+    city = city or guide_city(conn, base, trips)
     codes = references(conn, session_id, new)
     for name, direction in (("getting_there", "outbound"), ("getting_home", "return")):
         was, now = getattr(base, name).buses, getattr(new, name).buses
@@ -309,7 +329,7 @@ def check(conn, session_id: UUID, base: guides.Guide, new: guides.Guide, trips: 
             codes.append("two_booked")
         for a, b in zip(was, now):
             if a.trip_id != b.trip_id:
-                codes += trip_problems(trips.get(b.trip_id), b.date, direction)
+                codes += trip_problems(trips.get(b.trip_id), b.date, direction, city)
 
     def bus_rows(g: guides.Guide) -> dict:
         return {r.key: (d.day, r.bus) for d in g.days for r in d.rows if r.bus}
@@ -381,6 +401,7 @@ class Prepared:
     size: int
     budget_minted: int = 0  # TG-62: budget keys minted, and inherited by text (an old phone's save, plan §8)
     budget_by_text: int = 0
+    city: str = BAGUIO  # TG-67: the base's city, for the log line
 
 
 def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, whys: dict[str, str] | None = None,
@@ -399,7 +420,8 @@ def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, whys: dict[
         raise Refused(422, "bad_guide", problems=len(problems))
     trips = load_trips(conn, guides.trip_ids(new))
     bus_times(new, cur.guide, trips)
-    codes = check(conn, session_id, cur.guide, new, trips)
+    city = guide_city(conn, cur.guide, trips)
+    codes = check(conn, session_id, cur.guide, new, trips, city)
     if codes:
         raise Refused(422, codes[0], codes=codes, problems=len(codes))
     changes = plan_diff.changes(cur.guide, new, names(conn, session_id, cur.guide, new), whys)
@@ -409,7 +431,8 @@ def prepare(conn, session_id: UUID, cur: Current, guide_in: GuideIn, whys: dict[
     size = len(json.dumps(plan).encode())
     if size > MAX_PLAN_BYTES:
         raise Refused(422, "too_big")
-    return Prepared(guide=new, plan=plan, changes=changes, minted=minted, size=size, budget_minted=budget_minted, budget_by_text=by_text)
+    return Prepared(guide=new, plan=plan, changes=changes, minted=minted, size=size, budget_minted=budget_minted, budget_by_text=by_text,
+                    city=city)
 
 
 # ---------------------------------------------------------------- replays (F2)
@@ -526,10 +549,11 @@ def save_plan(share_slug: str, body: PlanIn, request: Request, response: Respons
         saved = _answer(conn, slug, p.changes)
         logger.info(
             "plan save share_slug=%s source=%s base_seq=%d seq=%d copied=%s rows=%d todos=%d new_keys=%d bytes=%d whys=%d"
-            " budget_minted=%d budget_by_text=%d",
+            " budget_minted=%d budget_by_text=%d city=%s",
             share_slug, body.source, body.base.seq, seq, not cur.copy, sum(len(d.rows) for d in p.guide.days), len(p.guide.todo),
             p.minted, p.size, len(body.whys or {}),  # a count: a why is the trip's own text, never logged
             p.budget_minted, p.budget_by_text,  # counts: a budget key is a slug of the group's own line text (TG-62 N2)
+            p.city,
         )
         return saved
 
@@ -565,7 +589,7 @@ def undo_plan(share_slug: str, body: UndoIn, request: Request, response: Respons
             [ChangeLine(word="Changed", day=None, text="the plan")]
         slug, seq = _write(conn, session_id, cur, prev, "undo", changes)
         saved = _answer(conn, slug, changes)
-        logger.info("plan undo share_slug=%s seq=%d undid_seq=%d", share_slug, seq, cur.seq)
+        logger.info("plan undo share_slug=%s seq=%d undid_seq=%d city=%s", share_slug, seq, cur.seq, guide_city(conn, restored))
         return saved
 
     out = _run(share_slug, "undo", work)
