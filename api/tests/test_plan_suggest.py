@@ -200,7 +200,13 @@ import psycopg  # noqa: E402
 from app import plan_validation as pv  # noqa: E402
 from conftest import ROOT  # noqa: E402
 from test_guide import SLUG, barkada, trip  # noqa: E402,F401  fixtures
-from test_plan_edit import base_of, editing, plan_of, sg_trip, t  # noqa: E402,F401  fixtures
+from test_plan_edit import base_of, editing, plan_of, sg_trip  # noqa: E402,F401  fixtures (not `t`: this file has a t())
+
+
+@pytest.fixture()
+def baguio_trip(trip, editing):  # noqa: F811
+    """test_plan_edit's `t`: a made-up trip on the owner's Baguio plan file, with editing on."""
+    return trip
 
 NEAR = (17.093373, 120.900438)  # made up: 1.0 km north of the Sagada centre below
 
@@ -234,7 +240,8 @@ def test_t67_u2_a_pinned_sagada_lodging_wins(sg_trip, client, dsn):  # B14  # no
     assert (r.json()["km_from_baguio"], r.json()["far"]) == (3, False)
 
 
-def test_t67_u3_a_baguio_plan_measures_from_its_lodging_pin_else_session_road(t, client, barkada):  # B14  # noqa: F811
+def test_t67_u3_a_baguio_plan_measures_from_its_lodging_pin_else_session_road(baguio_trip, client, barkada):  # B14  # noqa: F811
+    t = baguio_trip
     spot = _near_spot(barkada)  # a Sagada place, far from Baguio
     r = _ask(client, t, {"after": "d2-01"}, spot)
     assert r.status_code == 200, r.text
@@ -265,7 +272,10 @@ def test_t67_u4_one_centre_per_city_and_sagadas_is_sourced():  # §3
     assert f"{lat}, {lng}" in sources
 
 
-def test_t67_u5_the_suggest_log_line_carries_the_city(sg_trip, t, client, dsn, caplog):  # §7  # noqa: F811
+def test_t67_u5_the_suggest_log_line_carries_the_city(sg_trip, baguio_trip, client, dsn, caplog):  # §7  # noqa: F811
+    """A Sagada plan's line ends city=Sagada. A Baguio plan's line is exactly today's, with no city (test_trip_places pins
+    it word for word, and §8 forbids editing it), so no city there means Baguio."""
+    t = baguio_trip
     spot = _near_spot(dsn)
     caplog.set_level(logging.INFO, logger="tara_gala.api")
     assert _ask(client, sg_trip, {"after": "d2-01"}, spot).status_code == 200
@@ -273,6 +283,6 @@ def test_t67_u5_the_suggest_log_line_carries_the_city(sg_trip, t, client, dsn, c
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan suggest share_slug=")]
     assert len(lines) == 2
     assert lines[0].startswith(f"plan suggest share_slug={sg_trip} ") and lines[0].endswith(" city=Sagada"), lines[0]
-    assert lines[1].startswith(f"plan suggest share_slug={t} ") and lines[1].endswith(" city=Baguio"), lines[1]
+    assert lines[1].startswith(f"plan suggest share_slug={t} ") and "city=" not in lines[1], lines[1]
     for line in lines:
         assert not re.search(r"\d+\.\d{3,}", line), "no pin in the log"
