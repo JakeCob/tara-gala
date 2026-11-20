@@ -308,5 +308,5 @@ export function startWorld(guide: Guide, marks: readonly Mark[]): number {
 export function placeMapsUrl({ name, kind, lat, lng, city = "Baguio" }: { name: string; kind: GuidePlace["kind"]; lat?: number | null; lng?: number | null; city?: string }): string {
   // TG-61: a trip place has the pin the server read from the group's link, so directions go straight to it
   if (kind === "trip_place" && lat != null && lng != null) return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${kind === "terminal" ? "" : `${PROVINCE[city] ?? "Benguet"}, `}Philippines`)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${kind === "terminal" ? "" : `${Object.hasOwn(PROVINCE, city) ? PROVINCE[city] : "Benguet"}, `}Philippines`)}`;
 }
