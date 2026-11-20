@@ -445,3 +445,7 @@ test("T67-W6 placeMapsUrl: a Sagada spot searches Mountain Province; terminals g
   const map = readFileSync(new URL("../components/LevelMap.tsx", import.meta.url), "utf8");
   assert.equal(map.match(/placeMapsUrl\(\{[^}]*city[^}]*\}\)/g)?.length, 2, "both Maps links in the level dialog pass the city");
 });
+
+test("T67-W6b LevelMap hands the city on to LevelDialog, so a Sagada spot's Maps link can't fall back to Benguet (review S1)", () => {
+  assert.match(readFileSync(new URL("../components/LevelMap.tsx", import.meta.url), "utf8"), /<LevelDialog [^>]*\bcity=\{city\}/);
+});
