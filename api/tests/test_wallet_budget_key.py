@@ -263,6 +263,17 @@ def test_g5_resending_the_stored_key_is_always_accepted(on, dsn, why):
     assert (r.status_code, detail(r)) == (422, "unknown_budget_line"), "a key that's new to it is still checked"
 
 
+def test_g5_resending_a_current_line_the_plan_moved_with_the_old_category_is_refused(on, dsn):
+    """tg-review N1: G5's resend is accepted when the key can't be compared (removed line, two trips). A current line
+    the plan moved to another category is compared: a stale form's body gets ux §9's budget_line_category alert."""
+    slug, (a, b, *_) = new_wallet(on)
+    itinerary = trip(dsn, slug)
+    eid = add(on, slug, on_line([a, b])).json()["expenses"][0]["id"]
+    set_rows(dsn, itinerary, [{**r, "category": "hotel"} if r.get("key") == "meals" else r for r in ROWS])
+    r = edit(on, slug, eid, {**on_line([a, b], note="Dinner, really"), "version": 1})
+    assert (r.status_code, detail(r)) == (422, "budget_line_category")
+    assert key_of(dsn, eid) == "meals" and stored(dsn, eid)["version"] == 1
+
 def test_g6_a_line_needs_its_own_category(on, dsn):
     slug, (a, b, *_) = new_wallet(on)
     trip(dsn, slug)
