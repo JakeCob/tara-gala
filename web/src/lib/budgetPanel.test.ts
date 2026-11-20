@@ -264,3 +264,21 @@ test("GW2-S6 ux-review M1, S1, S2: the wallet link's shape, the Spent header on 
   assert.match(src, /<th scope="col" className="[^"]*whitespace-nowrap[^"]*">Spent \(₱\)<\/th>/, "S1: it wrapped at 320");
   for (const part of ["p.lines", "p.word.text", "p.other"]) assert.match(src, new RegExp(`<span className="[^"]*whitespace-nowrap[^"]*">\\{${part.replace(/\./g, "\\.")}\\}<\\/span>`), `S2: ${part} doesn't break`);
 });
+
+// ---------------------------------------------------------------- tg-review's N1 on #103 (TG-62/review-code-gw2.md)
+
+test("GW2-P16 review N1: only the newest fetch's answer lands; an older one that arrives last is dropped", async () => {
+  const { newestOnly } = await load();
+  const later = <T,>(v: T, ms: number) => new Promise<T>((r) => setTimeout(() => r(v), ms));
+  const newest = newestOnly<string>();
+  const [old, now] = await Promise.all([newest(later("old", 40)), newest(later("new", 5))]);
+  assert.equal(old, null, "the older answer landed last: dropped");
+  assert.equal(now, "new");
+  assert.equal(await newest(later("next", 1)), "next", "one at a time, every answer lands");
+  assert.equal(await newestOnly<string>()(Promise.resolve("own")), "own", "each guard counts its own calls");
+  // Both of TripView's fetches, the first load's and each reopen's, go through the one guard
+  const trip = read(TRIP);
+  assert.match(trip, /const \[newest\] = useState\(\(\) => newestOnly<BudgetResult>\(\)\);/);
+  assert.equal((trip.match(/newest\(fetchBudget\(\)\)/g) ?? []).length, 2, "the load and the reopen");
+  assert.doesNotMatch(trip, /void fetchBudget\(\)/, "no unguarded fetch");
+});

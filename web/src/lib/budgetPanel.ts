@@ -124,3 +124,16 @@ export function cardLine(b: Pick<SessionBudget, "total_centavos" | "member_count
 export function afterRefetch(prev: "loading" | BudgetResult | null, next: BudgetResult): BudgetResult {
   return !next.ok && prev !== null && prev !== "loading" && prev.ok ? prev : next;
 }
+
+/**
+ * tg-review N1: on slow signal the first load's fetch and a reopen's can answer out of order. Each call through one
+ * guard gets its answer only if no newer call started since; an older answer that lands last is null, and dropped.
+ */
+export function newestOnly<T>(): (work: Promise<T>) => Promise<T | null> {
+  let latest = 0;
+  return async (work) => {
+    const mine = ++latest;
+    const answer = await work;
+    return mine === latest ? answer : null;
+  };
+}

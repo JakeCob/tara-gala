@@ -24,7 +24,7 @@ import TripRecap from "./TripRecap";
 import { fetchItinerary, savedItinerary } from "@/lib/api";
 import { fitPhoto } from "@/lib/shrink";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
-import { afterRefetch, cardLine } from "@/lib/budgetPanel";
+import { afterRefetch, cardLine, newestOnly } from "@/lib/budgetPanel";
 import { type BudgetResult, getBudget } from "@/lib/sessionBudget";
 import type { Spending } from "./BudgetPanel";
 
@@ -182,15 +182,16 @@ export default function TripView({ slug }: { slug: string }) {
     console.info("[tg-trip] budget ok=%s state=%s lines=%d members=%d", r.ok ? "yes" : r.why, r.ok ? r.budget.state : "none", r.ok ? r.budget.lines.length : 0, r.ok ? r.budget.member_count : 0);
     return r;
   }, [slug]);
+  const [newest] = useState(() => newestOnly<BudgetResult>()); // tg-review N1: an older answer that lands last is dropped
   useEffect(() => {
     if (!flags.budgetLines) return;
     if (walletOf === null) return; // once the trip is on screen, so a trip with a wallet loads it once, not twice
     let live = true;
-    void fetchBudget().then((r) => live && setSpend(r));
+    void newest(fetchBudget()).then((r) => live && r && setSpend(r));
     return () => {
       live = false;
     };
-  }, [fetchBudget, walletOf]);
+  }, [fetchBudget, newest, walletOf]);
   const knownRaw = useSyncExternalStore(subscribeNothing, knownWalletsRaw, () => null);
 
   // TG-61: editing the plan. Edit mode belongs to this phone only, and isn't remembered (ux.md §3)
@@ -281,7 +282,7 @@ export default function TripView({ slug }: { slug: string }) {
     me: parseKnownWallets(knownRaw).find((w) => w.slug === trip.wallet?.share_slug)?.me ?? null,
     returnDate: trip.return_date,
     today: manilaToday(),
-    onOpen: () => void fetchBudget().then((r) => setSpend((prev) => afterRefetch(prev, r))),
+    onOpen: () => void newest(fetchBudget()).then((r) => r && setSpend((prev) => afterRefetch(prev, r))),
   };
 
   async function write(action: string, op: () => Promise<TripResult>, done: string): Promise<boolean> {
