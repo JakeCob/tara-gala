@@ -13,6 +13,7 @@ import { flags } from "@/lib/flags";
 import { cardMeta, payersWords } from "@/lib/walletActivity";
 import { categoryLabel, showingLine } from "@/lib/walletCategories";
 import { addOutcome, addedBy, editOutcome, screenParts, visibleExpenses } from "@/lib/walletView";
+import { budgetRefusal } from "@/lib/budgetLines";
 import { type TripFile, fetchFile, knownTrips, tripApi } from "@/lib/trip";
 import { runShare, shareDeps, type ShareOutcome } from "@/lib/itinerary";
 import {
@@ -101,6 +102,7 @@ export default function WalletView({ slug }: { slug: string }) {
   const deletedHere = useRef<string | null>(null); // Details' own Delete, so it isn't also announced as someone else's
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [alertFocus, setAlertFocus] = useState(0); // a 409's alert takes focus (tg-ux2 W3 M1): bumped after the form remounts
+  const [lineReset, setLineReset] = useState(0); // TG-62 GW1: a save refused for its line clears the form's pick
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
   const shownAt = useRef(0); // TG-65: how new the wallet on screen is: when its GET left, or when a write landed
   const [opening, setOpening] = useState<string | null>(null);
@@ -314,6 +316,8 @@ export default function WalletView({ slug }: { slug: string }) {
     const r = await walletApi.addExpense(slug, body);
     setBusy(false);
     console.info("[tg-wallet] expense add ok=%s", r.ok ? "yes" : r.why);
+    const lineAlert = r.ok ? null : budgetRefusal(r.detail);
+    if (lineAlert) return refuseLine(lineAlert, r);
     const out = addOutcome(before, body, r);
     if (out.ok && out.text !== "Expense added.") console.info("[tg-wallet] expense add category dropped=yes"); // the server's WALLET_SPLITS is off
     if (!out.ok) {
@@ -325,6 +329,19 @@ export default function WalletView({ slug }: { slug: string }) {
     landWallet(out.wallet);
     setNotice({ text: out.text, error: false });
     return true;
+  }
+
+  /**
+   * TG-62 GW1, ux §9: a save refused for its line (unknown_budget_line, budget_line_category: the plan changed while the
+   * form was open). Its alert in the form, the pick cleared, and the lines reloaded from the answer's wallet or a fresh GET.
+   */
+  function refuseLine(text: string, r: WalletResult): false {
+    console.info("[tg-wallet] expense line refused why=%s", r.ok ? "none" : r.why);
+    setFormAlert({ text, asAmounts: false });
+    setLineReset((n) => n + 1);
+    if (!r.ok && r.wallet) landWallet(r.wallet);
+    else setReloads((n) => n + 1);
+    return false;
   }
 
   async function saveEdit(current: Editing, body: ExpensePatch): Promise<boolean> {
@@ -340,7 +357,11 @@ export default function WalletView({ slug }: { slug: string }) {
       if (row?.action === "expense_edit") actor = wallet.members.find((m) => m.id === row.actor)?.name ?? null;
     }
     setBusy(false);
-    const out = editOutcome(r, body, current.expense, actor);
+    const lineAlert = r.ok ? null : budgetRefusal(r.detail);
+    if (lineAlert) return refuseLine(lineAlert, r);
+    // TG-62 GW1 (tg-ux2 S1): the 409's Changes line reads the wallet as the screen does, so flag off is TG-66's alert exactly
+    const lineSeen = (x: WalletResult): WalletResult => (flags.budgetLines || x.ok || !x.wallet ? x : { ...x, wallet: { ...x.wallet, budget: null } });
+    const out = editOutcome(lineSeen(r), body, current.expense, actor);
     console.info("[tg-wallet] expense edit ok=%s outcome=%s", r.ok ? "yes" : r.why, out.kind);
     if (out.kind === "saved") {
       landWallet(out.wallet);
@@ -480,6 +501,8 @@ export default function WalletView({ slug }: { slug: string }) {
 
   const owedToMe = wallet.transfers.filter((t) => t.to_member === me).length;
   const detailsExpense = detailsId ? (wallet.expenses.find((e) => e.id === detailsId) ?? null) : null;
+  // TG-62 GW1 (G27): with NEXT_PUBLIC_BUDGET_LINES off no part sees a budget, so the form, Details and Changes are TG-66's
+  const lineWallet = flags.budgetLines ? wallet : { ...wallet, budget: null };
   const filtering = parts.categories && uncategorizedOnly;
   const listed = visibleExpenses(wallet.expenses, filtering);
   const formNotice: ReactNode = (
@@ -531,6 +554,8 @@ export default function WalletView({ slug }: { slug: string }) {
           <ExpenseForm
             key={formKey}
             wallet={wallet}
+            budget={lineWallet.budget ?? null}
+            lineReset={lineReset}
             me={me}
             busy={busy}
             flags={flags}
@@ -740,7 +765,7 @@ export default function WalletView({ slug }: { slug: string }) {
 
           <PayoutQr />
 
-          {parts.activity && <ActivityList slug={slug} wallet={wallet} online={online} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
+          {parts.activity && <ActivityList slug={slug} wallet={lineWallet} online={online} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
         </div>
       </div>
 
@@ -748,7 +773,7 @@ export default function WalletView({ slug }: { slug: string }) {
         <ExpenseDetails
           key={detailsExpense.id}
           slug={slug}
-          wallet={wallet}
+          wallet={lineWallet}
           expense={detailsExpense}
           me={me}
           online={online}

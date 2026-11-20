@@ -3,6 +3,7 @@
 // expense snapshots: ExpenseOut's own fields, lists diffed by member_id, seq or kind, never by position, and any key this
 // file doesn't know (TG-62's budget_key) ignored. Logs carry counts and outcomes only: never a name, a note, a comment,
 // an id or the slug.
+import { lineLabel } from "./budgetLines.ts";
 import { failureMessage, formatPeso, splitEqual } from "./wallet.ts";
 import type { Activity, ActivityResult, Category, WalletFailed, Charge, Comment, Expense, InputRow, Item, Payer, Share, SplitMode, Wallet } from "./wallet.ts";
 
@@ -213,13 +214,13 @@ export function chargeLabel(c: Charge): string {
 
 // ---------------------------------------------------------------- Changes: a pure diff of two snapshots (B23)
 
-export type Field = "amount" | "note" | "category" | "split" | "payers" | "items" | "charges";
+export type Field = "amount" | "note" | "category" | "budget" | "split" | "payers" | "items" | "charges";
 export type Change = { field: Field; before?: string; after?: string };
 
-const FIELD_LONG: Record<Field, string> = { amount: "the amount", note: "the note", category: "the category", split: "the split", payers: "Paid by", items: "the items", charges: "the charges" };
+const FIELD_LONG: Record<Field, string> = { amount: "the amount", note: "the note", category: "the category", budget: "the budget line", split: "the split", payers: "Paid by", items: "the items", charges: "the charges" };
 // The activity list's line when its first field has no arrow: "Ana changed the items on Dinner." (ux §5, tg-ux2 W3)
 const FIELD_FEED: Record<Field, string> = { ...FIELD_LONG, payers: "who paid" };
-const FIELD_SHORT: Record<Field, string> = { amount: "amount", note: "note", category: "category", split: "split", payers: "Paid by", items: "items", charges: "charges" };
+const FIELD_SHORT: Record<Field, string> = { amount: "amount", note: "note", category: "category", budget: "budget line", split: "split", payers: "Paid by", items: "items", charges: "charges" };
 
 /** A list as a key → value map, so order never counts. */
 const keyed = <T,>(rows: T[] | undefined, key: (r: T) => string | number, value: (r: T) => unknown) =>
@@ -247,6 +248,9 @@ export function changes(before: Snapshot, after: Snapshot, w: Wallet): Change[] 
   if (before.amount_centavos !== after.amount_centavos) out.push(change("amount", formatPeso(before.amount_centavos), formatPeso(after.amount_centavos)));
   if (before.note !== after.note) out.push(change("note", `"${before.note}"`, `"${after.note}"`));
   if ((before.category ?? null) !== (after.category ?? null)) out.push(change("category", categoryWords(before.category), categoryWords(after.category)));
+  // TG-62 GW1: the budget line, only when the wallet on screen carries one (the flag on, one trip); else TG-66's Changes
+  const [lb, la] = [(before.budget_key as string | null | undefined) ?? null, (after.budget_key as string | null | undefined) ?? null];
+  if (w.budget && lb !== la) out.push(change("budget", lineLabel(w.budget, lb), lineLabel(w.budget, la)));
   const [sb, sa] = [splitOf(before, w), splitOf(after, w)];
   if (inputsKey(sb) !== inputsKey(sa)) {
     const short = sb.mode !== sa.mode;

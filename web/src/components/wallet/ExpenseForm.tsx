@@ -4,7 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { PX, PixelBox, PixelButton, PixelChoice, SectionTitle, cx } from "@/components/pixel";
 import ItemsEditor from "@/components/wallet/ItemsEditor";
 import PayersEditor from "@/components/wallet/PayersEditor";
-import { formatPeso, type Category, type SplitMode, type Expense, type ExpenseBodyV2, type ExpensePatch, type LegacyExpenseBody, type Wallet } from "@/lib/wallet";
+import { formatPeso, type Category, type SplitMode, type Expense, type ExpenseBodyV2, type ExpensePatch, type LegacyExpenseBody, type Wallet, type WalletBudget } from "@/lib/wallet";
+import { editLineMeta, fromPlan, initialLine, lineAfterCategory, linesFor, logLine, showLineRow, withBudgetKey } from "@/lib/budgetLines";
 import {
   MAX_SHARE_WEIGHT,
   addItem,
@@ -40,12 +41,16 @@ const ADDED = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short
  * Edit: pass `editing`; remount with a new `key` to load a newer version (a 409 shows their version, ux.md §6).
  * `notice` is the wallet's alert for this form (a 409 or a feature_off line), shown above the buttons.
  */
-export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, onSubmit, onCancel, onError }: {
+export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, budget = null, lineReset = 0, onSubmit, onCancel, onError }: {
   wallet: Wallet;
   me: string;
   busy: boolean;
-  flags: FormFlags;
+  flags: FormFlags & { budgetLines?: boolean };
   editing?: { expense: Expense; addedBy?: string | null } | null;
+  /** TG-62: the wallet's one trip's lines (WalletOut.budget), already null with NEXT_PUBLIC_BUDGET_LINES off. */
+  budget?: WalletBudget | null;
+  /** TG-62: bumped by the parent when a save is refused for its line (ux §9): the pick clears and the row reloads. */
+  lineReset?: number;
   notice?: ReactNode;
   onSubmit: (body: ExpenseSubmit, ctx: SubmitContext) => Promise<boolean>;
   onCancel?: () => void;
@@ -53,6 +58,21 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
 }) {
   const members = wallet.members;
   const [s, setS] = useState<FormState>(() => (editing ? formFromExpense(editing.expense, members) : emptyForm(me)));
+  // TG-62 GW1: the budget line, beside W1's state (walletRequest builds the body; the line goes on after, withBudgetKey)
+  const budgetOn = !!flags.budgetLines;
+  const [line, setLine] = useState<string | null>(() => (editing ? initialLine(budget, editing.expense.budget_key, editing.expense.category ?? null) : null));
+  const [seenReset, setSeenReset] = useState(lineReset);
+  if (lineReset !== seenReset) {
+    setSeenReset(lineReset);
+    setLine(null);
+  }
+  // The meta is about the plan's change, so it reads against the saved category: a category the person picks here isn't one
+  const [linePicked, setLinePicked] = useState(false); // tg-ux2: the edit meta goes once anything is picked in the row
+  const lineMeta = editing && line === null && !linePicked ? editLineMeta(budget, editing.expense.budget_key, editing.expense.category ?? null) : null;
+  const pickCategory = (c: Category | null) => {
+    setLine((l) => lineAfterCategory(budget, l, s.category, c)); // a new category lists its own lines, none picked (G24); no row, no change (F1)
+    set({ category: c });
+  };
   const edit = !!editing; // with WALLET_SPLITS off, buildPatch refuses (never an add in its place: tg-review2 nit 1)
   const v2 = flags.walletSplits;
   const check = checkForm(s, members, flags);
@@ -71,7 +91,8 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
 
   async function submit(state: FormState): Promise<boolean> {
     const built = edit ? buildPatch(state, members, flags, me, editing!.expense.version ?? 1) : buildBody(state, members, flags, me);
-    console.info("[tg-wallet] expense form submit mode=%s edit=%s items=%d payers=%s ok=%s", state.mode, edit, state.mode === "itemized" ? state.items.length : 0, several, built.ok);
+    const lineWord = logLine(budgetOn, line); // four fixed words, never the key (G10a)
+    console.info("[tg-wallet] expense form submit mode=%s edit=%s items=%d payers=%s ok=%s line=%s", state.mode, edit, state.mode === "itemized" ? state.items.length : 0, several, built.ok, lineWord);
     if (!built.ok) {
       onError(built.problem);
       return false;
@@ -84,10 +105,11 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
       setS(next);
       return submit(next);
     };
-    const saved = await onSubmit(built.body, { edit, asAmounts });
+    const saved = await onSubmit(withBudgetKey(built.body, { on: budgetOn, line }), { edit, asAmounts });
     if (saved && !edit) {
       // Today's reset: the amount, the note and what was typed per person go; the payer, the people and the mode stay
       setS((x) => ({ ...emptyForm(me), paidBy: x.paidBy, mode: x.mode, out: x.out, several: x.several }));
+      setLine(null);
     }
     return saved;
   }
@@ -269,15 +291,40 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
               name="expense-category"
               value={c}
               checked={s.category === c}
-              onChange={() => set({ category: c })}
-              inputProps={{ onClick: () => s.category === c && set({ category: null }) }} // tapping the checked pill clears it
+              onChange={() => pickCategory(c)}
+              inputProps={{ onClick: () => s.category === c && pickCategory(null) }} // tapping the checked pill clears it
             >
               {CATEGORY_LABEL[c]}
             </PixelChoice>
           ))}
         </div>
       </fieldset>
-      {/* TG-62: "Which budget line? (optional)" goes here, after a category is picked (ux.md §2.3). Hidden until TG-62. */}
+      {budget && showLineRow(budget, s.category) && (
+        // TG-62 GW1, ux §2 item 3: the category's plan lines, then None of these. Never picked for the user (not from the note)
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm font-semibold">Which budget line?<span className={PX.meta}> (optional)</span></legend>
+          <div className="flex flex-col gap-2">
+            {linesFor(budget, s.category).map((l) => (
+              <PixelChoice
+                key={l.key}
+                name="budget-line"
+                value={l.key}
+                checked={line === l.key}
+                onChange={() => {
+                  setLine(l.key);
+                  setLinePicked(true);
+                }}
+                inputProps={{ onClick: () => line === l.key && setLine(null) }} // tapping the checked line clears it
+                className="flex w-full items-center gap-1 px-3 py-2 text-left text-sm leading-tight"
+              >
+                {l.item}
+              </PixelChoice>
+            ))}
+          </div>
+          <p className={PX.meta}>{fromPlan(budget)}</p>
+          {lineMeta && <p className={PX.meta}>{lineMeta}</p>}
+        </fieldset>
+      )}
       {paidBy}
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-sm font-semibold">Split</legend>
