@@ -127,7 +127,9 @@ def _problems(schema: dict) -> list[str]:
         if "object" in kinds and n.get("additionalProperties") is not False:
             out.append(f"{path}: an object needs additionalProperties: false")
         if "object" in kinds and set(n.get("required", [])) != set(n.get("properties", {})):
-            out.append(f"{path}: an object requires every property (strict)")
+            # Our own rule, not Anthropic's (it allows optional properties): every _obj requires all its properties, and
+            # the OpenRouter adapter sends strict: true. Don't loosen a schema's required list to "match the provider"
+            out.append(f"{path}: an object requires every property (our house rule for strict outputs, not an Anthropic limit)")
         if "anyOf" in n and ("type" in n or "properties" in n):
             out.append(f"{path}: anyOf beside type or properties")
         for v in [*n.get("enum", []), *([n["const"]] if "const" in n else [])]:
