@@ -7,6 +7,7 @@ Usage:
 Reads DATABASE_URL from the environment or from the repo-root .env file. --database-url still works but warns:
 it shows the password in the process list (ps). Database errors are printed with the password and DSN masked.
 Load order: spots.csv, routes_trips.csv, last_mile_routes.csv.
+spots.csv and last_mile_routes.csv take an optional `city` column (TG-67): blank or missing is Baguio, else Baguio or Sagada.
 """
 
 from __future__ import annotations
