@@ -1,0 +1,4 @@
+slug,name,category,lat,lng,description,visit_minutes,entrance_fee_php,city
+test-sg-lodge,Test Sagada Lodge,other,17.08,120.90,made-up test row,,,Sagada
+test-sg-cave,Test Sagada Cave,viewpoint,17.07,120.91,made-up test row,120,100,Sagada
+test-bg-park,Test Baguio Park,park,16.41,120.59,made-up test row,60,,
