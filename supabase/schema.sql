@@ -342,6 +342,11 @@ create table trip_sessions (
   wallet_id     uuid references wallets(id) on delete set null,
   created_at    timestamptz not null default now(),
   invite_slug   text unique check (invite_slug ~ '^[0-9a-f]{32}$'),  -- TG-58: the limited invite link, null until turned on
+  -- TG-64: the read-only recap link, null until turned on, and what it shows (map only by default)
+  recap_slug     text unique check (recap_slug ~ '^[0-9a-f]{32}$'),
+  recap_photos   boolean not null default false,
+  recap_people   text not null default 'none' check (recap_people in ('none', 'names', 'names_photos')),
+  recap_spending text not null default 'none' check (recap_spending in ('none', 'total')),
   check (return_date between start_date and start_date + 30)
 );
 
