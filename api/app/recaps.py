@@ -104,14 +104,22 @@ def recap_flag(request: Request) -> None:
         raise _missing(request.path_params.get("recap_slug", ""), "flag_off")
 
 
+def _recap_limit(limiter: RateLimiter, request: Request, action: str) -> None:
+    """sessions._limit, with the recap's headers on its 429 too: no-cache and noindex are on every recap answer (review N1)."""
+    try:
+        _limit(limiter, request, action)
+    except HTTPException as e:
+        raise HTTPException(e.status_code, e.detail, headers={**(e.headers or {}), **HEADERS}) from None
+
+
 def _limited(request: Request) -> None:
     """A dependency on the recap's page read, so the limit comes before any database work."""
-    _limit(RECAP_LIMITER, request, "recap")
+    _recap_limit(RECAP_LIMITER, request, "recap")
 
 
 def _file_limited(request: Request) -> None:
     """The same for the photo and avatar bytes, on their own counter."""
-    _limit(RECAP_FILE_LIMITER, request, "recap-file")
+    _recap_limit(RECAP_FILE_LIMITER, request, "recap-file")
 
 
 def _headers(response: Response) -> None:
