@@ -307,6 +307,7 @@ GET_ROUTES = {
     "/invites/{invite_slug}",  # TG-58 PR 2: one invite by exact slug: the trip's name, dates and names, never the trip
     "/wallets/{share_slug}/activity",  # TG-66 A2: one wallet's activity, behind WALLET_ACTIVITY
     "/wallets/{share_slug}/expenses/{expense_id}/comments",  # TG-66 A2: one expense's comments, inside its own wallet only
+    "/sessions/{share_slug}/budget",  # TG-62 GA2: one trip's Budget panel, behind BUDGET_LINES (its guide through trip_marks)
     # TG-64: one recap by exact slug, behind RECAP_LINKS: the trip's own plan (read through the trip, never by a slug
     # from the URL), and its photos and profile photos only as the recap's toggles allow
     "/recaps/{recap_slug}",

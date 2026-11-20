@@ -171,3 +171,8 @@ for edit_router in (plan_edit_router, plan_suggest_router, trip_places_router, p
 
 # TG-64: the read-only recap link, behind RECAP_LINKS (every recap route is its own 404 recap_not_found while it's off)
 app.include_router(recaps_router, dependencies=[Depends(recap_flag)])
+
+# TG-62: budget vs actual, behind BUDGET_LINES (the panel's route answers 404 feature_off while it's off)
+from .session_budget import router as session_budget_router  # noqa: E402  kept in its own block (plan §1)
+
+app.include_router(session_budget_router)
