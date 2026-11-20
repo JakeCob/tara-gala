@@ -24,7 +24,7 @@ import TripRecap from "./TripRecap";
 import { fetchItinerary, savedItinerary } from "@/lib/api";
 import { fitPhoto } from "@/lib/shrink";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
-import { cardLine } from "@/lib/budgetPanel";
+import { afterRefetch, cardLine } from "@/lib/budgetPanel";
 import { type BudgetResult, getBudget } from "@/lib/sessionBudget";
 import type { Spending } from "./BudgetPanel";
 
@@ -281,7 +281,7 @@ export default function TripView({ slug }: { slug: string }) {
     me: parseKnownWallets(knownRaw).find((w) => w.slug === trip.wallet?.share_slug)?.me ?? null,
     returnDate: trip.return_date,
     today: manilaToday(),
-    onOpen: () => void fetchBudget().then(setSpend),
+    onOpen: () => void fetchBudget().then((r) => setSpend((prev) => afterRefetch(prev, r))),
   };
 
   async function write(action: string, op: () => Promise<TripResult>, done: string): Promise<boolean> {

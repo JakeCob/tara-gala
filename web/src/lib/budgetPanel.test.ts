@@ -246,6 +246,18 @@ test("GW2-S5 logs: the budget load says its state and counts, never a name, an i
 
 // ---------------------------------------------------------------- tg-ux2's review of #103 (TG-62/ux-review-gw2.md)
 
+test("GW2-P15 ux-review Q1: a refetch that fails keeps the numbers on screen; couldn't-load is only for nothing to show", async () => {
+  const { afterRefetch } = await load();
+  const ok = { ok: true as const, budget: budget() };
+  const fresh = { ok: true as const, budget: budget({ total_centavos: 1_300_000 }) };
+  for (const why of ["offline", "failed", "off"] as const) assert.equal(afterRefetch(ok, { ok: false, why }), ok, why);
+  assert.equal(afterRefetch(ok, fresh), fresh, "new numbers replace the old");
+  assert.deepEqual(afterRefetch("loading", { ok: false, why: "failed" }), { ok: false, why: "failed" });
+  assert.deepEqual(afterRefetch({ ok: false, why: "offline" }, { ok: false, why: "failed" }), { ok: false, why: "failed" });
+  assert.equal(afterRefetch(null, fresh), fresh);
+  assert.match(read(TRIP), /onOpen: \(\) =>[^\n]*setSpend\(\(prev\) => afterRefetch\(prev, r\)\)/, "Q1: the reopen keeps the numbers");
+});
+
 test("GW2-S6 ux-review M1, S1, S2: the wallet link's shape, the Spent header on one line, each amount with its word", () => {
   const src = read(PANEL);
   assert.match(src, /<PixelLink variant="secondary" href=\{`\/w\/\$\{walletSlug\}`\} className="inline-flex items-center self-start px-4 text-sm">/, "M1: like every other secondary PixelLink");

@@ -116,3 +116,11 @@ export function cardLine(b: Pick<SessionBudget, "total_centavos" | "member_count
   if (b.total_centavos <= 0 || b.member_count <= 0) return null;
   return `₱${num(pesosOf(b.total_centavos))} spent · about ₱${num(pesosOf(eachOf(b.total_centavos, b.member_count)))} each`;
 }
+
+/**
+ * A reopen's answer (tg-ux2, ux-review-gw2.md Q1): new numbers replace the old, but a refetch that fails while numbers
+ * are on screen keeps them with no line, as the saved copy offline does. "Couldn't load" is only for nothing to show.
+ */
+export function afterRefetch(prev: "loading" | BudgetResult | null, next: BudgetResult): BudgetResult {
+  return !next.ok && prev !== null && prev !== "loading" && prev.ok ? prev : next;
+}
