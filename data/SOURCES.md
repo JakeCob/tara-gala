@@ -105,19 +105,19 @@ For the owner's Sagada trip (Wed Nov 25 to Sun Nov 29, two people), from the own
 - `data/spots.csv` (21 Sagada spots) and `data/last_mile_routes.csv` (54 Sagada legs) now have a last column, `city`. It's blank on every Baguio row, so the default, `Baguio`, still applies. These rows reference no new terminal, so the main CSVs still load on a schema-only database (the tests that copy them, such as `test_scraper_stable_rows.py`, pass).
 - `supabase/data/sagada_seed.sql`: the `coda-lines` operator, the `coda-cubao` and `coda-sagada` terminals, and `operator_terminals`. These are upserts, safe to re-run, with a commented rollback block at the bottom.
 - `data/sagada-coda/`: the rows that need that seed. `routes_trips.csv` has the owner's two buses: the outbound, and the return as the 45-seater without CR (`deluxe`, ₱1,304), which the owner confirmed via the manager on 2026-11-20. `last_mile_routes.csv` has the 5 legs at the `coda-sagada` stop.
-- `data/itineraries/sagada-trip-2026-11-25.json`: the S5 guide draft (share slug `sagada-trip-nov25`).
+- `data/itineraries/sagada-2026-11-25.json`: the S5 guide (key and share slug `sagada-2026-11-25`), built to plan.md §12.2 and §12.3.
 
 **Load order, after TG-67 S1 (the loader reads `city`; before that, Sagada rows would be saved as `Baguio`):**
 1. `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/data/sagada_seed.sql`
 2. `python data/load_data.py`
 3. `python data/load_data.py --data-dir data/sagada-coda`: its legs need step 2's spots, and its trips need step 1.
-4. After S2: `python data/load_itinerary.py data/itineraries/sagada-trip-2026-11-25.json`
+4. After S2: `python data/load_itinerary.py data/itineraries/sagada-2026-11-25.json`
 
 Validated on tg-testpg (database `tg_data_sagada`: schema, migrations and `terminals_coords.sql`):
 - Step 2 dry run, before the seed: "spots: 38, trips: 2 (2 new routes), last-mile routes: 344". That's Baguio's 17, 2 and 290 plus Sagada's 21 spots and 54 legs.
 - The seed runs twice without error.
 - Steps 2 and 3 load: "trips: 2 (2 new routes), last-mile routes: 5". A re-run adds no routes.
-- Step 4's dry run reports only "the outbound trip must go to Baguio" and "the return trip must leave from Baguio", which is S2's change. With the validator's city set to `Sagada` in memory, it gives "Dry run OK … sagada-trip-nov25: 3 days, 26 rows, 11 to-dos".
+- Step 4's dry run reports only "the outbound trip must go to Baguio" and "the return trip must leave from Baguio", which is S2's change. With the validator's city set to `Sagada` in memory, it gives "Dry run OK, nothing saved. Would load sagada-2026-11-25: 3 days, 30 rows, 9 to-dos".
 - `pytest` for `test_scraper_stable_rows`, `test_trip_places`, `test_scraper_hardening`, `test_guide` and `test_loader_and_trips` on a throwaway tg-testpg database: 149 passed.
 
 ### Sagada centre point (for TG-67 S3 `CITY_CENTRES`)
@@ -196,17 +196,15 @@ Fees, guides and times:
 - No leg to `sagada-pottery`: no source says how to get there.
 - Not used: the OSM "Jeepney Station to Bangaan and Bontoc" (way/255575797). It has no signboard, fare or time from any source.
 
-### The guide draft (`data/itineraries/sagada-trip-2026-11-25.json`)
+### The guide (`data/itineraries/sagada-2026-11-25.json`)
 
-It follows the owner's itinerary row by row: the day tables (Thu, Fri, Sat; Wednesday night is in the getting-there tips, and Sunday's arrival in the getting-home tips), a brunch pick (Yoghurt House or Lemon Pie House), the rules as day tips, the packing list as to-dos, and the owner's sources. The core plan's stop times are planning choices taken from the owner's times, not travel times.
+Built to plan.md §12.2 and §12.3 (manager, 2026-11-20). The core is the strict shape: days 1 to 3 are Thu to Sat, with only the tourist information center (10:35 to 11:00) and the lodge (11:10 to 11:30) on day 1. Both legs are sourced walks with no sourced minutes, so F3's times hold. The guide has 5 days, Wed Nov 25 to Sun Nov 29, and 30 rows, word for word from the owner's itinerary. The brunch pick is two `show_if` rows (`d2-05` Yoghurt House, `d2-06` Lemon Pie House), and the to-dos are the 9 packing items. Slugs differ from §12.1's proposals, which it allows: `coda-cubao` (§12.1 `hm-cubao`), `sagada-tourist-info-center`, `church-of-st-mary-the-virgin`, `kanip-aw-pines-view-lodge`.
 
-Budget rows, per person for two (`estimate` form "1,232 to 1,377"):
-- `bus` 2,803: the outbound ₱1,499 (35-seater with CR) plus the return ₱1,304 (45-seater without CR), both from Pamasahe (Sept 2026). One figure, not a range, because both classes are now known.
-- `lodge`: as booked.
-- `registration` 100: PTV/PNA 2022.
-- `guides` 1,610: half of (Hanging Coffins P300 + Marlboro and Blue Soil P1,600 + Sumaguing P800 + Bomod-ok P500), plus the P10 barangay fee, all at the 2019 guide rates above. The owner's itinerary says ~₱800 to ₱1,000 per tour for two.
-- `vans` 925 to 1,000: half of (Marlboro and Blue Soil P1,350 + Bomod-ok P500 to P650). The owner's file doesn't have this row; it's added because both guides charge transport on top of guide fees.
-- `danum` 275: half of P550.
-- `food`: "Your call", as in the owner's file. No source.
-
-The return bus is written as `deluxe` (the owner's 45-seater without CR).
+Budget rows, per person for two (§12.3's table, `estimate` as `parse_estimate` reads it):
+- `bus` 2,803: the outbound ₱1,499 (35-seater with CR) plus the return ₱1,304 (45-seater without CR), both from Pamasahe (Sept 2026). §12.3 has `2,464 to 2,754`, from the ₱1,232 to ₱1,377 the owner's file quotes; the page no longer shows those fares, and §12.3 itself says the line becomes exact once the class is known.
+- `lodge`: "As booked".
+- `registration` 100: the owner's file (GoAsia, no URL given, so the source has `url: null`). PTV/PNA 2022 also gives ₱100.
+- `guides` 1,600 to 2,000: the owner's "~₱800 to ₱1,000 per tour for 2", halved, times 4 tours. The per-group rates on Philippine Beaches and The Poor Traveler (above) give 1,610 for the same 4 tours plus the Bomod-ok barangay fee, inside that range.
+- `lake-danum`: "Ask at tourism office", as in the owner's file. Philippine Beaches gives P550 transport (₱275 each), not loaded.
+- `food`: "Your call".
+- Not in §12.3, so not loaded: the tour vans (Marlboro and Blue Soil P1,350, Bomod-ok P500 to P650, about ₱925 to ₱1,000 each), which both guide sources charge on top of guide fees.
