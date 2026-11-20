@@ -1,5 +1,5 @@
 {
- "_readme": "TG-67 (S5 draft by tg-data): the owner's Sagada trip (Nov 25-29), from the owner's itinerary (_team/tickets/TG-67/owner-itinerary.txt). Same shape as baguio-barkada-2026-11-06.json. Day 1 is Thu Nov 26, the day the overnight bus arrives. The return bus class is a placeholder (super_deluxe = the 35-seater with CR) until the owner confirms it; if the ticket is the 45-seater, change both 'return.class' and getting_home's trip class to 'deluxe' and uncomment the matching row in data/sagada-coda/routes_trips.csv. Needs supabase/data/sagada_seed.sql, the Sagada rows in data/*.csv and data/sagada-coda/, and TG-67 S1 and S2 (load order in data/SOURCES.md). Load with: python data/load_itinerary.py data/itineraries/sagada-trip-2026-11-25.json",
+ "_readme": "TG-67 (S5 draft by tg-data): the owner's Sagada trip (Nov 25-29), from the owner's itinerary (_team/tickets/TG-67/owner-itinerary.txt). Same shape as baguio-barkada-2026-11-06.json. Day 1 is Thu Nov 26, the day the overnight bus arrives. The return bus is the owner's 45-seater without CR (deluxe), confirmed by the owner via the manager on 2026-11-20. Needs supabase/data/sagada_seed.sql, the Sagada rows in data/*.csv and data/sagada-coda/, and TG-67 S1 and S2 (load order in data/SOURCES.md). Load with: python data/load_itinerary.py data/itineraries/sagada-trip-2026-11-25.json",
  "share_slug": "sagada-trip-nov25",
  "key": "sagada-trip-2026-11-25",
  "vibe": "Two of us, treks and caves",
@@ -27,7 +27,7 @@
   "destination": "coda-cubao",
   "departure": "14:30",
   "date": "2026-11-28",
-  "class": "super_deluxe",
+  "class": "deluxe",
   "via": null
  },
  "days": [
@@ -581,7 +581,7 @@
       "destination": "coda-cubao",
       "departure": "14:30",
       "date": "2026-11-28",
-      "class": "super_deluxe",
+      "class": "deluxe",
       "via": null
      },
      "note": "Booked",
@@ -598,7 +598,7 @@
    "rows": [
     {
      "item": "Coda Lines bus, both ways",
-     "estimate": "2,803 to 2,998",
+     "estimate": "2,803",
      "key": "bus",
      "category": "transport"
     },

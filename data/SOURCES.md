@@ -104,7 +104,7 @@ Victory Liner no longer lists first class 13:15 and 14:15 from Baguio to Cubao o
 For the owner's Sagada trip (Wed Nov 25 to Sun Nov 29, two people), from the owner's itinerary (`_team/tickets/TG-67/owner-itinerary.txt`) and research. Files:
 - `data/spots.csv` (21 Sagada spots) and `data/last_mile_routes.csv` (54 Sagada legs) now have a last column, `city`. It's blank on every Baguio row, so the default, `Baguio`, still applies. These rows reference no new terminal, so the main CSVs still load on a schema-only database (the tests that copy them, such as `test_scraper_stable_rows.py`, pass).
 - `supabase/data/sagada_seed.sql`: the `coda-lines` operator, the `coda-cubao` and `coda-sagada` terminals, and `operator_terminals`. These are upserts, safe to re-run, with a commented rollback block at the bottom.
-- `data/sagada-coda/`: the rows that need that seed. `routes_trips.csv` has the owner's outbound bus, plus the return as two commented rows, one per class, until the owner confirms it (manager, 2026-11-20). `last_mile_routes.csv` has the 5 legs at the `coda-sagada` stop.
+- `data/sagada-coda/`: the rows that need that seed. `routes_trips.csv` has the owner's two buses: the outbound, and the return as the 45-seater without CR (`deluxe`, ₱1,304), which the owner confirmed via the manager on 2026-11-20. `last_mile_routes.csv` has the 5 legs at the `coda-sagada` stop.
 - `data/itineraries/sagada-trip-2026-11-25.json`: the S5 guide draft (share slug `sagada-trip-nov25`).
 
 **Load order, after TG-67 S1 (the loader reads `city`; before that, Sagada rows would be saved as `Baguio`):**
@@ -116,7 +116,7 @@ For the owner's Sagada trip (Wed Nov 25 to Sun Nov 29, two people), from the own
 Validated on tg-testpg (database `tg_data_sagada`: schema, migrations and `terminals_coords.sql`):
 - Step 2 dry run, before the seed: "spots: 38, trips: 2 (2 new routes), last-mile routes: 344". That's Baguio's 17, 2 and 290 plus Sagada's 21 spots and 54 legs.
 - The seed runs twice without error.
-- Steps 2 and 3 load, with the 35-seater return row uncommented in a temp copy: "trips: 2 (2 new routes), last-mile routes: 5". A re-run adds no routes.
+- Steps 2 and 3 load: "trips: 2 (2 new routes), last-mile routes: 5". A re-run adds no routes.
 - Step 4's dry run reports only "the outbound trip must go to Baguio" and "the return trip must leave from Baguio", which is S2's change. With the validator's city set to `Sagada` in memory, it gives "Dry run OK … sagada-trip-nov25: 3 days, 26 rows, 11 to-dos".
 - `pytest` for `test_scraper_stable_rows`, `test_trip_places`, `test_scraper_hardening`, `test_guide` and `test_loader_and_trips` on a throwaway tg-testpg database: 149 passed.
 
@@ -132,7 +132,7 @@ Validated on tg-testpg (database `tg_data_sagada`: schema, migrations and `termi
 | Stations | https://www.codalines.ph/stations | "Quezon City: HM Transport Terminal, Monte De Piedad St., corner Maryland St., Brgy. Immaculate Concepcion, Quezon City" and "Sagada, Mt. Province: Poblacion, Sagada, Mt. Province". The owner's itinerary says the bus stops in front of the Municipal Hall. |
 | `coda-cubao` lat/lng | https://www.openstreetmap.org/node/10100751717 | "Coda Lines Terminal", `amenity=bus_station`, on Maryland Street. "HM Transport Cubao" (node/1649835257) is within 15 m. |
 | `coda-sagada` lat/lng | https://www.openstreetmap.org/node/5566017629 | "Bus Stop", `amenity=bus_station`, beside the Municipal Hall. The OSM "Coda Lines Booking Office" (node/4838253221) is 7 m away. |
-| Owner's buses: dates and times | the owner's tickets, via `owner-itinerary.txt` | Wed 2026-11-25 22:30 Cubao to Sagada (loaded), and Sat 2026-11-28 14:30 Sagada to Cubao (commented, class pending). The loader stores them as `source = manual`. Each row's note is exactly "from the owner's ticket", and `valid_from` = `valid_to` is the travel date. `source_url` is the Pamasahe page below, which lists both departures, 10:30 PM and 2:30 PM (manager, TG-67 test-plan F2). |
+| Owner's buses: dates and times | the owner's tickets, via `owner-itinerary.txt` | Wed 2026-11-25 22:30 Cubao to Sagada (loaded), and Sat 2026-11-28 14:30 Sagada to Cubao (the 45-seater without CR, `deluxe`, ₱1,304; owner via manager, 2026-11-20). The loader stores them as `source = manual`. Each row's note is exactly "from the owner's ticket", and `valid_from` = `valid_to` is the travel date. `source_url` is the Pamasahe page below, which lists both departures, 10:30 PM and 2:30 PM (manager, TG-67 test-plan F2). |
 | Class, fare, travel time | https://pamasahe.com/routes/quezon-city-sagada-and-coda-lines-schedule-fares | "Last Updated September 2026". It lists 10:30 PM as "Bus 35" only, and 2:30 PM as "Bus 35 and 45". "Bus 35 seater with CR ₱1499.00", "Bus 45 seater without CR ₱1304.00", and "12 hours", which gives `travel_minutes` 720 (the owner's itinerary also says about 12 hours each way). It warns fares "may be higher" because of fuel prices. The owner's itinerary quotes an older Pamasahe range of ₱1,232 to ₱1,377, which the page no longer shows. |
 | Class names | https://www.philippinebeaches.org/?p=15615 | Updated 2025-01-20. It calls the bus with a toilet "Super Deluxe (w/ toilet)" and the one without "Deluxe (w/o toilet)", which gives `super_deluxe` with `has_restroom` yes for the 35-seater, and `deluxe` with no restroom for the 45-seater. |
 
@@ -201,7 +201,7 @@ Fees, guides and times:
 It follows the owner's itinerary row by row: the day tables (Thu, Fri, Sat; Wednesday night is in the getting-there tips, and Sunday's arrival in the getting-home tips), a brunch pick (Yoghurt House or Lemon Pie House), the rules as day tips, the packing list as to-dos, and the owner's sources. The core plan's stop times are planning choices taken from the owner's times, not travel times.
 
 Budget rows, per person for two (`estimate` form "1,232 to 1,377"):
-- `bus` 2,803 to 2,998: the outbound ₱1,499, plus the return at ₱1,304 or ₱1,499 (Pamasahe, Sept 2026).
+- `bus` 2,803: the outbound ₱1,499 (35-seater with CR) plus the return ₱1,304 (45-seater without CR), both from Pamasahe (Sept 2026). One figure, not a range, because both classes are now known.
 - `lodge`: as booked.
 - `registration` 100: PTV/PNA 2022.
 - `guides` 1,610: half of (Hanging Coffins P300 + Marlboro and Blue Soil P1,600 + Sumaguing P800 + Bomod-ok P500), plus the P10 barangay fee, all at the 2019 guide rates above. The owner's itinerary says ~₱800 to ₱1,000 per tour for two.
@@ -209,4 +209,4 @@ Budget rows, per person for two (`estimate` form "1,232 to 1,377"):
 - `danum` 275: half of P550.
 - `food`: "Your call", as in the owner's file. No source.
 
-The return bus is written as `super_deluxe`. If the owner's ticket is the 45-seater, change both of its trip references in the file to `deluxe`.
+The return bus is written as `deluxe` (the owner's 45-seater without CR).
