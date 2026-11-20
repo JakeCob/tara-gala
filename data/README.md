@@ -31,13 +31,19 @@ Each operator + origin + destination + via + class becomes one route; every row 
 
 ## spots.csv
 
-`slug` (e.g. `burnham-park`), `name`, `category` (`park`, `food`, `market`, `museum`, `viewpoint`, `shopping`, `church`, `cafe`, `other`), `lat`, `lng`, `description`, `visit_minutes`, `entrance_fee_php`.
+`slug` (e.g. `burnham-park`), `name`, `category` (`park`, `food`, `market`, `museum`, `viewpoint`, `shopping`, `church`, `cafe`, `other`), `lat`, `lng`, `description`, `visit_minutes`, `entrance_fee_php`, `city` (see below).
 
 ## last_mile_routes.csv: one leg each
 
 Fill exactly one of `from_terminal` / `from_spot`, and exactly one of `to_terminal` / `to_spot`.
 `mode` is `jeep`, `taxi`, `walk`, `tricycle`, `van` or `grab`. For jeeps, `signboard` is the text on the jeep and `boarding_point` is where to catch it.
-`verified_on` is required.
+`verified_on` is required. `city` works as in spots.csv.
+
+## The `city` column (spots.csv and last_mile_routes.csv)
+
+Optional. Leave it out, or leave the cell blank, and the row is `Baguio`, as before. Otherwise write `Baguio` or `Sagada`, spelled exactly like that (capital first letter). Any other value fails its line, and nothing is saved.
+
+The planner, the chat and the /baguio page only read `Baguio` rows, so a Sagada spot or leg must say `Sagada`. A re-run sets the city on every row it touches, so a blank cell turns a row back into `Baguio`. The dry run lists every existing row whose city would change (`Would change the city of …`). Check that list before the real run. The summary counts rows per city: `spots: 43 (Baguio 41, Sagada 2)`.
 
 ## premade_itineraries.json
 
@@ -53,6 +59,8 @@ Load with `python data/load_premade.py --dry-run` first, then without `--dry-run
 **Re-check after data changes.** After loading trip data or a scraper run, and again before Nov 5, run `python data/load_premade.py --dry-run`. It re-resolves and re-validates every entry against the current database and lists any that broke, for example when the scraper has deactivated a trip. The API hides a plan that no longer validates (and logs a `premade itinerary dropped` warning), which would quietly remove the trip fallback.
 
 ## Terminal slugs
+
+Operators and terminals are seeds in `supabase/schema.sql`, with no CSV. A new city's operators, terminals and `operator_terminals` rows go in a seed file in `supabase/data/` (Sagada: `sagada_seed.sql`, TG-67), written in the style of `terminals_coords.sql`: one transaction, `on conflict (slug) do update`, safe to re-run. Run it before `load_data.py`, because the CSVs name terminals by slug. A terminal's `city` is its real city (`Quezon City`, `Sagada`, …), not the trip's.
 
 | Slug | Terminal |
 | --- | --- |

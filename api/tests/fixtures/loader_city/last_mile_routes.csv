@@ -1,0 +1,4 @@
+from_terminal,from_spot,to_terminal,to_spot,mode,signboard,boarding_point,alighting_point,fare_min_php,fare_max_php,minutes,verified_on,notes,city
+test-sg-sagada,,,test-sg-lodge,walk,,,,,,10,2026-11-20,made-up test row,Sagada
+,test-sg-lodge,,test-sg-cave,van,,,,500,800,20,2026-11-20,made-up test row,Sagada
+vl-baguio,,,test-bg-park,walk,,,,,,15,2026-11-20,made-up test row,

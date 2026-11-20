@@ -478,3 +478,23 @@ def test_t60_r1_the_rule_is_written_down():
     for words in ("not listed", "3 days", "last_verified_at", "load_itinerary.py", "load_premade.py"):
         assert words in section, words
     assert vl.RETIRE_AFTER_DAYS == 3
+
+
+# ---------------------------------------------------------------- TG-67 L8: other operators' rows are not the scraper's
+
+def test_t67_l8_the_scraper_never_deactivates_another_operators_sagada_trips(dsn):
+    """T67-L8 (TG-67 S1, manager-approved outside the slot): _UNSEEN only matches Victory Liner's own scraped rows to or
+    from vl-baguio. A made-up Sagada operator's manual trip (and even a scraped-tagged one) stays active."""
+    only_out(dsn)
+    with psycopg.connect(dsn) as conn:
+        op = conn.execute("insert into operators (slug, name) values ('test-sagada-lines', 'Test Sagada Lines') returning id").fetchone()[0]
+        a, b = (conn.execute("insert into terminals (slug, name, city) values (%s, %s, %s) returning id", t).fetchone()[0]
+                for t in (("test-sg-cubao", "Test SG Cubao", "Quezon City"), ("test-sg-sagada", "Test SG Sagada", "Sagada")))
+        route = conn.execute("insert into routes (operator_id, origin_terminal_id, destination_terminal_id, class)"
+                             " values (%s, %s, %s, 'regular_aircon') returning id", (op, a, b)).fetchone()[0]
+        sagada = [conn.execute("insert into trips (route_id, departure_time, source, source_url) values (%s, %s, %s,"
+                               " 'https://example.test/sagada') returning id", (route, dep, src)).fetchone()[0]
+                  for dep, src in (("22:30", "manual"), ("21:00", "scraped"))]
+    res = only_out(dsn, 3, window(later(3)))  # VL's 10:15 First Class is missing for three days: it goes
+    assert res.trips_deactivated == 1 and fc(dsn, "10:15", TO_LEG)[0][4] is False
+    assert query(dsn, "select is_active from trips where id = any(%s)", sagada) == [(True,), (True,)]

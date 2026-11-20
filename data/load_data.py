@@ -7,6 +7,7 @@ Usage:
 Reads DATABASE_URL from the environment or from the repo-root .env file. --database-url still works but warns:
 it shows the password in the process list (ps). Database errors are printed with the password and DSN masked.
 Load order: spots.csv, routes_trips.csv, last_mile_routes.csv.
+spots.csv and last_mile_routes.csv take an optional `city` column (TG-67): blank or missing is Baguio, else Baguio or Sagada.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import argparse
 import csv
 import os
 import sys
+from collections import Counter
 from collections.abc import Iterable
 from datetime import date, datetime, time
 from pathlib import Path
@@ -44,6 +46,9 @@ MODES = {"jeep", "taxi", "walk", "tricycle", "van", "grab"}
 SPOT_CATEGORIES = {"park", "food", "market", "museum", "viewpoint", "shopping", "church", "cafe", "other"}
 DAY_NAMES = {"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
 DAY_PRESETS = {"daily": [0, 1, 2, 3, 4, 5, 6], "weekdays": [1, 2, 3, 4, 5], "weekends": [0, 6]}
+# Keep in step with app.plan_validation.CITIES (TG-67). Not imported from there: it pulls in pydantic (TG-40).
+CITIES = ("Baguio", "Sagada")
+DEFAULT_CITY = "Baguio"  # a missing column or blank cell: every row before TG-67 is Baguio
 
 
 class RowError(Exception):
@@ -140,6 +145,22 @@ def _choice(row: dict, key: str, allowed: set[str], default: str | None = None) 
     return v
 
 
+def _city(row: dict) -> str:
+    """The optional `city` cell: blank or missing is Baguio, anything else must match CITIES exactly."""
+    v = _s(row, "city")
+    if v is None:
+        return DEFAULT_CITY
+    if v not in CITIES:
+        raise RowError(f"'city' must be one of {', '.join(CITIES)}; got {v!r}")
+    return v
+
+
+def _city_change(changes: list[str] | None, where: str, old: str | None, new: str, what: str) -> None:
+    """Note an existing row whose city this load changes (review N2: a city set by hand would flip back to Baguio)."""
+    if changes is not None and old is not None and old != new:
+        changes.append(f"{where}: city {old} -> {new} ({what})")
+
+
 def read_csv(path: Path) -> list[tuple[int, dict]]:
     if not path.exists():
         return []
@@ -182,7 +203,10 @@ def missing_seed_message(what: str, slugs: Iterable[str]) -> str:
 # ---------------------------------------------------------------------------
 # Loaders
 # ---------------------------------------------------------------------------
-def load_spots(cur, rows) -> tuple[int, list[str]]:
+def load_spots(cur, rows, *, cities: Counter | None = None, changes: list[str] | None = None) -> tuple[int, list[str]]:
+    """`cities` counts the loaded rows per city; `changes` gets one line per existing spot whose city changes."""
+    cur.execute("select slug, city from spots")
+    old_city = dict(cur.fetchall())
     errors, n = [], 0
     for line, row in rows:
         try:
@@ -195,22 +219,27 @@ def load_spots(cur, rows) -> tuple[int, list[str]]:
                 description=_s(row, "description"),
                 visit_minutes=_int(row, "visit_minutes"),
                 entrance_fee_php=_num(row, "entrance_fee_php"),
+                city=_city(row),
             )
         except RowError as e:
             errors.append(f"spots.csv line {line}: {e}")
             continue
+        _city_change(changes, f"spots.csv line {line}", old_city.get(vals["slug"]), vals["city"], vals["slug"])
         cur.execute(
             """
-            insert into spots (slug, name, category, lat, lng, description, visit_minutes, entrance_fee_php)
-            values (%(slug)s, %(name)s, %(category)s, %(lat)s, %(lng)s, %(description)s, %(visit_minutes)s, %(entrance_fee_php)s)
+            insert into spots (slug, name, category, lat, lng, description, visit_minutes, entrance_fee_php, city)
+            values (%(slug)s, %(name)s, %(category)s, %(lat)s, %(lng)s, %(description)s, %(visit_minutes)s, %(entrance_fee_php)s,
+                    %(city)s)
             on conflict (slug) do update set
               name = excluded.name, category = excluded.category, lat = excluded.lat, lng = excluded.lng,
               description = excluded.description, visit_minutes = excluded.visit_minutes,
-              entrance_fee_php = excluded.entrance_fee_php
+              entrance_fee_php = excluded.entrance_fee_php, city = excluded.city
             """,
             vals,
         )
         n += 1
+        if cities is not None:
+            cities[vals["city"]] += 1
     return n, errors
 
 
@@ -320,7 +349,8 @@ def load_routes_trips(cur, rows) -> tuple[int, int, list[str]]:
     return new_routes, n_trips, errors
 
 
-def load_last_mile(cur, rows) -> tuple[int, list[str]]:
+def load_last_mile(cur, rows, *, cities: Counter | None = None, changes: list[str] | None = None) -> tuple[int, list[str]]:
+    """`cities` and `changes` as in load_spots."""
     terminals = slug_map(cur, "terminals")
     spots = slug_map(cur, "spots")
     errors, n = [], 0
@@ -340,6 +370,7 @@ def load_last_mile(cur, rows) -> tuple[int, list[str]]:
                 minutes=_int(row, "minutes"),
                 verified=_verified(row),
                 notes=_s(row, "notes"),
+                city=_city(row),
             )
             if (vals["ft"] is None) == (vals["fs"] is None):
                 raise RowError("fill exactly one of from_terminal or from_spot")
@@ -353,7 +384,7 @@ def load_last_mile(cur, rows) -> tuple[int, list[str]]:
 
         cur.execute(
             """
-            select id from last_mile_routes
+            select id, city from last_mile_routes
             where from_terminal_id is not distinct from %(ft)s and from_spot_id is not distinct from %(fs)s
               and to_terminal_id is not distinct from %(tt)s and to_spot_id is not distinct from %(ts)s
               and mode = %(mode)s and signboard is not distinct from %(signboard)s
@@ -362,11 +393,13 @@ def load_last_mile(cur, rows) -> tuple[int, list[str]]:
         )
         found = cur.fetchone()
         if found:
+            leg = f"{_s(row, 'from_terminal') or _s(row, 'from_spot')} > {_s(row, 'to_terminal') or _s(row, 'to_spot')}"
+            _city_change(changes, f"last_mile_routes.csv line {line}", found[1], vals["city"], leg)
             cur.execute(
                 """
                 update last_mile_routes set boarding_point = %(boarding)s, alighting_point = %(alighting)s,
                   fare_min_php = %(fmin)s, fare_max_php = %(fmax)s, minutes = %(minutes)s,
-                  source = 'manual', last_verified_at = %(verified)s, notes = %(notes)s
+                  source = 'manual', last_verified_at = %(verified)s, notes = %(notes)s, city = %(city)s
                 where id = %(id)s
                 """,
                 {**vals, "id": found[0]},
@@ -376,13 +409,15 @@ def load_last_mile(cur, rows) -> tuple[int, list[str]]:
                 """
                 insert into last_mile_routes (from_terminal_id, from_spot_id, to_terminal_id, to_spot_id, mode,
                   signboard, boarding_point, alighting_point, fare_min_php, fare_max_php, minutes,
-                  source, last_verified_at, notes)
+                  source, last_verified_at, notes, city)
                 values (%(ft)s, %(fs)s, %(tt)s, %(ts)s, %(mode)s, %(signboard)s, %(boarding)s, %(alighting)s,
-                        %(fmin)s, %(fmax)s, %(minutes)s, 'manual', %(verified)s, %(notes)s)
+                        %(fmin)s, %(fmax)s, %(minutes)s, 'manual', %(verified)s, %(notes)s, %(city)s)
                 """,
                 vals,
             )
         n += 1
+        if cities is not None:
+            cities[vals["city"]] += 1
     return n, errors
 
 
@@ -414,6 +449,12 @@ def db_failure(exc: psycopg.Error, dsn: str | None) -> str:
     return line + " (run supabase/schema.sql first)" if isinstance(exc, psycopg.errors.UndefinedTable) else line
 
 
+def _per_city(n: int, cities: Counter) -> str:
+    """'3 (Baguio 1, Sagada 2)'; just '0' when nothing loaded."""
+    parts = ", ".join(f"{c} {cities[c]}" for c in CITIES if cities[c])
+    return f"{n} ({parts})" if parts else str(n)
+
+
 def run(dsn: str, data_dir: Path, dry_run: bool) -> int:
     spots_rows = read_csv(data_dir / "spots.csv")
     trip_rows = read_csv(data_dir / "routes_trips.csv")
@@ -421,9 +462,10 @@ def run(dsn: str, data_dir: Path, dry_run: bool) -> int:
 
     with psycopg.connect(dsn, prepare_threshold=None) as conn:
         with conn.cursor() as cur:
-            n_spots, e1 = load_spots(cur, spots_rows)
+            spot_cities, lm_cities, changes = Counter(), Counter(), []
+            n_spots, e1 = load_spots(cur, spots_rows, cities=spot_cities, changes=changes)
             new_routes, n_trips, e2 = load_routes_trips(cur, trip_rows)
-            n_lm, e3 = load_last_mile(cur, lm_rows)
+            n_lm, e3 = load_last_mile(cur, lm_rows, cities=lm_cities, changes=changes)
         errors = e1 + e2 + e3
 
         if errors:
@@ -433,13 +475,18 @@ def run(dsn: str, data_dir: Path, dry_run: bool) -> int:
                 print(f"  - {e}", file=sys.stderr)
             return 1
 
-        summary = f"spots: {n_spots}, trips: {n_trips} ({new_routes} new routes), last-mile routes: {n_lm}"
+        summary = (f"spots: {_per_city(n_spots, spot_cities)}, trips: {n_trips} ({new_routes} new routes), "
+                   f"last-mile routes: {_per_city(n_lm, lm_cities)}")
         if dry_run:
             conn.rollback()
             print(f"Dry run OK, nothing saved. Would load {summary}")
         else:
             conn.commit()
             print(f"Loaded {summary}")
+        if changes:
+            print(f"{'Would change' if dry_run else 'Changed'} the city of {len(changes)} existing row(s):")
+            for c in changes:
+                print(f"  - {c}")
     return 0
 
 
