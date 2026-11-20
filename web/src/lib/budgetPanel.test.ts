@@ -243,3 +243,12 @@ test("GW2-S5 logs: the budget load says its state and counts, never a name, an i
   }
   assert.doesNotMatch(read("src/lib/budgetPanel.ts"), /console\./, "the words are pure");
 });
+
+// ---------------------------------------------------------------- tg-ux2's review of #103 (TG-62/ux-review-gw2.md)
+
+test("GW2-S6 ux-review M1, S1, S2: the wallet link's shape, the Spent header on one line, each amount with its word", () => {
+  const src = read(PANEL);
+  assert.match(src, /<PixelLink variant="secondary" href=\{`\/w\/\$\{walletSlug\}`\} className="inline-flex items-center self-start px-4 text-sm">/, "M1: like every other secondary PixelLink");
+  assert.match(src, /<th scope="col" className="[^"]*whitespace-nowrap[^"]*">Spent \(₱\)<\/th>/, "S1: it wrapped at 320");
+  for (const part of ["p.lines", "p.word.text", "p.other"]) assert.match(src, new RegExp(`<span className="[^"]*whitespace-nowrap[^"]*">\\{${part.replace(/\./g, "\\.")}\\}<\\/span>`), `S2: ${part} doesn't break`);
+});

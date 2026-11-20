@@ -4,7 +4,7 @@
 // from the trip menu, never in TG-64's recap; with NEXT_PUBLIC_BUDGET_LINES off it's never mounted and today's table
 // shows. The words, rounding and totals are budgetPanel.ts's.
 import { PX, PixelBox, PixelLink, cx } from "@/components/pixel";
-import { type PanelView, panelView, personMeta, shareHeading, stateLine } from "@/lib/budgetPanel";
+import { type PanelView, panelView, shareHeading, stateLine } from "@/lib/budgetPanel";
 import type { Guide } from "@/lib/guide";
 import type { BudgetResult, SessionBudget } from "@/lib/sessionBudget";
 
@@ -52,7 +52,7 @@ export default function BudgetPanel({ guide, budget, walletSlug, me, returnDate,
           <thead>
             <tr className="border-b-2 border-border">
               <th scope="col" className="px-3 py-2 font-semibold">Item</th>
-              <th scope="col" className="px-3 py-2 text-right font-semibold">Spent (₱)</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">Spent (₱)</th>
             </tr>
           </thead>
           <tbody>
@@ -116,21 +116,21 @@ export default function BudgetPanel({ guide, budget, walletSlug, me, returnDate,
                   <span className="min-w-0 break-words">{p.name}{p.you && " (you)"}</span>
                   <span className="font-bold tabular-nums">{p.total}</span>
                 </span>
-                {p.word?.over ? (
-                  // Over is a word in danger-text (ux §6): the Red only repeats it
-                  <span className={PX.meta}>
-                    {p.lines}, <span className="font-semibold text-danger-text">{p.word.text}</span>
-                    {p.other && ` · ${p.other}`}
-                  </span>
-                ) : (
-                  <span className={PX.meta}>{personMeta(p)}</span>
-                )}
+                {/* personMeta's line, each amount kept with its word (tg-ux2 S2: "₱690 / other" broke at 320). Over is a word
+                    in danger-text (ux §6): the Red only repeats it */}
+                <span className={PX.meta}>
+                  <span className="whitespace-nowrap">{p.lines}</span>
+                  {p.word && (p.word.over
+                    ? <>, <span className="whitespace-nowrap font-semibold text-danger-text">{p.word.text}</span></>
+                    : <>, <span className="whitespace-nowrap">{p.word.text}</span></>)}
+                  {p.other && <> · <span className="whitespace-nowrap">{p.other}</span></>}
+                </span>
               </li>
             ))}
           </ul>
           <p className={PX.meta}>Shares come from the wallet&apos;s splits. Who pays whom is in the wallet&apos;s Settle up.</p>
           {walletSlug && (
-            <PixelLink variant="secondary" href={`/w/${walletSlug}`} className="self-start">
+            <PixelLink variant="secondary" href={`/w/${walletSlug}`} className="inline-flex items-center self-start px-4 text-sm">
               Open the wallet
             </PixelLink>
           )}
