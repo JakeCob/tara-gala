@@ -75,9 +75,12 @@ test("T64-W2 countLine: the stops always, then photos and who came, each only wh
   assert.equal(countLine(recapWith({ people: { count: 3, list: null } })), "4 of 24 stops done · 3 photos · 3 came", "Just how many came keeps the count");
   assert.equal(countLine(recapWith({ photos: [FIXTURE.photos[2]], people: { count: 1, list: null } })), "4 of 24 stops done · 1 photo · 1 came");
   assert.equal(countLine(recapWith({ photos: [] })), "4 of 24 stops done · 0 photos · 3 came", "photos on and none yet");
-  assert.equal(countLine(recapWith({ marks: [] })), "0 of 24 stops done · 3 photos · 3 came", "no pick: d2-01 and d2-02 hide, d3-01 shows (7 + 7 + 10)");
-  const hidden = recapWith({ marks: FIXTURE.marks.filter((m: { key: string }) => m.key !== "pick:sunrise") });
-  assert.equal(countLine(hidden), "3 of 24 stops done · 3 photos · 3 came", "a tick on a row the pick hides isn't a stop done");
+  // Before a pick every option's rows show (guide.rowShows), so the count follows what levels() draws
+  assert.equal(countLine(recapWith({ marks: [] })), "0 of 26 stops done · 3 photos · 3 came", "no pick: d2-01, d2-02 and d3-01 all show (7 + 9 + 10)");
+  const unpicked = recapWith({ marks: FIXTURE.marks.filter((m: { key: string }) => m.key !== "pick:sunrise") });
+  assert.equal(countLine(unpicked), "4 of 26 stops done · 3 photos · 3 came", "no pick: the tick on d2-02 counts, since it shows");
+  const pickedA = recapWith({ marks: FIXTURE.marks.map((m: { key: string }) => (m.key === "pick:sunrise" ? { ...m, value: "A" } : m)) });
+  assert.equal(countLine(pickedA), "3 of 25 stops done · 3 photos · 3 came", "pick A hides d2-02 (7 + 8 + 10): a tick on a row the pick hides isn't a stop done");
 });
 
 test("T64-W3 photosByRow: each level's photos, and On the trip for no row or a row that isn't a level", async () => {
@@ -103,6 +106,8 @@ test("T64-W4 fetchRecap: the recap, and gone, offline and server kept apart", as
   assert.deepEqual((await sent(() => fetchRecap(SLUG), 404, { detail: "recap_not_found" })).result, { ok: false, why: "gone" });
   assert.deepEqual((await sent(() => fetchRecap(SLUG), 0)).result, { ok: false, why: "offline" }, "no signal isn't a dead link");
   for (const status of [500, 502, 503]) assert.deepEqual((await sent(() => fetchRecap(SLUG), status, {})).result, { ok: false, why: "server" }, String(status));
+  assert.deepEqual((await sent(() => fetchRecap(SLUG), 429, { detail: "rate_limited" })).result, { ok: false, why: "server" },
+    "a viewer over the read limit gets Try again, never the final \"isn't shared any more\"");
 });
 
 test("T64-W4b recapFileUrl: a photo or a profile photo, only through the recap's own link", async () => {
