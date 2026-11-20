@@ -153,6 +153,14 @@ test("GW2-P10 G28 the per-person meta reads as one line", async () => {
   assert.equal(personMeta({ lines: "₱3,900 on the plan's lines", word: { text: "₱10 over", over: true }, other: null }), "₱3,900 on the plan's lines, ₱10 over");
 });
 
+test("GW2-P14 ux.md GW2 Q5: a line with nothing spent, among spent lines, shows 0 and its word as any other line", async () => {
+  const { panelView } = await load();
+  const v = panelView(budget({ lines: [...budget().lines, line({ key: "taxis", item: "Taxis and jeeps", estimate: "200 to 400", min: 200, max: 400 })] }), A);
+  assert.deepEqual(v.rows[2], { key: "taxis", item: "Taxis and jeeps", plan: "Plan 200–400", spent: "0", word: { text: "400 left", over: false } });
+  assert.deepEqual(v.total, { plan: "Plan 2,050–2,950", spent: "2,310", word: { text: "640 left", over: false } }, "its plan still counts in Total");
+  assert.equal(v.nothingSpent, null, "only a wallet with nothing spent drops the words (P8)");
+});
+
 // ---------------------------------------------------------------- G29: states, heading; G30: the card
 
 test("GW2-P11 G29 ux §5: each state's line under today's table; ok and no_budget add none", async () => {
@@ -192,7 +200,8 @@ test("GW2-S1 G29 Rev 1 S1: LevelMap mounts the panel beside the recap mode, neve
   assert.match(src, /import BudgetPanel, \{ SpendingNote \} from "\.\/BudgetPanel"/);
   assert.match(src, /spending\?: Spending;/, "an optional prop: the plan's own page and the recap pass none");
   assert.match(src, /const shownSpending = recap \? undefined : spending;/, "the recap never shows the budget (TG-64 §2.2)");
-  assert.match(src, /shownSpending\?\.load !== undefined && shownSpending\.load !== "loading" && shownSpending\.load\.ok \? \(\s*<BudgetPanel /);
+  assert.match(src, /shownSpending\?\.load !== undefined && shownSpending\.load !== "loading" && shownSpending\.load\.ok && shownSpending\.load\.budget\.state === "ok" \? \(\s*<BudgetPanel /,
+    "only state ok has lines: no_wallet, two_trips and no_budget come back ok:true too and keep today's table with their line (ux §5)");
   assert.match(src, /<Budget guide=\{guide\}>\{shownSpending && <SpendingNote load=\{shownSpending\.load\} \/>\}<\/Budget>/);
   assert.match(src, /if \(key === "budget" && menu !== "budget"\) shownSpending\?\.onOpen\(\);/, "opening the panel fetches again (ux §5)");
   assert.doesNotMatch(read("src/components/RecapView.tsx"), /spending=/, "the recap passes no spending");
@@ -204,7 +213,8 @@ test("GW2-S2 ux §6: the spending table is a real table with a caption, column h
   assert.match(src, /<caption className="sr-only">The plan and the spending per person, in pesos<\/caption>/);
   assert.match(src, /<th scope="col"[^>]*>Item<\/th>/);
   assert.match(src, /<th scope="col"[^>]*>Spent \(₱\)<\/th>/);
-  assert.match(src, /<th scope="row"[^>]*>Total<\/th>/);
+  // ux §3: Total's cell carries the summed plan under it, as each line's item does
+  assert.match(src, /<th scope="row"[^>]*>\s*<span[^>]*>Total<\/span>\s*<span className=\{cx\(PX\.meta, "block"\)\}>\{v\.total\.plan\}<\/span>\s*<\/th>/);
   assert.match(src, /text-danger-text/, "over is a word, and the Red only repeats it");
   assert.match(src, /href=\{`\/w\/\$\{walletSlug\}#expenses-title`\}/, "the nudge links to the wallet's expenses");
   assert.match(src, /href="#money-title"/, "no wallet: Go to Shared expenses");
