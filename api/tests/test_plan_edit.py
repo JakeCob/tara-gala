@@ -995,3 +995,17 @@ def test_t67_e5_every_hand_edit_works_on_a_sagada_plan(sg_trip, client):  # §3 
     r = undo(client, sg_trip)
     assert r.status_code == 200, r.text
     assert any(x["key"] == "d2-02" for d in r.json()["itinerary"]["guide"]["days"] for x in d["rows"])
+
+
+def test_t67_e6_guide_city_is_baguio_with_no_guide_or_no_buses_on_file(sg_trip, client, dsn):  # review N6
+    from app import plan_edit
+
+    g = guides.parse_guide(stored(plan_of(client, sg_trip)["guide"]))[0]
+    with psycopg.connect(dsn, row_factory=dict_row) as conn:
+        assert plan_edit.guide_city(conn, g) == "Sagada"
+        assert plan_edit.guide_city(conn, None) == "Baguio"
+        conn.execute("delete from trips where source_url = %s", (sg.SRC,))
+        assert plan_edit.guide_city(conn, g) == "Baguio", "no bus on file"
+        empty = g.model_copy(deep=True)
+        empty.getting_there.buses, empty.getting_home.buses = [], []
+        assert plan_edit.guide_city(conn, empty) == "Baguio", "no buses at all"

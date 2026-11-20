@@ -580,8 +580,9 @@ def sagada(rows, tmp_path):
     return rows, sg.insert_curated(rows)
 
 
-def test_t67_i1_every_baguio_itinerary_says_baguio(make_client, planner, tmp_path):  # B8
+def test_t67_i1_every_baguio_itinerary_says_baguio(make_client, planner, tmp_path, caplog):  # B8
     dsn, slug, _ = planner
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
     assert load_premade.run(dsn, write_premade(tmp_path, [chill_entry()]), dry_run=False, prune=False) == 0
     trips, spots, legs = db_ids(dsn)
     night = insert_row(dsn, build_plan(trips[NIGHT], THU, trips[RET], SUN, NIGHT_DAYS, spots, legs), trip_date=THU)
@@ -590,19 +591,26 @@ def test_t67_i1_every_baguio_itinerary_says_baguio(make_client, planner, tmp_pat
             body = get(client, s).json()
             assert body["city"] == "Baguio", s
             assert set(body) == TOP_FIELDS
+    assert not [r for r in caplog.records if r.getMessage().startswith("plan city fallback")], "Baguio reads stay quiet"
 
 
 def test_t67_i2_the_city_survives_a_missing_bus_and_falls_back_with_a_warning(client, sagada, caplog):  # B9
     dsn, slug = sagada
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+
+    def fallbacks():
+        return [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan city fallback")]
+
     plan = get(client, slug).json()["plan"]
+    assert fallbacks() == [], "no fallback line on a normal read"
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute("delete from trips where id = %s", (plan["outbound"]["trip_id"],))
     body = get(client, slug).json()
     assert body["city"] == "Sagada", "from the return trip's origin"
     assert ("unknown_trip", "outbound.trip_id") in found(body)
+    assert fallbacks() == [], "no fallback line while one bus is still on file"
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute("delete from trips where id = %s", (plan["return"]["trip_id"],))
-    caplog.set_level(logging.INFO, logger="tara_gala.api")
     caplog.clear()
     body = get(client, slug).json()
     assert body["city"] == "Baguio"
