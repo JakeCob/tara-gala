@@ -8,6 +8,7 @@ The file is a pre-made entry (see load_premade.py: slugs and natural keys, never
 bus tables, sunrise pick, budget, to-do and sources. The core is resolved and checked with the planner's validator,
 exactly like a pre-made plan; the guide's bus rows are resolved to trips (their times and fares come from the
 schedule data, never the file) and its places to spots and terminals, then the guide is checked (app/guide.py).
+TG-67: the plan's city comes from its buses (Baguio or Sagada), and every guide bus must go to or leave from it.
 Saved with model = 'curated' and share_slug = the file's "share_slug", updated in place on re-runs. Any problem rolls
 back. Reads DATABASE_URL like data/load_data.py.
 """
@@ -18,6 +19,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from uuid import UUID
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -29,7 +31,7 @@ sys.path.insert(0, str(HERE.parent / "api"))
 import load_data  # noqa: E402
 import load_premade  # noqa: E402
 from app.guide import parse_guide  # noqa: E402
-from app.plan_validation import loc_path, validate_plan  # noqa: E402
+from app.plan_validation import load_trips, loc_path, validate_plan  # noqa: E402
 
 MODEL = "curated"
 SLUG = r"^[a-z0-9]+(-[a-z0-9]+)*$"
@@ -102,6 +104,17 @@ def resolve_guide(cur, raw: dict) -> tuple[dict | None, list[str]]:
     return parsed.model_dump(mode="json", by_alias=True, exclude_none=True), []
 
 
+def city_problems(conn, guide: dict, city: str) -> list[str]:
+    """TG-67: every getting-there bus must go to the core's city and every getting-home bus leave from it, so the trip
+    page's swaps (plan_edit.guide_city) and the core (plan_city) agree on the city."""
+    tables = (("getting_there", "destination_city", "go to"), ("getting_home", "origin_city", "leave from"))
+    ids = [UUID(str(b["trip_id"])) for t, _, _ in tables for b in guide[t]["buses"]]
+    trips = load_trips(conn, ids)
+    return [f"guide.{t}.buses[{i}]: this bus doesn't {verb} {city}"
+            for t, end, verb in tables for i, b in enumerate(guide[t]["buses"])
+            if (trip := trips.get(UUID(str(b["trip_id"])))) is None or getattr(trip, end) != city]
+
+
 UPSERT = """
 insert into itineraries (share_slug, trip_date, return_date, party, budget_php, vibe, plan, model)
 values (%(slug)s, %(trip_date)s, %(return_date)s, %(party)s, %(budget)s, %(vibe)s, %(plan)s, %(model)s)
@@ -138,6 +151,8 @@ def run(dsn: str, path: Path, *, dry_run: bool) -> int:
             if plan is not None:
                 result = validate_plan(conn, plan, trip_date=entry.outbound.date, return_date=entry.return_.date)
                 problems += [str(e) for e in result.errors]
+                if guide is not None:
+                    problems += city_problems(conn, guide, result.city)
             if not problems:
                 stored = {**result.plan.to_json(), "guide": guide}
                 cur.execute(UPSERT, {
@@ -156,10 +171,10 @@ def run(dsn: str, path: Path, *, dry_run: bool) -> int:
         rows = sum(len(d["rows"]) for d in guide["days"])
         if dry_run:
             conn.rollback()
-            print(f"Dry run OK, nothing saved. Would load {slug}: {len(entry.days)} days, {rows} rows, {len(guide['todo'])} to-dos")
+            print(f"Dry run OK, nothing saved. Would load {slug}: {len(entry.days)} days, {rows} rows, {len(guide['todo'])} to-dos city={result.city}")
         else:
             conn.commit()
-            print(f"Loaded {slug}: {len(entry.days)} days, {rows} rows, {len(guide['todo'])} to-dos")
+            print(f"Loaded {slug}: {len(entry.days)} days, {rows} rows, {len(guide['todo'])} to-dos city={result.city}")
     return 0
 
 

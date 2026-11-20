@@ -1119,3 +1119,11 @@ def test_t67_v10_empty_core_days_pass_with_the_afternoon_return(sagada):  # §12
     raw = sg.plan(sagada)
     assert [d["stops"] for d in raw["days"][1:]] == [[], []]
     assert sg_validate(sagada, raw, trip_date=sg.OUT_DATE, return_date=sg.RET_DATE).errors == []
+
+
+def test_t67_l7_the_loader_and_the_validator_list_the_same_cities():  # §3 (review N1: lives here)
+    import load_data
+
+    if not hasattr(load_data, "CITIES"):
+        pytest.skip("S1 (the loader's city column) is not on this branch yet")
+    assert load_data.CITIES == pv.CITIES
