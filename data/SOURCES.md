@@ -101,16 +101,24 @@ Victory Liner no longer lists first class 13:15 and 14:15 from Baguio to Cubao o
 
 ## Sagada (TG-67, branch DATA-sagada), checked 2026-11-20
 
-For the owner's Sagada trip (Wed Nov 25 to Sun Nov 29, two people), from the owner's itinerary (`_team/tickets/TG-67/owner-itinerary.txt`) and research. The rows go in the main files with `city` = `Sagada`:
-- `data/spots.csv` (21 spots) and `data/last_mile_routes.csv` (59 legs) now have a last column, `city`. It's blank on every Baguio row, so the loader's default, `Baguio`, still applies. **Load them only after TG-67 S1** (the loader reads `city`). Before that, Sagada rows would be saved as `Baguio`.
-- `supabase/data/sagada_seed.sql`: the `coda-lines` operator, the `coda-cubao` and `coda-sagada` terminals, and `operator_terminals`. These are upserts, safe to re-run, with a commented rollback block at the bottom. **Run it before `load_data.py`.** Without it, the dry run fails with "unknown operator 'coda-lines'" and "unknown terminal 'coda-sagada'".
-- `data/routes_trips.csv`: the owner's outbound bus, plus the owner's return bus as two commented rows, one per class. The class waits for the owner (manager, 2026-11-20).
+For the owner's Sagada trip (Wed Nov 25 to Sun Nov 29, two people), from the owner's itinerary (`_team/tickets/TG-67/owner-itinerary.txt`) and research. Files:
+- `data/spots.csv` (21 Sagada spots) and `data/last_mile_routes.csv` (54 Sagada legs) now have a last column, `city`. It's blank on every Baguio row, so the default, `Baguio`, still applies. These rows reference no new terminal, so the main CSVs still load on a schema-only database (the tests that copy them, such as `test_scraper_stable_rows.py`, pass).
+- `supabase/data/sagada_seed.sql`: the `coda-lines` operator, the `coda-cubao` and `coda-sagada` terminals, and `operator_terminals`. These are upserts, safe to re-run, with a commented rollback block at the bottom.
+- `data/sagada-coda/`: the rows that need that seed. `routes_trips.csv` has the owner's outbound bus, plus the return as two commented rows, one per class, until the owner confirms it (manager, 2026-11-20). `last_mile_routes.csv` has the 5 legs at the `coda-sagada` stop.
 - `data/itineraries/sagada-trip-2026-11-25.json`: the S5 guide draft (share slug `sagada-trip-nov25`).
 
-Validated on tg-testpg (database `tg_data_sagada`: schema, migrations and `terminals_coords.sql`, then `sagada_seed.sql` twice):
-- `load_data.py --dry-run`: "spots: 38, trips: 3 (3 new routes), last-mile routes: 349". That's Baguio's 17, 2 and 290 plus Sagada's 21, 1 and 59.
-- Loading with the 35-seater return row uncommented (a temp copy) works twice, and the second run adds nothing.
-- `load_itinerary.py --dry-run` on the guide reports only "the outbound trip must go to Baguio" and "the return trip must leave from Baguio", which is TG-67 S2's change. With the validator's city set to `Sagada` in memory, it gives "Dry run OK … sagada-trip-nov25: 3 days, 26 rows, 11 to-dos".
+**Load order, after TG-67 S1 (the loader reads `city`; before that, Sagada rows would be saved as `Baguio`):**
+1. `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/data/sagada_seed.sql`
+2. `python data/load_data.py`
+3. `python data/load_data.py --data-dir data/sagada-coda`: its legs need step 2's spots, and its trips need step 1.
+4. After S2: `python data/load_itinerary.py data/itineraries/sagada-trip-2026-11-25.json`
+
+Validated on tg-testpg (database `tg_data_sagada`: schema, migrations and `terminals_coords.sql`):
+- Step 2 dry run, before the seed: "spots: 38, trips: 2 (2 new routes), last-mile routes: 344". That's Baguio's 17, 2 and 290 plus Sagada's 21 spots and 54 legs.
+- The seed runs twice without error.
+- Steps 2 and 3 load, with the 35-seater return row uncommented in a temp copy: "trips: 2 (2 new routes), last-mile routes: 5". A re-run adds no routes.
+- Step 4's dry run reports only "the outbound trip must go to Baguio" and "the return trip must leave from Baguio", which is S2's change. With the validator's city set to `Sagada` in memory, it gives "Dry run OK … sagada-trip-nov25: 3 days, 26 rows, 11 to-dos".
+- `pytest` for `test_scraper_stable_rows`, `test_trip_places`, `test_scraper_hardening`, `test_guide` and `test_loader_and_trips` on a throwaway tg-testpg database: 149 passed.
 
 ### Sagada centre point (for TG-67 S3 `CITY_CENTRES`)
 
@@ -181,7 +189,7 @@ Fees, guides and times:
 
 ### Getting-around legs (`data/last_mile_routes.csv`, city Sagada)
 
-59 legs, `minutes` empty unless sourced, fares only in notes (they're per vehicle, not per person):
+59 legs (54 in `data/last_mile_routes.csv`, 5 at the bus stop in `data/sagada-coda/`), `minutes` empty unless sourced, fares only in notes (they're per vehicle, not per person):
 - **The owner's chain** (plan §5): `coda-sagada` → tourist office → lodge, and lodge to and from Yoghurt House, Lemon Pie House, the church, Sumaguing, Log Cabin and the town centre (walk). Also church → Echo Valley → Hanging Coffins → lodge (walk), Marlboro → Blue Soil (the guided trek), and van legs lodge ↔ Lake Danum (20 min), lodge → Marlboro, Blue Soil → lodge, and lodge ↔ Bomod-ok.
 - **The town-centre hub** (earlier batch): walks to the tourist office, SAGGAS, church, market, museum, Yoghurt House, Log Cabin, Bokong Falls, Sumaguing and Lumiang, and vans to Lumiang and Kiltepan (15 min). There's also Lumiang → Sumaguing, the guided Cave Connection.
 - Walking times aren't sourced, so the notes give OSM straight-line distances. Van legs say "Hired tour vehicle through the tourism office or SAGGAS". That's how both guides describe the transport fee; no public route is implied.

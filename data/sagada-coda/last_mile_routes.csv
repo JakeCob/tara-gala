@@ -1,0 +1,7 @@
+from_terminal,from_spot,to_terminal,to_spot,mode,signboard,boarding_point,alighting_point,fare_min_php,fare_max_php,minutes,verified_on,notes,city
+# Sagada legs that start or end at the coda-sagada terminal (TG-67). Load after supabase/data/sagada_seed.sql and TG-67 S1: python data/load_data.py --data-dir data/sagada-coda
+coda-sagada,,,sagada-town-centre,walk,,,,,,,2026-11-20,"agent-researched (tg-data), owner to verify. The Coda Lines stop is in front of the Municipal Hall (codalines.ph stations page; owner's itinerary; OSM). Straight line about 20 m.",Sagada
+,sagada-town-centre,coda-sagada,,walk,,,,,,,2026-11-20,"agent-researched (tg-data), owner to verify. The Coda Lines stop is in front of the Municipal Hall (codalines.ph stations page; owner's itinerary; OSM). Straight line about 20 m.",Sagada
+coda-sagada,,,sagada-tourist-info-center,walk,,,,,,,2026-11-20,"agent-researched (tg-data), owner to verify. Register on arrival. Straight line about 50 m (OSM).",Sagada
+coda-sagada,,,kanip-aw-pines-view-lodge,walk,,,,,,,2026-11-20,"agent-researched (tg-data), owner to verify. Kanip-aw is within walking distance of the town centre and restaurants (Trip.com listing); the owner's plan walks it. Straight line about 830 m (OSM); walking time not sourced.",Sagada
+,kanip-aw-pines-view-lodge,coda-sagada,,walk,,,,,,,2026-11-20,"agent-researched (tg-data), owner to verify. Kanip-aw is within walking distance of the town centre and restaurants (Trip.com listing); the owner's plan walks it. Straight line about 830 m (OSM); walking time not sourced.",Sagada
