@@ -1009,3 +1009,30 @@ def test_t67_e6_guide_city_is_baguio_with_no_guide_or_no_buses_on_file(sg_trip, 
         empty = g.model_copy(deep=True)
         empty.getting_there.buses, empty.getting_home.buses = [], []
         assert plan_edit.guide_city(conn, empty) == "Baguio", "no buses at all"
+
+
+def test_t67_e7_guide_city_reads_getting_there_first_and_only_cities_it_serves(sg_trip, client, dsn):  # review N1
+    from datetime import time as Time
+
+    from app import plan_edit
+    from app.plan_validation import TripRef
+
+    def ref(origin_city, dest_city):
+        return TripRef(trip_id=uuid.uuid4(), is_active=True, departure_time=Time(22, 30), travel_minutes=720,
+                       days_of_week=[0, 1, 2, 3, 4, 5, 6], valid_from=None, valid_to=None,
+                       origin_terminal_id=uuid.uuid4(), origin_city=origin_city,
+                       destination_terminal_id=uuid.uuid4(), destination_city=dest_city)
+
+    g = guides.parse_guide(stored(plan_of(client, sg_trip)["guide"]))[0]
+
+    def city(there, home):
+        g.getting_there.buses[0].trip_id, g.getting_home.buses[0].trip_id = there.trip_id, home.trip_id
+        with psycopg.connect(dsn, row_factory=dict_row) as conn:  # every trip is passed in, so nothing is read
+            return plan_edit.guide_city(conn, g, {there.trip_id: there, home.trip_id: home})
+
+    # the tables disagree: getting there wins
+    assert city(ref("Quezon City", "Baguio"), ref("Sagada", "Quezon City")) == "Baguio"
+    assert city(ref("Quezon City", "Sagada"), ref("Baguio", "Quezon City")) == "Sagada"
+    # a city we don't serve is skipped, not taken
+    assert city(ref("Quezon City", "La Trinidad"), ref("Sagada", "Quezon City")) == "Sagada"
+    assert city(ref("Quezon City", "La Trinidad"), ref("Banaue", "Quezon City")) == "Baguio"
