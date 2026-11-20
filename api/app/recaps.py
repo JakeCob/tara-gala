@@ -35,8 +35,14 @@ logger = logging.getLogger("tara_gala.api")
 
 NOT_FOUND = "recap_not_found"
 HEADERS = {"Cache-Control": "private, no-cache", "X-Robots-Tag": "noindex"}  # on every recap answer, 404s included
-RECAP_PER_HOUR = 600  # the three public reads together, per IP: photo bytes are the heavy part
+RECAP_PER_HOUR = 600  # GET /recaps/{slug}, per IP
 RECAP_LIMITER = RateLimiter(RECAP_PER_HOUR)
+# The photo and avatar bytes, per IP, on their own counter (review-code-a.md S1): one full album view is up to 300 photos
+# plus the faces, the answers are no-cache so a reload fetches them all again, and a group often shares one carrier or
+# hotel IP. 5000 is 8 people each seeing a 300-photo album twice. Every request still needs a live link, the toggle and
+# this trip's file.
+RECAP_FILES_PER_HOUR = 5000
+RECAP_FILE_LIMITER = RateLimiter(RECAP_FILES_PER_HOUR)
 
 
 class RecapIn(BaseModel):
@@ -99,8 +105,13 @@ def recap_flag(request: Request) -> None:
 
 
 def _limited(request: Request) -> None:
-    """A dependency on the public reads, so the limit comes before any database work."""
+    """A dependency on the recap's page read, so the limit comes before any database work."""
     _limit(RECAP_LIMITER, request, "recap")
+
+
+def _file_limited(request: Request) -> None:
+    """The same for the photo and avatar bytes, on their own counter."""
+    _limit(RECAP_FILE_LIMITER, request, "recap-file")
 
 
 def _headers(response: Response) -> None:
@@ -252,7 +263,7 @@ def _file_id(recap_slug: str, raw: str) -> UUID:
         raise _missing(recap_slug, "file") from None
 
 
-@router.get("/recaps/{recap_slug}/photos/{file_id}", responses={404: {"description": NOT_FOUND}}, dependencies=[Depends(_limited)])
+@router.get("/recaps/{recap_slug}/photos/{file_id}", responses={404: {"description": NOT_FOUND}}, dependencies=[Depends(_file_limited)])
 def get_photo(recap_slug: str, file_id: str) -> Response:
     with db.get_conn() as conn:
         trip = _recap(conn, recap_slug)
@@ -269,7 +280,7 @@ def get_photo(recap_slug: str, file_id: str) -> Response:
     return answer
 
 
-@router.get("/recaps/{recap_slug}/avatars/{attendee_id}", responses={404: {"description": NOT_FOUND}}, dependencies=[Depends(_limited)])
+@router.get("/recaps/{recap_slug}/avatars/{attendee_id}", responses={404: {"description": NOT_FOUND}}, dependencies=[Depends(_file_limited)])
 def get_avatar(recap_slug: str, attendee_id: str) -> Response:
     with db.get_conn() as conn:
         trip = _recap(conn, recap_slug)
