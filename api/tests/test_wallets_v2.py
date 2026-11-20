@@ -32,7 +32,7 @@ NAMES = ("Ana Testname", "Ben Testname", "Carla Testname", "Dan Testname", "Eli 
 NOTE = "Lunch at TESTPLACE"
 ITEM = "TESTITEM"
 SNAPSHOT = {"amount_centavos", "note", "category", "paid_by", "payers", "mode", "inputs", "items", "charges", "shares",
-            "version"}
+            "version", "budget_key"}  # budget_key: TG-62 GA1 (plan G8), manager OK
 
 
 # ---------------------------------------------------------------- fixtures and helpers
