@@ -289,7 +289,8 @@ test("T58-W27 plain words, and no colour on a time", () => {
 
 test("T58-W29 fences: these files don't change, and TripPeople writes nothing to a wallet", () => {
   // TG-61 changes LevelMap.tsx (the plan editor), so it's no longer fenced here; TG-61 doesn't touch sw.js either
-  const changed = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/public/sw.js", "web/package.json", "web/package-lock.json", "package.json", "package-lock.json"], { cwd: new URL("../", WEB), encoding: "utf8" });
+  // TG-62 GW2 changes sw.js (plan §1, G31); swStrategy.test.ts's GW2-SW1 and SW2 pin that change instead
+  const changed = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/package.json", "web/package-lock.json", "package.json", "package-lock.json"], { cwd: new URL("../", WEB), encoding: "utf8" });
   assert.equal(changed.trim(), "");
   const src = box();
   assert.match(src, /walletApi\.get\(/, "the count comes from the wallet's GET");
