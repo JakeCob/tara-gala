@@ -186,3 +186,93 @@ def test_times_read_as_the_app_writes_them():  # S15
     assert [ps.clock12(t(x)) for x in ("00:05", "09:00", "12:00", "12:30", "16:15", "23:45")] == \
         ["12:05 AM", "9:00 AM", "12:00 PM", "12:30 PM", "4:15 PM", "11:45 PM"]
     assert ps.hhmm(t("07:05")) == "07:05" and ps.minutes("23:59") == 1439
+
+
+# ---------------------------------------------------------------- TG-67 S3: the plan's centre (T67-U1 to U5)
+# These need the database: a made-up Sagada trip (fixtures/sagada_made_up.py) read through the suggest route.
+
+import logging  # noqa: E402
+import re  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+import psycopg  # noqa: E402
+
+from app import plan_validation as pv  # noqa: E402
+from conftest import ROOT  # noqa: E402
+from test_guide import SLUG, barkada, trip  # noqa: E402,F401  fixtures
+from test_plan_edit import base_of, editing, plan_of, sg_trip, t  # noqa: E402,F401  fixtures
+
+NEAR = (17.093373, 120.900438)  # made up: 1.0 km north of the Sagada centre below
+
+
+def _near_spot(dsn) -> str:
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        return str(conn.execute(
+            "insert into spots (slug, name, city, lat, lng, description) values"
+            " ('test-sg-near', 'Test SG Near (made up)', 'Sagada', %s, %s, 'made up for tests only') returning id", NEAR,
+        ).fetchone()[0])
+
+
+def _ask(client, slug, at, spot_id):
+    base = base_of(plan_of(client, slug))
+    return client.post(f"/sessions/{slug}/plan/suggest", json={"base": base, "at": at, "place": {"spot_id": spot_id}})
+
+
+@pytest.mark.parametrize("at", [{"after": "d2-01"}, {"anywhere": True}])
+def test_t67_u1_no_lodging_pin_measures_from_the_sagada_centre(sg_trip, client, dsn, at):  # B14  # noqa: F811
+    r = _ask(client, sg_trip, at, _near_spot(dsn))
+    assert r.status_code == 200, r.text
+    assert (r.json()["km_from_baguio"], r.json()["far"]) == (1, False), "about 1 km from the town, not ~80 from Session Road"
+
+
+def test_t67_u2_a_pinned_sagada_lodging_wins(sg_trip, client, dsn):  # B14  # noqa: F811
+    spot = _near_spot(dsn)
+    with psycopg.connect(dsn, autocommit=True) as conn:  # the lodge pinned about 3 km south of the made-up place
+        conn.execute("update spots set lat = %s, lng = %s where slug = 'test-sg-lodge'", (NEAR[0] - 0.027, NEAR[1]))
+    r = _ask(client, sg_trip, {"after": "d2-01"}, spot)
+    assert r.status_code == 200, r.text
+    assert (r.json()["km_from_baguio"], r.json()["far"]) == (3, False)
+
+
+def test_t67_u3_a_baguio_plan_measures_from_its_lodging_pin_else_session_road(t, client, barkada):  # B14  # noqa: F811
+    spot = _near_spot(barkada)  # a Sagada place, far from Baguio
+    r = _ask(client, t, {"after": "d2-01"}, spot)
+    assert r.status_code == 200, r.text
+    lodge = plan_of(client, t)["guide"]["lodging"]
+    with psycopg.connect(barkada) as conn:
+        pin = conn.execute("select lat, lng from spots where id = %s", (lodge["id"],)).fetchone()
+    assert pin[0] is not None, "the owner's Baguio lodging is pinned"
+    assert r.json()["km_from_baguio"] == ps.about_km(ps.haversine_km(pin, NEAR)) and r.json()["far"] is True
+
+
+def test_t67_u3b_with_no_lodging_pin_baguio_and_unknown_cities_use_session_road():  # B14
+    no_lodging = SimpleNamespace(lodging=None)
+    for city in ("Baguio", "Nowhere"):
+        assert ps._km_from_centre(no_lodging, {}, NEAR, city) == ps.haversine_km(ps.BAGUIO_CENTRE, NEAR), city
+    assert ps._km_from_centre(no_lodging, {}, None, "Sagada") is None
+
+
+def test_t67_u4_one_centre_per_city_and_sagadas_is_sourced():  # §3
+    assert set(ps.CITY_CENTRES) == set(pv.CITIES)
+    assert ps.CITY_CENTRES["Baguio"] is ps.BAGUIO_CENTRE
+    lat, lng = ps.CITY_CENTRES["Sagada"]
+    assert 17.07 <= lat <= 17.10 and 120.89 <= lng <= 120.92, "inside Sagada poblacion"
+    source = (ROOT / "api" / "app" / "plan_suggest.py").read_text(encoding="utf-8")
+    assert "openstreetmap.org/way/185305065" in source, "the comment cites the point's source"
+    sources = (ROOT / "data" / "SOURCES.md").read_text(encoding="utf-8")
+    if "Sagada centre point" not in sources:
+        pytest.skip("DATA-sagada (data/SOURCES.md's Sagada centre) is not on this branch yet")
+    assert f"{lat}, {lng}" in sources
+
+
+def test_t67_u5_the_suggest_log_line_carries_the_city(sg_trip, t, client, dsn, caplog):  # §7  # noqa: F811
+    spot = _near_spot(dsn)
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    assert _ask(client, sg_trip, {"after": "d2-01"}, spot).status_code == 200
+    assert _ask(client, t, {"after": "d2-01"}, spot).status_code == 200
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("plan suggest share_slug=")]
+    assert len(lines) == 2
+    assert lines[0].startswith(f"plan suggest share_slug={sg_trip} ") and lines[0].endswith(" city=Sagada"), lines[0]
+    assert lines[1].startswith(f"plan suggest share_slug={t} ") and lines[1].endswith(" city=Baguio"), lines[1]
+    for line in lines:
+        assert not re.search(r"\d+\.\d{3,}", line), "no pin in the log"

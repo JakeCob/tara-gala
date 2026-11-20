@@ -621,3 +621,60 @@ def test_a_hand_edit_carries_no_why(t, client):  # P9: whys only come with a cha
     g["days"][1]["rows"] = [r for r in g["days"][1]["rows"] if r["key"] != "d2-06"]
     r = client.put(f"/sessions/{t}/plan", json={"base": base_of(it), "guide": g, "source": "chat", "whys": None})
     assert r.status_code == 200 and "why" not in r.json()["changes"][0], "whys are optional on the PUT"
+
+
+# ---------------------------------------------------------------- TG-67 S3: the chat stays Baguio's (T67-C1 to C5)
+
+from test_plan_edit import sg_trip  # noqa: E402,F401  fixture: a made-up trip on a made-up Sagada plan
+
+
+@pytest.fixture()
+def sg_chat(sg_trip, client, monkeypatch):  # noqa: F811
+    """CHATBOT_LIVE on for a made-up Sagada trip, with the chat's model replaced (as `chat` does for Baguio)."""
+    from app import plan_chat
+
+    client.app.state.flags = dataclasses.replace(client.app.state.flags, chatbot_live=True)
+    settings = plan_chat.ChatSettings(model="claude-haiku-5-5", fallback_model="claude-sonnet-5-5", max_tokens=1000,
+                                      timeout_s=20.0, max_attempts=3, daily_cap_usd=1.0, trip_per_hour=20, ip_per_hour=60)
+    llm = FakeLLM(say("Done."))
+    bot = plan_chat.Chat(llm, settings)
+    client.app.dependency_overrides[plan_chat.get_chat] = lambda: bot
+    yield sg_trip, llm, bot
+    client.app.dependency_overrides.clear()
+
+
+def test_t67_c1_a_sagada_plan_is_refused_before_any_model_call(sg_chat, client, caplog, monkeypatch):  # B13
+    from app import plan_chat_context
+
+    slug, llm, bot = sg_chat
+
+    def never(*a, **k):
+        raise AssertionError("the chat context must not load for a Sagada plan")
+
+    monkeypatch.setattr(plan_chat_context, "load", never)
+    spent = bot.spend.spent_today
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    r = ask(client, slug, text="what else is near?")
+    assert r.status_code == 422 and r.json() == {"detail": "chat_not_here"}, r.text
+    assert llm.calls == [] and bot.spend.spent_today == spent
+    lines = [x.getMessage() for x in caplog.records if x.getMessage().startswith("plan chat refused")]
+    assert lines == [f"plan chat refused share_slug={slug} reason=not_baguio city=Sagada"]
+
+
+def test_t67_c2_a_stale_base_on_a_sagada_plan_still_gets_chat_not_here(sg_chat, client):  # F5
+    slug, llm, _ = sg_chat
+    r = ask(client, slug, base={"itinerary_slug": "not-the-plan", "seq": 7})
+    assert r.status_code == 422 and r.json() == {"detail": "chat_not_here"}, r.text
+    assert llm.calls == []
+
+
+def test_t67_c4_a_refused_call_uses_one_trip_slot(sg_chat, client):  # F5 (pinned: changing it is a decision)
+    slug, _, bot = sg_chat
+    ask(client, slug)
+    assert len(bot.trips._hits.get(slug, ())) == 1, "the limiter runs in the route, before the guard"
+
+
+def test_t67_c5_with_the_chat_off_a_sagada_plan_gets_chat_off(sg_trip, client):  # F5  # noqa: F811
+    assert client.app.state.flags.chatbot_live is False
+    r = ask(client, sg_trip)
+    assert r.status_code == 503 and r.json() == {"detail": "chat_off"}
