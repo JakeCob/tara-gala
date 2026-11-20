@@ -176,7 +176,7 @@ def test_dry_run_lists_rows_whose_city_would_change(dsn, tmp_path, capsys):
     assert cities(dsn, "spots") == {"burnham-park": "La Trinidad"}
 
 
-def test_sagada_rows_stay_out_of_baguio_answers(dsn, client, tmp_path):
+def test_sagada_rows_stay_out_of_baguio_answers(dsn, client, tmp_path, monkeypatch):
     # B4: the planner context and the Baguio terminal's last-mile list never see the Sagada rows
     from app.planner_context import load_context
 
@@ -189,3 +189,58 @@ def test_sagada_rows_stay_out_of_baguio_answers(dsn, client, tmp_path):
 
     legs = client.get("/last-mile", params={"terminal": "vl-baguio"}).json()
     assert [leg["destination"]["slug"] for leg in legs] == ["test-bg-park"]
+
+    # T67-L4: nor does the planner's prompt text; GET /spots stays unfiltered on purpose (the web filters it, S4)
+    from app import planner
+    from app.planner_prompt import build_user_message
+    from planner_data import TODAY, request_body
+
+    monkeypatch.setattr(planner, "manila_today", lambda: TODAY)  # request_body's dates stay in the future
+    prompt = build_user_message(ctx, planner.PlanRequest(**request_body()))
+    assert "test-sg-" not in prompt and "Sagada" not in prompt
+    spots = {s["slug"]: s["city"] for s in client.get("/spots").json()}
+    assert spots == {"test-sg-lodge": "Sagada", "test-sg-cave": "Sagada", "test-bg-park": "Baguio"}
+
+
+def test_a_real_rerun_moves_an_existing_spot_and_leg_to_sagada(dsn, tmp_path, capsys):
+    # T67-L5 (RED audit M1, M2): rows first loaded with no city are Baguio; a real re-run with city=Sagada updates them
+    spot = "test-sg-lodge,Test Sagada Lodge,other,17.08,120.90,made-up test row,,"
+    leg = ",test-sg-lodge,vl-baguio,,taxi,,,,,,30,2026-11-20,made-up test row"
+    write_csvs(tmp_path, spots=spot + "\n", last_mile=leg + "\n")
+    assert load_data.run(dsn, tmp_path, dry_run=False) == 0
+    assert cities(dsn, "spots") == {"test-sg-lodge": "Baguio"}
+    assert cities(dsn, "last_mile_routes") == {"test-sg-lodge>vl-baguio": "Baguio"}
+
+    (tmp_path / "spots.csv").write_text("slug,name,category,lat,lng,description,visit_minutes,entrance_fee_php,city\n"
+                                        f"{spot},Sagada\n", encoding="utf-8")
+    lm_header = (tmp_path / "last_mile_routes.csv").read_text(encoding="utf-8").splitlines()[0]
+    (tmp_path / "last_mile_routes.csv").write_text(f"{lm_header},city\n{leg},Sagada\n", encoding="utf-8")
+    capsys.readouterr()
+    assert load_data.run(dsn, tmp_path, dry_run=False) == 0
+    assert cities(dsn, "spots") == {"test-sg-lodge": "Sagada"}
+    assert cities(dsn, "last_mile_routes") == {"test-sg-lodge>vl-baguio": "Sagada"}
+    assert (count(dsn, "spots"), count(dsn, "last_mile_routes")) == (1, 1)
+    out = capsys.readouterr().out
+    assert "spots.csv line 2: city Baguio -> Sagada (test-sg-lodge)" in out
+    assert "last_mile_routes.csv line 2: city Baguio -> Sagada (test-sg-lodge > vl-baguio)" in out
+
+
+def test_a_city_cell_with_spaces_is_stripped(dsn, tmp_path):
+    # T67-L3: ' Sagada ' is read as Sagada, as _s strips every cell
+    (tmp_path / "spots.csv").write_text("slug,name,category,lat,lng,description,visit_minutes,entrance_fee_php,city\n"
+                                        "test-sg-cave,Test Sagada Cave,viewpoint,,,made-up test row,,, Sagada \n",
+                                        encoding="utf-8")
+    assert load_data.run(dsn, tmp_path, dry_run=False) == 0
+    assert cities(dsn, "spots") == {"test-sg-cave": "Sagada"}
+
+
+def test_the_repo_csvs_load_as_baguio(dsn, tmp_path):
+    # T67-L2: today's data/spots.csv and data/last_mile_routes.csv (no city column) load every row as Baguio.
+    # Must stay green on main too; the summary's per-city counts are L6, above.
+    for name in ("spots.csv", "last_mile_routes.csv"):
+        shutil.copy(load_data.HERE / name, tmp_path / name)
+    assert load_data.run(dsn, tmp_path, dry_run=False) == 0
+    assert set(cities(dsn, "spots").values()) == {"Baguio"}
+    with psycopg.connect(dsn) as conn:
+        assert conn.execute("select distinct city from last_mile_routes").fetchall() == [("Baguio",)]
+    assert count(dsn, "spots") and count(dsn, "last_mile_routes")
