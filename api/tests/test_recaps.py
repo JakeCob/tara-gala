@@ -589,3 +589,19 @@ def test_two_full_album_views_from_one_ip_pass(client, monkeypatch):  # review-c
         statuses.append(client.get(f"/recaps/{rslug}/avatars/{aid}").status_code)
         assert set(statuses) == {200}, f"view {view + 1}: {statuses.count(429)} answers were 429"
     assert recaps.RECAP_FILES_PER_HOUR >= 8 * (trip_files.MAX_PHOTOS + 10), "a group of 8 on one carrier IP or hotel wifi can each see the whole album"
+
+
+def test_a_429_carries_the_recaps_headers(client, monkeypatch):  # review-code-a.md N1: "every recap answer" (plan §2.2)
+    from app import recaps
+
+    rslug, [pid], aid = album_trip(client)
+    for limiter, path in [("RECAP_LIMITER", f"/recaps/{rslug}"), ("RECAP_FILE_LIMITER", f"/recaps/{rslug}/photos/{pid}"),
+                          ("RECAP_FILE_LIMITER", f"/recaps/{rslug}/avatars/{aid}")]:
+        monkeypatch.setattr(recaps, limiter, RateLimiter(1))
+        assert client.get(path).status_code == 200, path
+        r = client.get(path)
+        assert r.status_code == 429, path
+        assert r.json() == {"detail": "rate_limited"}, path
+        assert int(r.headers["retry-after"]) >= 1, path
+        assert r.headers.get("cache-control") == "private, no-cache", path
+        assert r.headers.get("x-robots-tag") == "noindex", path
