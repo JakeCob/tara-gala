@@ -399,6 +399,31 @@ def test_g9c_a_kept_line_whose_category_changes_is_cleared_not_refused(client, f
     assert (row["before"]["budget_key"], row["after"]["budget_key"]) == ("meals", None), "Changes reads the line going"
 
 
+@pytest.mark.parametrize("flag", ["on", "off"])
+def test_g9c_a_line_the_plan_moved_is_kept_when_the_edit_keeps_the_category(client, flags, dsn, flag):
+    """tg-review S1 (G8, G9c, §6): the plan moves `meals` from food to hotel. A save that leaves the field out and
+    doesn't change the category (an old phone, or BUDGET_LINES off) didn't move the expense away from its line, so the
+    line stays: an unchanged save writes nothing, and a note edit keeps `meals` on both sides of its activity row."""
+    flags(wallet_splits=True, budget_lines=True)
+    slug, (a, b, *_) = new_wallet(client)
+    itinerary = trip(dsn, slug)
+    eid = add(client, slug, on_line([a, b])).json()["expenses"][0]["id"]
+    set_rows(dsn, itinerary, [{**r, "category": "hotel"} if r.get("key") == "meals" else r for r in ROWS])
+    if flag == "off":
+        flags(wallet_splits=True)
+    unchanged = {**equal([a, b], amount=1000, category="food"), "version": 1}
+    n, before = rev(dsn, slug), rows(dsn, slug)
+    r = edit(client, slug, eid, unchanged)
+    assert r.status_code == 200, r.text
+    assert (rev(dsn, slug), rows(dsn, slug)) == (n, before), "an unchanged save writes nothing"
+    assert stored(dsn, eid)["version"] == 1 and key_of(dsn, eid) == "meals"
+    r = edit(client, slug, eid, note_only([a, b]))
+    assert r.status_code == 200, r.text
+    assert key_of(dsn, eid) == "meals" and stored(dsn, eid)["version"] == 2
+    row = rows(dsn, slug)[-1]
+    assert row["before"]["budget_key"] == row["after"]["budget_key"] == "meals", "no Changes line for the budget"
+
+
 @pytest.mark.parametrize("why", ["line removed", "two trips"])
 def test_g9c_a_kept_key_that_isnt_a_line_any_more_stays(on, dsn, why):
     slug, (a, b, *_) = new_wallet(on)
