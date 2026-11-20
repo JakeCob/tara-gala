@@ -196,3 +196,53 @@ test("T61-W11r (UX should 2) a clash on Save, Move, Remove or a swap's Apply say
 test("T61-W11s (UX should 3) the bar's status line says why Undo is greyed", () => {
   assert.match(read("src/components/PlanEditBar.tsx"), /<SaidText said=\{barLine\(status, edits\)\} \/>/);
 });
+
+// ---- TG-67 S4: the plan's city on the trip page, read from the source (test-plan T67-W9 to W12)
+const comp = (name: string) => read(`src/components/${name}.tsx`);
+
+test("T67-W9 TripView: spots filtered by the plan's city at render, chat hidden off Baguio, the city on the editor and the map", () => {
+  const v = view();
+  assert.match(v, /const city = cityOf\(shown \?\? \{\}\);/, "the city comes from the plan on screen, Baguio by default");
+  assert.match(v, /const spots = useMemo\(\(\) => \(rawSpots \? rawSpots\.filter\(\(s\) => s\.city === city\) : null\), \[rawSpots, city\]\);/,
+    "filtered at render, so a plan moving to another city refilters");
+  const want = v.slice(v.indexOf("const wantSpots = useCallback("), v.indexOf("}, []);", v.indexOf("const wantSpots = useCallback(")));
+  assert.match(want, /if \(list\) setRawSpots\(list\);/, "the raw list is kept as it came");
+  assert.doesNotMatch(want, /\.filter\(/, "never filtered in the setter (M-W1)");
+  assert.match(v, /const chatTools: ChatTools \| null = flags\.planEditing && flags\.chatbotLive && city === "Baguio" \? \{/, "the chat stays Baguio's (M-W2)");
+  const ed = v.slice(v.indexOf("const editor: PlanEditor | undefined ="), v.indexOf("chat: chatTools,"));
+  assert.match(ed, /\n    city,\n/, "the editor carries the city");
+  assert.match(v, /<LevelMap\n\s+guide=\{theGuide\}\n\s+city=\{city\}/, "the map gets it");
+  assert.match(read("src/components/PlanEditor.ts"), /\n  city: string;\n/);
+});
+
+test("T67-W10 BusSwap searches and names the plan's city, and refetches when it changes", () => {
+  const src = comp("BusSwap");
+  assert.match(src, /const city = editor\.city;/);
+  assert.match(src, /searchTrips\(\{ originCity: up \? "Metro Manila" : city, destinationCity: up \? city : "Metro Manila", date \}\)/);
+  assert.match(src, /\}, \[date, up, oldTime, city\]\);/, "M-W3: the effect deps include the city");
+  assert.match(src, /swapHeader\([^)]*, city\)/);
+  assert.doesNotMatch(src, /"Baguio"/, "no hard-coded Baguio left");
+});
+
+test("T67-W11 PlaceInput: no hard-coded Baguio distance; pinLine and farLine get the city", () => {
+  const src = comp("PlaceInput");
+  assert.doesNotMatch(src, /km from Baguio/);
+  assert.equal(src.match(/pinLine\(s, editor\.city\)/g)?.length, 2, "the find step and the proposal");
+  assert.match(src, /farLine\(s\.km_from_baguio \?\? 0, editor\.city\)/);
+});
+
+test("T67-W12 the three [tg-trip] lines with the city, the hidden-chat line once, and nothing personal in them", () => {
+  const v = view();
+  const spots = /console\.info\("\[tg-trip\] plan spots ok=%s count=%d city=%s", list \? "yes" : "no", list\?\.length \?\? 0, cityRef\.current\);/;
+  assert.match(v, spots);
+  const hidden = /console\.info\("\[tg-trip\] plan chat hidden city=%s", city\);/;
+  assert.match(v, hidden);
+  const once = v.slice(v.indexOf("chatHiddenLogged"), v.indexOf("plan chat hidden city"));
+  assert.match(once, /if \(chatHiddenLogged\.current[^)]*\) return;/, "logged once, not on every render");
+  assert.match(once, /chatHiddenLogged\.current = true;/);
+  const swap = /console\.info\("\[tg-trip\] plan swap list trips=%d near=%s city=%s", trips\.length, oldTime \? swapWindow\(oldTime, trips\)\.near\.length : "none", city\);/;
+  assert.match(comp("BusSwap"), swap);
+  for (const line of [...v.matchAll(/console\.info\("\[tg-trip\] plan (spots|chat hidden)[^\n]*/g), ...comp("BusSwap").matchAll(/console\.info\("\[tg-trip\] plan swap list trips[^\n]*/g)]) {
+    assert.doesNotMatch(line[0], /name|note|link|lat|lng|pin\b|\.plan\b/, `no name, note, link or pin: ${line[0]}`);
+  }
+});

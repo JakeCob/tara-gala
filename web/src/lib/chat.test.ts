@@ -223,3 +223,12 @@ test("T61-W10k the request: base, the trimmed turns ending with the new message,
   assert.deepEqual(chatRequest(BASE, [], "hi", null), { base: BASE, messages: [{ role: "user", text: "hi" }], focus: null });
   assert.equal(chatRequest(BASE, [], "  hi  ", null).messages[0].text, "hi", "trimmed");
 });
+
+// ---- TG-67 S4: the server's refusal on a plan outside Baguio reads as the chat being off (test-plan T67-W8)
+test("T67-W8 a 422 chat_not_here is 'off'; any other 422 is read as before", async () => {
+  const { chatAnswer } = await load();
+  assert.deepEqual(chatAnswer(422, { detail: "chat_not_here" }), { ok: false, why: "off" });
+  assert.deepEqual(chatAnswer(422, { detail: [{ loc: ["body"] }] }), { ok: false, why: "rejected" });
+  assert.deepEqual(chatAnswer(422, { detail: "something_else" }), { ok: false, why: "rejected" });
+  assert.deepEqual(chatAnswer(403, { detail: "chat_not_here" }), { ok: false, why: "rejected" }, "only the 422 carries it");
+});

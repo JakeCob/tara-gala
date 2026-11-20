@@ -433,3 +433,15 @@ test("T61-W16 a trip place opens directions to its own pin, with the plain stop 
   assert.equal(placeMapsUrl({ name: "Burnham Park", kind: "spot" }), "https://www.google.com/maps/search/?api=1&query=Burnham%20Park%2C%20Benguet%2C%20Philippines");
   assert.equal(placeIcon({ kind: "trip_place", id: "tp", name: "Cafe", category: null, lodging: false, lat: 16.4, lng: 120.6, maps_url: "https://maps.app.goo.gl/x" }), "place-other");
 });
+
+// ---- TG-67 S4: a spot's Maps search names the plan's province (test-plan T67-W6)
+test("T67-W6 placeMapsUrl: a Sagada spot searches Mountain Province; terminals get none; unknown or missing is Benguet", () => {
+  const q = (s: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s)}`;
+  assert.equal(placeMapsUrl({ name: "Echo Valley", kind: "spot", city: "Sagada" }), q("Echo Valley, Mountain Province, Philippines"));
+  assert.equal(placeMapsUrl({ name: "Test Sagada Stop", kind: "terminal", city: "Sagada" }), q("Test Sagada Stop, Philippines"), "terminals stay without a province");
+  assert.equal(placeMapsUrl({ name: "Burnham Park", kind: "spot", city: "Baguio" }), q("Burnham Park, Benguet, Philippines"));
+  assert.equal(placeMapsUrl({ name: "Burnham Park", kind: "spot" }), q("Burnham Park, Benguet, Philippines"));
+  assert.equal(placeMapsUrl({ name: "Somewhere", kind: "spot", city: "Nowhere" }), q("Somewhere, Benguet, Philippines"), "an unknown city falls back to Benguet");
+  const map = readFileSync(new URL("../components/LevelMap.tsx", import.meta.url), "utf8");
+  assert.equal(map.match(/placeMapsUrl\(\{[^}]*city[^}]*\}\)/g)?.length, 2, "both Maps links in the level dialog pass the city");
+});

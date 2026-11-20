@@ -242,3 +242,23 @@ test("T61-L19 (UX should 3) before the first edit the bar says why Undo is greye
   assert.equal(barLine("", { seq: 1, versions: [v(1, "hand", [L("New", "x")])] }), "");
   assert.equal(barLine("Saving...", null), "Saving...", "a status of its own wins");
 });
+
+// ---- TG-67 S4: the plan's city in the swap header and the distance lines (test-plan T67-W4, W5)
+test("T67-W4 swapHeader names the plan's city; with none it is Baguio's line", async () => {
+  const { swapHeader } = await import("./planLines.ts");
+  const w = { from: "21:30", to: "23:30" };
+  assert.equal(swapHeader(true, "2026-11-25", w, "Sagada"), "Buses on file from Metro Manila to Sagada on Wed, Nov 25, 9:30 PM to 11:30 PM.");
+  assert.equal(swapHeader(false, "2026-11-28", null, "Sagada"), "Buses on file from Sagada to Metro Manila on Sat, Nov 28.");
+  assert.equal(swapHeader(true, "2026-11-06", null, "Baguio"), "Buses on file from Metro Manila to Baguio on Fri, Nov 6.");
+  assert.equal(swapHeader(true, "2026-11-06", null), "Buses on file from Metro Manila to Baguio on Fri, Nov 6.");
+});
+
+test("T67-W5 farLine and pinLine say the plan's city; with none they are Baguio's", async () => {
+  const { farLine, pinLine } = await import("./planLines.ts");
+  assert.equal(farLine(40, "Sagada"), "This is about 40 km from Sagada. Add it anyway?");
+  assert.equal(farLine(243, "Sagada"), "This is about 240 km from Sagada. Add it anyway?");
+  assert.equal(farLine(26.4), "This is about 26 km from Baguio. Add it anyway?");
+  assert.equal(pinLine({ pin_source: "typed", lat: 17.08, lng: 120.9, km_from_baguio: 2 }, "Sagada")?.lead, "Pin you pasted, about 2 km from Sagada.");
+  assert.equal(pinLine({ pin_source: "link", lat: 17.08, lng: 120.9, km_from_baguio: 3 }, "Sagada")?.lead, "Pinned from your link, about 3 km from Sagada.");
+  assert.equal(pinLine({ pin_source: "typed", lat: 16.4, lng: 120.6, km_from_baguio: 2 })?.lead, "Pin you pasted, about 2 km from Baguio.");
+});
