@@ -98,3 +98,66 @@ Two manual one-off Victory Liner first class trips, approved by the owner (TG-59
 ## Trips Victory Liner stopped listing (TG-59b), 2026-11-03
 
 Victory Liner no longer lists first class 13:15 and 14:15 from Baguio to Cubao on Sun 2026-11-08, most likely because they sold out. So those two reference rows are gone from `getting_home` in `data/itineraries/baguio-barkada-2026-11-06.json`, and the `chill` plan is gone from `data/premade_itineraries.json` for now, because it used the 14:15 return and first class 08:15 on Nov 6, which no longer resolves either. `food-trip` and `nature` stay. The owner's booked rows are unchanged. The other reference rows can drop out the same way before the trip, so re-run both dry runs after each scrape.
+
+## Sagada (`data/sagada/*.csv`, branch DATA-sagada), checked 2026-11-20
+
+For TG-67, the owner's Sagada trip (Nov 25 to 29). The rows are in `data/sagada/`, with the same file names and columns as the Baguio files plus a `city` column (`Sagada`), for two reasons:
+- `load_data.py` doesn't read `city` yet, so loading these rows would store them with the table default, `Baguio`. They have to wait for a loader change (TG-67 plan).
+- The Coda Lines operator and its two terminals aren't seeded, and the loader can't add operators or terminals. `data/sagada/operators_terminals.csv` holds the sourced seed values. Until they're seeded, the terminal legs fail with "unknown terminal 'coda-sagada'".
+
+Validated on tg-testpg (database `tg_data_sagada`, schema plus migrations plus `terminals_coords.sql`, with the proposed seeds inserted by hand): `python data/load_data.py --dry-run --data-dir data/sagada` gives "spots: 15, trips: 0, last-mile routes: 34". With the trip rows uncommented and a test class it gives "trips: 2 (2 new routes)". The main `data/` dry run is unchanged: 17 spots, 2 trips, 290 legs.
+
+### Operator and schedule
+
+| Item | Source | Note |
+| --- | --- | --- |
+| Coda Lines operator, booking link, discount note | https://www.codalines.ph/ | The official site (`codalines.com` now hosts an unrelated Japanese blog). The home page lists "Manila to Sagada" and "Quezon City to Sagada" and links to `codalines.12go.com` for booking. It says student, senior and PWD discounts are sold only at terminal ticket booths. |
+| Stations | https://www.codalines.ph/stations | "Quezon City: HM Transport Terminal, Monte De Piedad St., corner Maryland St., Brgy. Immaculate Concepcion, Quezon City" and "Sagada, Mt. Province: Poblacion, Sagada, Mt. Province". |
+| Schedule | https://www.codalines.ph/copy-of-our-routes | An image titled "Updated Daily Trip Schedules", dated "As of March 26, 2022": QC > Sagada 9:00 PM, Sagada > QC 2:00 PM. It also says the schedule "may subject to change without prior notice", that there "may be additional trips", and "All trips are via NLET". It gives no fares or bus classes. |
+| `coda-cubao` lat/lng | https://www.openstreetmap.org/node/10100751717 | "Coda Lines Terminal", `amenity=bus_station`, Maryland Street. The "HM Transport Cubao" stop (node/1649835257) and "Codalines Cubao" (node/4721162891) are within 15 m. |
+| `coda-sagada` lat/lng | https://www.openstreetmap.org/node/5566017629 | "Bus Stop", `amenity=bus_station`, Sagada-Besao Road, beside the Town Hall. The "Coda Lines Booking Office" (node/4838253221) is 7 m away. The Poor Traveler (2019) calls this junction the town's main bus stop, and says pickup is at the drop-off spot. |
+
+The two trip rows in `data/sagada/routes_trips.csv` are commented out. The loader needs a `class`, and the operator's schedule doesn't give one. Fill `class` (and the fare) from the owner's ticket. The 2022 schedule is the newest one the operator publishes on its site; the owner's ticket overrides it.
+
+Not used for times or fares:
+- `codalines.12go.com` (the operator's booking partner): returns 403 to automated requests, so it wasn't read.
+- Coda Lines' Facebook page: needs a login.
+- Aggregators and blogs disagree with each other. BusTickets.ph lists 8:00, 9:00, 10:00 and 10:30 PM at P760/P980. philippinebeaches.org (updated 2025-01-20) lists 8:00 and 9:00 PM outbound and 2:00 and 3:00 PM back, at P1,225 to P1,399, taking 11 to 12 hours. These are leads for the owner, not data.
+- Other operators: GV Florida's official schedule (https://gvfloridatrans.com/page5.html) goes to Banaue/Bagabag, not Sagada. No other direct Manila–Sagada operator was found.
+
+### Spots (`data/sagada/spots.csv`)
+
+Coordinates come from one Nominatim lookup call (`https://nominatim.openstreetmap.org/lookup`, format=jsonv2) for the OSM elements found with one Overpass query over the Sagada area. Each spot's OSM element is in the `#` row above it.
+
+| Spot | OSM element | Note |
+| --- | --- | --- |
+| `sagada-town-centre` | way/185305065 | Sagada Town Hall, the junction where buses stop |
+| `sagada-tourist-info-center` | node/2612566236 | `tourism=information`, `information=office` |
+| `saggas-guides-office` | node/2612566224 | "SAGGAS Information Office", note "Sagada Genuine Guides Association" |
+| `echo-valley-hanging-coffins` | node/2918514080 | "Hanging Coffins". The Echo Valley wood is way/255575795, 40 m away. |
+| `sumaguing-cave` | node/2612600152 | "Sumaguing Cave Entrance". Two more entrance points (node/3858183159, node/4750698323) are within 150 m and weren't used. |
+| `lumiang-burial-cave` | node/2612600116 | `natural=cave_entrance` |
+| `kiltepan-viewpoint` | node/2613062949 | "Kiltepan Peak", `tourism=viewpoint`. The peak itself (node/13967335574) is 90 m away. |
+| `marlboro-hill` | node/2613401106 | "Marlboro Country", `natural=peak` |
+| `bomod-ok-falls` | node/12180043229 | `waterway=waterfall`. "Bomod-ok Falls Registration Area" is node/4311239792. |
+| `lake-danum` | way/32356334 | "Danum Lake", alt_name "Lake Banao". A separate "Banao Lake" (way/1168005572) is 300 m away; the owner should check which one guides use. |
+| `church-of-st-mary-the-virgin` | way/224067711 | Anglican church |
+| `sagada-pottery` | node/2613055699 | `amenity=arts_centre` |
+| `ganduyan-museum` | node/2612566174 | `tourism=museum` |
+| `sagada-public-market` | node/2612566228 | `amenity=marketplace` |
+| `bokong-falls` | node/8406298601 | `waterway=waterfall` |
+
+Fees, guides and times:
+- Registration fee (`sagada-tourist-info-center`, `entrance_fee_php` 100): https://ptvnews.ph/?p=212052 (PTV/PNA, 2022-10-19) says "the town only charges a PHP100 registration fee for tourists, which already covers the environment fee". It also says the guide-to-tourist ratio cap was relaxed except for caves. Older guides (2019) give P50. The town's own site (https://sagada.gov.ph/) is "rebuilding" and has no content. The PNA originals (pna.gov.ph articles 1180967 and 1187635) returned 403/404.
+- Rules: https://ptvnews.ph/sagada-braces-for-tourists-influx-issues-guidelines (PTV/PNA, 2019-02-14). All visitors register at the tourism office. The official receipt is the entrance pass to sites. Echo Valley, Sumaguing and Lumiang are near and need only short walks. Bomod-ok and Marlboro are reached by shuttle. Visitor numbers at Marlboro are capped. Don't touch coffins, and don't photograph mass.
+- Guide rates, times and transport fees: https://www.thepoortraveler.net/2019/04/sagada-itinerary-guide/ (2019) and https://www.philippinebeaches.org/?p=12965 (undated, header image 2024-06). The two agree on these: Hanging Coffins tour P300 for 1 to 10 people, 1 hour (`visit_minutes` 60). Sumaguing guide P800 for 1 to 4 people, "around 2 hours" (`visit_minutes` 120). Cave Connection P1,000 for 1 to 2 people, 3 to 4 hours. Marlboro guide P600 for 1 to 10 people, about a 20-minute hike. Bomod-ok guide P500 for 1 to 7 people plus a "P10" barangay fee (`entrance_fee_php` 10). Lake Danum is "20 minutes away from the town proper". Kiltepan is a 15-minute drive and is listed as "Temporarily Closed". Guide rates are in descriptions only, because they are per group, not per person.
+- Not sourced: opening hours for any spot (`spots.csv` has no hours column anyway), and visit times for every spot other than the two above. Ganduyan Museum, Sagada Pottery and the market have no fee, hours or guide information.
+
+### Getting-around legs (`data/sagada/last_mile_routes.csv`)
+
+34 legs, hub and spoke from `sagada-town-centre`, plus 3 legs that touch the `coda-sagada` terminal and `lumiang-burial-cave` → `sumaguing-cave` (the guided Cave Connection, from philippinebeaches.org and The Poor Traveler).
+- Walk legs to the tourist office, SAGGAS, church, market, museum, Echo Valley, Bokong Falls, Sumaguing and Lumiang, both ways. The sources are The Poor Traveler ("To get to attractions within town center: Walk!"), PTV 2019 (the caves are near and need only short walks) and philippinebeaches.org (Bokong is on the Echo Valley trails). The notes give OSM straight-line distances, not walking times, so `minutes` is empty.
+- Van legs (a hired tour vehicle through the tourism office or SAGGAS) to Sumaguing (P350 two-way), Lumiang (P400), Kiltepan (P500 for 1 to 10, 15 minutes), Marlboro (P650), Bomod-ok (P500 to P650) and Lake Danum (P550, 20 minutes). These are 2019 guide rates per vehicle, so they are in the notes and `fare_min_php`/`fare_max_php` are empty.
+- No leg to `sagada-pottery`: no source says how to get there.
+- Not used: OSM maps a "Jeepney Station to Bangaan and Bontoc" (way/255575797) on Staunton Road. No source gave a signboard, fare or time, and PTV 2019 says Bomod-ok is reached by shuttle, so there's no public-jeep leg.
+- No lodging legs: the owner's lodging name is still pending (TG-67).
