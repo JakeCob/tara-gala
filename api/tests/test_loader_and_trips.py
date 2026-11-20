@@ -124,6 +124,8 @@ def test_cities_list():
 def test_spot_and_leg_city_saved_and_rerun_changes_nothing(dsn, tmp_path, capsys):
     # B1, B3: city=Sagada is saved on the spot and the leg; a blank cell is Baguio; a re-run is a no-op
     city_csvs(dsn, tmp_path)
+    assert load_data.run(dsn, tmp_path, dry_run=True) == 0
+    assert "change the city" not in capsys.readouterr().out  # review-code N1: a brand-new row is not a city change
     assert load_data.run(dsn, tmp_path, dry_run=False) == 0
     assert load_data.run(dsn, tmp_path, dry_run=False) == 0
     assert cities(dsn, "spots") == {"test-sg-lodge": "Sagada", "test-sg-cave": "Sagada", "test-bg-park": "Baguio"}
