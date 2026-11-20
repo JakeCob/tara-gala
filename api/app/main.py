@@ -28,6 +28,8 @@ from .sessions import router as sessions_router
 from .trip_files import router as trip_files_router
 from .trip_files import start_sweeper
 from .trip_invites import router as trip_invites_router
+from .recaps import recap_flag
+from .recaps import router as recaps_router
 from .trip_marks import router as trip_marks_router
 from .trip_places import router as trip_places_router
 from .trip_people import router as trip_people_router
@@ -166,3 +168,6 @@ app.include_router(trip_invites_router)
 # TG-61 PR 2: the chat is inside PLAN_EDITING too, and its own CHATBOT_LIVE gives 503 chat_off
 for edit_router in (plan_edit_router, plan_suggest_router, trip_places_router, plan_chat_router):
     app.include_router(edit_router, dependencies=[Depends(plan_editing)])
+
+# TG-64: the read-only recap link, behind RECAP_LINKS (every recap route is its own 404 recap_not_found while it's off)
+app.include_router(recaps_router, dependencies=[Depends(recap_flag)])

@@ -22,10 +22,12 @@ request_log = logging.getLogger("tara_gala.request")
 
 # An invite slug is a key anyone can use, so the request log keeps only its first 8 characters (TG-58)
 _INVITE_PATH = re.compile(r"^(/invites/[^/]{8})[^/]+")
+# TG-64: a recap link, and everything after it, since a file or person id follows the slug there (plan §8)
+_RECAP_PATH = re.compile(r"^(/recaps/[^/]{8}).+")
 
 
 def logged_path(path: str) -> str:
-    return _INVITE_PATH.sub(r"\1*", path)
+    return _RECAP_PATH.sub(r"\1*", _INVITE_PATH.sub(r"\1*", path))
 
 
 class RedactingFormatter(logging.Formatter):

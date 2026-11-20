@@ -29,6 +29,7 @@ class Flags:
     wallet_activity: bool = False  # WALLET_ACTIVITY: the activity list and comments (TG-66); writes record either way
     chatbot_live: bool = False  # CHATBOT_LIVE: the chatbot that proposes plan edits (TG-61 PR 2); needs PLAN_EDITING
     budget_lines: bool = False  # BUDGET_LINES: budget vs actual, the wallet's line pick and the trip's Budget panel (TG-62); needs WALLET_SPLITS
+    recap_links: bool = False  # RECAP_LINKS: the read-only recap link (TG-64); every recap route is 404 while it's off
 
 
 def parse_flag(name: str, raw: str | None, default: bool) -> bool:

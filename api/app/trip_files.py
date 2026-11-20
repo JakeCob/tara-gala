@@ -186,11 +186,18 @@ def get_file(share_slug: str, file_id: UUID) -> Response:
     if f is None:
         logger.info("trip file not found share_slug=%s", share_slug)
         raise HTTPException(404, NOT_FOUND, headers=NOINDEX)
+    answer = send_file(f)
+    logger.info("trip file get share_slug=%s kind=%s bytes=%d", share_slug, f["kind"], len(answer.body))
+    return answer
+
+
+def send_file(f) -> Response:
+    """One stored file's bytes, with the headers every file answer has. The trip's own route and the recap's photos and
+    profile photos (TG-64) all answer through this, so their headers can't drift apart."""
     try:
         data = storage.store().get(f["storage_path"])
     except storage.StorageError:
         raise HTTPException(503, "storage_unavailable") from None
-    logger.info("trip file get share_slug=%s kind=%s bytes=%d", share_slug, f["kind"], len(data))
     return Response(
         content=data,
         media_type=f["content_type"],
