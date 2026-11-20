@@ -2,8 +2,8 @@
 
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
-import { PhotoViewer } from "@/components/PhotoViewer";
-import { Thumb } from "@/components/TripFiles";
+import { BlobImage, PhotoViewer } from "@/components/PhotoViewer";
+import { THUMB_BOX } from "@/components/TripFiles";
 import { Sprite } from "@/components/WorldSheet";
 import { formatClass, formatTime, formatVerified } from "@/lib/api";
 import { type BusTable, type Guide, type GuideRow, type Mark, marksByKey, pickMark, placeIcon, rowMark, todoMark, whereNow } from "@/lib/guide";
@@ -14,7 +14,8 @@ import {
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
 import { busChangedLine, busNotice, busWarningLine } from "@/lib/planLines";
-import { type TripFile, fetchFile } from "@/lib/trip";
+import { doneTime } from "@/lib/recap";
+import type { TripFile } from "@/lib/trip";
 import { fnv1a, usableWidth } from "@/lib/world";
 import type { NeedLink } from "@/lib/chat";
 import BusSwap, { type BusAt, swapTitle } from "./BusSwap";
@@ -24,10 +25,12 @@ import { BudgetEdits, PickEdits, SourcesEdits, TodoEdits } from "./PlanTextEdito
 import StopChange, { PlanDialog } from "./StopChange";
 
 export type Photos = {
-  slug: string;
   files: TripFile[];
-  onAdd: (rowKey: string | null, picked: File[]) => void;
-  onDelete: (file: TripFile) => void;
+  /** One picture's bytes: the trip page's own file route, or the recap's (TG-64) */
+  fetch: (id: string) => Promise<Blob | null>;
+  /** Without them there's no Add photos or Delete: the recap's map is read-only */
+  onAdd?: (rowKey: string | null, picked: File[]) => void;
+  onDelete?: (file: TripFile) => void;
 };
 
 type Props = {
@@ -47,6 +50,9 @@ type Props = {
   editor?: PlanEditor;
   /** TG-61: "Your group's own copy of the plan, last changed ..." under the summary */
   copyLine?: string | null;
+  /** TG-64: the recap's map. No next level, no trip menu, and each done level says when it was ticked. Pass no onTick,
+   * onPick or editor with it, so nothing can be changed */
+  recap?: true;
 };
 
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
@@ -62,7 +68,7 @@ const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of t
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -97,7 +103,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const found = open && list.find((l) => l.row.key === open.key);
   if (found && kept?.row !== found.row) setKept(found);
   const current = found || (open && kept?.row.key === open.key ? kept : undefined);
-  const next = marks ? nextLevel(list) : null;
+  const next = marks && !recap ? nextLevel(list) : null; // a record has no next level: every tile not done is plain
   const atStart = !!marks && !list.some((l) => l.done); // no ticks in this world yet: the group waits at START
 
   // The road draws on the screen's real width, so it stays chunky pixels at any size. Measured before paint, or a
@@ -303,8 +309,13 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
                       <span className="block text-sm font-bold tabular-nums">{formatTime(l.row.time)}</span>
                       <span className="block text-xs">{l.row.plan}</span>
                       {l.row.place?.kind === "trip_place" && <span className="mt-0.5 inline-block text-xs font-semibold">Added by your group</span>}
-                      {shots > 0 && <span className="block text-xs">{shots} photo{shots === 1 ? "" : "s"}</span>}
+                      {recap && l.done ? (
+                        <span className="block text-xs font-semibold text-screen-ink">
+                          <span aria-hidden="true">✓</span> Done {doneTime(byKey.get(rowMark(l.row))!)}{shots > 0 && ` · ${shots} photo${shots === 1 ? "" : "s"}`}
+                        </span>
+                      ) : shots > 0 && <span className="block text-xs">{shots} photo{shots === 1 ? "" : "s"}</span>}
                       {l.done && <span className="sr-only">, done</span>}
+                      {recap && !l.done && <span className="sr-only">, not ticked</span>}
                       {isHere && <span className="sr-only">, the group is here</span>}
                     </span>
                   </button>
@@ -332,14 +343,16 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         </div>
       )}
 
-      <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
-        {([["buses", "Buses"], ["budget", "Budget"], ["todo", "To-do"], ["sources", "Sources"], ...(photos ? [["album", "Album"]] : [])] as [Menu, string][]).map(([key, name]) => (
-          <PixelButton key={key} variant={menu === key ? "primary" : "secondary"} aria-pressed={menu === key} className="px-3 text-sm"
-            onClick={() => setMenu(menu === key ? null : key)}>
-            <span className="font-bold">{name}</span>
-          </PixelButton>
-        ))}
-      </nav>
+      {!recap && (
+        <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
+          {([["buses", "Buses"], ["budget", "Budget"], ["todo", "To-do"], ["sources", "Sources"], ...(photos ? [["album", "Album"]] : [])] as [Menu, string][]).map(([key, name]) => (
+            <PixelButton key={key} variant={menu === key ? "primary" : "secondary"} aria-pressed={menu === key} className="px-3 text-sm"
+              onClick={() => setMenu(menu === key ? null : key)}>
+              <span className="font-bold">{name}</span>
+            </PixelButton>
+          ))}
+        </nav>
+      )}
       {menu === "buses" && (
         <div className="flex flex-col gap-5">
           <Buses table={guide.getting_there} onSwap={editor && ((index) => setSwapping({ table: "getting_there", index }))} can={!!editor?.can} />
@@ -355,6 +368,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         // Keyed by tap: each one gets its own dialog, because showModal runs once on mount. close() shuts a dialog at once
         // but its close event waits for the next frame, so that event only clears its own tap (TG-54).
         <LevelDialog key={open.tap} level={current} live={live} busy={busy} problem={problem} said={said} photos={photos} shots={photosAt(current.row.key)}
+          doneMark={recap && current.done ? byKey.get(rowMark(current.row)) : undefined}
           onClose={() => setOpen((o) => (o?.tap === open.tap ? null : o))} onTick={onTick}
           change={editor && { editor, guide, marks: marks ?? [], files: photos?.files ?? [], world: day.day, onDone: changed, onAsk: editor.chat ? askChat : undefined }} />
       )}
@@ -425,8 +439,11 @@ function bookedFor(guide: Guide, row: GuideRow) {
   return table ? guide[table].buses.find((b) => b.booked) : undefined;
 }
 
-function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose, onTick, change }: {
-  level: Level; live: boolean; busy?: boolean; problem?: string | null; said?: string; photos?: Photos; shots: TripFile[]; onClose: () => void; onTick?: (key: string, done: boolean) => void;
+function LevelDialog({ level, live, busy, problem, said, photos, shots, doneMark, onClose, onTick, change }: {
+  level: Level; live: boolean; busy?: boolean; problem?: string | null; said?: string; photos?: Photos; shots: TripFile[];
+  /** TG-64: the recap's dialog says when the stop was ticked */
+  doneMark?: Mark;
+  onClose: () => void; onTick?: (key: string, done: boolean) => void;
   change?: Change;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -442,7 +459,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
 
   async function show(f: TripFile) {
     if (!photos) return;
-    const blob = await fetchFile(photos.slug, f.id);
+    const blob = await photos.fetch(f.id);
     console.info("[tg-trip] file show kind=%s ok=%s", f.kind, blob ? "yes" : "no");
     if (blob) setShown({ blob, label: `Level ${level.label}` });
   }
@@ -466,6 +483,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
         </div>
         <p className="text-lg font-bold">{r.plan}</p>
         {r.bus && change && busChangedLine(change.editor.edits, r.plan) && <p className={PX.meta}>{busChangedLine(change.editor.edits, r.plan)}</p>}
+        {doneMark && <p className="text-sm font-semibold">Done {doneTime(doneMark)}</p>}
         {r.note && <p className="text-sm">{r.note}</p>}
         {r.place?.name && r.place.kind === "trip_place" ? (
           // TG-61: a place the group pinned from a link; never "verified" (ux.md §5)
@@ -498,7 +516,7 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
             {level.done ? "Done ✓ (tap to undo)" : "Mark done!"}
           </PixelButton>
         )}
-        {photos && (
+        {photos && (shots.length > 0 || photos.onAdd) && (
           <div className="flex flex-col gap-2">
             <p className="text-sm font-semibold">{shots.length ? `${shots.length} photo${shots.length === 1 ? "" : "s"} here` : "No photos here yet"}</p>
             {shots.length > 0 && (
@@ -506,17 +524,19 @@ function LevelDialog({ level, live, busy, problem, said, photos, shots, onClose,
                 {shots.map((f) => (
                   <li key={f.id} className="shrink-0">
                     <button type="button" className="focus-pixel block" aria-label="Show this photo" onClick={() => show(f)}>
-                      <Thumb slug={photos.slug} file={f} alt="" />
+                      <PhotoThumb fetch={photos.fetch} file={f} />
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-            <input ref={picker} type="file" accept={ACCEPT} multiple hidden
-              onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ""; if (files.length) photos.onAdd(r.key, files); }} />
-            <PixelButton variant="secondary" className="self-start px-4 text-sm" aria-disabled={busy} onClick={() => !busy && picker.current?.click()}>
-              Add photos here
-            </PixelButton>
+            {photos.onAdd && (<>
+              <input ref={picker} type="file" accept={ACCEPT} multiple hidden
+                onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ""; if (files.length && photos.onAdd) photos.onAdd(r.key, files); }} />
+              <PixelButton variant="secondary" className="self-start px-4 text-sm" aria-disabled={busy} onClick={() => !busy && picker.current?.click()}>
+                Add photos here
+              </PixelButton>
+            </>)}
           </div>
         )}
         {problem && <PixelBox as="p" tone="alertText" role="alert" className="p-2 text-sm">{problem}</PixelBox>}
@@ -678,7 +698,7 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
     return "On the trip";
   };
   async function show(f: TripFile) {
-    const blob = await fetchFile(photos.slug, f.id);
+    const blob = await photos.fetch(f.id);
     console.info("[tg-trip] file show kind=%s ok=%s", f.kind, blob ? "yes" : "no");
     if (blob) setShown({ blob, label: where(f.row_key) });
   }
@@ -686,11 +706,13 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
     <section className="flex flex-col gap-3">
       <h3 className={PX.dataHeading}>Trip album</h3>
       <p className="text-sm text-muted">Everyone on the trip sees these and can delete them. Tap a level on the map to add photos there.</p>
-      <input ref={picker} type="file" accept={ACCEPT} multiple hidden
-        onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ""; if (files.length) photos.onAdd(null, files); }} />
-      <PixelButton variant="secondary" className="self-start px-4 text-sm" disabled={busy} onClick={() => picker.current?.click()}>
-        Add photos
-      </PixelButton>
+      {photos.onAdd && (<>
+        <input ref={picker} type="file" accept={ACCEPT} multiple hidden
+          onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ""; if (files.length) photos.onAdd?.(null, files); }} />
+        <PixelButton variant="secondary" className="self-start px-4 text-sm" disabled={busy} onClick={() => picker.current?.click()}>
+          Add photos
+        </PixelButton>
+      </>)}
       {all.length === 0 ? (
         <p className="text-sm">No photos yet.</p>
       ) : (
@@ -698,13 +720,15 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
           {all.slice(0, shownCount).map((f) => (
             <PixelBox as="li" key={f.id} className="flex flex-col gap-2 p-2">
               <button type="button" className="focus-pixel self-center" aria-label={`Show the photo at ${where(f.row_key)}`} onClick={() => show(f)}>
-                <Thumb slug={photos.slug} file={f} alt="" />
+                <PhotoThumb fetch={photos.fetch} file={f} />
               </button>
               <p className="line-clamp-2 text-xs">{where(f.row_key)}</p>
-              <PixelButton variant="secondary" className="px-2 text-xs" disabled={busy}
-                onClick={() => window.confirm("Delete this photo for everyone?") && photos.onDelete(f)}>
-                Delete
-              </PixelButton>
+              {photos.onDelete && (
+                <PixelButton variant="secondary" className="px-2 text-xs" disabled={busy}
+                  onClick={() => window.confirm("Delete this photo for everyone?") && photos.onDelete?.(f)}>
+                  Delete
+                </PixelButton>
+              )}
             </PixelBox>
           ))}
         </ul>
@@ -717,4 +741,24 @@ function Album({ photos, guide, busy }: { photos: Photos; guide: Guide; busy?: b
       <PhotoViewer photo={shown} onClose={() => setShown(null)} logTag="tg-trip" />
     </section>
   );
+}
+
+/** One photo's thumbnail, through the map's own fetch: the trip's file route, or the recap's */
+function PhotoThumb({ fetch, file }: { fetch: Photos["fetch"]; file: TripFile }) {
+  const [got, setGot] = useState<{ id: string; blob: Blob | null } | null>(null);
+  // review M2: by id only, as useFile was. A caller's new function (an inline fetch, a poll's render) never fetches again:
+  // past 60 thumbs fetchFile's cache can't hold them all, so every render would download the whole album
+  const get = useRef(fetch);
+  useEffect(() => {
+    get.current = fetch;
+  });
+  useEffect(() => {
+    let live = true;
+    get.current(file.id).then((blob) => live && setGot({ id: file.id, blob }));
+    return () => {
+      live = false;
+    };
+  }, [file.id]);
+  const blob = got?.id === file.id ? got.blob : null;
+  return blob ? <BlobImage blob={blob} alt="" width={72} height={96} className={THUMB_BOX} /> : <span aria-hidden="true" className={THUMB_BOX} />;
 }

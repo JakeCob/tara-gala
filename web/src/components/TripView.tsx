@@ -20,6 +20,7 @@ import PlanChat from "./PlanChat";
 import type { ChatAsk, ChatTools, PlanEditor, SaveOutcome } from "./PlanEditor";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
 import TripPeople from "./TripPeople";
+import TripRecap from "./TripRecap";
 import { fetchItinerary, savedItinerary } from "@/lib/api";
 import { fitPhoto } from "@/lib/shrink";
 import { failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
@@ -192,6 +193,8 @@ export default function TripView({ slug }: { slug: string }) {
   const mine = useRef(new Map<number, number>()); // this phone's own versions, and when: Undo asks first otherwise
   const [spots, setSpots] = useState<SpotLite[] | null>(null);
   const spotsAsked = useRef(false);
+  // TG-64 review M2: one function for the page's life, so the map's thumbnails never fetch again on a render or a poll
+  const fetchPhoto = useCallback((id: string) => fetchFile(slug, id), [slug]);
   const wantSpots = useCallback(() => {
     if (spotsAsked.current) return;
     spotsAsked.current = true;
@@ -479,8 +482,8 @@ export default function TripView({ slug }: { slug: string }) {
           editor={editor}
           copyLine={copyLine(!!shown?.edited, trip.plan_edits)}
           photos={{
-            slug,
             files: trip.files,
+            fetch: fetchPhoto,
             onAdd: async (rowKey, picked) => {
               let added = 0;
               let skipped = 0;
@@ -533,6 +536,8 @@ export default function TripView({ slug }: { slug: string }) {
               <p className="text-sm">{notice.text}</p>
             ))}
         </div>
+        {/* TG-64: after Where we're staying on a phone (ux.md §2); in the right column on desktop, so it stays last before Delete */}
+        {flags.recapLinks && <TripRecap trip={trip} busy={busy} online={online} apply={apply} />}
         <DeleteTrip
           trip={trip}
           onDeleted={() => {

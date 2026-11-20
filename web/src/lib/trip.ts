@@ -53,7 +53,16 @@ export type Trip = {
   invite_slug?: string | null; // TG-58 PR 2: the limited invite link, null until someone turns it on
   plan_edits?: PlanEdits | null; // TG-61: the copy's newest versions; absent on a saved copy from before it
   places?: TripPlace[]; // TG-61: the places this group pinned from a link
+  recap?: RecapSettings; // TG-64: the read-only recap link; absent on a saved copy from before it
 };
+
+/** TG-64: the recap link (slug null while it's off) and what it shows. Off, every choice is back to map only. */
+export type RecapSettings = { slug: string | null; photos: boolean; people: RecapPeople; spending: RecapSpending };
+export type RecapPeople = "none" | "names" | "names_photos";
+export type RecapSpending = "none" | "total";
+/** What turning it on or changing it sends: always all three */
+export type RecapChoice = Omit<RecapSettings, "slug">;
+export const RECAP_OFF: RecapSettings = { slug: null, photos: false, people: "none", spending: "none" };
 
 /** TG-61: a place only this trip has, pinned by the server from a Google Maps link. Never verified. */
 export type TripPlace = { id: string; name: string; lat: number; lng: number; maps_url: string; created_at: string; pin_source?: PinSource | null };
@@ -321,6 +330,11 @@ export const tripApi = {
   startInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "PUT" })),
   /** The invite link stops working; startInvite then makes a new one */
   stopInvite: (slug: string) => one(call(`${at(slug)}/invite`, { method: "DELETE" })),
+  /** TG-64: turns the recap link on, or changes what it shows; the slug stays the same while it's on */
+  setRecap: (slug: string, choice: RecapChoice) =>
+    one(call(`${at(slug)}/recap`, { method: "PUT", body: { photos: choice.photos, people: choice.people, spending: choice.spending } })),
+  /** The recap link stops working and its choices go back to map only; setRecap then makes a new link */
+  stopRecap: (slug: string) => one(call(`${at(slug)}/recap`, { method: "DELETE" })),
   /** TG-61: the whole new guide, worked out from `base`. A 409 means another phone saved first: nothing was written */
   savePlan: (slug: string, base: PlanBase, guide: GuideIn, source: "hand" | "chat", whys?: Record<string, string>) =>
     // A chat Apply sends the proposal's whys, so the version's lines keep them; a hand save never carries any (the API's 422)

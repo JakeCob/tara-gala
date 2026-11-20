@@ -539,19 +539,53 @@ def test_public_reads_are_rate_limited(client, caplog, monkeypatch):  # plan §2
     assert recaps.RECAP_PER_HOUR == 600
 
 
-def test_the_photo_and_avatar_bytes_share_the_read_limit(client, monkeypatch):  # plan §2.2 Limits: one counter, three GETs
-    from app import recaps
-
+def album_trip(client, photos=1) -> tuple[str, list[str], str]:
+    """A trip with its recap fully on, `photos` photos and one person who came with an avatar."""
     slug = new_trip(client)
     rslug = on(client, slug, photos=True, people="names_photos")
-    pid = photo_id(upload(client, slug, kind="photo"))
+    pids = [photo_id(upload(client, slug, data=JPEG, content_type="image/jpeg", kind="photo")) for _ in range(photos)]
     aid = person(client, slug, "Ana")
     say(client, slug, aid, "yes")
     avatar(client, slug, aid)
-    for path in (f"/recaps/{rslug}/photos/{pid}", f"/recaps/{rslug}/avatars/{aid}"):
-        monkeypatch.setattr(recaps, "RECAP_LIMITER", RateLimiter(1))
-        assert client.get(path).status_code == 200, f"{path} is served under the limit"
-        monkeypatch.setattr(recaps, "RECAP_LIMITER", RateLimiter(1))
-        assert client.get(f"/recaps/{rslug}").status_code == 200
-        r = client.get(path)
-        assert r.status_code == 429 and "retry-after" in r.headers, f"{path} counts on the recap's limit"
+    return rslug, pids, aid
+
+
+def test_the_bytes_have_their_own_limit_and_the_page_its_own(client, caplog, monkeypatch):  # review-code-a.md S1
+    from app import recaps
+
+    caplog.set_level(logging.INFO)
+    rslug, [pid], aid = album_trip(client)
+    photo, face = f"/recaps/{rslug}/photos/{pid}", f"/recaps/{rslug}/avatars/{aid}"
+    monkeypatch.setattr(recaps, "RECAP_LIMITER", RateLimiter(1))
+    monkeypatch.setattr(recaps, "RECAP_FILE_LIMITER", RateLimiter(1000))
+    assert client.get(f"/recaps/{rslug}").status_code == 200
+    assert client.get(f"/recaps/{rslug}").status_code == 429, "the page keeps its 600 an hour"
+    assert client.get(photo).status_code == 200 and client.get(face).status_code == 200, "a photo or a face doesn't count on the page's limit"
+    monkeypatch.setattr(recaps, "RECAP_LIMITER", RateLimiter(1000))
+    monkeypatch.setattr(recaps, "RECAP_FILE_LIMITER", RateLimiter(1))
+    assert client.get(photo).status_code == 200
+    r = client.get(face)
+    assert r.status_code == 429 and "retry-after" in r.headers, "the photos and the faces share one counter of their own"
+    assert client.get(photo).status_code == 429
+    assert client.get(f"/recaps/{rslug}").status_code == 200, "and it doesn't stop the page"
+    hits = [x for x in caplog.records if "rate limited" in x.getMessage() and "recap-file" in x.getMessage()]
+    assert len(hits) == 2, "the face's 429 and the photo's"
+    for hit in hits:
+        assert hit.levelno == logging.WARNING and rslug[:8] not in hit.getMessage() and pid not in hit.getMessage()
+    assert recaps.RECAP_PER_HOUR == 600
+    assert recaps.RECAP_FILES_PER_HOUR == 5000
+
+
+def test_two_full_album_views_from_one_ip_pass(client, monkeypatch):  # review-code-a.md S1: 300 photos, the cap
+    from app import recaps, trip_files
+
+    monkeypatch.setattr(recaps, "RECAP_LIMITER", RateLimiter(recaps.RECAP_PER_HOUR))
+    monkeypatch.setattr(recaps, "RECAP_FILE_LIMITER", RateLimiter(recaps.RECAP_FILES_PER_HOUR))
+    rslug, pids, aid = album_trip(client, photos=trip_files.MAX_PHOTOS)
+    assert len(pids) == 300 and len(recap(client, rslug)["photos"]) == 300
+    for view in range(2):  # a reload fetches every byte again: the answers are private, no-cache
+        got = recap(client, rslug)
+        statuses = [client.get(f"/recaps/{rslug}/photos/{p['id']}").status_code for p in got["photos"]]
+        statuses.append(client.get(f"/recaps/{rslug}/avatars/{aid}").status_code)
+        assert set(statuses) == {200}, f"view {view + 1}: {statuses.count(429)} answers were 429"
+    assert recaps.RECAP_FILES_PER_HOUR >= 8 * (trip_files.MAX_PHOTOS + 10), "a group of 8 on one carrier IP or hotel wifi can each see the whole album"

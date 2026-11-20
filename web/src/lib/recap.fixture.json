@@ -1,0 +1,1098 @@
+{
+ "name": "Baguio",
+ "start_date": "2026-11-06",
+ "return_date": "2026-11-08",
+ "still_on": false,
+ "guide": {
+  "title": "Baguio Barkada Trip, Nov 6 to 8",
+  "summary": "7+ of us, bus from Cubao Friday morning, two nights at Finteo Skylands Premium (96 Dr. Cariño St, near Burnham Park), taxis around town, early nights, bus back to Cubao Sunday afternoon.",
+  "lodging": {
+   "kind": "spot",
+   "id": "af15cf6d-dcf2-468d-8b9c-03c1f1224f40",
+   "name": "Finteo Skylands Premium",
+   "category": "other",
+   "lodging": true,
+   "lat": null,
+   "lng": null,
+   "maps_url": null
+  },
+  "getting_there": {
+   "title": "Getting there (Fri Nov 6, Cubao)",
+   "intro": "Booked: Victory Liner First Class, 10:15 AM from Cubao, about 4 hours, arriving around 2:15 PM. The other trips stay below for reference.",
+   "buses": [
+    {
+     "trip_id": "f3e2d048-ed5f-42dd-ad5f-fff80116b262",
+     "date": "2026-11-06",
+     "trip": {
+      "trip_id": "f3e2d048-ed5f-42dd-ad5f-fff80116b262",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-cubao",
+      "origin_name": "Victory Liner Cubao",
+      "origin_city": "Quezon City",
+      "destination_slug": "vl-baguio",
+      "destination_name": "Victory Liner Baguio",
+      "destination_city": "Baguio",
+      "via": null,
+      "service_class": "deluxe",
+      "fare_php": 880.0,
+      "travel_minutes": 300,
+      "departure_time": "09:00",
+      "arrives_around": "14:00",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "afd92abc-a1cf-4293-9b01-73ec59b28201",
+     "date": "2026-11-06",
+     "trip": {
+      "trip_id": "afd92abc-a1cf-4293-9b01-73ec59b28201",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-cubao",
+      "origin_name": "Victory Liner Cubao",
+      "origin_city": "Quezon City",
+      "destination_slug": "vl-baguio",
+      "destination_name": "Victory Liner Baguio",
+      "destination_city": "Baguio",
+      "via": null,
+      "service_class": "regular_aircon",
+      "fare_php": 762.0,
+      "travel_minutes": 420,
+      "departure_time": "09:30",
+      "arrives_around": "16:30",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "More stops, slower",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "6f4408e3-8a58-43ab-8296-67411f0d0c2b",
+     "date": "2026-11-06",
+     "trip": {
+      "trip_id": "6f4408e3-8a58-43ab-8296-67411f0d0c2b",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-cubao",
+      "origin_name": "Victory Liner Cubao",
+      "origin_city": "Quezon City",
+      "destination_slug": "vl-baguio",
+      "destination_name": "Victory Liner Baguio",
+      "destination_city": "Baguio",
+      "via": null,
+      "service_class": "regular_aircon",
+      "fare_php": 762.0,
+      "travel_minutes": 420,
+      "departure_time": "10:00",
+      "arrives_around": "17:00",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "Fewer stops",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "e50f3820-c8b2-46e9-886c-0048882b2393",
+     "date": "2026-11-06",
+     "trip": {
+      "trip_id": "e50f3820-c8b2-46e9-886c-0048882b2393",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-cubao",
+      "origin_name": "Victory Liner Cubao",
+      "origin_city": "Quezon City",
+      "destination_slug": "vl-baguio",
+      "destination_name": "Victory Liner Baguio",
+      "destination_city": "Baguio",
+      "via": null,
+      "service_class": "first_class",
+      "fare_php": 1151.0,
+      "travel_minutes": 240,
+      "departure_time": "10:15",
+      "arrives_around": "14:15",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "Booked",
+     "booked": true,
+     "warning": null
+    },
+    {
+     "trip_id": "d524ce8f-58e2-4e56-83b9-b93f0b5e8bc2",
+     "date": "2026-11-06",
+     "trip": {
+      "trip_id": "d524ce8f-58e2-4e56-83b9-b93f0b5e8bc2",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-cubao",
+      "origin_name": "Victory Liner Cubao",
+      "origin_city": "Quezon City",
+      "destination_slug": "vl-baguio",
+      "destination_name": "Victory Liner Baguio",
+      "destination_city": "Baguio",
+      "via": null,
+      "service_class": "deluxe",
+      "fare_php": 880.0,
+      "travel_minutes": 300,
+      "departure_time": "11:00",
+      "arrives_around": "16:00",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "403719df-579d-43b4-94e8-08fbd32bd496",
+     "date": "2026-11-06",
+     "trip": {
+      "trip_id": "403719df-579d-43b4-94e8-08fbd32bd496",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-cubao",
+      "origin_name": "Victory Liner Cubao",
+      "origin_city": "Quezon City",
+      "destination_slug": "vl-baguio",
+      "destination_name": "Victory Liner Baguio",
+      "destination_city": "Baguio",
+      "via": null,
+      "service_class": "royal_class",
+      "fare_php": 1677.0,
+      "travel_minutes": 240,
+      "departure_time": "11:30",
+      "arrives_around": "15:30",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "Sleeper seats, most expensive",
+     "booked": false,
+     "warning": null
+    }
+   ],
+   "tips": [
+    "Friday traffic can stretch the 4 hours, so don't plan anything fixed before check-in.",
+    "Be at the Cubao terminal by 9:30 AM, 45 minutes before departure."
+   ]
+  },
+  "days": [
+   {
+    "day": 1,
+    "title": "Day 1: Fri Nov 6, arrive and walk",
+    "intro": "A light day: the bus eats the morning, so everything after check-in is walkable from Dr. Cariño St.",
+    "pick": null,
+    "rows": [
+     {
+      "key": "d1-01",
+      "time": "09:30",
+      "plan": "Meet at Cubao terminal",
+      "note": "Eat breakfast before, buy snacks",
+      "place": {
+       "kind": "terminal",
+       "id": "c42dfd99-3b66-4f7b-bc17-39e066748ef8",
+       "name": "Victory Liner Cubao",
+       "category": null,
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d1-02",
+      "time": "10:15",
+      "plan": "Bus leaves",
+      "note": "",
+      "place": {
+       "kind": "terminal",
+       "id": "c42dfd99-3b66-4f7b-bc17-39e066748ef8",
+       "name": "Victory Liner Cubao",
+       "category": null,
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": "outbound",
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d1-03",
+      "time": "14:15",
+      "plan": "Arrive, late lunch, then 2 taxis to the condo",
+      "note": "Check-in opens 3:00 PM",
+      "place": {
+       "kind": "terminal",
+       "id": "fe58a5a4-823b-43cc-a587-7878de0ef7cd",
+       "name": "Victory Liner Baguio",
+       "category": null,
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d1-04",
+      "time": "15:00",
+      "plan": "Check in at the condo",
+      "note": "Ask the host about early check-in",
+      "place": {
+       "kind": "spot",
+       "id": "af15cf6d-dcf2-468d-8b9c-03c1f1224f40",
+       "name": "Finteo Skylands Premium",
+       "category": "other",
+       "lodging": true,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d1-05",
+      "time": "16:30",
+      "plan": "Burnham Park walk, boating if you want",
+      "note": "About 900 m from the condo",
+      "place": {
+       "kind": "spot",
+       "id": "910dd721-72f0-4f8b-821a-c35a5c3faa51",
+       "name": "Burnham Park",
+       "category": "park",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d1-06",
+      "time": "18:00",
+      "plan": "Session Road stroll, dinner",
+      "note": "Book or arrive early for a table of 7+",
+      "place": {
+       "kind": "spot",
+       "id": "3b2cc98c-c2e1-4cb4-8f05-dfd93a4d2fc9",
+       "name": "Session Road",
+       "category": "shopping",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d1-07",
+      "time": "20:30",
+      "plan": "Groceries and breakfast stuff, back to rest",
+      "note": "Early night for the sunrise",
+      "place": {
+       "kind": "spot",
+       "id": "af15cf6d-dcf2-468d-8b9c-03c1f1224f40",
+       "name": "Finteo Skylands Premium",
+       "category": "other",
+       "lodging": true,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     }
+    ],
+    "tips": [
+     "Decide tonight which sunrise option you're doing tomorrow (Day 2), so you know the alarm time."
+    ]
+   },
+   {
+    "day": 2,
+    "title": "Day 2: Sat Nov 7, the full loop",
+    "intro": "The one big day: sunrise, La Trinidad, the two art spots, then Camp John Hay, ordered north to west to east so taxis don't backtrack.",
+    "pick": {
+     "key": "sunrise",
+     "title": "Sunrise: pick one the night before",
+     "options": [
+      {
+       "id": "A",
+       "label": "Mt. Yangbew",
+       "leave": "04:45",
+       "what": "Easy 30 to 40 min hike in Tawang, La Trinidad, about ₱50 entrance (confirm); flows straight into the strawberry farm",
+       "place": {
+        "kind": "spot",
+        "id": "63aa2b67-89d3-4731-929f-a8e739d830a2",
+        "name": "Mt. Yangbew",
+        "category": "viewpoint",
+        "lodging": false,
+        "lat": null,
+        "lng": null,
+        "maps_url": null
+       }
+      },
+      {
+       "id": "B",
+       "label": "Mines View at sunrise",
+       "leave": "05:15",
+       "what": "No hike, short taxi; frees up Sunday morning",
+       "place": {
+        "kind": "spot",
+        "id": "b5dc8ae4-c660-4134-887e-5fa1444b6db1",
+        "name": "Mines View Park",
+        "category": "viewpoint",
+        "lodging": false,
+        "lat": null,
+        "lng": null,
+        "maps_url": null
+       }
+      },
+      {
+       "id": "C",
+       "label": "Sleep in",
+       "leave": "07:30",
+       "what": "Skip sunrise, start the day at breakfast",
+       "place": null
+      }
+     ]
+    },
+    "rows": [
+     {
+      "key": "d2-01",
+      "time": "04:45",
+      "plan": "Leave for the Mt. Yangbew sunrise hike",
+      "note": "Option A",
+      "place": {
+       "kind": "spot",
+       "id": "63aa2b67-89d3-4731-929f-a8e739d830a2",
+       "name": "Mt. Yangbew",
+       "category": "viewpoint",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": {
+       "pick": "sunrise",
+       "is": "A"
+      },
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-02",
+      "time": "05:15",
+      "plan": "Leave for Mines View at sunrise",
+      "note": "Option B",
+      "place": {
+       "kind": "spot",
+       "id": "b5dc8ae4-c660-4134-887e-5fa1444b6db1",
+       "name": "Mines View Park",
+       "category": "viewpoint",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": {
+       "pick": "sunrise",
+       "is": "B"
+      },
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-03",
+      "time": "07:30",
+      "plan": "Breakfast in La Trinidad",
+      "note": "",
+      "place": null,
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-04",
+      "time": "08:30",
+      "plan": "Strawberry Farm",
+      "note": "November is early season, picking may be thin; shop the stalls anyway",
+      "place": {
+       "kind": "spot",
+       "id": "76060f52-9a2c-4216-907f-fdeb60dee157",
+       "name": "La Trinidad Strawberry Farm",
+       "category": "other",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-05",
+      "time": "09:30",
+      "plan": "Bell Church",
+      "note": "Short stop, near the La Trinidad boundary. Hours unconfirmed",
+      "place": {
+       "kind": "spot",
+       "id": "5fda25ea-2c72-45a4-9d00-472fe2e62b7b",
+       "name": "Bell Church",
+       "category": "church",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-06",
+      "time": "10:30",
+      "plan": "Tam-awan Village",
+      "note": "Art village with Ifugao huts, on the way west. Hours and fee unconfirmed",
+      "place": {
+       "kind": "spot",
+       "id": "4349aff7-f594-4835-be30-094c7339e782",
+       "name": "Tam-awan Village",
+       "category": "other",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-07",
+      "time": "11:45",
+      "plan": "BenCab Museum, lunch at Cafe Sabel",
+      "note": "Km 6 Asin Road, Tue to Sun 9 AM to 6 PM",
+      "place": {
+       "kind": "spot",
+       "id": "f6051fde-410a-4af7-a66e-121f9d223c53",
+       "name": "BenCab Museum",
+       "category": "museum",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-08",
+      "time": "15:00",
+      "plan": "Camp John Hay",
+      "note": "Pine trails, merienda at Choco-late de Batirol",
+      "place": {
+       "kind": "spot",
+       "id": "78a21d40-590d-4983-a541-626b8635cb6c",
+       "name": "Camp John Hay",
+       "category": "park",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d2-09",
+      "time": "18:00",
+      "plan": "Dinner, back to the condo",
+      "note": "Early night",
+      "place": {
+       "kind": "spot",
+       "id": "af15cf6d-dcf2-468d-8b9c-03c1f1224f40",
+       "name": "Finteo Skylands Premium",
+       "category": "other",
+       "lodging": true,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     }
+    ],
+    "tips": [
+     "7+ people means 2 taxis every hop. Assign a lead per taxi and drop plate numbers in the group chat.",
+     "Strawberry Farm to Tam-awan is the longest ride of the day, budget 30 to 45 minutes."
+    ]
+   },
+   {
+    "day": 3,
+    "title": "Day 3: Sun Nov 8, tourist circuit and home",
+    "intro": "Bags go to SM after checkout, so the afternoon is free; the First Class bus leaves at 4:15 PM and reaches Cubao around 8:15 PM.",
+    "pick": null,
+    "rows": [
+     {
+      "key": "d3-01",
+      "time": "07:00",
+      "plan": "Mines View Park",
+      "note": "Skip if you did it for Saturday's sunrise",
+      "place": {
+       "kind": "spot",
+       "id": "b5dc8ae4-c660-4134-887e-5fa1444b6db1",
+       "name": "Mines View Park",
+       "category": "viewpoint",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": {
+       "pick": "sunrise",
+       "is": "B"
+      },
+      "leg": null
+     },
+     {
+      "key": "d3-02",
+      "time": "07:45",
+      "plan": "Good Shepherd for pasalubong",
+      "note": "Lines get long later, go early",
+      "place": {
+       "kind": "spot",
+       "id": "0f506a25-e92a-417b-8e24-8390c5537b0a",
+       "name": "Good Shepherd Sisters Convent",
+       "category": "shopping",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-03",
+      "time": "08:30",
+      "plan": "Botanical Garden, Wright Park",
+      "note": "All close to each other",
+      "place": {
+       "kind": "spot",
+       "id": "6b2eabe1-2a23-4c85-b1d1-0c5104be1446",
+       "name": "Baguio Botanical Garden",
+       "category": "park",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-04",
+      "time": "10:00",
+      "plan": "Back to the condo, pack",
+      "note": "",
+      "place": {
+       "kind": "spot",
+       "id": "af15cf6d-dcf2-468d-8b9c-03c1f1224f40",
+       "name": "Finteo Skylands Premium",
+       "category": "other",
+       "lodging": true,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-05",
+      "time": "11:00",
+      "plan": "Check out, taxis to SM City Baguio",
+      "note": "Leave bags at SM's baggage counter (confirm it first)",
+      "place": {
+       "kind": "spot",
+       "id": "3a36865a-25e7-410f-acb9-79e343b25062",
+       "name": "SM City Baguio",
+       "category": "shopping",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-06",
+      "time": "11:30",
+      "plan": "Lunch at SM or Session Road",
+      "note": "Session Road is a short walk from SM",
+      "place": {
+       "kind": "spot",
+       "id": "3b2cc98c-c2e1-4cb4-8f05-dfd93a4d2fc9",
+       "name": "Session Road",
+       "category": "shopping",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-07",
+      "time": "13:00",
+      "plan": "Free time: Burnham, cafes, last pasalubong",
+      "note": "",
+      "place": {
+       "kind": "spot",
+       "id": "910dd721-72f0-4f8b-821a-c35a5c3faa51",
+       "name": "Burnham Park",
+       "category": "park",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-08",
+      "time": "15:00",
+      "plan": "Pick up bags at SM, taxis to the Victory Liner terminal",
+      "note": "",
+      "place": {
+       "kind": "spot",
+       "id": "3a36865a-25e7-410f-acb9-79e343b25062",
+       "name": "SM City Baguio",
+       "category": "shopping",
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-09",
+      "time": "15:45",
+      "plan": "Board",
+      "note": "",
+      "place": {
+       "kind": "terminal",
+       "id": "fe58a5a4-823b-43cc-a587-7878de0ef7cd",
+       "name": "Victory Liner Baguio",
+       "category": null,
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": null,
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     },
+     {
+      "key": "d3-10",
+      "time": "16:15",
+      "plan": "Bus to Cubao",
+      "note": "Arrive around 8:15 PM",
+      "place": {
+       "kind": "terminal",
+       "id": "fe58a5a4-823b-43cc-a587-7878de0ef7cd",
+       "name": "Victory Liner Baguio",
+       "category": null,
+       "lodging": false,
+       "lat": null,
+       "lng": null,
+       "maps_url": null
+      },
+      "bus": "return",
+      "show_if": null,
+      "hide_if": null,
+      "leg": null
+     }
+    ],
+    "tips": []
+   }
+  ],
+  "getting_home": {
+   "title": "Getting home (Sun Nov 8, to Cubao)",
+   "intro": "Booked: Victory Liner First Class, 4:15 PM, about 4 hours, into Cubao around 8:15 PM. The other trips stay below for reference.",
+   "buses": [
+    {
+     "trip_id": "e8e7ae98-76e6-41f3-9967-5c4dfa253701",
+     "date": "2026-11-08",
+     "trip": {
+      "trip_id": "e8e7ae98-76e6-41f3-9967-5c4dfa253701",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-baguio",
+      "origin_name": "Victory Liner Baguio",
+      "origin_city": "Baguio",
+      "destination_slug": "vl-cubao",
+      "destination_name": "Victory Liner Cubao",
+      "destination_city": "Quezon City",
+      "via": null,
+      "service_class": "regular_aircon",
+      "fare_php": 762.0,
+      "travel_minutes": 420,
+      "departure_time": "13:30",
+      "arrives_around": "20:30",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "be8c0763-a666-479b-be50-872a95b76500",
+     "date": "2026-11-08",
+     "trip": {
+      "trip_id": "be8c0763-a666-479b-be50-872a95b76500",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-baguio",
+      "origin_name": "Victory Liner Baguio",
+      "origin_city": "Baguio",
+      "destination_slug": "vl-cubao",
+      "destination_name": "Victory Liner Cubao",
+      "destination_city": "Quezon City",
+      "via": null,
+      "service_class": "regular_aircon",
+      "fare_php": 762.0,
+      "travel_minutes": 420,
+      "departure_time": "14:10",
+      "arrives_around": "21:10",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "5cb9cdfc-7f7e-42c7-8afa-2ecfb98fc000",
+     "date": "2026-11-08",
+     "trip": {
+      "trip_id": "5cb9cdfc-7f7e-42c7-8afa-2ecfb98fc000",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-baguio",
+      "origin_name": "Victory Liner Baguio",
+      "origin_city": "Baguio",
+      "destination_slug": "vl-cubao",
+      "destination_name": "Victory Liner Cubao",
+      "destination_city": "Quezon City",
+      "via": null,
+      "service_class": "regular_aircon",
+      "fare_php": 762.0,
+      "travel_minutes": 420,
+      "departure_time": "14:45",
+      "arrives_around": "21:45",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "64e0aa59-1dfc-48f2-893e-fff512a9e0d5",
+     "date": "2026-11-08",
+     "trip": {
+      "trip_id": "64e0aa59-1dfc-48f2-893e-fff512a9e0d5",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-baguio",
+      "origin_name": "Victory Liner Baguio",
+      "origin_city": "Baguio",
+      "destination_slug": "vl-cubao",
+      "destination_name": "Victory Liner Cubao",
+      "destination_city": "Quezon City",
+      "via": null,
+      "service_class": "royal_class",
+      "fare_php": 1677.0,
+      "travel_minutes": 240,
+      "departure_time": "15:15",
+      "arrives_around": "19:15",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "Sleeper seats",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "e65c6ae9-7762-4b85-9e67-5b5c05d2a707",
+     "date": "2026-11-08",
+     "trip": {
+      "trip_id": "e65c6ae9-7762-4b85-9e67-5b5c05d2a707",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-baguio",
+      "origin_name": "Victory Liner Baguio",
+      "origin_city": "Baguio",
+      "destination_slug": "vl-cubao",
+      "destination_name": "Victory Liner Cubao",
+      "destination_city": "Quezon City",
+      "via": null,
+      "service_class": "regular_aircon",
+      "fare_php": 762.0,
+      "travel_minutes": 420,
+      "departure_time": "15:20",
+      "arrives_around": "22:20",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "",
+     "booked": false,
+     "warning": null
+    },
+    {
+     "trip_id": "98024c73-1045-4ffa-a5a5-4983eb4135a0",
+     "date": "2026-11-08",
+     "trip": {
+      "trip_id": "98024c73-1045-4ffa-a5a5-4983eb4135a0",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-baguio",
+      "origin_name": "Victory Liner Baguio",
+      "origin_city": "Baguio",
+      "destination_slug": "vl-cubao",
+      "destination_name": "Victory Liner Cubao",
+      "destination_city": "Quezon City",
+      "via": null,
+      "service_class": "first_class",
+      "fare_php": 1151.0,
+      "travel_minutes": 240,
+      "departure_time": "16:15",
+      "arrives_around": "20:15",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "Booked",
+     "booked": true,
+     "warning": null
+    },
+    {
+     "trip_id": "99f82f9a-3ee7-46eb-b241-a5f5b471a13c",
+     "date": "2026-11-08",
+     "trip": {
+      "trip_id": "99f82f9a-3ee7-46eb-b241-a5f5b471a13c",
+      "operator_slug": "victory-liner",
+      "operator_name": "Victory Liner",
+      "origin_slug": "vl-baguio",
+      "origin_name": "Victory Liner Baguio",
+      "origin_city": "Baguio",
+      "destination_slug": "vl-cubao",
+      "destination_name": "Victory Liner Cubao",
+      "destination_city": "Quezon City",
+      "via": null,
+      "service_class": "regular_aircon",
+      "fare_php": 762.0,
+      "travel_minutes": 420,
+      "departure_time": "16:20",
+      "arrives_around": "23:20",
+      "arrives_day_offset": 0,
+      "booking_url": null,
+      "source": "manual",
+      "source_url": "https://tickets.victoryliner.com/",
+      "last_verified_at": "2026-10-28T04:00:00Z",
+      "confirm_note": "Schedules can change. Confirm with the operator before you travel."
+     },
+     "note": "Latest that still gets you home before midnight",
+     "booked": false,
+     "warning": null
+    }
+   ],
+   "tips": [
+    "Sunday evening traffic into Manila can stretch the 4 hours."
+   ]
+  },
+  "budget": {
+   "summary": "",
+   "rows": [],
+   "excluded": ""
+  },
+  "todo": [],
+  "sources": []
+ },
+ "marks": [
+  {
+   "key": "row:d1-01",
+   "value": "done",
+   "updated_at": "2026-11-06T01:41:00Z"
+  },
+  {
+   "key": "row:d1-02",
+   "value": "done",
+   "updated_at": "2026-11-06T03:05:00Z"
+  },
+  {
+   "key": "row:d1-03",
+   "value": "done",
+   "updated_at": "2026-11-06T05:30:00Z"
+  },
+  {
+   "key": "pick:sunrise",
+   "value": "B",
+   "updated_at": "2026-11-06T12:00:00Z"
+  },
+  {
+   "key": "row:d2-02",
+   "value": "done",
+   "updated_at": "2026-11-06T21:05:00Z"
+  }
+ ],
+ "photos": [
+  {
+   "id": "3d4b9de5-38ce-44b1-aa76-982f64f85d15",
+   "row_key": "d1-01"
+  },
+  {
+   "id": "d8344a62-ece6-4ff0-b2f8-dd7a2d40576d",
+   "row_key": "d1-01"
+  },
+  {
+   "id": "cf51c160-a93b-4a96-9ac9-5d01c8fbcb16",
+   "row_key": null
+  }
+ ],
+ "people": {
+  "count": 3,
+  "list": [
+   {
+    "name": "Ana",
+    "arrived_at": "2026-11-06T01:41:00Z",
+    "avatar_id": null
+   },
+   {
+    "name": "Ben",
+    "arrived_at": null,
+    "avatar_id": null
+   },
+   {
+    "name": "Pia",
+    "arrived_at": "2026-11-06T01:52:00Z",
+    "avatar_id": "9db80812-c091-4a0b-8d1e-e7871923c257"
+   }
+  ]
+ },
+ "spending": {
+  "total_centavos": 1800000
+ }
+}

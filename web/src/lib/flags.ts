@@ -13,6 +13,7 @@ export type Flags = {
   walletActivity: boolean;
   chatbotLive: boolean;
   budgetLines: boolean;
+  recapLinks: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -27,6 +28,7 @@ export const FLAG_DEFAULTS: Flags = {
   walletActivity: false, // TG-66: the activity list and comments
   chatbotLive: false, // TG-61 PR 2: the chatbot, inside the hand editor, until the API's CHATBOT_LIVE is on
   budgetLines: false, // TG-62: the wallet's budget line and the trip's Budget panel; off sends no budget_key and makes no budget request
+  recapLinks: false, // TG-64: the trip page's Trip recap box and /r/<slug>, until the API's RECAP_LINKS is on
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -57,6 +59,7 @@ export function readFlags(): Flags {
     walletActivity: parseFlag(process.env.NEXT_PUBLIC_WALLET_ACTIVITY, FLAG_DEFAULTS.walletActivity),
     chatbotLive: parseFlag(process.env.NEXT_PUBLIC_CHATBOT_LIVE, FLAG_DEFAULTS.chatbotLive),
     budgetLines: parseFlag(process.env.NEXT_PUBLIC_BUDGET_LINES, FLAG_DEFAULTS.budgetLines),
+    recapLinks: parseFlag(process.env.NEXT_PUBLIC_RECAP_LINKS, FLAG_DEFAULTS.recapLinks),
   };
 }
 
