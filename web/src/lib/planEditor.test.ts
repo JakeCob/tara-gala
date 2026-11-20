@@ -1,7 +1,7 @@
 // TG-61 W11: the plan editor's wiring, read from the source in the style of guide.test.ts. Run with `npm test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
@@ -244,5 +244,11 @@ test("T67-W12 the three [tg-trip] lines with the city, the hidden-chat line once
   assert.match(comp("BusSwap"), swap);
   for (const line of [...v.matchAll(/console\.info\("\[tg-trip\] plan (spots|chat hidden)[^\n]*/g), ...comp("BusSwap").matchAll(/console\.info\("\[tg-trip\] plan swap list trips[^\n]*/g)]) {
     assert.doesNotMatch(line[0], /name|note|link|lat|lng|pin\b|\.plan\b/, `no name, note, link or pin: ${line[0]}`);
+  }
+});
+
+test("T67-W14 the plan's city is read only through cityOf: no component reads shown.city (RED audit should)", () => {
+  for (const f of readdirSync(new URL("src/components/", WEB)).filter((n) => /\.tsx?$/.test(n))) {
+    assert.doesNotMatch(read(`src/components/${f}`), /shown\??\.city/, `${f}: an optional city reads undefined on a Baguio plan; use cityOf`);
   }
 });
