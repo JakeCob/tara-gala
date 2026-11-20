@@ -34,7 +34,15 @@ export type Itinerary = {
   edited?: boolean; // TG-61: a trip's own copy of a plan
   seq?: number | null; // TG-61: the copy's version, read with its plan; null for a shared plan
   changed_at?: string | null; // TG-61 W-7: when the copy last changed; null for a shared plan
+  city?: string; // TG-67: the plan's city, from its buses (S2). Missing on an older answer, which is Baguio's
 };
+
+// TG-67: the towns a plan can go to. Keep in step with app.plan_validation.CITIES (a test compares them).
+export const DESTINATIONS: readonly string[] = ["Baguio", "Sagada"];
+/** The province each destination is in, for Google Maps searches. One entry per destination (a test checks). */
+export const PROVINCE: Readonly<Record<string, string>> = { Baguio: "Benguet", Sagada: "Mountain Province" };
+/** The plan's city: an answer from before TG-67, or a saved copy that old, has none, and is Baguio's. */
+export const cityOf = (it: { city?: string | null }): string => it.city || "Baguio";
 
 // Same pattern as SLUG in api/app/itineraries.py (a test compares them). An invalid slug shows the 404
 // without a request.

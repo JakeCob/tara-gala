@@ -321,3 +321,13 @@ test("googleMapsUrl takes an optional travel mode; transit stays the default", (
     assert.ok(url.href.startsWith(MAPS_DIR_BASE));
   }
 });
+
+// ---- TG-67 S4: no Sakay link on a destination town's terminal (test-plan T67-W7)
+test("T67-W7 sakay is off for every destination city, Sagada included", async () => {
+  assert.equal(showSakay("Sagada"), false);
+  assert.equal(showSakay(" Sagada "), false);
+  assert.equal(showSakay("Baguio"), false);
+  assert.equal(showSakay("Quezon City"), true);
+  const { DESTINATIONS } = await import(new URL("./itinerary.ts", import.meta.url).href) as typeof import("./itinerary.ts");
+  for (const city of DESTINATIONS) assert.equal(showSakay(city), false, `${city}: mapLinks.ts TOWNS must match itinerary.ts DESTINATIONS`);
+});

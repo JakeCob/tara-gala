@@ -153,6 +153,7 @@ export function chatAnswer(status: number | "offline", body: unknown): ChatAnswe
   if (status >= 200 && status < 300) return isOut(body) ? { ok: true, body: { ...body, need_link: body.need_link ?? null } } : { ok: false, why: "server" };
   if (status === 429) return { ok: false, why: o.detail === "chat_cap" ? "cap" : "busy", retryAt: isoOrNull(o.retry_at) };
   if (status === 503 && o.detail === "chat_off") return { ok: false, why: "off" };
+  if (status === 422 && o.detail === "chat_not_here") return { ok: false, why: "off" }; // TG-67: a plan outside Baguio
   if (status === 409 && o.detail === "plan_changed") return { ok: false, why: "clash", clash: { itinerary_slug: String(o.itinerary_slug), seq: Number(o.seq) } };
   if (status === 404) return { ok: false, why: "not_found" };
   if (status >= 500) return { ok: false, why: "server" };

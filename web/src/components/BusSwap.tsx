@@ -42,6 +42,7 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
   const [everyBus, setEveryBus] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const date = bus?.date ?? "";
+  const city = editor.city; // TG-67: the plan's city, so a Sagada plan lists Manila and Sagada buses
   // The old bus's time, or its row's when the trip row is gone
   const oldTime = bus?.trip?.departure_time ?? busRowOf(guide, at.table)?.r.time ?? null;
 
@@ -53,9 +54,9 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
   useEffect(() => {
     if (!date) return;
     let live = true;
-    searchTrips({ originCity: up ? "Metro Manila" : "Baguio", destinationCity: up ? "Baguio" : "Metro Manila", date }).then(
+    searchTrips({ originCity: up ? "Metro Manila" : city, destinationCity: up ? city : "Metro Manila", date }).then(
       (trips) => {
-        console.info("[tg-trip] plan swap list trips=%d near=%s", trips.length, oldTime ? swapWindow(oldTime, trips).near.length : "none");
+        console.info("[tg-trip] plan swap list trips=%d near=%s city=%s", trips.length, oldTime ? swapWindow(oldTime, trips).near.length : "none", city);
         if (live) setList(trips);
       },
       () => {
@@ -66,13 +67,13 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
     return () => {
       live = false;
     };
-  }, [date, up, oldTime]);
+  }, [date, up, oldTime, city]);
 
   if (!bus) return null;
   const old = bus.trip;
   // e2e W-8: the towns, as ux §7 names them ("from Cubao to Baguio"), not the terminals
-  const from = old ? town(old.origin_name, old.operator_name) : up ? "Metro Manila" : "Baguio";
-  const to = old ? town(old.destination_name, old.operator_name) : up ? "Baguio" : "Metro Manila";
+  const from = old ? town(old.origin_name, old.operator_name) : up ? "Metro Manila" : city;
+  const to = old ? town(old.destination_name, old.operator_name) : up ? city : "Metro Manila";
   const day = datesLine(date, date);
   const others = (list ?? []).filter((t) => t.trip_id !== bus.trip_id);
   const w = swapWindow(oldTime, others);
@@ -120,7 +121,7 @@ export default function BusSwap({ editor, guide, at, onApplied, onBack }: {
     <div className="flex flex-col gap-3">
       {bus.warning && <p className="text-sm font-semibold">{busWarningLine(bus.warning, date)}</p>}
       {bus.booked && <p className="text-sm">You marked it booked, so check your ticket with {old?.operator_name ?? "the bus company"} before you swap.</p>}
-      <p className="text-sm">{swapHeader(up, date, everyBus ? null : w.window)}</p>
+      <p className="text-sm">{swapHeader(up, date, everyBus ? null : w.window, city)}</p>
       {failed && <PlanProblem text="The bus list didn't load. Check your signal, then try again." />}
       {list === null && !failed && <p className="text-sm text-muted">Finding buses...</p>}
       {list !== null && others.length === 0 && <p className="text-sm">No other buses on file from {from} to {to} on {day} yet.</p>}

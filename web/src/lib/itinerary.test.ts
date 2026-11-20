@@ -480,3 +480,32 @@ test("T43-P6 the stop sprite draws at a true 24px on a PX.plate wrapper; the ste
   assert.match(plate[1], /alt=""/);
   assert.match(src, /<span aria-hidden="true" className=\{`\$\{PX\.numeral\} w-6 shrink-0 text-center`\}>\s*\{n\}\s*<\/span>/);
 });
+
+// ---- TG-67 S4: the plan's city (plan §3 S4; test-plan T67-W1, W2). Loaded inside each test, so they fail on their own.
+type ItineraryLib = typeof import("./itinerary.ts");
+const itineraryLib = (): Promise<ItineraryLib> => import(new URL("./itinerary.ts", import.meta.url).href);
+
+test("T67-W1 cityOf: a missing, null or empty city is Baguio; any other is the itinerary's own", async () => {
+  const { cityOf } = await itineraryLib();
+  assert.equal(typeof cityOf, "function", "cityOf is exported");
+  assert.equal(cityOf({}), "Baguio", "an answer from before S2 has no city");
+  assert.equal(cityOf({ city: null }), "Baguio");
+  assert.equal(cityOf({ city: "" }), "Baguio");
+  assert.equal(cityOf({ city: "Sagada" }), "Sagada");
+  assert.equal(cityOf({ city: "Baguio" }), "Baguio");
+});
+
+test("T67-W2 DESTINATIONS matches the API's CITIES, and PROVINCE has one entry per destination (F6)", async (t) => {
+  const { DESTINATIONS, PROVINCE } = await itineraryLib();
+  assert.ok(Array.isArray(DESTINATIONS), "DESTINATIONS is exported");
+  assert.deepEqual([...DESTINATIONS], ["Baguio", "Sagada"]);
+  assert.deepEqual(Object.keys(PROVINCE ?? {}), [...DESTINATIONS], "a province for each destination, in the same order");
+  assert.equal(PROVINCE.Baguio, "Benguet");
+  assert.equal(PROVINCE.Sagada, "Mountain Province");
+  // The API's list (S2, plan_validation.CITIES). Until S2 is on this branch's base there is nothing to compare with
+  const py = new URL("../../../api/app/plan_validation.py", import.meta.url);
+  const m = /^CITIES\s*=\s*\(([^)]*)\)/m.exec(existsSync(py) ? readFileSync(py, "utf8") : "");
+  if (!m) return t.skip("S2 not merged yet: api/app/plan_validation.py has no CITIES tuple");
+  const api = [...m[1].matchAll(/["']([^"']+)["']/g)].map((x) => x[1]);
+  assert.deepEqual(api, [...DESTINATIONS], "keep web/src/lib/itinerary.ts DESTINATIONS in step with app.plan_validation.CITIES");
+});

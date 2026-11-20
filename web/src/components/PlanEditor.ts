@@ -32,6 +32,8 @@ export type ChatTools = {
 
 export type PlanEditor = {
   editing: boolean;
+  /** TG-67: the plan's city (cityOf): Swap bus and the distance lines name it */
+  city: string;
   /** Controls that change the plan are live: online, no plan write out, and the newest plan on screen (ux.md §3.3) */
   can: boolean;
   online: boolean;

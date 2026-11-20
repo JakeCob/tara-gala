@@ -121,3 +121,14 @@ test("T61-W12h review M1: a plan write is refused while a session write is out, 
   assert.match(apply, /return \{ state: "ready", trip: next \};/, "the trip on screen is keepNewerPlan's");
   assert.match(view, /<PlanSection trip=\{trip\} busy=\{busy \|\| planWriting\}/, "attach and detach move the plan: they wait for a plan write");
 });
+
+// ---- TG-67 S4: the plan's city rides with the plan on screen (plan §3 S4; test-plan T67-W3)
+test("T67-W3 shownFrom keeps the answer's city; a missing one reads as Baguio", async () => {
+  const { cityOf } = await import(new URL("./itinerary.ts", import.meta.url).href) as typeof import("./itinerary.ts");
+  const sagada = shownFrom({ share_slug: COPY, seq: 2, guide: g("sagada"), edited: true, city: "Sagada" } as Parameters<typeof shownFrom>[0]);
+  assert.equal(sagada.city, "Sagada");
+  assert.equal(cityOf(sagada), "Sagada");
+  const old = shownFrom({ share_slug: SHARED, guide: g("shared") });
+  assert.equal(cityOf(old), "Baguio", "an answer with no city (an older saved copy, or before S2) is Baguio");
+  assert.equal(cityOf(shownFrom({ share_slug: SHARED, guide: g("shared"), city: "" } as Parameters<typeof shownFrom>[0])), "Baguio");
+});

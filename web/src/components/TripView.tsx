@@ -6,6 +6,7 @@ import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx }
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
 import { type NeedLink, chatRequest } from "@/lib/chat";
 import { flags } from "@/lib/flags";
+import { cityOf } from "@/lib/itinerary";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
 import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
 import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, keepNewerPlan, shownFrom } from "@/lib/planState";
@@ -216,7 +217,15 @@ export default function TripView({ slug }: { slug: string }) {
   const behind = (s: Shown | null, at: PlanBase | null, tripPlan: string | null | undefined) =>
     !!at && tripPlan === at.itinerary_slug && !(s?.slug === at.itinerary_slug && (s.seq ?? 0) >= at.seq);
   const mine = useRef(new Map<number, number>()); // this phone's own versions, and when: Undo asks first otherwise
-  const [spots, setSpots] = useState<SpotLite[] | null>(null);
+  // TG-67: the plan's city, from the plan on screen (Baguio until it loads, and for every Baguio plan)
+  const city = cityOf(shown ?? {});
+  const cityRef = useRef(city);
+  useLayoutEffect(() => {
+    cityRef.current = city;
+  }, [city]);
+  const [rawSpots, setRawSpots] = useState<SpotLite[] | null>(null);
+  // Filtered at render, so the other town's spots never show and a plan that moves to another city refilters
+  const spots = useMemo(() => (rawSpots ? rawSpots.filter((s) => s.city === city) : null), [rawSpots, city]);
   const spotsAsked = useRef(false);
   // TG-64 review M2: one function for the page's life, so the map's thumbnails never fetch again on a render or a poll
   const fetchPhoto = useCallback((id: string) => fetchFile(slug, id), [slug]);
@@ -224,11 +233,18 @@ export default function TripView({ slug }: { slug: string }) {
     if (spotsAsked.current) return;
     spotsAsked.current = true;
     void fetchSpots().then((list) => {
-      console.info("[tg-trip] plan spots ok=%s count=%d", list ? "yes" : "no", list?.length ?? 0);
-      if (list) setSpots(list);
+      console.info("[tg-trip] plan spots ok=%s count=%d city=%s", list ? "yes" : "no", list?.length ?? 0, cityRef.current);
+      if (list) setRawSpots(list);
       else spotsAsked.current = false; // try again on the next find
     });
   }, []);
+  // TG-67: the chat stays Baguio's (owner decision 2), so a plan elsewhere has no chat entry. Said once per page
+  const chatHiddenLogged = useRef(false);
+  useEffect(() => {
+    if (chatHiddenLogged.current || city === "Baguio" || !flags.planEditing || !flags.chatbotLive) return;
+    chatHiddenLogged.current = true;
+    console.info("[tg-trip] plan chat hidden city=%s", city);
+  }, [city]);
 
   // A newer plan landed: after a clash, say what changed; from another phone, say so above the tabs (ux.md §6)
   const lastPlan = useRef<{ slug: string; seq: number | null } | undefined>(undefined); // the last plan on screen in step
@@ -408,7 +424,7 @@ export default function TripView({ slug }: { slug: string }) {
   const barStatus = !online
     ? typeof planSaid === "string" && planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
     : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : (!synced && !planWriting && shown) || waiting ? "Updating the map..." : planSaid;
-  const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive ? {
+  const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && city === "Baguio" ? {
     slug,
     send: async (log, text, focus) => {
       const s = shownRef.current;
@@ -425,6 +441,7 @@ export default function TripView({ slug }: { slug: string }) {
   } : null;
   const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {
     editing,
+    city,
     can: editable,
     online,
     writing: planWriting,
@@ -511,6 +528,7 @@ export default function TripView({ slug }: { slug: string }) {
         <p className="text-sm text-muted md:max-w-prose">{editing && editor ? EDIT_INTRO : VIEW_INTRO}</p>
         <LevelMap
           guide={theGuide}
+          city={city}
           marks={trip.marks}
           editor={editor}
           copyLine={copyLine(!!shown?.edited, trip.plan_edits)}
