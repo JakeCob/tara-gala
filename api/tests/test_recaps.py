@@ -568,8 +568,10 @@ def test_the_bytes_have_their_own_limit_and_the_page_its_own(client, caplog, mon
     assert r.status_code == 429 and "retry-after" in r.headers, "the photos and the faces share one counter of their own"
     assert client.get(photo).status_code == 429
     assert client.get(f"/recaps/{rslug}").status_code == 200, "and it doesn't stop the page"
-    [hit] = [x for x in caplog.records if "rate limited" in x.getMessage() and "recap-file" in x.getMessage()]
-    assert hit.levelno == logging.WARNING and rslug[:8] not in hit.getMessage() and pid not in hit.getMessage()
+    hits = [x for x in caplog.records if "rate limited" in x.getMessage() and "recap-file" in x.getMessage()]
+    assert len(hits) == 2, "the face's 429 and the photo's"
+    for hit in hits:
+        assert hit.levelno == logging.WARNING and rslug[:8] not in hit.getMessage() and pid not in hit.getMessage()
     assert recaps.RECAP_PER_HOUR == 600
     assert recaps.RECAP_FILES_PER_HOUR == 5000
 
