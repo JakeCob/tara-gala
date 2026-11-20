@@ -133,20 +133,35 @@ def test_g7_budget_is_null_with_the_flag_off(client, flags, dsn):
     assert client.get(f"/wallets/{slug}").json()["budget"]["lines"] == LINES
 
 
-def test_g7_every_wallet_write_answers_with_the_budget(on, dsn):
-    slug, (a, b, *_) = new_wallet(on)
+@pytest.mark.parametrize("budget_on", [True, False])
+def test_g7_every_wallet_write_answers_with_the_budget(client, flags, dsn, budget_on):
+    """Every wallet answer of a write carries the budget, and none does with BUDGET_LINES off (tg-test's GA1 S1): the
+    lines are the group's own text. The refusals that carry the wallet (409 expense_changed, 404 expense_gone) too."""
+    flags(wallet_splits=True, budget_lines=budget_on)
+    slug, (a, b, *_) = new_wallet(client)
     trip(dsn, slug)
-    answers = [add(on, slug, on_line([a, b]))]
-    eid = answers[0].json()["expenses"][0]["id"]
-    answers.append(edit(on, slug, eid, {**on_line([a, b], amount=1200), "version": 1}))
-    answers.append(on.post(f"/wallets/{slug}/members", json={"name": "Gina Testname"}))
-    answers.append(on.post(f"/wallets/{slug}/settlements", json={"from_member": b, "to_member": a, "amount_centavos": 100}))
-    sid = answers[-1].json()["settlements"][0]["id"]
-    answers.append(on.delete(f"/wallets/{slug}/settlements/{sid}"))
-    answers.append(on.delete(f"/wallets/{slug}/expenses/{eid}"))
-    for r in answers:
-        assert r.status_code in (200, 201), r.text
-        assert r.json()["budget"] == {"trip_name": "Baguio test trip", "lines": LINES}
+    answers = {"add": add(client, slug, on_line([a, b]))}
+    eid = answers["add"].json()["expenses"][0]["id"]
+    answers["legacy add"] = add(client, slug, legacy_equal([a, b], amount=1000))
+    answers["edit"] = edit(client, slug, eid, {**on_line([a, b], amount=1200), "version": 1})
+    answers["edit 409"] = edit(client, slug, eid, {**on_line([a, b], amount=1300), "version": 1})
+    answers["edit no-op"] = edit(client, slug, eid, {**on_line([a, b], amount=1200), "version": 2})
+    answers["member add"] = client.post(f"/wallets/{slug}/members", json={"name": "Gina Testname"})
+    answers["settlement add"] = client.post(f"/wallets/{slug}/settlements",
+                                            json={"from_member": b, "to_member": a, "amount_centavos": 100})
+    sid = answers["settlement add"].json()["settlements"][0]["id"]
+    answers["settlement remove"] = client.delete(f"/wallets/{slug}/settlements/{sid}")
+    answers["delete 409"] = client.delete(f"/wallets/{slug}/expenses/{eid}?version=1")
+    answers["delete"] = client.delete(f"/wallets/{slug}/expenses/{eid}?version=2")
+    answers["delete 404"] = client.delete(f"/wallets/{slug}/expenses/{eid}?version=2")
+    assert {k: r.status_code for k, r in answers.items()} == {
+        "add": 201, "legacy add": 201, "edit": 200, "edit 409": 409, "edit no-op": 200, "member add": 201,
+        "settlement add": 201, "settlement remove": 200, "delete 409": 409, "delete": 200, "delete 404": 404}
+    assert rows(dsn, slug)[-1]["action"] == "expense_delete" and len(rows(dsn, slug)) == 7, "the no-op wrote nothing"
+    want = {"trip_name": "Baguio test trip", "lines": LINES} if budget_on else None
+    for name, r in answers.items():
+        wallet = r.json()["detail"]["wallet"] if r.status_code >= 400 else r.json()
+        assert wallet["budget"] == want, name
 
 
 @pytest.mark.parametrize("budget_on", [True, False])
