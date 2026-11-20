@@ -14,6 +14,10 @@ activity list move together. An expense's before/after in that list is snapshot(
 `by` is the phone's pick of who's writing, in the v2 body or as `?by=` where the body has no room for it. The logs add
 the mode, the category, the people and item counts and the centavo totals (options §8): still never a name, a note, an
 item's name, `by` or a member id.
+
+TG-62 (GA1): an expense also carries `budget_key`, a line of the wallet's one trip's budget (budget_lines()), "_none"
+or null, and WalletOut.budget lists those lines, both behind BUDGET_LINES. An edit that leaves the field out keeps the
+stored line (plan Rev 1 M2). The key is never logged: it's a slug of the group's own line text (`budget=line|none|null`).
 """
 
 import logging
@@ -37,6 +41,7 @@ from .wallet_models import (  # TG-66: the models moved, and every name is still
     ExpenseIn,
     ExpenseInLegacy,
     ExpenseInV2,
+    BudgetLine,
     ExpenseOut,
     ExpensePatch,
     InputOut,
@@ -53,8 +58,10 @@ from .wallet_models import (  # TG-66: the models moved, and every name is still
     TransferOut,
     WalletIn,
     WalletName,
+    WalletBudget,
     WalletOut,
 )
+from .guide import Budget
 from .wallet_splits import SplitError
 
 router = APIRouter(tags=["wallets"])
@@ -66,7 +73,8 @@ NOINDEX = {"X-Robots-Tag": "noindex"}
 MAX_EXPENSES = 500
 
 # TG-66: an activity row's before/after (plan §2): ExpenseOut's own names, no id, timestamps or comment count
-SNAPSHOT_FIELDS = frozenset({"amount_centavos", "note", "category", "paid_by", "payers", "mode", "inputs", "items",
+SNAPSHOT_FIELDS = frozenset({"budget_key",  # TG-62 GA1 (plan G8)
+                             "amount_centavos", "note", "category", "paid_by", "payers", "mode", "inputs", "items",
                              "charges", "shares", "version"})
 FREE_MODES = ("equal", "exact")  # what WALLET_SPLITS off still takes (category dropped): the common case, after a rollback
 CHARGE_ORDER = {"service": 0, "vat": 1}
@@ -147,7 +155,30 @@ def _by_expense(conn, sql: str, wallet_id: UUID) -> dict[UUID, list[dict]]:
     return out
 
 
-def _load(conn, wallet_id: UUID) -> WalletOut:
+def budget_lines(conn, wallet_id: UUID) -> WalletBudget | None:
+    """TG-62 G7: the lines of the wallet's one trip, in plan order: only when exactly one trip has this wallet, that trip
+    has an itinerary, and its guide's budget has keyed rows. Anything else, a budget that doesn't parse included, is
+    None. Never an estimate or an amount. TG-63's scan reads it too."""
+    trips = conn.execute(
+        "select s.name, i.plan from trip_sessions s left join itineraries i on i.id = s.itinerary_id where s.wallet_id = %s limit 2",
+        (wallet_id,),
+    ).fetchall()
+    if len(trips) != 1 or not isinstance(trips[0]["plan"], dict):
+        return None
+    guide = trips[0]["plan"].get("guide")
+    raw = guide.get("budget") if isinstance(guide, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    try:
+        rows = Budget.model_validate(raw).rows
+    except ValueError:  # pydantic's ValidationError: a budget we can't read has no lines
+        return None
+    lines = [BudgetLine(key=r.key, item=r.item, category=r.category) for r in rows if r.key is not None]
+    return WalletBudget(trip_name=trips[0]["name"], lines=lines) if lines else None
+
+
+def _load(conn, wallet_id: UUID, *, budget: bool = False) -> WalletOut:
+    """The whole wallet. `budget`: BUDGET_LINES, read from the request by every route that answers a wallet (TG-62)."""
     wallet = conn.execute("select share_slug, name, created_at, rev from wallets where id = %s", (wallet_id,)).fetchone()
     members = conn.execute("select id, name from wallet_members where wallet_id = %s order by seq", (wallet_id,)).fetchall()
     order = [m["id"] for m in members]
@@ -192,6 +223,7 @@ def _load(conn, wallet_id: UUID) -> WalletOut:
         )
         for r in conn.execute(
             """select id, paid_by, amount_centavos, note, created_at, split_mode as mode, category, version, updated_at,
+                      budget_key,  -- TG-62
                       (select count(*) from expense_comments c where c.expense_id = expenses.id) as comment_count  -- TG-66
                from expenses where wallet_id = %s order by created_at desc, id desc""",
             (wallet_id,),
@@ -230,6 +262,7 @@ def _load(conn, wallet_id: UUID) -> WalletOut:
         transfers=[TransferOut(from_member=f, to_member=t, amount_centavos=a) for f, t, a in settle_up(net, order)],
         total_centavos=sum(e.amount_centavos for e in expenses),
         rev=wallet["rev"],  # TG-66: moved by wallet_activity.record() on every write
+        budget=budget_lines(conn, wallet_id) if budget else None,  # TG-62
     )
 
 
@@ -319,9 +352,10 @@ def _store_split(conn, expense_id: UUID, body, shares: dict[UUID, int], payers: 
 
 
 def _money_and_words(e: ExpenseOut) -> tuple:
-    """Amount, payer(s), final shares (a person at 0 is no person), note and category."""
+    """Amount, payer(s), final shares (a person at 0 is no person), note, category and budget line."""
     return (e.amount_centavos, e.paid_by, {p.member_id: p.paid_centavos for p in e.payers},
-            {s.member_id: s.share_centavos for s in e.shares if s.share_centavos}, e.note, e.category)
+            {s.member_id: s.share_centavos for s in e.shares if s.share_centavos}, e.note, e.category,
+            e.budget_key)  # TG-62 G8: a line change is a change
 
 
 def _form(e: ExpenseOut) -> tuple:
@@ -362,6 +396,42 @@ def _is_noop(old: ExpenseOut, new_money: tuple, body, order: list[UUID]) -> bool
     return _form_of(body, order) == _form(old)
 
 
+def _line_categories(conn, wallet_id: UUID) -> dict[str, str] | None:
+    """Each current line's category (a row with none is listed under other), or None without one trip's lines."""
+    found = budget_lines(conn, wallet_id)
+    return None if found is None else {line.key: line.category or "other" for line in found.lines}
+
+
+def _sent_line(key: str | None, category: str | None, lines: dict | None, share_slug: str, what: str,
+               stored: str | None = None) -> str | None:
+    """A budget_key the body sends (G5, G6): a current line with its own category, "_none", or null. Without one trip's
+    lines only null. On an edit, the stored key resent is always fine when it's no longer a line (Rev 1 M2)."""
+    if key is None:
+        return None
+    if key == stored and (lines is None or (key != "_none" and key not in lines)):
+        return key
+    if lines is None or (key != "_none" and key not in lines):
+        raise _refuse(share_slug, what, 422, "unknown_budget_line")
+    if key != "_none" and lines[key] != category:
+        raise _refuse(share_slug, what, 422, "budget_line_category")
+    return key
+
+
+def _kept_line(stored: str | None, category: str | None, lines: dict | None, old_category: str | None) -> str | None:
+    """An edit that doesn't set the line (the field left out, or BUDGET_LINES off) keeps the stored one, unless the edit
+    changed the category away from that current line's: then it's cleared, not refused, since an old phone can't fix
+    that (G9c). "_none", a key that isn't a line any more, and an edit that keeps the category stay (review S1: a line
+    the plan moved isn't cleared by a save that didn't move the expense, so G8's no-op holds)."""
+    if stored in (None, "_none") or lines is None or stored not in lines or category == old_category:
+        return stored
+    return stored if lines[stored] == category else None
+
+
+def _budget_word(key: str | None) -> str:
+    """The log's word for a line: never the key, which is the group's own text (N2)."""
+    return "null" if key is None else "none" if key == "_none" else "line"
+
+
 # ---------------------------------------------------------------- routes
 
 @router.post("/wallets", status_code=201, response_model=WalletOut)
@@ -371,16 +441,16 @@ def create_wallet(body: WalletIn, request: Request, response: Response) -> Walle
         wallet_id = conn.execute("insert into wallets (name) values (%s) returning id", (body.name,)).fetchone()["id"]
         for name in body.members:
             conn.execute("insert into wallet_members (wallet_id, name) values (%s, %s)", (wallet_id, name))
-        wallet = _load(conn, wallet_id)
+        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
     _private(response)
     logger.info("wallet create share_slug=%s %s", wallet.share_slug, _counts(wallet))
     return wallet
 
 
 @router.get("/wallets/{share_slug}", response_model=WalletOut, responses={404: {"description": NOT_FOUND}})
-def get_wallet(share_slug: str, response: Response) -> WalletOut:
+def get_wallet(share_slug: str, request: Request, response: Response) -> WalletOut:
     with db.get_conn() as conn:
-        wallet = _load(conn, _wallet_id(conn, share_slug))
+        wallet = _load(conn, _wallet_id(conn, share_slug), budget=request.app.state.flags.budget_lines)
     _private(response)
     logger.info("wallet get share_slug=%s %s", share_slug, _counts(wallet))
     return wallet
@@ -404,7 +474,7 @@ def add_member(share_slug: str, body: MemberIn, request: Request, response: Resp
             "insert into wallet_members (wallet_id, name) values (%s, %s) returning id", (wallet_id, body.name)
         ).fetchone()["id"]
         record(conn, wallet_id, "member_join", by=by, member_id=member_id)
-        wallet = _load(conn, wallet_id)
+        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
     _private(response)
     logger.info("wallet member add share_slug=%s %s", share_slug, _counts(wallet))
     return wallet
@@ -419,28 +489,31 @@ def add_expense(share_slug: str, body: Union[ExpenseIn, ExpenseInV2], request: R
     """The old body (no `mode`), as before, or TG-66's: a mode, one payer or several, a category and `by`."""
     _limit(WRITE_LIMITER, request, "expense")
     if isinstance(body, ExpenseIn):
-        return _add_legacy(share_slug, body, response)
+        return _add_legacy(share_slug, body, response, request.app.state.flags.budget_lines)
     flags = request.app.state.flags
     if body.payers is not None and not flags.wallet_multi_payer:
         raise _feature_off(share_slug, "add")
     if body.mode not in FREE_MODES and not flags.wallet_splits:
         raise _feature_off(share_slug, "add")
     category = body.category if flags.wallet_splits else None  # dropped, not refused (plan §2's flag table)
+    # TG-62 G9: the line is dropped, not refused, with BUDGET_LINES off, and with WALLET_SPLITS off (with the category)
+    wanted = body.budget_key if flags.budget_lines and flags.wallet_splits else None
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
         amount, shares, paid_by, payers = _v2_split(conn, wallet_id, body, share_slug, "add")
+        key = _sent_line(wanted, category, _line_categories(conn, wallet_id) if wanted else None, share_slug, "add")
         _wallet_has_room(conn, wallet_id, share_slug)
         expense_id = conn.execute(
-            """insert into expenses (wallet_id, paid_by, amount_centavos, note, split_mode, category)
-               values (%s, %s, %s, %s, %s, %s) returning id""",
-            (wallet_id, paid_by, amount, body.note, body.mode, category),
+            """insert into expenses (wallet_id, paid_by, amount_centavos, note, split_mode, category, budget_key)
+               values (%s, %s, %s, %s, %s, %s, %s) returning id""",
+            (wallet_id, paid_by, amount, body.note, body.mode, category, key),
         ).fetchone()["id"]
         _store_split(conn, expense_id, body, shares, payers)
-        wallet = _recorded(conn, wallet_id, "expense_add", body.by, expense_id)
+        wallet = _recorded(conn, wallet_id, "expense_add", body.by, expense_id, budget=flags.budget_lines)
     _private(response)
-    logger.info("wallet expense add share_slug=%s mode=%s payers=%d people=%d items=%d amount=%d category=%s %s",
+    logger.info("wallet expense add share_slug=%s mode=%s payers=%d people=%d items=%d amount=%d category=%s budget=%s %s",
                 share_slug, body.mode, len(payers or {}) or 1, len(shares), len(getattr(body, "items", None) or []),
-                amount, category, _counts(wallet))
+                amount, category, _budget_word(key), _counts(wallet))
     return wallet
 
 
@@ -451,15 +524,16 @@ def _wallet_has_room(conn, wallet_id: UUID, share_slug: str) -> None:
         raise HTTPException(409, "wallet_full")
 
 
-def _recorded(conn, wallet_id: UUID, action: str, by: UUID | None, expense_id: UUID, before: dict | None = None) -> WalletOut:
+def _recorded(conn, wallet_id: UUID, action: str, by: UUID | None, expense_id: UUID, before: dict | None = None, *,
+              budget: bool = False) -> WalletOut:
     """The wallet after an expense add or edit, with its activity row written: `after` is the expense as saved."""
-    wallet = _load(conn, wallet_id)
+    wallet = _load(conn, wallet_id, budget=budget)
     wallet.rev = record(conn, wallet_id, action, by=by, expense_id=expense_id, before=before,
                         after=snapshot(_find(wallet, expense_id)))
     return wallet
 
 
-def _add_legacy(share_slug: str, body: ExpenseIn, response: Response) -> WalletOut:
+def _add_legacy(share_slug: str, body: ExpenseIn, response: Response, budget: bool) -> WalletOut:
     """Today's body, unchanged: stored with split_mode null (B9). It records expense_add, so rev still moves."""
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
@@ -484,11 +558,11 @@ def _add_legacy(share_slug: str, body: ExpenseIn, response: Response) -> WalletO
                 "insert into expense_shares (expense_id, member_id, share_centavos) values (%s, %s, %s)",
                 (expense_id, member_id, part),
             )
-        wallet = _recorded(conn, wallet_id, "expense_add", None, expense_id)
+        wallet = _recorded(conn, wallet_id, "expense_add", None, expense_id, budget=budget)
     _private(response)
     split = "equal" if body.split_among is not None else "custom"
-    logger.info("wallet expense add share_slug=%s mode=legacy split=%s people=%d amount=%d %s", share_slug, split,
-                len(shares), body.amount_centavos, _counts(wallet))
+    logger.info("wallet expense add share_slug=%s mode=legacy split=%s people=%d amount=%d budget=null %s", share_slug,
+                split, len(shares), body.amount_centavos, _counts(wallet))
     return wallet
 
 
@@ -509,7 +583,7 @@ def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request:
         raise _feature_off(share_slug, "edit")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
-        current = _load(conn, wallet_id)
+        current = _load(conn, wallet_id, budget=flags.budget_lines)
         old = _find(current, expense_id)
         if old is None:
             raise _refuse(share_slug, "edit", 404, "expense_gone", _with_wallet("expense_gone", current))
@@ -518,23 +592,31 @@ def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request:
         if body.version != old.version:
             raise _refuse(share_slug, "edit", 409, "expense_changed", _with_wallet("expense_changed", current))
         amount, shares, paid_by, payers = _v2_split(conn, wallet_id, body, share_slug, "edit")
-        new = (amount, paid_by, payers or {}, {m: v for m, v in shares.items() if v}, body.note, body.category)
+        # TG-62: the line the body sets (G5, G6), or the stored one kept (Rev 1 M2: the field left out, or the flag off)
+        lines = _line_categories(conn, wallet_id)
+        if flags.budget_lines and "budget_key" in body.model_fields_set:
+            key = _sent_line(body.budget_key, body.category, lines, share_slug, "edit", stored=old.budget_key)
+        else:
+            key = _kept_line(old.budget_key, body.category, lines, old.category)
+        new = (amount, paid_by, payers or {}, {m: v for m, v in shares.items() if v}, body.note, body.category, key)
         if _is_noop(old, new, body, [m.id for m in current.members]):
             _private(response)
             logger.info("wallet expense edit noop share_slug=%s mode=%s %s", share_slug, body.mode, _counts(current))
             return current
         conn.execute(
             """update expenses set paid_by = %s, amount_centavos = %s, note = %s, split_mode = %s, category = %s,
-                      version = version + 1, updated_at = now() where id = %s""",
-            (paid_by, amount, body.note, body.mode, body.category, expense_id),
+                      budget_key = %s, version = version + 1, updated_at = now() where id = %s""",
+            (paid_by, amount, body.note, body.mode, body.category, key, expense_id),
         )
         for table in ("expense_shares", "expense_inputs", "expense_items", "expense_charges", "expense_payers"):
             conn.execute(f"delete from {table} where expense_id = %s", (expense_id,))  # items' people cascade
         _store_split(conn, expense_id, body, shares, payers)
-        wallet = _recorded(conn, wallet_id, "expense_edit", body.by, expense_id, before=snapshot(old))
+        wallet = _recorded(conn, wallet_id, "expense_edit", body.by, expense_id, before=snapshot(old),
+                           budget=flags.budget_lines)
     _private(response)
-    logger.info("wallet expense edit share_slug=%s mode=%s version=%d amount_before=%d amount_after=%d people=%d %s",
-                share_slug, body.mode, old.version + 1, old.amount_centavos, amount, len(shares), _counts(wallet))
+    logger.info("wallet expense edit share_slug=%s mode=%s version=%d amount_before=%d amount_after=%d people=%d "
+                "budget=%s %s", share_slug, body.mode, old.version + 1, old.amount_centavos, amount, len(shares),
+                _budget_word(key), _counts(wallet))
     return wallet
 
 
@@ -546,7 +628,7 @@ def delete_expense(share_slug: str, expense_id: UUID, request: Request, response
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
         wallet_activity.check_by(conn, wallet_id, by, share_slug, "expense delete")
-        current = _load(conn, wallet_id)
+        current = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
         old = _find(current, expense_id)
         if old is None:
             if version is not None:
@@ -557,7 +639,7 @@ def delete_expense(share_slug: str, expense_id: UUID, request: Request, response
             raise _refuse(share_slug, "delete", 409, "expense_changed", _with_wallet("expense_changed", current))
         conn.execute("delete from expenses where id = %s and wallet_id = %s", (expense_id, wallet_id))
         record(conn, wallet_id, "expense_delete", by=by, expense_id=expense_id, before=snapshot(old))
-        wallet = _load(conn, wallet_id)
+        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
     _private(response)
     logger.info("wallet expense delete share_slug=%s amount=%d %s", share_slug, old.amount_centavos, _counts(wallet))
     return wallet
@@ -584,7 +666,7 @@ def add_settlement(share_slug: str, body: SettlementIn, request: Request, respon
             (wallet_id, body.from_member, body.to_member, body.amount_centavos),
         ).fetchone()
         record(conn, wallet_id, "settle", by=by, settlement_id=row["id"], after=_payment(row))
-        wallet = _load(conn, wallet_id)
+        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
     _private(response)
     logger.info("wallet settlement add share_slug=%s %s", share_slug, _counts(wallet))
     return wallet
@@ -605,7 +687,7 @@ def delete_settlement(share_slug: str, settlement_id: UUID, request: Request, re
             logger.info("wallet settlement delete not found share_slug=%s", share_slug)
             raise HTTPException(404, "Payment not found")
         record(conn, wallet_id, "settle_undo", by=by, settlement_id=gone["id"], after=_payment(gone))
-        wallet = _load(conn, wallet_id)
+        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
     forget_proof(gone["proof_path"], share_slug)
     _private(response)
     logger.info("wallet settlement delete share_slug=%s proof=%d %s", share_slug, 1 if gone["proof_path"] else 0, _counts(wallet))

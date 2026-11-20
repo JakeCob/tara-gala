@@ -106,8 +106,10 @@ _OP = _obj(
     budget_rows={"type": ["array", "null"], "items": _obj(
         item={"type": "string"}, estimate={"type": "string"},
         key=_maybe("string", "the row's key from <budget>; null for a new row"),
-        category={**_maybe("string", "transport, hotel, food, activities or other; null keeps the row's category"),
-                  "enum": [*CATEGORIES, None]},  # tg-review N1: a word outside these would fail the whole reply
+        # tg-review N1: a word outside these would fail the whole reply. A nullable enum is anyOf, never a type list with
+        # an enum: Anthropic (direct and via OpenRouter) refuses the whole request for that (TG-62 chat schema fix)
+        category={"anyOf": [{"type": "string", "enum": [*CATEGORIES]}, {"type": "null"}],
+                  "description": "transport, hotel, food, activities or other; null keeps the row's category"},
     ), "description": "set_budget: every budget row"},
     budget_summary=_maybe("string", "set_budget: the budget's one-line summary"),
     why=_maybe("string", f"remove_row, remove_todo, and set_row with a new place: required, why it goes, at most {MAX_WHY} "

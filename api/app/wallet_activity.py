@@ -184,7 +184,7 @@ def add_comment(share_slug: str, expense_id: UUID, body: CommentIn, request: Req
             "insert into expense_comments (expense_id, author, body) values (%s, %s, %s)", (expense_id, body.by, body.body)
         )
         record(conn, wallet_id, "comment_add", by=body.by, expense_id=expense_id)  # never the text
-        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id), comments=_comments(conn, expense_id))
+        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id, budget=request.app.state.flags.budget_lines), comments=_comments(conn, expense_id))
     wallets._private(response)
     logger.info(
         "wallet comment add share_slug=%s comments=%d rev=%d by=%s",
@@ -215,7 +215,7 @@ def delete_comment(
             logger.info("wallet comment delete not found share_slug=%s", share_slug)
             raise HTTPException(404, COMMENT_NOT_FOUND)
         record(conn, wallet_id, "comment_delete", by=by, expense_id=expense_id)
-        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id), comments=_comments(conn, expense_id))
+        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id, budget=request.app.state.flags.budget_lines), comments=_comments(conn, expense_id))
     wallets._private(response)
     logger.info(
         "wallet comment delete share_slug=%s comments=%d rev=%d by=%s",

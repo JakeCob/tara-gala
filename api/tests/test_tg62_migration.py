@@ -48,11 +48,20 @@ def test_migration_over_pre_tg62_schema_with_rows_matches_schema_sql(dsn):  # G1
     with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as conn:
         wids = seed(conn)
         before_rows = old_rows(conn)
+        # GA1: _load reads budget_key now, so it can't run before TG-62's migration (as test_tg66_migration's _load
+        # needs TG-66's columns). The pre-migration baseline comes from the raw rows instead (manager, 2026-11-18).
+        want = {w: balances_from(before_rows, w) for w in wids}
         loaded_before = None
         for m in sorted([*later, MIGRATION, MIGRATION], key=lambda p: p.name):  # TG-62's twice: re-runnable
-            if m == MIGRATION and loaded_before is None:
-                loaded_before = load_all(conn, wids)  # the wallet as it reads just before TG-62's migration
             conn.execute(m.read_text(encoding="utf-8"))
+            if m == MIGRATION and loaded_before is None:  # after TG-62's first run: the raw rows' own balances
+                loaded_before = load_all(conn, wids)
+                for w in wids:
+                    first = wallets._load(conn, w, budget=True)
+                    assert ([(b.member_id, b.paid_centavos, b.share_centavos, b.net_centavos) for b in first.balances],
+                            [(t.from_member, t.to_member, t.amount_centavos) for t in first.transfers]) == want[w]
+                    # tg-test: the null default through _load: Not sorted yet, and no trip so no budget
+                    assert first.budget is None and all(e.budget_key is None for e in first.expenses)
         # Old rows: budget_key null (Not sorted yet), and nothing else moved
         assert conn.execute("select distinct budget_key from expenses").fetchall() == [{"budget_key": None}]
         assert conn.execute("select count(*) as n from expenses").fetchone()["n"] == 4

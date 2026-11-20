@@ -307,6 +307,11 @@ GET_ROUTES = {
     "/invites/{invite_slug}",  # TG-58 PR 2: one invite by exact slug: the trip's name, dates and names, never the trip
     "/wallets/{share_slug}/activity",  # TG-66 A2: one wallet's activity, behind WALLET_ACTIVITY
     "/wallets/{share_slug}/expenses/{expense_id}/comments",  # TG-66 A2: one expense's comments, inside its own wallet only
+    # TG-64: one recap by exact slug, behind RECAP_LINKS: the trip's own plan (read through the trip, never by a slug
+    # from the URL), and its photos and profile photos only as the recap's toggles allow
+    "/recaps/{recap_slug}",
+    "/recaps/{recap_slug}/photos/{file_id}",
+    "/recaps/{recap_slug}/avatars/{attendee_id}",
 }
 OTHER_ROUTES = {
     ("POST", "/plan"),  # TG-20: inserts a planner row, never reads the table
@@ -356,6 +361,9 @@ OTHER_ROUTES = {
     ("POST", "/sessions/{share_slug}/plan/chat"),  # TG-61 PR 2: behind PLAN_EDITING and CHATBOT_LIVE
     ("POST", "/invites/{invite_slug}/answers"),
     ("POST", "/invites/{invite_slug}/attendees/{attendee_id}/photo"),
+    # TG-64: the recap link, turned on (or its toggles changed) and off under the trip's own slug
+    ("PUT", "/sessions/{share_slug}/recap"),
+    ("DELETE", "/sessions/{share_slug}/recap"),
 }
 
 
@@ -368,7 +376,7 @@ def test_no_hidden_or_renamed_listing_route():
     takes_slug = [r.path for r in app.routes if "{" in getattr(r, "path", "")]
     # the only parameterised itinerary path is the exact-slug read; TG-50's wallet, TG-52's session and TG-58's invite
     # paths all start at one exact slug
-    starts = ("/wallets/{share_slug}", "/sessions/{share_slug}", "/invites/{invite_slug}")
+    starts = ("/wallets/{share_slug}", "/sessions/{share_slug}", "/invites/{invite_slug}", "/recaps/{recap_slug}")
     assert [p for p in takes_slug if not p.startswith(starts)] == ["/itineraries/{share_slug}"]
 
 
@@ -385,7 +393,11 @@ def test_only_exact_slug_and_premade_reads_touch_itineraries():
     # TG-61 plan_edit.py: the trip's own linked itinerary again (a join on the session's id); sessions.py also deletes
     # the trip's own copy with the trip (model trip-edit, owned through itinerary_versions.session_id). plan_edit.py's
     # second is the shared plan's slug that the trip's own copy was made from (F2: a replay of the first edit)
-    assert readers == {"itineraries.py": 1, "plan_edit.py": 2, "plan_suggest.py": 1, "premade.py": 1, "sessions.py": 3, "trip_marks.py": 1}
+    # TG-64 recaps.py: the trip's own linked itinerary again (a join on the trip found by its exact recap slug)
+    # TG-62 GA1 wallets.py: the budget lines of the wallet's own one trip's linked itinerary (a join on the wallet's id)
+    assert readers == {"itineraries.py": 1, "plan_edit.py": 2, "plan_suggest.py": 1, "premade.py": 1, "recaps.py": 1, "sessions.py": 3, "trip_marks.py": 1, "wallets.py": 1}
+    assert "left join itineraries i on i.id = s.itinerary_id where s.recap_slug = %s" in (APP / "recaps.py").read_text(encoding="utf-8")
+    assert "from trip_sessions s left join itineraries i on i.id = s.itinerary_id where s.wallet_id = %s limit 2" in (APP / "wallets.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_suggest.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "plan_edit.py").read_text(encoding="utf-8")
     assert "join itineraries i on i.id = s.itinerary_id where s.id = %s" in (APP / "trip_marks.py").read_text(encoding="utf-8")

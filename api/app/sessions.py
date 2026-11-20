@@ -14,7 +14,7 @@ import logging
 import math
 import re
 from datetime import date, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -176,6 +176,14 @@ class TripPlaceOut(BaseModel):
     created_at: datetime
 
 
+class RecapSettings(BaseModel):
+    """TG-64: the read-only recap link (recaps.py). It's on when slug isn't null; the toggles say what it shows."""
+    slug: str | None
+    photos: bool
+    people: Literal["none", "names", "names_photos"]
+    spending: Literal["none", "total"]
+
+
 class SessionOut(BaseModel):
     share_slug: str
     name: str
@@ -191,6 +199,7 @@ class SessionOut(BaseModel):
     invite_slug: str | None  # the limited invite link (trip_invites.py), null until someone turns it on
     plan_edits: PlanEditsOut | None = None  # TG-61: null until the first edit
     places: list[TripPlaceOut] = []  # TG-61: the trip's own places, for the place picker and offline
+    recap: RecapSettings  # TG-64: the recap link and its toggles, read whatever RECAP_LINKS says
 
 
 # ---------------------------------------------------------------- database
@@ -221,6 +230,7 @@ def _session_id(conn, share_slug: str, lock: bool = False) -> UUID:
 def _load(conn, session_id: UUID) -> SessionOut:
     s = conn.execute(
         """select s.share_slug, s.name, s.start_date, s.return_date, s.created_at, s.invite_slug,
+                  s.recap_slug, s.recap_photos, s.recap_people, s.recap_spending,
                   i.share_slug as itinerary_slug, w.share_slug as wallet_slug, w.name as wallet_name,
                   (select max(v.seq) from itinerary_versions v where v.itinerary_id = s.itinerary_id and v.session_id = s.id) as plan_seq
            from trip_sessions s
@@ -269,6 +279,7 @@ def _load(conn, session_id: UUID) -> SessionOut:
         invite_slug=s["invite_slug"],
         plan_edits=PlanEditsOut(seq=s["plan_seq"], versions=[PlanVersionOut(**v) for v in versions]) if s["plan_seq"] is not None else None,
         places=[TripPlaceOut(**p) for p in places],
+        recap=RecapSettings(slug=s["recap_slug"], photos=s["recap_photos"], people=s["recap_people"], spending=s["recap_spending"]),
     )
 
 
@@ -281,7 +292,8 @@ def _shape(s: SessionOut) -> str:
     days = (s.return_date - s.start_date).days + 1
     return (
         f"days={days} itinerary={'yes' if s.itinerary_slug else 'no'} wallet={'yes' if s.wallet else 'no'} "
-        f"hotel={'yes' if s.hotel else 'no'} files={len(s.files)} marks={len(s.marks)} attendees={len(s.attendees)}"
+        f"hotel={'yes' if s.hotel else 'no'} files={len(s.files)} marks={len(s.marks)} attendees={len(s.attendees)} "
+        f"recap={'on' if s.recap.slug else 'off'}"
     )
 
 
