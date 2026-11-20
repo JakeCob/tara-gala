@@ -154,12 +154,21 @@ export default function TripRecap({ trip, busy, online, apply }: {
         </div>
       </fieldset>
       <p role="status" className="text-sm empty:sr-only">{said}</p>
-      {failed && <PixelBox as="p" tone="alertText" role="alert" className="p-3 text-sm">{failed}</PixelBox>}
+      {failed && <Failed text={failed} />}
       <p className={PX.meta}>{NEVER}{on ? "" : ANYONE}</p>
       {!online && <p className={PX.meta}>Changing the recap needs signal.</p>}
       <PixelButton variant="secondary" className="self-start" aria-disabled={!online || held} onClick={on ? onTurnOff : onTurnOn}>
         {on ? "Turn off the recap link" : "Turn on the recap link"}
       </PixelButton>
+    </PixelBox>
+  );
+}
+
+/** A change that didn't save, in the alert box the trip page uses */
+function Failed({ text }: { text: string }) {
+  return (
+    <PixelBox as="p" tone="alertText" role="alert" className="p-3 text-sm">
+      {text}
     </PixelBox>
   );
 }
