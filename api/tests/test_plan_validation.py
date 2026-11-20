@@ -944,3 +944,178 @@ def test_return_check_without_stops_ignores_earlier_days():
     raw = p0(ret="ret-early")
     raw["days"][2]["stops"] = []
     assert check(raw) == []  # Sun 06:00 is long after the Fri arrival
+
+
+# --- TG-67 S2: the plan's city (test-plan.md §4, T67-V1 to V10) -----------------------------------
+# Sagada rows are made up (fixtures/sagada_made_up.py). The new names are read off the module inside each test, so a
+# missing one fails that test alone, not the whole file.
+
+from app import plan_validation as pv  # noqa: E402
+from fixtures import sagada_made_up as sg  # noqa: E402
+from premade_data import THU  # noqa: E402
+
+GOLDEN = API / "tests" / "fixtures" / "tg67_baguio_errors.json"
+SG_TERMINALS = {"sg-cubao": (uuid4(), "Quezon City"), "sg-sagada": (uuid4(), "Sagada"), "lt": (uuid4(), "La Trinidad")}
+
+
+def city_ref(origin, dest):
+    """A made-up TripRef between any two cities (by name or by this file's terminal slugs)."""
+    ends = {**{k: (TERMINALS[k], CITY[k]) for k in TERMINALS}, **SG_TERMINALS}
+    (o_id, o_city), (d_id, d_city) = ends[origin], ends[dest]
+    return TripRef(trip_id=uuid4(), is_active=True, departure_time=time(22, 30), travel_minutes=720, days_of_week=DAILY,
+                   valid_from=None, valid_to=None, origin_terminal_id=o_id, origin_city=o_city,
+                   destination_terminal_id=d_id, destination_city=d_city)
+
+
+@pytest.fixture()
+def sagada(dsn, tmp_path):
+    """Baguio's made-up rows plus the made-up Sagada ones, on the builder's throwaway database."""
+    load_rows(dsn, tmp_path / "csv")
+    sg.load(dsn, tmp_path / "sg")
+    return dsn
+
+
+def sg_validate(dsn, raw, **kw):
+    with psycopg.connect(dsn) as conn:
+        return validate_plan(conn, raw, **kw)
+
+
+def codes_paths_messages(errors):
+    return [(e.code, e.path, e.message) for e in errors]
+
+
+def test_t67_v1_a_sagada_plan_passes_with_no_city_given(sagada):  # B5
+    result = sg_validate(sagada, sg.plan(sagada), trip_date=sg.OUT_DATE, return_date=sg.RET_DATE)
+    assert result.errors == [] and result.ok
+    with psycopg.connect(sagada) as conn:
+        trips = pv.load_trips(conn, [result.plan.outbound.trip_id, result.plan.return_.trip_id])
+    assert pv.plan_city(trips[result.plan.outbound.trip_id], trips[result.plan.return_.trip_id]) == "Sagada"
+    assert result.city == "Sagada"
+
+
+def test_t67_v2_the_planners_city_keeps_a_sagada_plan_out(sagada):  # B6
+    errors = sg_validate(sagada, sg.plan(sagada), city="Baguio").errors
+    assert [(e.code, e.path, e.message) for e in errors if e.code == "wrong_direction"] == [
+        ("wrong_direction", "outbound.trip_id", "the outbound trip must go to Baguio"),
+        ("wrong_direction", "return.trip_id", "the return trip must leave from Baguio"),
+    ]
+
+
+def test_t67_v3_a_return_from_the_other_city_is_wrong_direction(sagada):  # B7
+    trips, spots, legs = db_ids(sagada)
+    raw = sg.plan(sagada, ret=("vl-baguio", "21:00", "regular_aircon"))
+    errors = sg_validate(sagada, raw).errors
+    assert [(e.code, e.path, e.message) for e in errors if e.code == "wrong_direction"] == [
+        ("wrong_direction", "return.trip_id", "the return trip must leave from Sagada")]
+    # the mirror: a Baguio outbound with a Sagada to Manila return
+    raw = db_p0(sagada)
+    raw["return"]["trip_id"] = str(trips[sg.RET])
+    errors = sg_validate(sagada, raw).errors
+    assert [(e.code, e.path, e.message) for e in errors if e.code == "wrong_direction"] == [
+        ("wrong_direction", "return.trip_id", "the return trip must leave from Baguio")]
+
+
+@pytest.mark.parametrize("case, outbound, ret, city", [
+    ("a", ("sg-cubao", "sg-sagada"), None, "Sagada"),
+    ("b", ("sg-sagada", "sg-cubao"), ("vl-baguio", "vl-cubao"), "Baguio"),
+    ("c", None, ("sg-sagada", "sg-cubao"), "Sagada"),
+    ("d", None, None, "Baguio"),
+    ("e", ("sg-cubao", "lt"), None, "Baguio"),
+    ("f", ("vl-cubao", "vl-baguio"), ("sg-sagada", "sg-cubao"), "Baguio"),
+])
+def test_t67_v4_plan_city(case, outbound, ret, city):  # B9
+    out_ref = city_ref(*outbound) if outbound else None
+    ret_ref = city_ref(*ret) if ret else None
+    assert pv.plan_city(out_ref, ret_ref) == city, case
+    if ret is None:
+        assert pv.plan_city(out_ref) == city, "the return is optional"
+
+
+def test_t67_v5a_trip_problems_keeps_its_old_positional_calls():
+    d = FRI
+    assert pv.trip_problems(TRIP_REFS["out-day"], d, "outbound") == []
+    assert pv.trip_problems(TRIP_REFS["ret"], d, "return") == []
+    assert pv.trip_problems(TRIP_REFS["ret"], d, "outbound") == ["wrong_direction"]
+    assert pv.trip_problems(TRIP_REFS["out-day"], d, "return") == ["wrong_direction"]
+    assert pv.trip_problems(TRIP_REFS["out-baguio-loop"], d, "outbound") == ["wrong_direction"]
+    assert pv.trip_problems(TRIP_REFS["ret-manila-loop"], d, "return") == ["wrong_direction"]
+    assert pv.trip_problems(TRIP_REFS["out-inactive"], d, "outbound") == ["trip_inactive"]
+    assert pv.trip_problems(TRIP_REFS["ret-weekdays"], SUN, "return") == ["trip_not_running"]
+    assert pv.trip_problems(None, d, "outbound") == ["unknown_trip"]
+
+
+def test_t67_v5b_trip_problems_takes_a_city():
+    d = FRI
+    for key, trip in TRIP_REFS.items():  # no city is Baguio
+        for direction in ("outbound", "return"):
+            assert pv.trip_problems(trip, d, direction) == pv.trip_problems(trip, d, direction, "Baguio"), key
+    loop = city_ref("sg-sagada", "sg-sagada")
+    assert pv.trip_problems(loop, d, "outbound", city="Sagada") == ["wrong_direction"]
+    assert pv.trip_problems(loop, d, "return", city="Sagada") == ["wrong_direction"]
+    assert pv.trip_problems(city_ref("sg-cubao", "sg-sagada"), d, "outbound", city="Sagada") == []
+    assert pv.trip_problems(city_ref("sg-sagada", "sg-cubao"), d, "return", city="Sagada") == []
+    assert pv.trip_problems(city_ref("sg-cubao", "sg-sagada"), d, "outbound") == ["wrong_direction"]
+
+
+def _golden() -> dict:
+    """main's check_plan answers on every pairing of this file's Baguio buses, by day and by date args, with the
+    random ids named back to their keys so the file is stable."""
+    names = {str(t.trip_id): k for k, t in TRIP_REFS.items()}
+    names |= {str(s.spot_id): k for k, s in SPOT_REFS.items()}
+    names |= {str(leg.last_mile_route_id): "/".join(k) for k, leg in LEG_REFS.items()}
+
+    def named(text: str) -> str:
+        for uid, name in names.items():
+            text = text.replace(uid, f"<{name}>")
+        return text
+
+    out = {}
+    for days_name, days, out_date, date_args in (("p0", P0_DAYS, FRI, ((None, None),)), ("thu", P0_DAYS, THU, ((FRI, SUN),))):
+        for o in TRIP_REFS:
+            for r in TRIP_REFS:
+                for dates in date_args:
+                    raw = p0(outbound=o, out_date=out_date, ret=r, days=days)
+                    errors = check(raw, trip_date=dates[0], return_date=dates[1])
+                    out[f"{days_name}|{o}|{r}|{'dates' if dates[0] else '-'}"] = [[e.code, e.path, named(e.message)] for e in errors]
+    return out
+
+
+def test_t67_v6_baguio_answers_are_byte_for_byte_mains():  # B8
+    """The golden file was written by main's check_plan in the RED commit (TG67_GOLDEN=write). GREEN must match it."""
+    got = "{\n" + ",\n".join(f"{json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}" for k, v in sorted(_golden().items())) + "\n}\n"
+    if __import__("os").environ.get("TG67_GOLDEN") == "write":
+        GOLDEN.write_text(got, encoding="utf-8")
+    assert got == GOLDEN.read_text(encoding="utf-8")
+
+
+def test_t67_v7_cities():
+    assert pv.CITIES == ("Baguio", "Sagada")
+    assert BAGUIO in pv.CITIES
+
+
+def test_t67_v8_the_overnight_bus_makes_day_one_the_next_date(sagada):  # §9
+    raw = sg.plan(sagada)
+    assert sg_validate(sagada, raw).errors == []
+    four = sg.plan(sagada, days=[*sg.DAYS, (4, [])])
+    assert codes_paths_messages(sg_validate(sagada, four).errors) == [
+        ("bad_days", "days", "days must be numbered 1 to 3 (2026-11-26 to 2026-11-28), one per day")]
+    with psycopg.connect(sagada, autocommit=True) as conn:
+        conn.execute("update routes set travel_minutes = null where destination_terminal_id = (select id from terminals where slug = 'test-sg-sagada')")
+    out_id = raw["outbound"]["trip_id"]
+    assert codes_paths_messages(sg_validate(sagada, raw).errors) == [
+        ("arrival_unknown", "outbound.trip_id", f"outbound trip {out_id} has no travel time, so its arrival is unknown")]
+
+
+def test_t67_v9_a_one_date_trip_runs_on_that_date_only(sagada):  # §9
+    raw = sg.plan(sagada)
+    raw["outbound"]["date"] = "2026-11-26"
+    out_id = raw["outbound"]["trip_id"]
+    errors = sg_validate(sagada, raw).errors
+    assert codes_paths_messages(errors)[0] == ("trip_not_running", "outbound.trip_id", f"outbound trip {out_id} does not run on 2026-11-26")
+    assert "wrong_direction" not in {e.code for e in errors}
+
+
+def test_t67_v10_empty_core_days_pass_with_the_afternoon_return(sagada):  # §12.2
+    raw = sg.plan(sagada)
+    assert [d["stops"] for d in raw["days"][1:]] == [[], []]
+    assert sg_validate(sagada, raw, trip_date=sg.OUT_DATE, return_date=sg.RET_DATE).errors == []
