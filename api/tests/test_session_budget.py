@@ -79,13 +79,39 @@ def budget(client, slug):
     return client.get(f"/sessions/{slug}/budget")
 
 
+WALLET_ORDER = (NAMES[3], NAMES[0], NAMES[2], NAMES[1])  # Dan, Ana, Carla, Ben: wallet order isn't name order (tg-test F2)
+
+
+def wallet_of(client, names):
+    """A made-up wallet with these people in this order. Returns (slug, {name: id})."""
+    r = client.post("/wallets", json={"name": "Test trip", "members": list(names)})
+    assert r.status_code == 201, r.text
+    return r.json()["share_slug"], {m["name"]: m["id"] for m in r.json()["members"]}
+
+
 def spend(client, dsn):
-    """The G13/G14 trip: 4 people and six made-up expenses, one on a line the plan then removes.
+    """The G13/G14 trip: 4 people (wallet order Dan, Ana, Carla, Ben) and six made-up expenses, one on a line the plan
+    then removes.
 
     meals 1000 (equal, 4) and 2000 (Ana and Ben); van 1002 (Ana 500, Ben 502); _none 500 (Ana);
     null 700 (Ben 300, Carla 400); ana-s-birthday-dinner 300 (Dan), whose row is then removed. Total 5502.
+
+    tg-test F1: another group's wallet is on its own trip, with expenses on the same keys. None of it may reach this
+    trip's answer, and its trip doesn't make this wallet's trip count two.
     """
-    wallet, (a, b, c, d) = new_wallet(client)
+    other, people = wallet_of(client, (NAMES[4], NAMES[5]))
+    e, f = people[NAMES[4]], people[NAMES[5]]
+    trip(dsn, other, name="Another group's trip")
+    for body in (equal([e, f], amount=99900, category="food", budget_key="meals"),
+                 equal([e, f], amount=77700, category="transport", budget_key="van"),
+                 exact([(e, 4400)], e, category="food", budget_key="_none"),
+                 exact([(f, 3300)], f, category="food"),
+                 exact([(f, 2200)], f, category="food", budget_key="ana-s-birthday-dinner")):
+        r = add(client, other, body)
+        assert r.status_code == 201, r.text
+
+    wallet, people = wallet_of(client, WALLET_ORDER)
+    a, b, c, d = (people[n] for n in NAMES[:4])
     slug, itinerary_id = trip(dsn, wallet)
     for body in (equal([a, b, c, d], amount=1000, category="food", budget_key="meals", note=NOTE),
                  equal([a, b], amount=2000, category="food", budget_key="meals", note=NOTE),
@@ -102,7 +128,8 @@ def spend(client, dsn):
 # ---------------------------------------------------------------- G12: the states
 
 def test_g12_ok_is_the_whole_answer(on, dsn):
-    slug, _, (a, b, c, d) = spend(on, dsn)
+    """With another group's wallet and trip beside it (F1), and members in wallet order, not name order (F2)."""
+    slug, wallet, (a, b, c, d) = spend(on, dsn)
     r = budget(on, slug)
     assert r.status_code == 200, r.text
     assert r.json() == {
@@ -119,13 +146,16 @@ def test_g12_ok_is_the_whole_answer(on, dsn):
         ],
         "not_in_budget": {"count": 1, "spent": 500},
         "unsorted": {"count": 2, "spent": 1000, "removed": 1},
-        "members": [
-            {"member_id": a, "name": NAMES[0], "share_lines": 1750, "share_total": 2250},
-            {"member_id": b, "name": NAMES[1], "share_lines": 1752, "share_total": 2052},
-            {"member_id": c, "name": NAMES[2], "share_lines": 250, "share_total": 650},
+        "members": [  # wallet order: Dan, Ana, Carla, Ben
             {"member_id": d, "name": NAMES[3], "share_lines": 250, "share_total": 550},
+            {"member_id": a, "name": NAMES[0], "share_lines": 1750, "share_total": 2250},
+            {"member_id": c, "name": NAMES[2], "share_lines": 250, "share_total": 650},
+            {"member_id": b, "name": NAMES[1], "share_lines": 1752, "share_total": 2052},
         ],
     }
+    # tg-test S1: the panel's lines are the wallet's lines (GW1's form), the same keys in the same order
+    lines = on.get(f"/wallets/{wallet}").json()["budget"]["lines"]
+    assert [x["key"] for x in r.json()["lines"]] == [x["key"] for x in lines] == ["meals", "van", "tips"]
 
 
 def test_g12_no_wallet(on, dsn):
