@@ -91,7 +91,10 @@ def test_the_reply_model_refuses_a_word_outside_the_categories():  # tg-review N
 # structured-outputs, read 2026-11-20). Anything else is a 400 for the whole request, which the chat and planner turn
 # into a 502 in prod. A keyword this list doesn't know fails here first: check the doc, then add it.
 KEYWORDS = {"type", "properties", "required", "additionalProperties", "items", "enum", "const", "anyOf", "allOf", "$ref",
-            "$defs", "definitions", "default", "description", "title", "format", "pattern", "minItems"}
+            "$defs", "definitions", "default", "description", "title", "format", "minItems"}
+# Supported by the doc but kept out by our own rule (tg-test S2): `pattern` takes only a subset of regex (no backreferences,
+# lookarounds or \b), and neither schema needs one. Check the doc's list before allowing it.
+HOUSE_RULES = {"pattern": "our house rule, not an Anthropic limit: the doc takes only a subset of regex, so check it before allowing pattern"}
 FORMATS = {"date-time", "time", "date", "duration", "email", "hostname", "uri", "ipv4", "ipv6", "uuid"}
 TYPES = {"object", "array", "string", "integer", "number", "boolean", "null"}
 
@@ -114,7 +117,9 @@ def _schemas(node: dict, path="$"):
 def _problems(schema: dict) -> list[str]:
     out = []
     for path, n in _schemas(schema):
-        out += [f"{path}: {k} isn't supported" for k in sorted(set(n) - KEYWORDS)]
+        out += [f"{path}: {k}: {HOUSE_RULES.get(k, 'not supported by Anthropic structured output')}" for k in sorted(set(n) - KEYWORDS)]
+        if "items" in n and not isinstance(n["items"], dict):
+            out.append(f"{path}: items must be one schema, not a list (tuple items aren't supported or walked)")
         kinds = n.get("type")
         kinds = kinds if isinstance(kinds, list) else [kinds] if kinds is not None else []
         out += [f"{path}: type {k!r}" for k in kinds if k not in TYPES]
@@ -159,6 +164,14 @@ def _obj(**props):
     {"type": "object", "properties": {"a": {"type": "string"}, "b": {"type": "string"}}, "required": ["a"], "additionalProperties": False},
     {"type": "string", "anyOf": [{"enum": ["x"]}, {"type": "null"}]}, {"type": "string", "enum": [{"a": 1}]},
     {"$ref": "https://example.invalid/s.json"}, {"type": "date"}, {"type": "string", "patternProperties": {}},
+    # tg-test F1, F2: a refused keyword one level down, so a walk that stops at anyOf, allOf, $defs or definitions fails
+    pytest.param({"anyOf": [{"type": "string", "minLength": 1}, {"type": "null"}]}, id="under-anyOf"),
+    pytest.param({"allOf": [{"type": "string", "maxLength": 3}]}, id="under-allOf"),
+    pytest.param({"$ref": "#/$defs/d", "$defs": {"d": {"type": "string", "maxLength": 3}}}, id="under-$defs"),
+    pytest.param({"$ref": "#/definitions/d", "definitions": {"d": {"type": "integer", "minimum": 0}}}, id="under-definitions"),
+    # tg-test S1, S2
+    pytest.param({"type": "array", "items": [{"type": "string"}, {"type": "integer"}]}, id="items-list"),
+    pytest.param({"type": "string", "pattern": "^[a-z]+$"}, id="pattern-house-rule"),
 ], ids=lambda b: next(iter(sorted(set(b) - {"type", "properties", "required", "items"}) or ["type"])))
 def test_the_allowlist_refuses_what_anthropic_refuses(bad):  # the check isn't vacuous: each one, nested in a real shape
     assert _problems(_obj(reply={"type": "string"}, ops={"type": "array", "items": _obj(x=bad)}))
