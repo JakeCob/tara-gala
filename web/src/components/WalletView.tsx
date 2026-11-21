@@ -883,7 +883,7 @@ export default function WalletView({ slug }: { slug: string }) {
 
           <PayoutQr onSaved={() => setSettleNotice((n) => (n?.toPayout ? null : n))} />
 
-          {parts.activity && <ActivityList slug={slug} wallet={lineWallet} online={online} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
+          {parts.activity && <ActivityList slug={slug} wallet={lineWallet} online={online} waitHere={parts.outbox} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
         </div>
       </div>
 

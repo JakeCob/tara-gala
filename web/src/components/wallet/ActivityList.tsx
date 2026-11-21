@@ -6,14 +6,19 @@
 import { useEffect, useState } from "react";
 import { PX, PixelBox, PixelButton, SectionTitle } from "@/components/pixel";
 import { activityLine, groupByDay, mergeActivity, oldestId, timeOnly, type ActivityState } from "@/lib/walletActivity";
-import { failureMessage, walletApi, type Wallet } from "@/lib/wallet";
+import { failureMessage, walletApi, type Wallet, type WalletFailed } from "@/lib/wallet";
 
+/** TG-70 (ux.md §6, tg-ux2 M1): next to the Waiting box, a failed read mustn't sound like a lost expense. */
+export const ACTIVITY_OFFLINE = "No signal, so Activity may be missing the newest changes.";
+const readFailure = (r: WalletFailed, waitHere?: boolean) => (waitHere && (r.why === "offline" || r.why === "server") ? ACTIVITY_OFFLINE : failureMessage(r));
 const SOMEONE_LINE = `"Someone" is a phone that hasn't picked who it is. Activity from before this update isn't listed.`;
 
-export default function ActivityList({ slug, wallet, online, onOpenExpense }: {
+export default function ActivityList({ slug, wallet, online, waitHere, onOpenExpense }: {
   slug: string;
   wallet: Wallet;
   online: boolean;
+  /** TG-70: the outbox is on (its flag): an offline or 5xx read says ACTIVITY_OFFLINE. Off, today's words (B24). */
+  waitHere?: boolean;
   /** A line's expense note: open that expense's details. */
   onOpenExpense: (expenseId: string) => void;
 }) {
@@ -31,12 +36,12 @@ export default function ActivityList({ slug, wallet, online, onOpenExpense }: {
       if (r.ok) {
         setList((prev) => mergeActivity(prev, r, false));
         setFailed(null);
-      } else setFailed(failureMessage(r));
+      } else setFailed(readFailure(r, waitHere));
     });
     return () => {
       current = false;
     };
-  }, [online, slug, rev]);
+  }, [online, slug, rev, waitHere]);
 
   async function older() {
     const before = list ? oldestId(list) : undefined;
@@ -46,7 +51,7 @@ export default function ActivityList({ slug, wallet, online, onOpenExpense }: {
     console.info("[tg-wallet] activity older ok=%s rows=%d", r.ok ? "yes" : r.why, r.ok ? r.rows.length : 0);
     setLoadingOlder(false);
     if (r.ok) setList((prev) => mergeActivity(prev, r, true));
-    else setFailed(failureMessage(r));
+    else setFailed(readFailure(r, waitHere));
   }
 
   const rows = list?.rows ?? [];
