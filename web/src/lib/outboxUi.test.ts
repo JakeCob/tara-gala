@@ -276,8 +276,9 @@ test("T70-U16 M1: with the flag on, Activity's offline or 5xx read says ACTIVITY
   const src = read("src/components/wallet/ActivityList.tsx");
   assert.match(src, /export const ACTIVITY_OFFLINE = "No signal, so Activity may be missing the newest changes\.";/);
   assert.match(src, /waitHere\?: boolean;/, "an optional prop: flag off, today's list (B24)");
-  assert.match(src, /const readFailure = \(r: WalletFailed\) => \(waitHere && \(r\.why === "offline" \|\| r\.why === "server"\) \? ACTIVITY_OFFLINE : failureMessage\(r\)\);/);
-  assert.equal(src.split("setFailed(readFailure(r))").length - 1, 2, "the first page and Older");
+  assert.match(src, /const readFailure = \(r: WalletFailed, waitHere\?: boolean\) => \(waitHere && \(r\.why === "offline" \|\| r\.why === "server"\) \? ACTIVITY_OFFLINE : failureMessage\(r\)\);/);
+  assert.equal(src.split("setFailed(readFailure(r, waitHere))").length - 1, 2, "the first page and Older");
+  assert.match(src, /\}, \[online, slug, rev, waitHere\]\);/);
   assert.doesNotMatch(src, /setFailed\(failureMessage\(/);
   assert.match(view(), /<ActivityList slug=\{slug\} wallet=\{lineWallet\} online=\{online\} waitHere=\{parts\.outbox\} /);
 });
