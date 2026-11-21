@@ -227,5 +227,5 @@ def test_refusal_bodies_carry_codes_never_names():
     assert m.REFUSALS == (  # audit nit: the whole list, in ux.md §9's words
         "shares_mismatch", "percent_total", "shares_zero", "extras_too_big", "item_no_one", "too_many_items", "amount_mismatch",
         "items_zero", "amount_too_big", "charge_too_big", "payers_mismatch",
-        "feature_off", "expense_changed", "expense_gone", "comments_full", "unknown_member",
+        "feature_off", "expense_changed", "expense_gone", "comments_full", "unknown_member", "id_taken",
     )

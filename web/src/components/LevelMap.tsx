@@ -9,7 +9,7 @@ import { formatClass, formatTime, formatVerified } from "@/lib/api";
 import { type BusTable, type Guide, type GuideRow, type Mark, marksByKey, pickMark, placeIcon, rowMark, todoMark, whereNow } from "@/lib/guide";
 import {
   BAND_PX, SIGN_DROP, SIGN_GAP, SNAKE_MIN_PX, START_POINT, TILE_PX, type Level, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, snakeMap, snakeRoad, snakeScenery,
-  startWorld, worldHeight,
+  startWorld, worldHeight, worldTabs,
 } from "@/lib/levelMap";
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
@@ -92,6 +92,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
   const warned = (["getting_there", "getting_home"] as const).flatMap((table) => guide[table].buses.flatMap((b, index) => (b.warning ? [{ table, index }] : [])));
   const here = marks ? whereNow(guide, marks) : null;
   const day = guide.days.find((d) => d.day === world) ?? guide.days[0];
+  const tabs = worldTabs(guide.days.length); // TG-67: 3 per row past 3 Worlds; Baguio's 3 keep today's row
   const list = levels(day, byKey);
   const screen = useRef<HTMLElement>(null);
   const [W, setW] = useState(0);
@@ -283,14 +284,14 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         </PixelBox>
       )}
 
-      <nav aria-label="Days" className="flex flex-wrap gap-2">
+      <nav aria-label="Days" className={tabs.nav}>
         {guide.days.map((d) => {
           const ls = levels(d, byKey);
           const done = ls.filter((l) => l.done).length;
           return (
             <PixelButton key={d.day} variant={d.day === world ? "primary" : "secondary"} aria-pressed={d.day === world}
               aria-label={marks ? `World ${d.day}, ${done} of ${ls.length} done` : `World ${d.day}`}
-              className="min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm" onClick={() => goTo(d.day)}>
+              className={tabs.tab} onClick={() => goTo(d.day)}>
               <span className="font-bold">World {d.day}</span>
               {marks && <span className="ml-1 tabular-nums">{done}/{ls.length}</span>}
             </PixelButton>

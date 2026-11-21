@@ -6,6 +6,17 @@ import { type Guide, type GuideDay, type GuidePlace, type GuideRow, type Mark, r
 import { PROVINCE } from "./itinerary.ts";
 import type { SpriteName } from "./sprites.ts";
 
+/**
+ * TG-67 (ux-review-S4 B21 Must 1): the Days nav and its tabs. Up to 3 Worlds, one row as before (Baguio, byte for byte).
+ * More, and five "World n 12/12" labels can't share a 320 to 380 row, so it's 3 per row (5 sit 3 then 2), with px-0.5 so
+ * the worst-case label fits a 320 cell; from md up the row has room again.
+ */
+export function worldTabs(n: number): { nav: string; tab: string } {
+  return n > 3
+    ? { nav: "grid grid-cols-3 gap-2 md:flex md:flex-wrap", tab: "min-w-0 flex-1 whitespace-nowrap px-0.5 text-xs md:px-3 md:text-sm" }
+    : { nav: "flex flex-wrap gap-2", tab: "min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm" };
+}
+
 export const GAP_PX = 120; // between two levels, down the screen; the longest sign is 82px tall at 320
 export const TOP_PX = 160; // the first level's y: room for the bar, START and the group standing there, then a tall sign
 export const PAD_PX = 132; // room for GOAL below the last level
