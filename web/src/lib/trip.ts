@@ -367,7 +367,7 @@ const PLAN_DETAIL: Record<string, string> = {
   too_big: "That change is too big to save. Try a smaller one.",
   link_unreadable: "We couldn't read that link. Open the place in Google Maps, tap Share, and copy the link again.",
   need_pin: "That link has no pin we can read. In Google Maps, press and hold the place, copy the numbers that show up, and paste them here.",
-  bad_pin: "Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.",
+  bad_pin: "Those numbers aren't a pin. Paste the two numbers Google Maps shows, with a comma between.", // TG-68 ux §6
   link_not_maps: "That isn't a Google Maps link. Paste one, or type a place name.",
   too_many_places: "This trip already has 100 places of its own, the most it can hold.",
   bad_place: "Give the place a name of 1 to 80 letters.",

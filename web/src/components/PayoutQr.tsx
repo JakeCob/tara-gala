@@ -29,7 +29,7 @@ export async function loadMyQr(): Promise<StoredQr | null> {
  * TG-50: my payout QR (GCash, Maya or a bank's InstaPay QR). Owner decision: it stays on this phone and is never
  * uploaded. When someone pays me, I show it full screen and they scan it with their own app.
  */
-export default function PayoutQr() {
+export default function PayoutQr({ onSaved }: { onSaved?: () => void }) {
   const [saved, setSaved] = useState<Saved>({ state: "loading" });
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const [shown, setShown] = useState(false);
@@ -59,6 +59,7 @@ export default function PayoutQr() {
       console.info("[tg-wallet] payout qr saved persistent=%s", persisted);
       setSaved(await readQr());
       setNotice({ text: "Saved on this phone.", error: false });
+      onSaved?.();
     } catch (err) {
       console.warn("[tg-wallet] payout qr save failed", err instanceof Error ? err.name : err);
       setNotice({ text: "Couldn't save that photo. Try again.", error: true });
@@ -80,7 +81,7 @@ export default function PayoutQr() {
 
   return (
     <section aria-labelledby="payout-title" className="flex flex-col gap-3">
-      <SectionTitle id="payout-title">My payout QR</SectionTitle>
+      <SectionTitle id="payout-title" tabIndex={-1} className="focus-pixel">My payout QR</SectionTitle>
       <PixelBox className="flex flex-col gap-3 p-4">
         <p className="text-sm text-muted">
           Your GCash, Maya or bank QR, for when someone pays you back. It stays on this phone; nothing is uploaded.

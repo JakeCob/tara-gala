@@ -15,7 +15,7 @@ export default function TripHome() {
   const router = useRouter();
   const raw = useSyncExternalStore(subscribeNothing, knownTripsRaw, () => null);
   const known = useMemo(() => parseKnownTrips(raw), [raw]);
-  const [name, setName] = useState("Baguio trip");
+  const [name, setName] = useState(""); // TG-68 ux §6: no Baguio default
   const [start, setStart] = useState("");
   const [back, setBack] = useState("");
   const [busy, setBusy] = useState(false);
@@ -24,7 +24,11 @@ export default function TripHome() {
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     const problem = tripProblem(name, start, back);
-    if (problem) return setError(problem);
+    if (problem) {
+      const why = name.trim() ? "other" : "empty"; // TG-68: the trip's name starts empty now
+      console.info("[tg-trip] create refused why=%s", why);
+      return setError(problem);
+    }
     setError("");
     setBusy(true);
     const r = await tripApi.create(name.trim(), start, back);
@@ -79,7 +83,7 @@ export default function TripHome() {
           <p className="text-sm text-muted">One link for the whole trip: the plan, the shared wallet and the hotel. Send it to everyone coming.</p>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">Trip name</span>
-            <input className={PX.input} value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
+            <input className={cx(PX.input, "placeholder:text-muted")} value={name} maxLength={40} placeholder="Like Sagada, Nov 25" onChange={(e) => setName(e.target.value)} />
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="flex min-w-0 flex-col gap-1 text-sm">

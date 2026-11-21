@@ -485,13 +485,14 @@ test("T46-V1..V6 landingPremadeView maps every fetch outcome to one state", asyn
   assert.equal(landingPremadeView(null, false).state, "loading");
 });
 
-test("T46-V7 landingCard is premadeCard without the date match", async () => {
+test("T46-V7 landingCard is premadeCard without the date match, or the dates (TG-68 ux.md §5)", async () => {
   const { landingCard, premadeCard } = await view();
   const s = summary({ share_slug: "a b/c" });
   const card = landingCard(s);
   assert.ok(!("matches" in card), "no date match on the landing");
   const expected: Partial<LandingCard & { matches: boolean }> = { ...premadeCard(s, "", "") };
   delete expected.matches;
+  expected.dates = "3 days · 12 stops"; // TG-68: premadeMeta without its leading " · "
   assert.deepEqual(card, expected);
   assert.equal(card.href, `/i/${encodeURIComponent("a b/c")}`);
   assert.equal(landingCard(summary({ budget_php: null })).budget, null);

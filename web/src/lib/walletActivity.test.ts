@@ -773,11 +773,11 @@ test("GW1-A2 G9c (an old phone's category change clears the line): one edit, two
   assert.equal(A.changeLine("Ben", A.changes(v1, v2, w)), "Ben changed the category: Food → Transport. The budget line: Meals and merienda, 2.5 days → Not sorted yet.");
 });
 
-test("GW1-A3 a removed line reads `A line no longer in the plan`; _none reads `Not in the budget`", () => {
+test("GW1-A3 a removed line reads `Removed from the plan` (TG-68 ux.md §4); _none reads `Not in the budget`", () => {
   const w = wallet({ budget: LINES });
   const v1 = expense({ category: "food", budget_key: "pasalubong" }); // the plan no longer has it
   const v2 = { ...v1, budget_key: "_none", version: 2 };
-  assert.equal(A.changeLine("Ana", A.changes(v1, v2, w)), "Ana changed the budget line: A line no longer in the plan → Not in the budget.");
+  assert.equal(A.changeLine("Ana", A.changes(v1, v2, w)), "Ana changed the budget line: Removed from the plan → Not in the budget.");
 });
 
 test("GW1-A4 G27 without a budget on the wallet (the flag off, or not one trip) Changes is TG-66's: no budget line field", () => {

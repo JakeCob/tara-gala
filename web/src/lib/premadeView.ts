@@ -24,10 +24,13 @@ export type LandingPremadeView = {
   cards?: LandingCard[];
 };
 
-/** A landing card (TG-46): the same text, with no date to match against. */
+/**
+ * A landing card (TG-46): the same text, with no date to match against. TG-68 ux §5: and no dates, which are a past
+ * trip's: only its length, `3 days · 9 stops`.
+ */
 export function landingCard(s: PremadeSummary): LandingCard {
-  const { title, dates, places, budget, href } = premadeCard(s, "", "");
-  return { title, dates, places, budget, href };
+  const { title, places, budget, href } = premadeCard(s, "", "");
+  return { title, dates: premadeMeta(s.day_count, s.stop_count).replace(/^ · /, ""), places, budget, href };
 }
 
 /** The landing's ready-made section for one fetch outcome; null while it loads. */

@@ -13,7 +13,7 @@ import { flags } from "@/lib/flags";
 import { cardMeta, payersWords } from "@/lib/walletActivity";
 import { categoryLabel, showingLine } from "@/lib/walletCategories";
 import { addOutcome, addedBy, editOutcome, screenParts, visibleExpenses } from "@/lib/walletView";
-import { budgetRefusal } from "@/lib/budgetLines";
+import { budgetRefusal, sentCategory, sentLine } from "@/lib/budgetLines";
 import { type TripFile, fetchFile, knownTrips, tripApi } from "@/lib/trip";
 import { runShare, shareDeps, type ShareOutcome } from "@/lib/itinerary";
 import {
@@ -39,7 +39,8 @@ import {
   type WalletResult,
 } from "@/lib/wallet";
 
-type Notice = { text: string; error: boolean };
+/** toPayout: TG-68 ux §1, Show my QR with none saved. The notice carries a button to the payout QR section. */
+type Notice = { text: string; error: boolean; toPayout?: true };
 /** The form's own alert (ux §6, §9): a 409, a refused split or edit. `asAmounts`: ux §9's Save as Amounts under it. */
 type FormAlert = { text: string; asAmounts: boolean };
 type Editing = { expense: Expense; addedBy: string | null };
@@ -62,14 +63,27 @@ const SHARED: Record<ShareOutcome, string> = {
   manual: "Your phone didn't let us copy it. Copy the address from the browser bar instead.",
 };
 
+/** TG-68 ux §1: My payout QR's title, in view at the top and focused. It never opens the file picker. */
+function toPayoutQr() {
+  const title = document.getElementById("payout-title");
+  title?.scrollIntoView({ block: "start" });
+  title?.focus({ preventScroll: true });
+}
+
 /** The one live region for results and errors. empty:-mt-* cancels its gap until it has something to say. */
 function NoticeArea({ notice, className }: { notice: Notice | null; className: string }) {
   return (
     <div aria-live="polite" className={className}>
       {notice &&
         (notice.error ? (
-          <PixelBox as="p" tone="alertText" className="p-4 text-sm">
+          // TG-68 ux §1: Show my QR's message carries a way to My payout QR, under the text, in the same box
+          <PixelBox as={notice.toPayout ? "div" : "p"} tone="alertText" className={notice.toPayout ? "flex flex-col gap-3 p-4 text-sm" : "p-4 text-sm"}>
             {notice.text}
+            {notice.toPayout && (
+              <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm" onClick={toPayoutQr}>
+                Go to My payout QR
+              </PixelButton>
+            )}
           </PixelBox>
         ) : (
           <p className="text-sm">{notice.text}</p>
@@ -316,8 +330,8 @@ export default function WalletView({ slug }: { slug: string }) {
     const r = await walletApi.addExpense(slug, body);
     setBusy(false);
     console.info("[tg-wallet] expense add ok=%s", r.ok ? "yes" : r.why);
-    const lineAlert = r.ok ? null : budgetRefusal(r.detail);
-    if (lineAlert) return refuseLine(lineAlert, r);
+    const lineAlert = r.ok ? null : await lineRefusal(r, body);
+    if (lineAlert) return refuseLine(lineAlert.text, lineAlert.r);
     const out = addOutcome(before, body, r);
     if (out.ok && out.text !== "Expense added.") console.info("[tg-wallet] expense add category dropped=yes"); // the server's WALLET_SPLITS is off
     if (!out.ok) {
@@ -332,11 +346,30 @@ export default function WalletView({ slug }: { slug: string }) {
   }
 
   /**
+   * TG-68 N2: the line refusal's words. GA1's budget_line_category answer carries no wallet (only its code), so the lines
+   * are read again first, to name the category the sent line is under now; refuseLine then lands that wallet. If the read
+   * fails too, or still lists the category the form sent (a stale copy), budgetRefusal keeps "another category". Null for
+   * any other refusal.
+   */
+  async function lineRefusal(r: WalletFailed, body: object): Promise<{ text: string; r: WalletFailed } | null> {
+    if (!budgetRefusal(r.detail)) return null;
+    let answer = r;
+    if (!r.wallet && r.detail === "budget_line_category") {
+      const fresh = await walletApi.get(slug);
+      console.info("[tg-wallet] expense line reread ok=%s", fresh.ok ? "yes" : fresh.why);
+      if (fresh.ok) answer = { ...r, wallet: fresh.wallet };
+    }
+    return { text: budgetRefusal(answer.detail, answer.wallet?.budget, sentLine(body), sentCategory(body))!, r: answer };
+  }
+
+  /**
    * TG-62 GW1, ux §9: a save refused for its line (unknown_budget_line, budget_line_category: the plan changed while the
    * form was open). Its alert in the form, the pick cleared, and the lines reloaded from the answer's wallet or a fresh GET.
    */
   function refuseLine(text: string, r: WalletResult): false {
-    console.info("[tg-wallet] expense line refused why=%s", r.ok ? "none" : r.why);
+    // TG-68 N2: named=yes when the moved line's refusal names its category (never the category or key itself)
+    const named = !r.ok && r.detail === "budget_line_category" ? (text.includes("another category") ? "no" : "yes") : "n/a";
+    console.info("[tg-wallet] expense line refused why=%s named=%s", r.ok ? "none" : r.why, named);
     setFormAlert({ text, asAmounts: false });
     setLineReset((n) => n + 1);
     if (!r.ok && r.wallet) landWallet(r.wallet);
@@ -357,8 +390,8 @@ export default function WalletView({ slug }: { slug: string }) {
       if (row?.action === "expense_edit") actor = wallet.members.find((m) => m.id === row.actor)?.name ?? null;
     }
     setBusy(false);
-    const lineAlert = r.ok ? null : budgetRefusal(r.detail);
-    if (lineAlert) return refuseLine(lineAlert, r);
+    const lineAlert = r.ok ? null : await lineRefusal(r, body);
+    if (lineAlert) return refuseLine(lineAlert.text, lineAlert.r);
     // TG-62 GW1 (tg-ux2 S1): the 409's Changes line reads the wallet as the screen does, so flag off is TG-66's alert exactly
     const lineSeen = (x: WalletResult): WalletResult => (flags.budgetLines || x.ok || !x.wallet ? x : { ...x, wallet: { ...x.wallet, budget: null } });
     const out = editOutcome(lineSeen(r), body, current.expense, actor);
@@ -464,7 +497,10 @@ export default function WalletView({ slug }: { slug: string }) {
 
   async function showMyQr() {
     const mine = await loadMyQr();
-    if (!mine) return setNotice({ text: "Add your payout QR below first, then show it here.", error: true });
+    if (!mine) {
+      console.info("[tg-wallet] show-my-qr none=yes");
+      return setSettleNotice({ text: "You haven't added your payout QR on this phone yet. It's in My payout QR, near the end of this page.", error: true, toPayout: true });
+    }
     setQr({ blob: mine.blob, label: "My payout QR" });
   }
 
@@ -763,7 +799,7 @@ export default function WalletView({ slug }: { slug: string }) {
             )}
           </section>
 
-          <PayoutQr />
+          <PayoutQr onSaved={() => setSettleNotice((n) => (n?.toPayout ? null : n))} />
 
           {parts.activity && <ActivityList slug={slug} wallet={lineWallet} online={online} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
         </div>

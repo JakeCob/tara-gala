@@ -8,7 +8,7 @@ import { PX, PixelBox, PixelButton, PixelChoice, cx } from "@/components/pixel";
 import { formatTime } from "@/lib/api";
 import { type At, type Found, type PlaceIn, type Suggestion, applySuggestion, findPlaces, isLink, prefillName } from "@/lib/planEdit";
 import type { ChangeLine, Done } from "@/lib/planLines";
-import { farLine, pinLine } from "@/lib/planLines";
+import { atStart, farLine, kmFrom, pinLine } from "@/lib/planLines";
 import { type SuggestIn, planFailureMessage, planOutcome } from "@/lib/trip";
 import { ChangeList, LegLine, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
@@ -101,7 +101,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
     const pin = pinText; // as typed: the server parses it (the field caps it at 60)
     if (!pin.trim()) {
       console.info("[tg-trip] plan find kind=pin ok=no why=empty");
-      return setPinProblem("Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.");
+      return setPinProblem("Those numbers aren't a pin. Paste the two numbers Google Maps shows, with a comma between.");
     }
     setFinding(true);
     setPinProblem("");
@@ -192,7 +192,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
             <>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-semibold">Pin</span>
-                <span className={PX.meta}>Two numbers, like 16.4138, 120.5964.</span>
+                <span className={PX.meta}>In Google Maps, press and hold the spot, then copy the two numbers it shows.</span>
                 <input className={PX.input} value={pinText} maxLength={60} inputMode="decimal" autoComplete="off"
                   onChange={(e) => { setPinText(e.target.value); setPinProblem(""); }} />
               </label>
@@ -213,11 +213,11 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
                 onClick={() => { console.info("[tg-trip] plan find wrong-spot"); setNeedPin(pinned!.link); setPinned(null); }}>
                 Wrong spot? Paste the pin instead.
               </button>
-              <p className={PX.meta}>{s.km_from_baguio != null && !s.far ? `About ${Math.round(s.km_from_baguio)} km from ${editor.city}. ` : ""}{ON_FILE}</p>
+              <p className={PX.meta}>{s.km_from_baguio != null && !s.far ? `${atStart(kmFrom(s.km_from_baguio, editor.city))}. ` : ""}{ON_FILE}</p>
             </>
           ) : (
             <p className={PX.meta}>
-              {said?.lead ?? `Pinned from your link${s.km_from_baguio != null && !s.far ? `, about ${Math.round(s.km_from_baguio)} km from ${editor.city}` : ""}.`} {ON_FILE}
+              {said?.lead ?? `Pinned from your link${s.km_from_baguio != null && !s.far ? `, ${kmFrom(s.km_from_baguio, editor.city)}` : ""}.`} {ON_FILE}
             </p>
           )}
           {s.far ? (

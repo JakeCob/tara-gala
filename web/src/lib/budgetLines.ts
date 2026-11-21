@@ -16,11 +16,11 @@ export function linesFor(b: WalletBudget | null, category: Category | null): { k
   return [...b.lines.filter((l) => categoryOf(l.category) === category).map(({ key, item }) => ({ key, item })), { key: NONE, item: "None of these" }];
 }
 
-/** G23 (tg-ux2): the line's words in Changes. A key the plan no longer has isn't "Not sorted yet": it was sorted. */
+/** G23 (tg-ux2): the line's words in Changes. A key the plan no longer has isn't "Not sorted yet": it was sorted (TG-68 N1). */
 export function lineLabel(b: WalletBudget | null, key: string | null | undefined): string {
   if (key === NONE) return "Not in the budget";
   if (!key) return "Not sorted yet";
-  return lineOf(b, key)?.item ?? "A line no longer in the plan";
+  return lineOf(b, key)?.item ?? "Removed from the plan";
 }
 
 /** G24: the row shows with the wallet's one trip's lines and a picked category. */
@@ -94,9 +94,27 @@ export function logLine(on: boolean, line: string | null): "off" | "null" | "non
   return line === NONE ? "none" : "line";
 }
 
-/** ux §9: the two refusals GA1 adds. Anything else is someone else's line. */
-export function budgetRefusal(code: string | undefined): string | null {
+/**
+ * ux §9: the two refusals GA1 adds. Anything else is someone else's line. TG-68 N2: the moved line's refusal names the
+ * category it's under now, from the reread lines and the key the form sent; without them, "another category". It's named
+ * only when it differs from the category the form sent (`sentCat`, when given): a stale saved copy can still list the
+ * old one, and "under Food" to someone who picked Food is wrong (tg-ux2, N2f).
+ */
+export function budgetRefusal(code: string | undefined, budget?: WalletBudget | null, sent?: string | null, sentCat?: Category | null): string | null {
   if (code === "unknown_budget_line") return "That budget line isn't in the plan any more. Pick another, or leave it for later.";
-  if (code === "budget_line_category") return "That budget line is under another category in the plan now. Pick the line again, or leave it for later.";
-  return null;
+  if (code !== "budget_line_category") return null;
+  const line = sent && sent !== NONE ? lineOf(budget ?? null, sent) : undefined;
+  const now = line ? categoryOf(line.category) : undefined;
+  const named = now && (sentCat === undefined || now !== categoryOf(sentCat)) ? CATEGORY_NAME[now] : "another category";
+  return `That budget line is under ${named} in the plan now. Pick the line again, or leave it for later.`;
+}
+
+/** TG-68 N2: the line a body sent (a v2 body's budget_key), for budgetRefusal. Today's body has none. */
+export function sentLine(body: object): string | null {
+  return "budget_key" in body && typeof body.budget_key === "string" ? body.budget_key : null;
+}
+
+/** TG-68 N2f: the category a body sent, as the API reads it (`body.category`; missing is none). */
+export function sentCategory(body: object): Category | null {
+  return "category" in body && typeof body.category === "string" ? (body.category as Category) : null;
 }
