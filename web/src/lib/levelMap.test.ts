@@ -455,14 +455,9 @@ test("T67-W6b LevelMap hands the city on to LevelDialog, so a Sagada spot's Maps
 test("TG67-WT1 more than 3 Worlds: a 3-column grid, so 5 tabs sit 3 then 2, with px-0.5 to fit '12/12' at 320", async () => {
   const { worldTabs } = (await import("./levelMap.ts")) as typeof import("./levelMap.ts") & { worldTabs?: (n: number) => { nav: string; tab: string } };
   assert.ok(worldTabs, "levelMap.ts exports worldTabs");
+  // the whole strings (tg-test's RED-audit should): "12/12 fits a 320 cell" was measured with gap-2, text-xs and px-0.5
   for (const n of [4, 5, 7]) {
-    const { nav, tab } = worldTabs(n);
-    assert.match(nav, /(^| )grid( |$)/, `${n} Worlds: a grid`);
-    assert.match(nav, /(^| )grid-cols-3( |$)/, `${n} Worlds: 3 per row`);
-    assert.match(nav, /(^| )md:flex md:flex-wrap( |$)/, `${n} Worlds: today's row from md up`);
-    assert.match(tab, /(^| )px-0\.5( |$)/);
-    assert.doesNotMatch(tab, /(^| )px-1( |$)/);
-    assert.match(tab, /(^| )min-w-0 flex-1 whitespace-nowrap( |$)/);
+    assert.deepEqual(worldTabs(n), { nav: "grid grid-cols-3 gap-2 md:flex md:flex-wrap", tab: "min-w-0 flex-1 whitespace-nowrap px-0.5 text-xs md:px-3 md:text-sm" }, `${n} Worlds`);
   }
 });
 
