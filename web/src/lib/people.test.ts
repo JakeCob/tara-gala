@@ -316,7 +316,7 @@ test("T58-W31 one write at a time on the page (review M1): the box's writes set 
   const apply = v.slice(v.indexOf("async function apply("), v.indexOf("const onFail ="));
   assert.ok(apply.indexOf("setBusy(true);") >= 0 && apply.indexOf("setBusy(true);") < apply.indexOf("await op()"), "busy before the write leaves");
   assert.ok(apply.indexOf("setBusy(false);") > apply.indexOf("await op()"), "and clear once its answer is back");
-  assert.match(v, /<TripPeople trip=\{trip\} plan=\{slot\} busy=\{busy\} apply=\{apply\} \/>/);
+  assert.match(v, /<TripPeople trip=\{trip\} plan=\{slot\} busy=\{busy\} apply=\{apply\} fold=\{up\?\.state === "during" \|\| undefined\} \/>/); // TG-69 N3: the fold
 });
 
 test("T58-W32 Edit the list says how to add a photo, and what a photo means, above the rows (ux must)", () => {

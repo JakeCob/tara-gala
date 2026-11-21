@@ -593,7 +593,7 @@ test("T69-X1 only the plan's files change: no API, schema, worker or package fil
   const allowed = [
     "README.md", "web/src/lib/nextUp.ts", "web/src/lib/nextUp.test.ts", "web/src/lib/api.ts", "web/src/lib/flags.ts", "web/src/lib/flags.test.ts",
     "web/src/components/NextUpCard.tsx", "web/src/components/DriverView.tsx", "web/src/components/TripView.tsx", "web/src/components/LevelMap.tsx",
-    "web/src/components/TripPeople.tsx",
+    "web/src/components/TripPeople.tsx", "web/src/lib/people.test.ts",
   ];
   for (const f of [...files, ...untracked]) assert.ok(allowed.includes(f), f);
 });
