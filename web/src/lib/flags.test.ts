@@ -17,6 +17,7 @@ const ENV_KEYS: Record<keyof Flags, string> = {
   chatbotLive: "NEXT_PUBLIC_CHATBOT_LIVE",
   budgetLines: "NEXT_PUBLIC_BUDGET_LINES",
   recapLinks: "NEXT_PUBLIC_RECAP_LINKS",
+  offlineExpenses: "NEXT_PUBLIC_OFFLINE_EXPENSES",
 };
 
 // [raw, fallback, expected]. Keep identical to CASES in api/tests/test_flags.py.
@@ -59,7 +60,7 @@ afterEach(() => {
 
 test("defaults when unset", () => {
   clearFlagEnv();
-  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false, budgetLines: false, recapLinks: false });
+  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false, budgetLines: false, recapLinks: false, offlineExpenses: false });
   assert.deepEqual(readFlags(), FLAG_DEFAULTS);
 });
 
@@ -130,4 +131,21 @@ test("flags.ts is a plain module", () => {
   assert.doesNotMatch(source, /use client/);
   assert.doesNotMatch(source, /\benum\s/);
   assert.doesNotMatch(source, /\bnamespace\s/);
+});
+
+test("T70-L13 NEXT_PUBLIC_OFFLINE_EXPENSES: default off, documented in README section 7 and both .env.example files", () => {
+  clearFlagEnv();
+  assert.equal(readFlags().offlineExpenses, false);
+  setEnv("NEXT_PUBLIC_OFFLINE_EXPENSES", "true");
+  assert.equal(readFlags().offlineExpenses, true);
+  const root = new URL("../../../", import.meta.url);
+  const readme = readFileSync(new URL("README.md", root), "utf8");
+  const section = readme.slice(readme.indexOf("## 7."));
+  const row = section.split("\n").find((line) => line.includes("`NEXT_PUBLIC_OFFLINE_EXPENSES`"));
+  assert.ok(row, "README section 7 has a row for NEXT_PUBLIC_OFFLINE_EXPENSES");
+  assert.ok(row.includes("`false`"), "default false");
+  assert.ok(row.includes("WALLET_SPLITS"), "it needs the split modes on");
+  for (const env of ["web/.env.example", ".env.example"]) {
+    assert.match(readFileSync(new URL(env, root), "utf8"), /^NEXT_PUBLIC_OFFLINE_EXPENSES=false$/m, env);
+  }
 });

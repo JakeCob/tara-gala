@@ -138,7 +138,15 @@ export type WalletFailure = "offline" | "not_found" | "rate_limited" | "server" 
  * A refusal's `detail` is its code. TG-66: 409 expense_changed and 404 expense_gone also bring the wallet as it is now,
  * and 422 item_no_one the item's seq (never its name).
  */
-export type WalletFailed = { ok: false; why: WalletFailure; detail?: string; wallet?: Wallet; seq?: number };
+export type WalletFailed = {
+  ok: false;
+  why: WalletFailure;
+  detail?: string;
+  wallet?: Wallet;
+  seq?: number;
+  timedOut?: true; // TG-70: an add with timeoutMs that got no answer in time (why is "offline"); it may have landed
+  retryAfter?: number; // TG-70: a 429's Retry-After in seconds, when the header is there and readable (needs O1's CORS)
+};
 export type WalletResult = { ok: true; wallet: Wallet; saved?: boolean } | WalletFailed;
 export type CommentsResult = { ok: true; rev: number; comments: Comment[] } | WalletFailed;
 export type CommentWriteResult = { ok: true; wallet: Wallet; comments: Comment[] } | WalletFailed;
@@ -173,7 +181,7 @@ export function afterWrite(prev: WalletLoad, wallet: Wallet): WalletLoad {
   return { state: "ready", wallet };
 }
 
-const DETAIL: Record<string, string> = {
+export const DETAIL: Record<string, string> = {
   shares_mismatch: "The amounts don't add up to the total.",
   unknown_member: "That person isn't in this wallet any more. Reload and try again.",
   name_taken: "Someone in this wallet already has that name.",
@@ -213,26 +221,72 @@ function refusal(why: WalletFailure, body: unknown): WalletFailed {
   };
 }
 
-type Init = { method: "POST" | "PATCH" | "DELETE"; body?: unknown; raw?: Blob };
+type Init = { method: "POST" | "PATCH" | "DELETE"; body?: unknown; raw?: Blob; timeoutMs?: number };
 
-/** One request; `read` turns a good answer into its result. Every failure is a WalletFailed, as call() has always given. */
+/** A 429's Retry-After in whole seconds: a number, or an HTTP date from now. Undefined when missing or unreadable. */
+function retryAfterS(res: Response): number | undefined {
+  const raw = res.headers.get("retry-after")?.trim();
+  if (!raw) return undefined;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  const when = Date.parse(raw);
+  return Number.isNaN(when) ? undefined : Math.max(0, Math.ceil((when - Date.now()) / 1000));
+}
+
+/**
+ * One request; `read` turns a good answer into its result. Every failure is a WalletFailed, as call() has always given.
+ * TG-70 `timeoutMs`: AbortController + setTimeout, never AbortSignal's static timeout helper (iOS before 16 lacks it,
+ * and a throw here would read as offline forever). The timer stays armed through the answer's body (review S1): a 2xx
+ * whose JSON stalls or drops has landed, so it comes back as offline with timedOut (may have landed, B11b), never a
+ * hang or a throw. Without it the fetch gets no signal and a broken body throws, as before.
+ */
 async function request<T>(path: string, init: Init | undefined, read: (body: unknown, res: Response) => T): Promise<T | WalletFailed> {
-  let res: Response;
+  const ctrl = init?.timeoutMs ? new AbortController() : null;
+  let timedOut = false;
+  const timer = ctrl
+    ? setTimeout(() => {
+        timedOut = true;
+        ctrl.abort();
+      }, init?.timeoutMs)
+    : undefined;
+  // Ends a stalled body read when the timer fires; handled here, so an abort during the fetch leaves no stray rejection
+  const aborted = ctrl ? new Promise<never>((_, reject) => ctrl.signal.addEventListener("abort", () => reject(new Error("timeout")), { once: true })) : null;
+  aborted?.catch(() => {});
   try {
-    res = await fetch(`${API_URL}${path}`, {
-      cache: "no-store",
-      method: init?.method ?? "GET",
-      headers: init?.raw ? { "content-type": init.raw.type } : init?.body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: init?.raw ?? (init?.body !== undefined ? JSON.stringify(init.body) : undefined),
-    });
-  } catch {
-    return { ok: false, why: "offline" };
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}${path}`, {
+        cache: "no-store",
+        method: init?.method ?? "GET",
+        headers: init?.raw ? { "content-type": init.raw.type } : init?.body !== undefined ? { "content-type": "application/json" } : undefined,
+        body: init?.raw ?? (init?.body !== undefined ? JSON.stringify(init.body) : undefined),
+        ...(ctrl ? { signal: ctrl.signal } : {}),
+      });
+    } catch {
+      if (timedOut) console.info(`[tg-wallet] request timed out ms=${init?.timeoutMs}`);
+      return timedOut ? { ok: false, why: "offline", timedOut: true } : { ok: false, why: "offline" };
+    }
+    const json = () => (aborted ? Promise.race([res.json(), aborted]) : res.json()); // every body read, under the timer
+    if (res.ok && aborted) {
+      let body: unknown;
+      try {
+        body = await json();
+      } catch {
+        console.info(`[tg-wallet] answer body lost status=${res.status} timed_out=${timedOut}`);
+        return { ok: false, why: "offline", timedOut: true }; // the write landed; the outbox resends it as a replay
+      }
+      return read(body, res);
+    }
+    if (res.ok) return read(await res.json(), res);
+    if (res.status === 404) return refusal("not_found", await json().catch(() => null));
+    if (res.status === 429) {
+      const after = retryAfterS(res);
+      return after === undefined ? { ok: false, why: "rate_limited" } : { ok: false, why: "rate_limited", retryAfter: after };
+    }
+    if (res.status >= 500) return { ok: false, why: "server" };
+    return refusal("rejected", await json().catch(() => null));
+  } finally {
+    clearTimeout(timer);
   }
-  if (res.ok) return read(await res.json(), res);
-  if (res.status === 404) return refusal("not_found", await res.json().catch(() => null));
-  if (res.status === 429) return { ok: false, why: "rate_limited" };
-  if (res.status >= 500) return { ok: false, why: "server" };
-  return refusal("rejected", await res.json().catch(() => null));
 }
 
 function call(path: string, init?: Init): Promise<WalletResult> {
@@ -250,7 +304,9 @@ export const walletApi = {
   create: (name: string, members: string[]) => call("/wallets", { method: "POST", body: { name, members } }),
   get: (slug: string) => call(at(slug)),
   addMember: (slug: string, name: string, by?: string | null) => call(`${at(slug)}/members${byQuery(by)}`, { method: "POST", body: { name } }),
-  addExpense: (slug: string, body: LegacyExpenseBody | ExpenseBodyV2) => call(`${at(slug)}/expenses`, { method: "POST", body }),
+  /** TG-70 `timeoutMs`: the outbox's add (15 s); no answer in time is offline with timedOut. None: today's call. */
+  addExpense: (slug: string, body: LegacyExpenseBody | ExpenseBodyV2, opts?: { timeoutMs?: number }) =>
+    call(`${at(slug)}/expenses`, { method: "POST", body, ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}) }),
   /** TG-66: `version` is the one the screen showed; a stale one is 409 expense_changed with the wallet as it is now. */
   deleteExpense: (slug: string, id: string, version?: number, by?: string | null) =>
     call(`${at(slug)}/expenses/${encodeURIComponent(id)}${version === undefined ? byQuery(by) : `?version=${version}${byQuery(by, "&")}`}`, { method: "DELETE" }),

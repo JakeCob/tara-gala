@@ -14,6 +14,7 @@ export type Flags = {
   chatbotLive: boolean;
   budgetLines: boolean;
   recapLinks: boolean;
+  offlineExpenses: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -29,6 +30,7 @@ export const FLAG_DEFAULTS: Flags = {
   chatbotLive: false, // TG-61 PR 2: the chatbot, inside the hand editor, until the API's CHATBOT_LIVE is on
   budgetLines: false, // TG-62: the wallet's budget line and the trip's Budget panel; off sends no budget_key and makes no budget request
   recapLinks: false, // TG-64: the trip page's Trip recap box and /r/<slug>, until the API's RECAP_LINKS is on
+  offlineExpenses: false, // TG-70: Add expense with no signal waits here and sends itself; needs walletSplits; off sends today's add
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -60,6 +62,7 @@ export function readFlags(): Flags {
     chatbotLive: parseFlag(process.env.NEXT_PUBLIC_CHATBOT_LIVE, FLAG_DEFAULTS.chatbotLive),
     budgetLines: parseFlag(process.env.NEXT_PUBLIC_BUDGET_LINES, FLAG_DEFAULTS.budgetLines),
     recapLinks: parseFlag(process.env.NEXT_PUBLIC_RECAP_LINKS, FLAG_DEFAULTS.recapLinks),
+    offlineExpenses: parseFlag(process.env.NEXT_PUBLIC_OFFLINE_EXPENSES, FLAG_DEFAULTS.offlineExpenses),
   };
 }
 

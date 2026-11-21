@@ -583,3 +583,75 @@ test("W1-R36 tg-review2 nit 1: an editing form always saves through buildPatch, 
   assert.match(src, /const edit = !!editing;/);
   assert.match(src, /edit \? buildPatch\(/);
 });
+
+// ---------------------------------------------------------------- TG-70 O2: a queued row's failed line, and its body back in the form
+
+const QID = "22222222-2222-4222-8222-222222222222";
+function queued(patch: Record<string, unknown> = {}, bodyPatch: Record<string, unknown> = {}) {
+  return {
+    id: QID,
+    slug: "a".repeat(32),
+    body: { id: QID, mode: "equal", paid_by: A, amount_centavos: 45000, note: "Taxi (made up)", category: null, by: A, inputs: [{ member_id: A, value: 1 }], ...bodyPatch },
+    savedAt: "2026-11-26T02:00:00.000Z",
+    tries: 2,
+    nextAt: "2026-11-26T02:00:30.000Z",
+    state: "failed",
+    ...patch,
+  } as never;
+}
+
+test("T70-L19 B19a failedLine: the table's rows, in order", async () => {
+  const { failedLine } = (await load()) as Awaited<ReturnType<typeof load>> & { failedLine: (q: unknown) => string };
+  const ANY = "Couldn't send. Put it in the form to check it, or remove it.";
+  // 404 feature_off: FAILED_OFF, never "This wallet link doesn't work"
+  assert.equal(failedLine(queued({ why: "not_found", detail: "feature_off" })), "Couldn't send. That kind of split is switched off right now. Put it in the form to save it another way, or remove it.");
+  // 404 any other detail: the wallet is gone
+  assert.equal(failedLine(queued({ why: "not_found" })), "Couldn't send. This wallet link doesn't work. Check it with whoever shared it.");
+  assert.equal(failedLine(queued({ why: "not_found", detail: "wallet_not_found" })), "Couldn't send. This wallet link doesn't work. Check it with whoever shared it.");
+  // DETAIL's codes
+  assert.equal(failedLine(queued({ why: "rejected", detail: "wallet_full" })), "Couldn't send. This wallet is full: it holds up to 500 expenses.");
+  assert.equal(failedLine(queued({ why: "rejected", detail: "unknown_member" })), "Couldn't send. That person isn't in this wallet any more. Reload and try again.");
+  assert.equal(failedLine(queued({ why: "rejected", detail: "shares_mismatch" })), "Couldn't send. The amounts don't add up to the total.", "DETAIL comes before SPLIT_COPY");
+  // a split code
+  assert.equal(failedLine(queued({ why: "rejected", detail: "percent_total" })), "Couldn't send. The percents need to add up to 100%.");
+  assert.equal(failedLine(queued({ why: "rejected", detail: "payers_mismatch" })), "Couldn't send. What people paid needs to add up to the amount.");
+  // an item code names the item from the stored body
+  const items = { mode: "itemized", items: [{ name: "Pinikpikan", price_centavos: 42000, who: [A] }, { name: "Strawberry taho", price_centavos: 12000, who: [] }], charges: [] };
+  assert.equal(failedLine(queued({ why: "rejected", detail: "item_no_one", seq: 2 }, items)), "Couldn't send. Pick who had Strawberry taho.");
+  assert.equal(failedLine(queued({ why: "rejected", detail: "item_no_one", seq: 9 }, items)), "Couldn't send. Pick who had each item.");
+  // everything else
+  for (const detail of ["id_taken", undefined, "something_new", "unknown_budget_line", "budget_line_category", "toString", "constructor", "__proto__"]) {
+    assert.equal(failedLine(queued({ why: "rejected", ...(detail ? { detail } : {}) })), ANY, String(detail));
+  }
+  // failureMessage's generic default is never used for a queued row
+  for (const q of [queued({ why: "rejected", detail: "nope" }), queued({ why: "rejected" })]) {
+    assert.doesNotMatch(failedLine(q), /That didn't save/);
+  }
+});
+
+test("T70-L15 formFromBody: buildBody(formFromBody(body)) is the body again, for all six modes, several payers, category and line", async () => {
+  const { buildBody, formFromBody } = (await load()) as Awaited<ReturnType<typeof load>> & { formFromBody: (b: unknown, m: Member[]) => unknown };
+  const { withBudgetKey, sentLine } = await import("./budgetLines.ts");
+  const forms = [
+    await form({ category: "food" }),
+    await form({ out: [D], paidBy: B, category: "transport" }),
+    await form({ mode: "exact", exact: { [A]: "400", [B]: "880", [C]: "0" } }),
+    await form({ mode: "percent", percent: { [A]: "40", [B]: "33.33", [C]: "26.67", [D]: "" } }),
+    await form({ mode: "shares", shares: { [A]: 2, [B]: 2, [C]: 1, [D]: 0 } }),
+    await form({ mode: "adjust", out: [C], extras: { [A]: "200", [B]: "-50.50" } }),
+    await form({ mode: "itemized", items: BILL, service: "10%", vat: "" }),
+    await form({ mode: "itemized", items: BILL, service: "", vat: "120" }),
+    await form({ category: "food", several: true, paid: { [A]: "800", [B]: "480" } }),
+    await form({ mode: "percent", percent: { [A]: "50", [B]: "50" }, several: true, paid: { [B]: "1,000", [C]: "280" } }),
+  ];
+  for (const [i, f] of forms.entries()) {
+    for (const line of [null, "food-1", "_none"]) {
+      const built = withBudgetKey(body(buildBody(f, MEMBERS, ALL, B)) as object, { on: true, line });
+      const sent = { ...built, id: QID };
+      const back = formFromBody(sent, MEMBERS) as Parameters<typeof buildBody>[0];
+      assert.equal(JSON.stringify(back).includes(QID), false, `form ${i}: the id never goes into the form`);
+      const again = withBudgetKey(body(buildBody(back, MEMBERS, ALL, B)) as object, { on: true, line: sentLine(sent) });
+      assert.deepEqual(again, built, `form ${i}, line ${line}`);
+    }
+  }
+});
