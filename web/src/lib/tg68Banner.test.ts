@@ -1,5 +1,6 @@
 // TG-68 part 3 (ux.md §3, audit §2.9): on a wallet (/w/…) the offline banner talks about expenses, not schedules.
-// Every other page keeps TG-27's four strings (offline.test.ts T27-13, unedited).
+// Every other page keeps TG-27's four strings (offline.test.ts T27-13, unedited). tg-ux2's answer 2 (2026-11-21): C on
+// /w/ (offline, never saved) gets its own words too, since a wallet has no search.
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -35,6 +36,13 @@ test("TG68-B2 on /w/ the lead is still split out for bold, and an unknown saved 
   assert.equal(text("B", SAVED, "/w/abc").lead, "Can't reach the server");
   assert.equal(text("D", SAVED, "/w/abc").lead, "Back online");
   assert.equal(full("A", null, "/w/abc"), "Offline · saved time unknown · expenses you add won't save until there's signal");
+});
+
+test("TG68-B5 on /w/: C (offline, never saved on this phone) says to open the wallet once with signal", () => {
+  for (const path of ["/w/abc123", "/w/" + "a".repeat(32)]) {
+    assert.deepEqual(text("C", null, path), { lead: "Offline", rest: " · open this wallet once with signal to keep a copy on this phone" }, path);
+    assert.equal(full("C", SAVED, path), "Offline · open this wallet once with signal to keep a copy on this phone", "no saved time in C");
+  }
 });
 
 test("TG68-B3 every other page keeps today's four strings: the trip, home, the planner, the wallet list, and no path", () => {
