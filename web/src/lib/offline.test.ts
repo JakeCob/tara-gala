@@ -341,7 +341,8 @@ test("T70-U11c the flag-on tails never reach /t/ or any other page", () => {
   }
 });
 
-test("T70-U11d OfflineBanner passes waitHere: the outbox flag, effective only with WALLET_SPLITS", () => {
+test("T70-U11d OfflineBanner passes waitHere: the outbox flag, effective only with WALLET_SPLITS; off, today's call (TG68-B4)", () => {
   const src = readFileSync(new URL("../components/OfflineBanner.tsx", import.meta.url), "utf8");
-  assert.match(src, /bannerText\(variant, state\.savedAt, pathname, flags\.offlineExpenses && flags\.walletSplits\)/);
+  assert.match(src, /const waitHere = flags\.offlineExpenses && flags\.walletSplits;/);
+  assert.match(src, /waitHere \? bannerText\(variant, state\.savedAt, pathname, true\) : bannerText\(variant, state\.savedAt, pathname\)/);
 });
