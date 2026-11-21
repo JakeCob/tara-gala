@@ -58,16 +58,18 @@ export function NextUpLog({ today, line, ready }: { today: string; line: string;
  * map's dialog, which Open on the map opens. No live region, because a card that moves shouldn't talk.
  */
 export default function NextUpCard({ up, onJump }: { up: NextUp; onJump: Jump }) {
-  const parts: [string, ReactNode][] = up.state === "during"
+  // The parts that show, in ux §4's order
+  const all: [string, ReactNode | false][] = up.state === "during"
     ? [
-      ...(up.stop ? [["stop", <StopBody key="stop" stop={up.stop} onJump={onJump} />] as [string, ReactNode]] : []),
-      ...(up.bus ? [["bus", <BusBody key="bus" label="Bus today" part={up.bus} onJump={onJump} />] as [string, ReactNode]] : []),
-      ...(up.hotel ? [["hotel", <HotelBody key="hotel" hotel={up.hotel} />] as [string, ReactNode]] : []),
+      ["stop", up.stop && <StopBody key="stop" stop={up.stop} onJump={onJump} />],
+      ["bus", up.bus && <BusBody key="bus" label="Bus today" part={up.bus} onJump={onJump} />],
+      ["hotel", up.hotel && <HotelBody key="hotel" hotel={up.hotel} />],
     ]
     : [
-      ...(up.bus ? [["bus", <BusBody key="bus" label="Bus tomorrow" part={up.bus} onJump={onJump} />] as [string, ReactNode]] : []),
-      ...(up.todos ? [["todo", <TodoBody key="todo" left={up.todos.left} onJump={onJump} />] as [string, ReactNode]] : []),
+      ["bus", up.bus && <BusBody key="bus" label="Bus tomorrow" part={up.bus} onJump={onJump} />],
+      ["todo", up.todos && <TodoBody key="todo" left={up.todos.left} onJump={onJump} />],
     ];
+  const parts = all.filter(([, body]) => !!body);
   return (
     <PixelBox as="section" aria-labelledby="next-up-title" className="flex flex-col gap-2 p-4">
       <SectionTitle id="next-up-title">{up.state === "during" ? "Next up" : "Leaving tomorrow"}</SectionTitle>
