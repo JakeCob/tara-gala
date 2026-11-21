@@ -180,7 +180,7 @@ function TodoBody({ left, onJump }: { left: number; onJump: Jump }) {
 /** Where we're staying (ux §5.4, §8.3): the address in big text, to hold up to a driver */
 function HotelBody({ hotel }: { hotel: HotelPart }) {
   const opener = useRef<HTMLButtonElement | null>(null);
-  const [driver, setDriver] = useState(false);
+  const [driver, setDriver] = useState(0); // taps on Show the driver
   const toHotel = () => {
     const title = document.getElementById("hotel-title");
     title?.scrollIntoView({ block: "start", behavior: smooth() });
@@ -202,7 +202,7 @@ function HotelBody({ hotel }: { hotel: HotelPart }) {
             <PixelButton variant="secondary" className={FULL}
               onClick={(e) => {
                 opener.current = e.currentTarget;
-                setDriver(true);
+                setDriver((n) => n + 1);
               }}>
               Show the driver
             </PixelButton>
@@ -211,7 +211,7 @@ function HotelBody({ hotel }: { hotel: HotelPart }) {
             Open in Google Maps<span aria-hidden="true">&nbsp;↗</span>
           </PixelLink>
           {hotel.from === "trip" && hotel.address && (
-            <DriverView hotel={driver ? { name: hotel.name, address: hotel.address } : null} opener={opener} onClose={() => setDriver(false)} />
+            <DriverView hotel={hotel} opened={driver} opener={opener} />
           )}
         </>
       )}
