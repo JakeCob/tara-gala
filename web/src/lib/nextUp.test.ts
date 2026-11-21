@@ -225,6 +225,13 @@ test("T69-N7b the next bus that hasn't left (G3): strictly after now, Manila's c
     const s = during(nextUp({ today: "2026-12-05", now, trip: T3, guide: out, city: "Baguio" })).stop;
     assert.equal(s?.kind === "busRow" && s.key, "c1-00", `the bus row stays the stop at ${now}`);
   }
+  // tg-test's RED audit: booked-only holds with the clock, and a gone row waits behind a timed row still to leave
+  const mixed = [{ table: "getting_there" as const, row: bus(busTrip("b-9", "09:00", "A", "B"), "2026-12-05", true) }, { table: "getting_home" as const, row: bus(busTrip("u-1430", "14:30", "B", "A"), "2026-12-05", false) }];
+  assert.equal(pickBus(mixed, "10:00"), null, "the booked 09:00 has left; the unbooked 14:30 isn't one the group is taking");
+  const withGone = [{ table: "getting_there" as const, row: bus(null, "2026-12-05") }, { table: "getting_home" as const, row: bus(busTrip("t-1430", "14:30", "B", "A"), "2026-12-05") }];
+  const g12 = pickBus(withGone, "12:00");
+  assert.equal(g12?.kind === "bus" && g12.row.trip_id, "t-1430", "a timed row still to leave beats a gone one");
+  assert.deepEqual(pickBus(withGone, "15:00"), { kind: "gone", direction: "outbound" }, "once nothing timed is left, the gone row shows");
   assert.equal(toMinutes("22:30"), 1350);
   assert.equal(toMinutes("22:30:00"), 1350);
   assert.equal(toMinutes("07:05"), 425);
