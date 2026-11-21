@@ -41,7 +41,7 @@ const ADDED = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short
  * Edit: pass `editing`; remount with a new `key` to load a newer version (a 409 shows their version, ux.md §6).
  * `notice` is the wallet's alert for this form (a 409 or a feature_off line), shown above the buttons.
  */
-export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, budget = null, lineReset = 0, onSubmit, onCancel, onError }: {
+export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, budget = null, lineReset = 0, start, onDirty, onSubmit, onCancel, onError }: {
   wallet: Wallet;
   me: string;
   busy: boolean;
@@ -52,15 +52,19 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
   /** TG-62: bumped by the parent when a save is refused for its line (ux §9): the pick clears and the row reloads. */
   lineReset?: number;
   notice?: ReactNode;
+  /** TG-70 B19: Put it in the form's expense, read when the form mounts (the parent remounts it with a new key). */
+  start?: { form: FormState; line: string | null };
+  /** TG-70 B19: whether something is typed (the amount or the note), for Finish or clear the form first. */
+  onDirty?: (dirty: boolean) => void;
   onSubmit: (body: ExpenseSubmit, ctx: SubmitContext) => Promise<boolean>;
   onCancel?: () => void;
   onError: (text: string) => void;
 }) {
   const members = wallet.members;
-  const [s, setS] = useState<FormState>(() => (editing ? formFromExpense(editing.expense, members) : emptyForm(me)));
+  const [s, setS] = useState<FormState>(() => (editing ? formFromExpense(editing.expense, members) : start?.form ?? emptyForm(me)));
   // TG-62 GW1: the budget line, beside W1's state (walletRequest builds the body; the line goes on after, withBudgetKey)
   const budgetOn = !!flags.budgetLines;
-  const [line, setLine] = useState<string | null>(() => (editing ? initialLine(budget, editing.expense.budget_key, editing.expense.category ?? null) : null));
+  const [line, setLine] = useState<string | null>(() => (editing ? initialLine(budget, editing.expense.budget_key, editing.expense.category ?? null) : start?.line ?? null));
   const [seenReset, setSeenReset] = useState(lineReset);
   if (lineReset !== seenReset) {
     setSeenReset(lineReset);
@@ -73,6 +77,10 @@ export default function ExpenseForm({ wallet, me, busy, flags, editing, notice, 
     setLine((l) => lineAfterCategory(budget, l, s.category, c)); // a new category lists its own lines, none picked (G24); no row, no change (F1)
     set({ category: c });
   };
+  const typed = s.amount.trim() !== "" || s.note.trim() !== "";
+  useEffect(() => {
+    onDirty?.(typed);
+  }, [typed, onDirty]);
   const edit = !!editing; // with WALLET_SPLITS off, buildPatch refuses (never an add in its place: tg-review2 nit 1)
   const v2 = flags.walletSplits;
   const check = checkForm(s, members, flags);

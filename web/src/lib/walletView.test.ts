@@ -66,11 +66,11 @@ const patch = (over: Partial<ExpensePatch> = {}) =>
 test("W3-V1 B28 flags off shows today's screen: no compact cards, Categories or Activity; each flag adds its part", async () => {
   const { screenParts } = await load();
   // `by` isn't a part: the manager's decision (plan §2 addendum) sends ?by= whenever a person is picked, flags or not
-  assert.deepEqual(screenParts(OFF), { compactCards: false, categories: false, activity: false });
-  assert.deepEqual(screenParts(ON), { compactCards: true, categories: true, activity: true });
-  assert.deepEqual(screenParts({ ...OFF, walletSplits: true }), { compactCards: true, categories: true, activity: false }, "Edit lives in Details");
-  assert.deepEqual(screenParts({ ...OFF, walletActivity: true }), { compactCards: true, categories: false, activity: true }, "Comments live in Details");
-  assert.deepEqual(screenParts({ ...OFF, walletMultiPayer: true }), { compactCards: true, categories: false, activity: false }, "Paid by Ana ₱800 and Ben ₱480 is in Details");
+  assert.deepEqual(screenParts(OFF), { compactCards: false, categories: false, activity: false, outbox: false });
+  assert.deepEqual(screenParts(ON), { compactCards: true, categories: true, activity: true, outbox: false });
+  assert.deepEqual(screenParts({ ...OFF, walletSplits: true }), { compactCards: true, categories: true, activity: false, outbox: false }, "Edit lives in Details");
+  assert.deepEqual(screenParts({ ...OFF, walletActivity: true }), { compactCards: true, categories: false, activity: true, outbox: false }, "Comments live in Details");
+  assert.deepEqual(screenParts({ ...OFF, walletMultiPayer: true }), { compactCards: true, categories: false, activity: false, outbox: false }, "Paid by Ana ₱800 and Ben ₱480 is in Details");
 });
 
 // ---------------------------------------------------------------- B26: someone else saved first

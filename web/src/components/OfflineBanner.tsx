@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useReducer } from "react";
+import { flags } from "@/lib/flags";
 import { bannerReducer, bannerText, bannerVariant, initialBanner, isWallet, parseSwMessage } from "@/lib/offline";
 
 /**
@@ -39,7 +40,9 @@ export default function OfflineBanner() {
   }, []);
 
   const variant = bannerVariant(state);
-  const text = variant ? bannerText(variant, state.savedAt, pathname) : null;
+  // TG-70 B26: the outbox's own wallet tails only with its flag effective; off, today's call as it is (TG68-B4)
+  const waitHere = flags.offlineExpenses && flags.walletSplits;
+  const text = variant ? (waitHere ? bannerText(variant, state.savedAt, pathname, true) : bannerText(variant, state.savedAt, pathname)) : null;
   // TG-68: which banner shows, and whether it's a wallet's (ux §3). No path, slug or time
   useEffect(() => {
     if (variant) console.info("[tg-offline] banner variant=%s wallet=%s", variant, isWallet(pathname) ? "yes" : "no");

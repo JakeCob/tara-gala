@@ -7,11 +7,12 @@ import { changeLine, changes, type Snapshot } from "./walletActivity.ts";
 import { onlyUncategorized } from "./walletCategories.ts";
 import { SPLIT_COPY, pickWhoHad } from "./walletRequest.ts";
 
-export type ViewFlags = { walletSplits: boolean; walletMultiPayer: boolean; walletActivity: boolean };
+export type ViewFlags = { walletSplits: boolean; walletMultiPayer: boolean; walletActivity: boolean; offlineExpenses?: boolean };
 export type ScreenParts = {
   compactCards: boolean; // the short card with Details (ux §5), instead of today's card with its shares line and Delete
   categories: boolean; // the Categories box (ux §7)
   activity: boolean; // the Activity box (ux §8)
+  outbox: boolean; // TG-70: an add with no signal waits here (the queue, the Waiting box, the cue); it sends only v2 bodies
 };
 export type Sent = LegacyExpenseBody | ExpenseBodyV2 | ExpensePatch;
 
@@ -21,6 +22,7 @@ export function screenParts(f: ViewFlags): ScreenParts {
     compactCards: f.walletSplits || f.walletActivity || f.walletMultiPayer,
     categories: f.walletSplits,
     activity: f.walletActivity,
+    outbox: !!f.offlineExpenses && f.walletSplits,
   };
 }
 

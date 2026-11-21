@@ -9,11 +9,16 @@ import ActivityList from "@/components/wallet/ActivityList";
 import CategoryBox from "@/components/wallet/CategoryBox";
 import ExpenseDetails from "@/components/wallet/ExpenseDetails";
 import ExpenseForm, { type ExpenseSubmit, type SubmitContext } from "@/components/wallet/ExpenseForm";
+import WaitingList, { useOutbox } from "@/components/wallet/WaitingList";
 import { flags } from "@/lib/flags";
 import { cardMeta, payersWords } from "@/lib/walletActivity";
 import { categoryLabel, showingLine } from "@/lib/walletCategories";
 import { addOutcome, addedBy, editOutcome, screenParts, visibleExpenses } from "@/lib/walletView";
 import { budgetRefusal, sentCategory, sentLine } from "@/lib/budgetLines";
+import { OFFLINE_CUE, QUEUED, newExpenseId, queuedRow, settleLine, shouldQueue, type Queued, type QueuedBody } from "@/lib/outbox";
+import { OUTBOX_KICK, SEND_TIMEOUT_MS } from "@/lib/outboxRunner";
+import { outbox } from "@/lib/outboxStore";
+import { formFromBody, type FormState } from "@/lib/walletRequest";
 import { type TripFile, fetchFile, knownTrips, tripApi } from "@/lib/trip";
 import { runShare, shareDeps, type ShareOutcome } from "@/lib/itinerary";
 import {
@@ -30,6 +35,7 @@ import {
   whenLine,
   whoAmI,
   type Expense,
+  type ExpenseBodyV2,
   type ExpensePatch,
   type Settlement,
   type Transfer,
@@ -125,6 +131,12 @@ export default function WalletView({ slug }: { slug: string }) {
   const [qr, setQr] = useState<{ blob: Blob; label: string } | null>(null);
   // TG-52 PR 2: the payout QRs shared on the trip that holds this wallet (if this phone knows that trip)
   const [tripQrs, setTripQrs] = useState<{ trip: string; files: TripFile[] } | null>(null);
+  // TG-70 O3: this wallet's rows saved here with no signal (the Waiting box), and Put it in the form's row
+  const box = useOutbox(slug, landWallet, parts.outbox);
+  const [formStart, setFormStart] = useState<{ form: FormState; line: string | null } | null>(null);
+  const [refill, setRefill] = useState<string | null>(null); // the failed row now in the form: it leaves once that Save is kept
+  const [formDirty, setFormDirty] = useState(false); // the Add form has something typed
+  const [formBusy, setFormBusy] = useState<string | null>(null); // the row whose Put it in the form met a typed form
 
   useEffect(() => {
     let live = true;
@@ -234,6 +246,7 @@ export default function WalletView({ slug }: { slug: string }) {
     setBusy(true);
     setNotice(null);
     setSettleNotice(null);
+    box.clear(); // TG-70 ux §3: the box's sent lines stay until the next write
     const r = await op();
     setBusy(false);
     console.info("[tg-wallet] %s ok=%s", action, r.ok ? "yes" : r.why);
@@ -314,6 +327,8 @@ export default function WalletView({ slug }: { slug: string }) {
   function closeForm(backTo: string | null) {
     setEditing(null);
     setFormAlert(null);
+    setFormStart(null); // TG-70: Put it in the form's expense loads once; its row stays a failed card
+    setRefill(null);
     setFormKey((k) => k + 1);
     if (backTo) toExpense(backTo);
   }
@@ -326,10 +341,16 @@ export default function WalletView({ slug }: { slug: string }) {
     setBusy(true);
     setNotice(null);
     setSettleNotice(null);
+    box.clear();
     const before = load.state === "ready" ? load.wallet : wallet;
-    const r = await walletApi.addExpense(slug, body);
+    // TG-70 B10, B11, B24: with the outbox on, a v2 add carries its own id and gives up after 15 s; off, today's call as it is
+    const id = parts.outbox && "mode" in body ? newExpenseId() : null;
+    const sent = id ? ({ ...(body as ExpenseBodyV2), id } as QueuedBody) : null; // what's sent is what's kept
+    const startOnline = navigator.onLine;
+    const r = sent ? await walletApi.addExpense(slug, sent, { timeoutMs: SEND_TIMEOUT_MS }) : await walletApi.addExpense(slug, body);
     setBusy(false);
     console.info("[tg-wallet] expense add ok=%s", r.ok ? "yes" : r.why);
+    if (sent && !r.ok && shouldQueue(r) && (await queueAdd(sent, r, startOnline))) return true;
     const lineAlert = r.ok ? null : await lineRefusal(r, body);
     if (lineAlert) return refuseLine(lineAlert.text, lineAlert.r);
     const out = addOutcome(before, body, r);
@@ -341,8 +362,64 @@ export default function WalletView({ slug }: { slug: string }) {
       return false;
     }
     landWallet(out.wallet);
+    void dropRefill();
     setNotice({ text: out.text, error: false });
     return true;
+  }
+
+  /**
+   * TG-70 B10 to B12 (ux §1): an add with no answer, a timeout, a 5xx or a 429 waits here. It's kept first; then the form
+   * clears (the caller returns true), the box says QUEUED in its own live region, focus goes to its title, and the runner
+   * arms its timer. False when it can't be kept (no IndexedDB, B23): today's line then, with the form as typed.
+   */
+  async function queueAdd(sent: QueuedBody, r: WalletFailed, startOnline: boolean): Promise<boolean> {
+    // eslint-disable-next-line react-hooks/purity
+    const row = queuedRow(slug, sent, r, { now: Date.now(), online: { start: startOnline, end: navigator.onLine } });
+    try {
+      await outbox.queue(row);
+    } catch {
+      console.info("[tg-outbox] save queued=no");
+      return false;
+    }
+    void dropRefill();
+    box.say(QUEUED);
+    await box.reload();
+    requestAnimationFrame(() => document.getElementById("waiting-title")?.focus());
+    window.dispatchEvent(new Event(OUTBOX_KICK));
+    return true;
+  }
+
+  /** TG-70 B19 (plan §3): Put it in the form's row leaves once its new Save is sent or queued again. */
+  async function dropRefill() {
+    if (!refill) return;
+    setRefill(null);
+    setFormStart(null);
+    try {
+      await outbox.remove(refill);
+    } catch {
+      // no IndexedDB now: it can't be there either
+    }
+    await box.reload();
+  }
+
+  /** TG-70 B19 (ux §2): a failed row back in the Add form, to save it another way. Never over something typed. */
+  function toForm(q: Queued) {
+    if (formDirty) {
+      console.info("[tg-outbox] to-form busy=yes");
+      return setFormBusy(q.id);
+    }
+    console.info("[tg-outbox] to-form busy=no");
+    setFormBusy(null);
+    setEditing(null);
+    setFormAlert(null);
+    setFormStart({ form: formFromBody(q.body, wallet.members), line: sentLine(q.body) });
+    setRefill(q.id);
+    setFormKey((k) => k + 1);
+    requestAnimationFrame(() => {
+      const amount = document.getElementById("expense-amount");
+      amount?.scrollIntoView({ block: "center" });
+      amount?.focus({ preventScroll: true });
+    });
   }
 
   /**
@@ -553,6 +630,7 @@ export default function WalletView({ slug }: { slug: string }) {
           Save as Amounts
         </PixelButton>
       )}
+      {parts.outbox && !online && !editing && <p className={PX.meta}>{OFFLINE_CUE}</p>}
     </div>
   );
 
@@ -597,6 +675,8 @@ export default function WalletView({ slug }: { slug: string }) {
             flags={flags}
             editing={editing}
             notice={flags.walletSplits || flags.walletMultiPayer ? formNotice : undefined} // flags off: today's form, element for element (B28)
+            start={formStart ?? undefined}
+            onDirty={parts.outbox ? setFormDirty : undefined}
             onSubmit={submitExpense}
             onCancel={() => closeForm(editing?.expense.id ?? null)}
             onError={(text) => setNotice({ text, error: true })}
@@ -605,6 +685,7 @@ export default function WalletView({ slug }: { slug: string }) {
           <PixelBox as="section" aria-labelledby="settle-title" className="flex flex-col gap-3 p-4">
             <SectionTitle id="settle-title" tabIndex={-1} className="focus-pixel">Settle up</SectionTitle>
             <NoticeArea notice={settleNotice} className="flex flex-col empty:-mt-3" />
+            {parts.outbox && box.rows.length > 0 && <p className={PX.meta}>{settleLine(box.rows.length)}</p>}
             {wallet.transfers.length === 0 ? (
               <p className="text-sm text-muted">
                 {wallet.expenses.length === 0 ? "Add expenses, and this works out who pays whom." : "All square. Nobody owes anything."}
@@ -723,6 +804,7 @@ export default function WalletView({ slug }: { slug: string }) {
             <SectionTitle id="expenses-title" tabIndex={parts.categories ? -1 : undefined} className={parts.categories ? "focus-pixel" : undefined}>
               Expenses
             </SectionTitle>
+            {parts.outbox && <WaitingList box={box} members={wallet.members} formBusy={formDirty ? formBusy : null} onToForm={toForm} />}
             {filtering && (
               <p id="showing-line" tabIndex={-1} className="focus-pixel text-sm">
                 {showingLine(listed.length).text}{" "}
@@ -801,7 +883,7 @@ export default function WalletView({ slug }: { slug: string }) {
 
           <PayoutQr onSaved={() => setSettleNotice((n) => (n?.toPayout ? null : n))} />
 
-          {parts.activity && <ActivityList slug={slug} wallet={lineWallet} online={online} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
+          {parts.activity && <ActivityList slug={slug} wallet={lineWallet} online={online} waitHere={parts.outbox} onOpenExpense={(id) => openDetails(id, document.activeElement as HTMLElement | null)} />}
         </div>
       </div>
 

@@ -1368,3 +1368,13 @@ test("GW2-SW2 G31 offline after one load, the saved budget answers; SW_VERSION m
   assert.deepEqual(await off.response!.json(), body);
   assert.notEqual(tg().SW_VERSION, "2026-11-02.3");
 });
+
+test("T70-U12 (B25) an expense add, with or without the outbox's id, is never the worker's: POSTs to a wallet bypass", () => {
+  const slug = "a".repeat(32);
+  for (const origins of [LOCAL, PROD]) {
+    for (const path of [`/wallets/${slug}/expenses`, `/wallets/${slug}/expenses/11111111-1111-4111-8111-111111111111`]) {
+      assert.deepEqual(strategy(req(`${origins.api}${path}`, { method: "POST" }), origins), BYPASS, `POST ${path}`);
+      assert.deepEqual(strategy(req(`${origins.api}${path}`, { method: "PATCH" }), origins), BYPASS, `PATCH ${path}`);
+    }
+  }
+});

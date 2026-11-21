@@ -306,3 +306,43 @@ test("offline.ts is a plain module with no imports at all", () => {
   assert.doesNotMatch(source, /\benum\s/);
   assert.doesNotMatch(source, /\bnamespace\s/);
 });
+
+// ---------------------------------------------------------------- TG-70 O3 U11 (B26): the wallet's banner with the flag on
+// waitHere is the fourth input, optional, so T27-13 and TG-68's B1 to B5 above stay unedited (plan §4a, F6)
+const textWait = bannerText as (v: "A" | "B" | "C" | "D", savedAt: string | null, pathname?: string | null, waitHere?: boolean) => { lead: string; rest: string };
+const fullWait = (v: "A" | "B" | "C" | "D", path: string | null, waitHere?: boolean) => {
+  const { lead, rest } = textWait(v, "2026-11-24T23:02:00.000Z", path, waitHere);
+  return lead + rest;
+};
+
+test("T70-U11a flag on, on /w/: A and B end with `expenses you add will wait here`; C and D are TG-68's", () => {
+  process.env.TZ = "Asia/Manila";
+  for (const path of ["/w/abc123", "/w/" + "a".repeat(32)]) {
+    assert.equal(fullWait("A", path, true), "Offline · saved Nov 25, 7:02 AM · expenses you add will wait here", path);
+    assert.equal(fullWait("B", path, true), "Can't reach the server · saved Nov 25, 7:02 AM · expenses you add will wait here", path);
+    assert.equal(fullWait("C", path, true), "Offline · open this wallet once with signal to keep a copy on this phone", path);
+    assert.equal(fullWait("D", path, true), "Back online · saved Nov 25, 7:02 AM · tap Refresh for the latest", path);
+  }
+});
+
+test("T70-U11b flag off (false or left out) on /w/: TG-68's four, unchanged", () => {
+  process.env.TZ = "Asia/Manila";
+  for (const waitHere of [false, undefined]) {
+    assert.equal(fullWait("A", "/w/abc123", waitHere), "Offline · saved Nov 25, 7:02 AM · expenses you add won't save until there's signal");
+    assert.equal(fullWait("B", "/w/abc123", waitHere), "Can't reach the server · saved Nov 25, 7:02 AM · expenses you add won't save until it's back");
+  }
+});
+
+test("T70-U11c the flag-on tails never reach /t/ or any other page", () => {
+  process.env.TZ = "Asia/Manila";
+  for (const path of ["/t/abc123", "/", "/plan", "/wallet", "/whatever/w/abc", null]) {
+    assert.equal(fullWait("A", path, true), "Offline · saved Nov 25, 7:02 AM · schedules may have changed", String(path));
+    assert.equal(fullWait("B", path, true), "Can't reach the server · saved Nov 25, 7:02 AM · schedules may have changed", String(path));
+  }
+});
+
+test("T70-U11d OfflineBanner passes waitHere: the outbox flag, effective only with WALLET_SPLITS; off, today's call (TG68-B4)", () => {
+  const src = readFileSync(new URL("../components/OfflineBanner.tsx", import.meta.url), "utf8");
+  assert.match(src, /const waitHere = flags\.offlineExpenses && flags\.walletSplits;/);
+  assert.match(src, /waitHere \? bannerText\(variant, state\.savedAt, pathname, true\) : bannerText\(variant, state\.savedAt, pathname\)/);
+});
