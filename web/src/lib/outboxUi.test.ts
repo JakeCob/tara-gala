@@ -50,7 +50,7 @@ test("T70-U1 OutboxRunner is mounted next to ServiceWorkerManager, renders nothi
   assert.match(src, /addEventListener\("online", onOnline\)/);
   assert.match(src, /document\.visibilityState === "visible"/);
   assert.match(src, /addEventListener\(OUTBOX_KICK, onKick\)/, "a Save that queued arms the timer");
-  assert.match(src, /void go\(true\);/, "a page opening is a trigger (S1)");
+  assert.match(src, /window\.addEventListener\(OUTBOX_KICK, onKick\);\n\s+void go\(true\);/, "the mount itself is a trigger (S1), not only online");
   assert.match(src, /clearTimeout\(timer\)/);
   assert.match(src, /setTimeout\(\(\) => void go\(false\), next\)/, "the timer is the only non-trigger run");
 });
@@ -120,7 +120,7 @@ test("T70-U5 the box: its title (count), intro, where-note, its own live region,
   assert.match(src, /outbox\.list\(\)\.then\(\n\s+\(all\) => \{\n\s+setRows\(forWallet\(all, slug\)\);/, "waiting and failed rows, oldest first");
   assert.match(src, /paidBy\(q\.body, members\)/);
   assert.match(src, /savedAt\(q\.savedAt, box\.now\)/, "the time they were read, never Date.now() in render");
-  assert.match(src, /\{q\.body\.note \|\| NO_NOTE\}/);
+  assert.match(src, /\{q\.body\.note\.trim\(\) \|\| NO_NOTE\}/, "trimmed, as sentLines does");
   assert.match(src, /formatPeso\(q\.body\.amount_centavos\)/);
 });
 
@@ -147,11 +147,25 @@ test("T70-U6 Remove: aria-disabled while sending; the confirm asks removeAsk(q),
   assert.match(close, /outbox\.held\.delete\(id\);/);
   assert.match(src, /<p className="text-sm">\{removeAsk\(q\)\}<\/p>/);
   assert.match(src, /<PixelButton variant="primary" className="px-4 text-sm" onClick=\{\(\) => void remove\(q\.id\)\}>\s*\{REMOVE\}/);
-  assert.match(src, /<PixelButton variant="secondary" onClick=\{\(\) => keep\(q\.id\)\}>\s*\{REMOVE_KEEP\}/);
   const rm = inner(src, "async function remove(");
   assert.match(rm, /await outbox\.remove\(id\);/);
   assert.match(rm, /outbox\.held\.delete\(id\);/);
   assert.match(rm, /box\.say\(REMOVED\);/);
+});
+
+test("T70-U5f no rows and no line: no box at all (ux §2: it shows only for this wallet's queued rows)", () => {
+  const fn = slice(list(), "export default function WaitingList(", "\n}\n");
+  const early = fn.indexOf("if (!box.rows.length && !box.lines.length) return null;");
+  assert.ok(early > 0 && early < fn.indexOf("return ("), "before the box is drawn");
+});
+
+test("T70-U6b the confirm starts on Keep it, and Esc is Keep it (ux §2:75): a stray Enter never removes", () => {
+  const src = list();
+  assert.match(src, /<div className="flex flex-col gap-2" onKeyDown=\{\(e\) => \{\n\s+if \(e\.key === "Escape"\) keep\(q\.id\);\n\s+\}\}>/);
+  assert.match(src, /<PixelButton variant="secondary" autoFocus onClick=\{\(\) => keep\(q\.id\)\}>\s*\{REMOVE_KEEP\}/);
+  assert.doesNotMatch(src, /<PixelButton variant="primary"[^>]*autoFocus/, "never on Remove");
+  const close = inner(src, "function keep(");
+  assert.match(close, /getElementById\(`remove-\$\{id\}`\)\?\.focus\(\)/, "focus back on that row's Remove");
 });
 
 test("T70-U5d the box listens to the runner: Sending..., the wallet landed by the rev rule, the run's sent lines at its end", () => {
