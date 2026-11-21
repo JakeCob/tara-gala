@@ -204,7 +204,8 @@ MAX_ITEMS_SENT = 100  # a body bound only: the 40-item rule is the split's too_m
 # The codes a refusal carries in `detail` (ux.md §9 has a line for each). Strings, except the three in the docstrings below.
 SPLIT_CODES = ("shares_mismatch", "percent_total", "shares_zero", "extras_too_big", "item_no_one", "too_many_items",
                "amount_mismatch", "items_zero", "amount_too_big", "charge_too_big", "payers_mismatch")
-REFUSALS = SPLIT_CODES + ("feature_off", "expense_changed", "expense_gone", "comments_full", "unknown_member")
+REFUSALS = SPLIT_CODES + ("feature_off", "expense_changed", "expense_gone", "comments_full", "unknown_member",
+                         "id_taken")  # TG-70: an add's `id` is another wallet's expense
 
 
 def _once(member_ids: list[UUID]) -> None:
@@ -230,6 +231,9 @@ class _ExpenseV2(BaseModel):
     # TG-62: the budget line. On a patch, a body that leaves it out keeps the stored line (GA1 reads model_fields_set,
     # plan Rev 1 M2); only an explicit null clears it. The old request shape never has it (extra="forbid").
     budget_key: Literal["_none"] | BudgetKey | None = None
+    # TG-70: the phone's own id for a retry-safe add (the outbox). A resend of an id this wallet has seen is a replay:
+    # 200 and nothing written. Null is the same as leaving it out. An edit can't carry it (_Versioned).
+    id: UUID | None = None
 
     @model_validator(mode="after")
     def one_payer_form(self):
@@ -331,6 +335,13 @@ ExpenseInV2 = Annotated[Union[EqualIn, ExactIn, PercentIn, SharesIn, AdjustIn, I
 
 class _Versioned(BaseModel):
     version: int = Field(ge=1)  # the version the form opened; a stale one is 409 expense_changed
+
+    @model_validator(mode="after")
+    def no_id(self):
+        """TG-70 B6: every *Patch inherits _ExpenseV2's `id`, but an edit names its expense in the URL."""
+        if getattr(self, "id", None) is not None:
+            raise ValueError("an edit names its expense in the URL, not in the body")
+        return self
 
 
 class EqualPatch(EqualIn, _Versioned): ...
