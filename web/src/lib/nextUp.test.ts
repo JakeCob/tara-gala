@@ -330,7 +330,7 @@ test("T69-N11 never invents a time: every HH:MM in the card comes from the fixtu
 
 test("T69-N12 where we're staying: the trip's hotel, the plan's lodging, or none", () => {
   const h = during(up1("2026-11-26")).hotel;
-  assert.deepEqual(h, { from: "trip", name: HOTEL.name, address: HOTEL.address, mapsUrl: "https://www.google.com/maps/search/?api=1&query=Made-up%20Pine%20Inn%2C%2012%20Made-up%20Road%2C%20Sagada%2C%20Mountain%20Province", checkOut: null });
+  assert.deepEqual(h, { from: "trip", name: HOTEL.name, address: HOTEL.address, mapsUrl: "https://www.google.com/maps/search/?api=1&query=Made-up%20Pine%20Inn%2C%2012%20Made-up%20Road%2C%20Sagada%2C%20Mountain%20Province", checkIn: "2026-11-26T14:00:00", checkOut: null });
   const lodge = during(up1("2026-11-26", [], "12:00", null)).hotel;
   assert.equal(lodge?.from, "lodging");
   assert.equal(lodge?.from === "lodging" && lodge.name, "Pine Ridge Lodge");
@@ -350,11 +350,34 @@ test("T69-N12b check-out (S1): the line all day on check_out's Manila date; hidd
   const allDone = during(up1("2026-11-29", [done("d5-01")], "02:30"));
   assert.deepEqual(allDone.stop, { kind: "allDone" }, "the whole plan done still has its card");
   const loose = { ...HOTEL, check_out: null };
-  for (const d of ["2026-11-25", "2026-11-28", "2026-11-29"]) {
+  for (const d of ["2026-11-26", "2026-11-28", "2026-11-29"]) {
     const u = during(up1(d, [], "12:00", loose));
     assert.equal(u.hotel?.from === "trip" && u.hotel.checkOut, null, `no check_out: no line on ${d}`);
   }
   assert.equal(nextUp({ today: "2026-11-29", now: "12:00", trip: T1([], HOTEL), guide: null, city: "Sagada" }), null, "after check-out with no plan and no bus: no card");
+});
+
+test("T69-N12c check-in (review nit 3, ux §5.4): hidden before check-in's Manila date; the Check-in line all that day; a one-night stay shows check-out only", () => {
+  const hotel = (d: string, h: Hotel | null = HOTEL) => during(up1(d, [], "06:00", h)).hotel;
+  assert.equal(hotel("2026-11-25"), null, "Wed 25, still in Manila: no Sagada address, no Show the driver");
+  assert.notEqual(during(up1("2026-11-25")).stop, null, "the card stays, on its stop");
+  const thu = hotel("2026-11-26");
+  assert.equal(thu?.from === "trip" && thu.checkIn, "2026-11-26T14:00:00", "the check-in day, before 2 PM too");
+  assert.equal(thu?.from === "trip" && thu.checkOut, null);
+  assert.equal(during(up1("2026-11-26", [], "23:00")).hotel?.from === "trip", true, "and after it");
+  const fri = hotel("2026-11-27");
+  assert.equal(fri?.from === "trip" && fri.checkIn, null, "only on that day");
+  const noIn = { ...HOTEL, check_in: null };
+  const wed = hotel("2026-11-25", noIn);
+  assert.equal(wed?.from === "trip" && wed.checkIn, null, "no check_in: from start_date, with no line");
+  const oneNight = { ...HOTEL, check_in: "2026-11-27T14:00:00", check_out: "2026-11-27T22:00:00" };
+  assert.equal(hotel("2026-11-26", oneNight), null);
+  const same = hotel("2026-11-27", oneNight);
+  assert.equal(same?.from === "trip" && same.checkIn, null, "a one-night stay: check-out only");
+  assert.equal(same?.from === "trip" && same.checkOut, "2026-11-27T22:00:00");
+  assert.equal(hotel("2026-11-28", oneNight), null);
+  assert.equal(nextUp({ today: "2026-11-25", now: "12:00", trip: T1(), guide: null, city: "Sagada" }), null, "before check-in with no plan: no card");
+  assert.equal(during(up1("2026-11-25", [], "12:00", null)).hotel?.from, "lodging", "the plan's lodging has no check-in to key on");
 });
 
 test("T69-N13 Leaving tomorrow: the bus dated start_date, the to-dos left, all done still a card, nothing gives none", () => {
@@ -388,7 +411,8 @@ test("T69-N13b the jump for each stop part, and the log line (B18, B26): words a
   assert.deepEqual(jumpFor({ kind: "pick", day: 2, title: "x" }), { day: 2 }, "an unmade pick: the World, no dialog");
   assert.deepEqual(jumpFor({ kind: "todayDone", nextDay: 3, tomorrow: null }), { day: 3 }, "tomorrow's World, no dialog");
   for (const kind of ["allDone", "nothingToday", "opening"] as const) assert.equal(jumpFor({ kind }), null, kind);
-  assert.equal(nextUpLog("2026-11-25", T1(), up1("2026-11-25", [], "20:00")), "state=during parts=stop,bus,hotel");
+  assert.equal(nextUpLog("2026-11-25", T1(), up1("2026-11-25", [], "20:00")), "state=during parts=stop,bus", "before check-in: no hotel part (review nit 3)");
+  assert.equal(nextUpLog("2026-11-28", T1(), up1("2026-11-28", [], "09:00")), "state=during parts=stop,bus,hotel");
   assert.equal(nextUpLog("2026-11-29", T1(), up1("2026-11-29")), "state=during parts=stop");
   assert.equal(nextUpLog("2026-11-24", T1(), up1("2026-11-24")), "state=tomorrow parts=bus,todo");
   assert.equal(nextUpLog("2026-11-20", T1(), null), "state=before");
@@ -459,7 +483,7 @@ test("T69-C2 the card: one PixelBox section, its parts split by a 2px rule, colu
   for (const words of [
     "Next stop", "Bus today", "Bus tomorrow", "Where we&apos;re staying", "To-do", "Open in Google Maps", "Open on the map", "Open the to-do list",
     "Pick one first: ", "Today&apos;s plan is done.", "That&apos;s the whole plan. Ingat pauwi!", "Nothing on the plan for today.", "Opening the plan...",
-    "Not marked booked yet.</p>", "This bus isn&apos;t on the schedule any more.</p>", "No hotel added yet.</p>", "See Buses", "Add the hotel", "Check-out ", "Show the driver",
+    "Not marked booked yet.</p>", "This bus isn&apos;t on the schedule any more.</p>", "No hotel added yet.</p>", "See Buses", "Add the hotel", "Check-in ", "Check-out ", "Show the driver",
   ]) assert.ok(src.includes(words), words);
   // ux review S1: no inline links; each sentence ends, and a 44px secondary button follows it
   assert.doesNotMatch(src, /PX\.inlineLink|See <|Add it in/);
