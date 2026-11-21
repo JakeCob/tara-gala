@@ -13,6 +13,14 @@ const fn = (src: string, start: string) => {
   const end = src.indexOf("\n  }\n", i);
   return src.slice(i, end > i ? end : undefined);
 };
+// A top-level function ends at its own column-0 brace (tg-test's audit: toPayoutQr and NoticeArea are top-level)
+const top = (src: string, start: string) => {
+  const i = src.indexOf(start);
+  assert.ok(i >= 0, `${start} is in the source`);
+  const end = src.indexOf("\n}\n", i);
+  assert.ok(end > i, `${start} ends`);
+  return src.slice(i, end);
+};
 const MESSAGE = "You haven't added your payout QR on this phone yet. It's in My payout QR, near the end of this page.";
 
 test("TG68-Q1 no QR: Show my QR puts ux §1's message in Settle up's notice (setSettleNotice), as an error, and logs it", () => {
@@ -21,6 +29,7 @@ test("TG68-Q1 no QR: Show my QR puts ux §1's message in Settle up's notice (set
   assert.match(show, /setSettleNotice\(/);
   assert.ok(show.includes(MESSAGE), "ux §1's text");
   assert.match(show, /error: true/);
+  assert.ok(show.includes(`setSettleNotice({ text: ${JSON.stringify(MESSAGE)}, error: true, toPayout: true })`), "the notice asks for the button");
   assert.match(show, /console\.info\("\[tg-wallet\] show-my-qr none=yes"\)/, "the log, with no names");
   assert.ok(!view().includes("Add your payout QR below first, then show it here."), "the old text is gone");
 });
@@ -38,14 +47,16 @@ test("TG68-Q3 the notice carries Go to My payout QR: a secondary button with the
   assert.match(button, /variant="secondary"/);
   assert.match(button, /className="inline-flex items-center self-start px-4 text-sm"/);
   // It's drawn by the notice area, and only the settle box's notice asks for it
-  const area = fn(src, "function NoticeArea(");
+  const area = top(src, "function NoticeArea(");
   assert.ok(area.includes("Go to My payout QR"), "NoticeArea draws it");
   assert.ok(area.indexOf("{notice.text}") < area.indexOf("Go to My payout QR"), "under the text");
+  assert.match(area, /\{notice\.toPayout && \(\n\s+<PixelButton [^>]*onClick=\{toPayoutQr\}>\n\s+Go to My payout QR\n/, "only for the QR message, and it goes there");
 });
 
 test("TG68-Q4 Go to My payout QR scrolls the section's title to the top and focuses it; it never opens the file picker", () => {
   const src = view();
-  const go = fn(src, "function toPayoutQr(");
+  const go = top(src, "function toPayoutQr(");
+  assert.ok(go.length < 400, "only toPayoutQr itself");
   assert.match(go, /getElementById\("payout-title"\)/);
   assert.match(go, /scrollIntoView\(\{ block: "start" \}\)/);
   assert.match(go, /\.focus\(\{ preventScroll: true \}\)/);
