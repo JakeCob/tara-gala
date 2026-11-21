@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Nunito } from "next/font/google";
 import localFont from "next/font/local";
 import OfflineBanner from "@/components/OfflineBanner";
+import OutboxRunner from "@/components/OutboxRunner";
 import ServiceWorkerManager from "@/components/ServiceWorkerManager";
 import SiteHeader from "@/components/SiteHeader";
 import TabBar from "@/components/TabBar";
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <SiteHeader />
         {children}
         <TabBar />
+        <OutboxRunner />
         <ServiceWorkerManager />
       </body>
     </html>
