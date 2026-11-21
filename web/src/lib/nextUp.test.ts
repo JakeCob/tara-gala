@@ -459,8 +459,11 @@ test("T69-C2 the card: one PixelBox section, its parts split by a 2px rule, colu
   for (const words of [
     "Next stop", "Bus today", "Bus tomorrow", "Where we&apos;re staying", "To-do", "Open in Google Maps", "Open on the map", "Open the to-do list",
     "Pick one first: ", "Today&apos;s plan is done.", "That&apos;s the whole plan. Ingat pauwi!", "Nothing on the plan for today.", "Opening the plan...",
-    "Not marked booked yet. See ", "This bus isn&apos;t on the schedule any more. See ", "No hotel added yet. Add it in ", "Check-out ", "Show the driver",
+    "Not marked booked yet.</p>", "This bus isn&apos;t on the schedule any more.</p>", "No hotel added yet.</p>", "See Buses", "Add the hotel", "Check-out ", "Show the driver",
   ]) assert.ok(src.includes(words), words);
+  // ux review S1: no inline links; each sentence ends, and a 44px secondary button follows it
+  assert.doesNotMatch(src, /PX\.inlineLink|See <|Add it in/);
+  assert.equal(src.match(/className=\{AFTER\}/g)?.length, 2, "See Buses and Add the hotel");
   for (const helper of ["dayLine(", "shortDate(", "thenLine(", "tomorrowLine(", "todosLine(", "busLines(", "formatTime(", "hotelTime(", "mapsLabel("]) assert.ok(src.includes(helper), helper);
   assert.doesNotMatch(src, /["'`>]\d{1,2}:\d{2}/, "no time written into the card");
   assert.doesNotMatch(src, /role="status"|aria-live/, "a moving card doesn't talk (B25)");

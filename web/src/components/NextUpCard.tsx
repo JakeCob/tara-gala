@@ -14,7 +14,7 @@ const PART = "flex min-w-0 flex-col gap-2 border-b-2 border-border py-3 last:bor
 const COLUMNS = ["", "md:grid md:grid-cols-1", "md:grid md:grid-cols-2", "md:grid md:grid-cols-3"];
 const LABEL = "text-sm font-semibold";
 const FULL = "flex w-full items-center justify-center px-4 text-sm"; // a secondary button's layout, full width
-const INLINE = cx(PX.inlineLink, "inline-flex min-h-11 items-center"); // a button inside a line, still 44px tall
+const AFTER = "inline-flex items-center self-start px-4 text-sm"; // a secondary button after its sentence (ux review S1)
 const smooth = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 
 /**
@@ -83,12 +83,12 @@ export default function NextUpCard({ up, onJump }: { up: NextUp; onJump: Jump })
   );
 }
 
-/** "Buses", inside a sentence: opens the map's Buses panel */
+/** After a bus's sentence: opens the map's Buses panel */
 function BusesButton({ onJump }: { onJump: Jump }) {
   return (
-    <button type="button" className={INLINE} onClick={() => onJump({ menu: "buses" })}>
-      Buses
-    </button>
+    <PixelButton variant="secondary" className={AFTER} onClick={() => onJump({ menu: "buses" })}>
+      See Buses
+    </PixelButton>
   );
 }
 
@@ -122,7 +122,7 @@ function StopBody({ stop, onJump }: { stop: StopPart; onJump: Jump }) {
         ) : (
           <>
             <p className="text-base break-words">{stop.plan}</p>
-            <p className="text-sm">See <BusesButton onJump={onJump} />.</p>
+            <BusesButton onJump={onJump} />
           </>
         ))}
       {stop.kind === "busRow" && then}
@@ -144,14 +144,26 @@ function StopBody({ stop, onJump }: { stop: StopPart; onJump: Jump }) {
 
 /** A bus's lines (ux §5.3): every one from its `trips` row, always with its checked date and the confirm note */
 function BusLines({ part, onJump }: { part: BusPart; onJump: Jump }) {
-  if (part.kind === "gone") return <p className="text-sm">This bus isn&apos;t on the schedule any more. See <BusesButton onJump={onJump} />.</p>;
+  if (part.kind === "gone") {
+    return (
+      <>
+        <p className="text-sm">This bus isn&apos;t on the schedule any more.</p>
+        <BusesButton onJump={onJump} />
+      </>
+    );
+  }
   const l = busLines(part);
   return (
     <>
       <p className="font-bold tabular-nums">{l.time}</p>
       <p className="text-sm break-words">{l.route}</p>
       <p className={PX.meta}>{l.checked}</p>
-      {!part.booked && <p className="text-sm">Not marked booked yet. See <BusesButton onJump={onJump} />.</p>}
+      {!part.booked && (
+        <>
+          <p className="text-sm">Not marked booked yet.</p>
+          <BusesButton onJump={onJump} />
+        </>
+      )}
     </>
   );
 }
@@ -192,9 +204,12 @@ function HotelBody({ hotel }: { hotel: HotelPart }) {
     <>
       <p className={LABEL}>Where we&apos;re staying</p>
       {hotel.from === "none" ? (
-        <p className="text-sm">
-          No hotel added yet. Add it in <button type="button" className={INLINE} onClick={toHotel}>Where we&apos;re staying</button>.
-        </p>
+        <>
+          <p className="text-sm">No hotel added yet.</p>
+          <PixelButton variant="secondary" className={AFTER} onClick={toHotel}>
+            Add the hotel
+          </PixelButton>
+        </>
       ) : (
         <>
           <p className="font-bold break-words">{hotel.name}</p>
