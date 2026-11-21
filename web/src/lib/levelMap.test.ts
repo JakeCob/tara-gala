@@ -255,7 +255,7 @@ test("LM5 a level's place opens in Google Maps by name", () => {
 test("LM6 a level's tag and a world's tab stay on one line", () => {
   const map = readFileSync("src/components/LevelMap.tsx", "utf8");
   assert.match(map, /absolute -bottom-3 left-1\/2 -translate-x-1\/2 whitespace-nowrap", PX\.screenTag/, "the tag is shrink-to-fit, so \"3-10\" would break at the hyphen");
-  assert.match(map, /className="min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm"/, "three tabs fit 320 only with text-xs and px-1");
+  assert.match(readFileSync("src/lib/levelMap.ts", "utf8"), /tab: "min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm"/, "three tabs fit 320 only with text-xs and px-1");
   assert.doesNotMatch(map, /· \{ls\.filter/, "no dot in the tab");
 });
 
