@@ -459,3 +459,118 @@ test("TG66-W3-3 B27 afterWrite: a write's wallet with a lower rev than the scree
   const other = { state: "ready" as const, wallet: { ...revWallet(50), share_slug: "d".repeat(32) } };
   assert.deepEqual(afterWrite(other, revWallet(1)), { state: "ready", wallet: revWallet(1) }, "another wallet's screen isn't this one's");
 });
+
+// ---------------------------------------------------------------- TG-70 O2: the add's timeout and Retry-After (test-plan L12)
+
+type Init70 = RequestInit & { signal?: AbortSignal };
+/** A fake fetch that keeps every init. `hang`: never answers, only rejects when its signal aborts (as a real fetch does). */
+async function withFetch70<T>(answer: Response | "hang", run: (inits: Init70[]) => Promise<T>): Promise<T> {
+  const real = globalThis.fetch;
+  const inits: Init70[] = [];
+  globalThis.fetch = ((_url: string, init?: Init70) => {
+    inits.push(init ?? {});
+    if (answer !== "hang") return Promise.resolve(answer);
+    return new Promise((_, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("The operation was aborted.", "AbortError")));
+      setTimeout(() => reject(new Error("test guard: the request was never aborted")), 3000); // fail fast, not at the 60 s cap
+    });
+  }) as typeof fetch;
+  try {
+    return await run(inits);
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+const V2_ADD = { mode: "equal", paid_by: "a", amount_centavos: 45000, note: "Taxi (made up)", category: null, by: "a", inputs: [{ member_id: "a", value: 1 }] } as const;
+
+test("T70-L12 addExpense with timeoutMs: an answer that never comes is offline with timedOut, after the abort", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  await withFetch70("hang", async (inits) => {
+    const started = Date.now();
+    const r = await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 30 });
+    assert.deepEqual(r, { ok: false, why: "offline", timedOut: true });
+    assert.ok(Date.now() - started >= 25, "it waited for the timeout");
+    assert.ok(inits[0].signal instanceof AbortSignal, "the fetch got a signal");
+    assert.equal(inits[0].signal?.aborted, true);
+  });
+});
+
+test("T70-L12 S2 the timeout doesn't need AbortSignal.timeout (iOS before 16 lacks it)", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const real = Object.getOwnPropertyDescriptor(AbortSignal, "timeout");
+  delete (AbortSignal as { timeout?: unknown }).timeout;
+  try {
+    assert.equal("timeout" in AbortSignal, false);
+    await withFetch70(json(201, revWallet(2)), async () => {
+      const r = await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 1000 });
+      assert.equal(r.ok, true, "it still sends");
+    });
+    await withFetch70("hang", async () => {
+      assert.deepEqual(await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 20 }), { ok: false, why: "offline", timedOut: true }, "and still times out");
+    });
+  } finally {
+    if (real) Object.defineProperty(AbortSignal, "timeout", real);
+  }
+  const source = readFileSync(new URL("./wallet.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /AbortSignal\.timeout/);
+  assert.match(source, /clearTimeout/);
+});
+
+test("T70-L12 B24 addExpense without the option: no signal in the init, and the request is today's byte for byte", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const old = { paid_by: "a", amount_centavos: 1000, note: "Taxi", split_among: ["a", "b"] };
+  await withFetch70(json(201, revWallet(1)), async (inits) => {
+    assert.ok((await walletApi.addExpense(W, old)).ok);
+    assert.deepEqual(Object.keys(inits[0]).sort(), ["body", "cache", "headers", "method"]);
+    assert.equal("signal" in inits[0], false);
+    assert.equal(inits[0].body, JSON.stringify(old));
+    assert.deepEqual(inits[0].headers, { "content-type": "application/json" });
+  });
+  await withFetch70(json(201, revWallet(1)), async (inits) => {
+    assert.ok((await walletApi.addExpense(W, old, {})).ok);
+    assert.equal("signal" in inits[0], false, "an empty option is no option");
+  });
+});
+
+test("T70-L12 a fast answer clears the timer: nothing aborts later", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  await withFetch70(json(201, revWallet(3)), async (inits) => {
+    assert.ok((await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 20 })).ok);
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(inits[0].signal?.aborted, false);
+  });
+});
+
+test("T70-L12 a 429's Retry-After is carried in seconds; without the header there's no retryAfter", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const with429 = new Response(JSON.stringify({ detail: "rate_limited" }), { status: 429, headers: { "content-type": "application/json", "retry-after": "120" } });
+  await withFetch70(with429, async () => {
+    assert.deepEqual(await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 1000 }), { ok: false, why: "rate_limited", retryAfter: 120 });
+  });
+  await withFetch70(json(429, { detail: "rate_limited" }), async () => {
+    assert.deepEqual(await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never), { ok: false, why: "rate_limited" });
+  });
+  const junk = new Response("{}", { status: 429, headers: { "retry-after": "soon" } });
+  await withFetch70(junk, async () => {
+    assert.deepEqual(await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never), { ok: false, why: "rate_limited" }, "an unreadable header is no header");
+  });
+});
+
+test("T70-L12 a thrown fetch without a timeout stays plain offline (no timedOut)", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new TypeError("Failed to fetch");
+  }) as typeof fetch;
+  try {
+    assert.deepEqual(await walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 1000 }), { ok: false, why: "offline" });
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test("T70-L12 DETAIL is exported, and failureMessage still reads it", async () => {
+  const { DETAIL, failureMessage } = (await import("./wallet.ts")) as typeof import("./wallet.ts") & { DETAIL?: Record<string, string> };
+  assert.ok(DETAIL, "DETAIL is exported");
+  for (const [code, line] of Object.entries(DETAIL)) assert.equal(failureMessage({ why: "rejected", detail: code }), line);
+});
