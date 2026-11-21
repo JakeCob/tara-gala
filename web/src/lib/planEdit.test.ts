@@ -306,7 +306,7 @@ test("T61-W9c need_pin brings the link's name, so the pin step can fill it in; a
   assert.deepEqual(JSON.parse(String(sent[0].init.body)), { link: "https://maps.app.goo.gl/x", name: "Neko-ya", pin: "16.4138, 120.5964" });
   answer(422, { detail: "bad_pin" });
   const bad = await tripApi.suggest(TRIP, { base: { itinerary_slug: "c0ffee", seq: 5 }, at: { after: "d1-03" }, place: { link: "https://maps.app.goo.gl/x", pin: "0,0" } });
-  assert.equal(planFailureMessage(bad as never), "Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.");
+  assert.equal(planFailureMessage(bad as never), "Those numbers aren't a pin. Paste the two numbers Google Maps shows, with a comma between."); // TG-68 ux.md §6
   assert.equal(planOutcome(bad as never), "bad_pin");
   assert.equal(planOutcome({ ok: false, why: "rejected", detail: "link_no_pin" }), "other", "retired in round 5");
 });
