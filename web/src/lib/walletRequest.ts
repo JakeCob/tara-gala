@@ -3,8 +3,9 @@
 // With WALLET_SPLITS off the add sends today's body byte for byte (plan §2, B18a): WalletView.tsx at a1c4299, lines 87
 // and 91 to 96. With WALLET_MULTI_PAYER off it never sends payers. Every ₱ shown comes from walletSplit.ts, the twin of
 // the server's split. The copy is ux.md §3, §4 and §9's. Pure: the components (components/wallet/) only render this.
-import { formatPeso, parsePeso, splitEqual } from "./wallet.ts";
+import { DETAIL, failureMessage, formatPeso, parsePeso, splitEqual } from "./wallet.ts";
 import type { Category, Charge, Expense, ExpenseBodyV2, ExpensePatch, InputRow, LegacyExpenseBody, Member, SplitMode } from "./wallet.ts";
+import { FAILED, FAILED_ANY, FAILED_OFF, type Queued } from "./outbox.ts";
 import { MAX_ITEMS, chargeAmount, firstPayer, trySplit, type Shares, type SplitCode, type SplitItem } from "./walletSplit.ts";
 
 export type FormFlags = { walletSplits: boolean; walletMultiPayer: boolean };
@@ -475,3 +476,40 @@ export function formFromExpense(e: Expense, members: Member[]): FormState {
   return { ...s, mode: "exact", exact: Object.fromEntries(e.shares.map((x) => [x.member_id, pesoInput(x.share_centavos)])) };
 }
 
+// ---------------------------------------------------------------- TG-70: a queued add that the API refused
+
+/**
+ * B19a (F5): a failed row's line, the first that matches. failureMessage's generic default ("That didn't save…") is
+ * never used for a queued row: its own fallback, FAILED_ANY, says what to do with it.
+ */
+export function failedLine(q: Pick<Queued, "why" | "detail" | "seq" | "body">): string {
+  if (q.why === "not_found") return q.detail === "feature_off" ? FAILED_OFF : FAILED + failureMessage({ why: "not_found" });
+  const code = q.why === "rejected" ? q.detail : undefined;
+  if (code && Object.hasOwn(DETAIL, code)) return FAILED + DETAIL[code];
+  if (code === "item_no_one") return FAILED + pickWhoHad("items" in q.body ? q.body.items[(q.seq ?? 0) - 1]?.name : undefined);
+  if (code && Object.hasOwn(SPLIT_COPY, code)) return FAILED + SPLIT_COPY[code as keyof typeof SPLIT_COPY];
+  return FAILED_ANY;
+}
+
+/**
+ * TG-70 "Put it in the form": a queued v2 body back as the form that built it (the reverse of buildBody, round-trip
+ * tested for every mode). Never carries the body's id: Save makes a new one. The line is budgetLines' sentLine(body).
+ */
+export function formFromBody(body: ExpenseBodyV2, members: Member[]): FormState {
+  const payers = "payers" in body ? body.payers : undefined;
+  const e: Expense = {
+    id: "",
+    paid_by: "paid_by" in body ? body.paid_by : (payers?.[0]?.member_id ?? members[0]?.id ?? ""),
+    amount_centavos: body.amount_centavos ?? 0,
+    note: body.note,
+    created_at: "",
+    shares: [],
+    category: body.category ?? null,
+    mode: body.mode,
+    ...(body.mode === "itemized"
+      ? { items: body.items.map((it, i) => ({ ...it, seq: i + 1 })), charges: body.charges }
+      : { inputs: body.inputs }),
+    ...(payers ? { payers } : {}),
+  };
+  return formFromExpense(e, members);
+}

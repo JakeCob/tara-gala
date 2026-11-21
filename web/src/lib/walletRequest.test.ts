@@ -620,7 +620,7 @@ test("T70-L19 B19a failedLine: the table's rows, in order", async () => {
   assert.equal(failedLine(queued({ why: "rejected", detail: "item_no_one", seq: 2 }, items)), "Couldn't send. Pick who had Strawberry taho.");
   assert.equal(failedLine(queued({ why: "rejected", detail: "item_no_one", seq: 9 }, items)), "Couldn't send. Pick who had each item.");
   // everything else
-  for (const detail of ["id_taken", undefined, "something_new", "unknown_budget_line", "budget_line_category"]) {
+  for (const detail of ["id_taken", undefined, "something_new", "unknown_budget_line", "budget_line_category", "toString", "constructor", "__proto__"]) {
     assert.equal(failedLine(queued({ why: "rejected", ...(detail ? { detail } : {}) })), ANY, String(detail));
   }
   // failureMessage's generic default is never used for a queued row
