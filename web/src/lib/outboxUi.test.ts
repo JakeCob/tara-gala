@@ -18,7 +18,6 @@ const slice = (src: string, start: string, end: string) => {
   assert.ok(j > i, `${start} ends`);
   return src.slice(i, j);
 };
-const top = (src: string, start: string) => slice(src, start, "\n}\n");
 const inner = (src: string, start: string) => slice(src, start, "\n  }\n");
 
 const view = () => read("src/components/WalletView.tsx");
@@ -42,7 +41,7 @@ test("T70-L14 screenParts: outbox is NEXT_PUBLIC_OFFLINE_EXPENSES and WALLET_SPL
 test("T70-U1 OutboxRunner is mounted next to ServiceWorkerManager, renders nothing, and only wires events and the timer", () => {
   const layout = read("src/app/layout.tsx");
   assert.match(layout, /import OutboxRunner from "@\/components\/OutboxRunner";/);
-  assert.match(layout, /<ServiceWorkerManager \/>\n\s+<OutboxRunner \/>/);
+  assert.match(layout, /<OutboxRunner \/>\n\s+<ServiceWorkerManager \/>/, "next to it; the manager stays last (S1)");
   const src = runnerTsx();
   assert.match(src, /^"use client";/);
   assert.match(src, /return null;\n\}\n/, "renders nothing");
@@ -118,9 +117,9 @@ test("T70-U5 the box: its title (count), intro, where-note, its own live region,
   assert.match(src, /<SectionTitle id="waiting-title" tabIndex=\{-1\} className="focus-pixel">\s*\{boxTitle\(box\.rows\.length\)\}\s*<\/SectionTitle>/);
   assert.match(src, /<p className=\{PX\.meta\}>\{BOX_INTRO\}<\/p>\s*<p className=\{PX\.meta\}>\{WHERE_NOTE\}<\/p>/, "B10b: the where-note, always");
   assert.match(src, /<div aria-live="polite"[^>]*>\s*\{box\.lines\.map\(/);
-  assert.match(src, /setRows\(forWallet\(await outbox\.list\(\), slug\)\)/, "waiting and failed rows, oldest first");
+  assert.match(src, /outbox\.list\(\)\.then\(\n\s+\(all\) => \{\n\s+setRows\(forWallet\(all, slug\)\);/, "waiting and failed rows, oldest first");
   assert.match(src, /paidBy\(q\.body, members\)/);
-  assert.match(src, /savedAt\(q\.savedAt, Date\.now\(\)\)/);
+  assert.match(src, /savedAt\(q\.savedAt, box\.now\)/, "the time they were read, never Date.now() in render");
   assert.match(src, /\{q\.body\.note \|\| NO_NOTE\}/);
   assert.match(src, /formatPeso\(q\.body\.amount_centavos\)/);
 });
@@ -133,7 +132,7 @@ test("T70-U5b the chip: a label in the banner's accent, 2px frame, text-xs semib
 test("T70-U5c a failed row: alertText with failedLine, MAYBE_LANDED when it may have landed, and Put it in the form", () => {
   const src = list();
   assert.match(src, /<PixelBox tone="alertText" className="flex flex-col gap-1 p-3 text-sm">\s*<p>\{failedLine\(q\)\}<\/p>\s*\{q\.mayHaveLanded && <p className=\{PX\.meta\}>\{MAYBE_LANDED\}<\/p>\}/);
-  assert.match(src, /\{q\.state === "failed" && \(\s*<PixelButton variant="secondary" className="min-h-11" onClick=\{\(\) => onToForm\(q\)\}>\s*\{TO_FORM\}/, "only a failed row");
+  assert.match(src, /\{q\.state === "failed" && \(\s*<PixelButton variant="secondary" onClick=\{\(\) => onToForm\(q\)\}>\s*\{TO_FORM\}/, "only a failed row (secondary's skin is 44 px)");
   assert.match(src, /\{formBusy === q\.id && <p className="text-sm">\{FORM_BUSY\}<\/p>\}/, "on that card");
   assert.match(src, /<div className="flex flex-wrap gap-2">/, "the buttons wrap only when they must (320)");
 });
@@ -147,8 +146,8 @@ test("T70-U6 Remove: aria-disabled while sending; the confirm asks removeAsk(q),
   const close = inner(src, "function keep(");
   assert.match(close, /outbox\.held\.delete\(id\);/);
   assert.match(src, /<p className="text-sm">\{removeAsk\(q\)\}<\/p>/);
-  assert.match(src, /<PixelButton variant="primary" className="min-h-11 px-4 text-sm" onClick=\{\(\) => void remove\(q\.id\)\}>\s*\{REMOVE\}/);
-  assert.match(src, /<PixelButton variant="secondary" className="min-h-11" onClick=\{\(\) => keep\(q\.id\)\}>\s*\{REMOVE_KEEP\}/);
+  assert.match(src, /<PixelButton variant="primary" className="px-4 text-sm" onClick=\{\(\) => void remove\(q\.id\)\}>\s*\{REMOVE\}/);
+  assert.match(src, /<PixelButton variant="secondary" onClick=\{\(\) => keep\(q\.id\)\}>\s*\{REMOVE_KEEP\}/);
   const rm = inner(src, "async function remove(");
   assert.match(rm, /await outbox\.remove\(id\);/);
   assert.match(rm, /outbox\.held\.delete\(id\);/);
@@ -200,7 +199,7 @@ test("T70-U7c ExpenseForm takes an optional start and onDirty; with neither it's
   assert.match(src, /onDirty\?: \(dirty: boolean\) => void;/);
   assert.match(src, /useState<FormState>\(\(\) => \(editing \? formFromExpense\(editing\.expense, members\) : start\?\.form \?\? emptyForm\(me\)\)\)/);
   assert.match(src, /editing \? initialLine\(budget, editing\.expense\.budget_key, editing\.expense\.category \?\? null\) : start\?\.line \?\? null/);
-  assert.match(src, /const typed = s\.amount\.trim\(\) !== "" \|\| s\.note\.trim\(\) !== "";\n\s+useEffect\(\(\) => onDirty\?\.\(typed\), \[typed, onDirty\]\);/);
+  assert.match(src, /const typed = s\.amount\.trim\(\) !== "" \|\| s\.note\.trim\(\) !== "";\n\s+useEffect\(\(\) => \{\n\s+onDirty\?\.\(typed\);\n\s+\}, \[typed, onDirty\]\);/);
   const v = view();
   assert.match(v, /start=\{formStart \?\? undefined\}/);
   assert.match(v, /onDirty=\{parts\.outbox \? setFormDirty : undefined\}/);
@@ -217,7 +216,7 @@ test("T70-U8 B10a: the cue sits right above Add only with the flag effective, of
 
 test("T70-U9 B22: Settle up's line right under its title, from this wallet's rows, failed ones counted", () => {
   const src = view();
-  assert.match(src, /<SectionTitle id="settle-title" tabIndex=\{-1\} className="focus-pixel">Settle up<\/SectionTitle>\n\s+\{parts\.outbox && box\.rows\.length > 0 && <p className=\{PX\.meta\}>\{settleLine\(box\.rows\.length\)\}<\/p>\}/);
+  assert.match(src, /<SectionTitle id="settle-title" tabIndex=\{-1\} className="focus-pixel">Settle up<\/SectionTitle>\n\s+<NoticeArea notice=\{settleNotice\} className="flex flex-col empty:-mt-3" \/>\n\s+\{parts\.outbox && box\.rows\.length > 0 && <p className=\{PX\.meta\}>\{settleLine\(box\.rows\.length\)\}<\/p>\}/, "under the title and its notice area (T53-W19), above the transfers");
   assert.doesNotMatch(src, /box\.rows\.filter/, "waiting and failed both count");
 });
 
