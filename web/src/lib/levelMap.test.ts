@@ -449,3 +449,35 @@ test("T67-W6 placeMapsUrl: a Sagada spot searches Mountain Province; terminals g
 test("T67-W6b LevelMap hands the city on to LevelDialog, so a Sagada spot's Maps link can't fall back to Benguet (review S1)", () => {
   assert.match(readFileSync(new URL("../components/LevelMap.tsx", import.meta.url), "utf8"), /<LevelDialog [^>]*\bcity=\{city\}/);
 });
+
+// ---------------------------------------------------------------- TG-67 follow-up: the World tabs on a 5-day trip (ux-review-S4 B21 Must 1)
+
+test("TG67-WT1 more than 3 Worlds: a 3-column grid, so 5 tabs sit 3 then 2, with px-0.5 to fit '12/12' at 320", async () => {
+  const { worldTabs } = (await import("./levelMap.ts")) as typeof import("./levelMap.ts") & { worldTabs?: (n: number) => { nav: string; tab: string } };
+  assert.ok(worldTabs, "levelMap.ts exports worldTabs");
+  for (const n of [4, 5, 7]) {
+    const { nav, tab } = worldTabs(n);
+    assert.match(nav, /(^| )grid( |$)/, `${n} Worlds: a grid`);
+    assert.match(nav, /(^| )grid-cols-3( |$)/, `${n} Worlds: 3 per row`);
+    assert.match(nav, /(^| )md:flex md:flex-wrap( |$)/, `${n} Worlds: today's row from md up`);
+    assert.match(tab, /(^| )px-0\.5( |$)/);
+    assert.doesNotMatch(tab, /(^| )px-1( |$)/);
+    assert.match(tab, /(^| )min-w-0 flex-1 whitespace-nowrap( |$)/);
+  }
+});
+
+test("TG67-WT2 3 Worlds or fewer: today's classes, byte for byte (Baguio unchanged)", async () => {
+  const { worldTabs } = (await import("./levelMap.ts")) as typeof import("./levelMap.ts") & { worldTabs?: (n: number) => { nav: string; tab: string } };
+  assert.ok(worldTabs, "levelMap.ts exports worldTabs");
+  for (const n of [1, 2, 3]) {
+    assert.deepEqual(worldTabs(n), { nav: "flex flex-wrap gap-2", tab: "min-w-0 flex-1 whitespace-nowrap px-1 text-xs md:px-3 md:text-sm" }, `${n} Worlds`);
+  }
+});
+
+test("TG67-WT3 LevelMap's Days nav and its tabs take their classes from worldTabs(guide.days.length)", () => {
+  const map = readFileSync("src/components/LevelMap.tsx", "utf8");
+  assert.match(map, /worldTabs\(guide\.days\.length\)/);
+  assert.match(map, /<nav aria-label="Days" className=\{tabs\.nav\}>/);
+  assert.match(map, /className=\{tabs\.tab\} onClick=\{\(\) => goTo\(d\.day\)\}/);
+  assert.doesNotMatch(map, /aria-label="Days" className="flex flex-wrap gap-2"/, "no hard-coded row left");
+});
