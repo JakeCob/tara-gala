@@ -487,7 +487,16 @@ test("T69-C3 LevelMap's jump: a new n only; goTo for the World (M1), then the di
   assert.ok(effect.indexOf("goTo(to.day)") < effect.indexOf("setOpen("), "the World first, then the dialog");
   assert.match(effect, /setOpen\(\(o\) => \(\{ key: to\.key!?, tap: \(o\?\.tap \?\? 0\) \+ 1 \}\)\)/, "as a tap on the level does");
   assert.match(effect, /setMenu\(to\.menu\);/);
-  assert.match(effect, /scrollIntoView\(/, "the panel scrolls in");
+  // tg-review N2: the target is the opened panel, held by a ref; no walk up the DOM
+  assert.doesNotMatch(src, /parentElement/);
+  assert.match(effect, /if \(menu === to\.menu && panel\.current\) scrollToPanel\(panel\.current\);/, "an open panel scrolls in now");
+  assert.match(effect, /panelDue\.current = true;\n\s+setMenu\(to\.menu\);/, "a new one once it's drawn");
+  const show = src.slice(src.indexOf("const showPanel = "), src.indexOf("\n  };\n", src.indexOf("const showPanel = ")));
+  assert.match(show, /panel\.current = el;\n\s+if \(!el \|\| !panelDue\.current\) return;\n\s+panelDue\.current = false;\n\s+scrollToPanel\(el\);/);
+  assert.match(src, /const scrollToPanel = \(el: HTMLElement\) => el\.scrollIntoView\(/);
+  assert.match(src, /\{menu === "buses" && \(\n\s+<div ref=\{showPanel\} className="flex flex-col gap-5">/, "the Buses panel");
+  assert.match(src, /\{menu === "todo" && <Todo [^\n]*panel=\{showPanel\} \/>\}/, "the To-do panel");
+  assert.match(fn(src, "function Todo("), /<section ref=\{panel\} className="flex flex-col gap-2">\n\s+<h3 className=\{PX\.dataHeading\}>To do before the trip<\/h3>/);
   assert.doesNotMatch(effect, /progress-title/);
   assert.doesNotMatch(fn(view(), "export default function TripView("), /progress-title"\)\?\.scrollIntoView|getElementById\("progress-title"\)/, "TripView doesn't scroll as well");
   assert.match(read("src/components/RecapView.tsx"), /<LevelMap\b/);
