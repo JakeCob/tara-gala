@@ -123,14 +123,22 @@ export const WALLET_TAILS: BannerTails = {
   C: "open this wallet once with signal to keep a copy on this phone",
   D: "tap Refresh for the latest",
 };
+/**
+ * TG-70 B26: with the outbox on, an expense added offline waits here, so the wallet's A and B say so. The words are
+ * outbox.ts's BANNER_WAIT (this file has no imports; outboxUi's test keeps the two equal).
+ */
+export const WALLET_WAIT_TAILS: BannerTails = { ...WALLET_TAILS, A: "expenses you add will wait here", B: "expenses you add will wait here" };
 /** A wallet's page (/w/…): its banner talks about expenses (TG-68 ux §3). */
 export const isWallet = (pathname: string | null | undefined): boolean => !!pathname?.startsWith("/w/");
 
-/** ux.md's four strings (TG-68: a wallet's own four). `lead` is shown bold; lead + rest is the whole banner. */
-export function bannerText(v: Variant, savedAt: string | null, pathname?: string | null): { lead: string; rest: string } {
+/**
+ * ux.md's four strings (TG-68: a wallet's own four; TG-70: `waitHere`, the outbox flag, for its A and B). `lead` is shown
+ * bold; lead + rest is the whole banner.
+ */
+export function bannerText(v: Variant, savedAt: string | null, pathname?: string | null, waitHere?: boolean): { lead: string; rest: string } {
   const formatted = formatSavedAt(savedAt);
   const saved = formatted ? `saved ${formatted}` : "saved time unknown";
-  const tail = isWallet(pathname) ? WALLET_TAILS : TAILS;
+  const tail = isWallet(pathname) ? (waitHere ? WALLET_WAIT_TAILS : WALLET_TAILS) : TAILS;
   switch (v) {
     case "A":
       return { lead: "Offline", rest: `${SEP}${saved}${SEP}${tail.A}` };
