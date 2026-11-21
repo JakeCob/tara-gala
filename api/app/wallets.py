@@ -27,6 +27,8 @@ from uuid import UUID
 
 from typing import Union
 
+import psycopg
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from . import db, storage, wallet_activity, wallet_splits
@@ -486,35 +488,86 @@ def _feature_off(share_slug: str, what: str) -> HTTPException:
 
 @router.post("/wallets/{share_slug}/expenses", status_code=201, response_model=WalletOut)
 def add_expense(share_slug: str, body: Union[ExpenseIn, ExpenseInV2], request: Request, response: Response) -> WalletOut:
-    """The old body (no `mode`), as before, or TG-66's: a mode, one payer or several, a category and `by`."""
-    _limit(WRITE_LIMITER, request, "expense")
-    if isinstance(body, ExpenseIn):
-        return _add_legacy(share_slug, body, response, request.app.state.flags.budget_lines)
+    """The old body (no `mode`), as before, or TG-66's: a mode, one payer or several, a category and `by`.
+
+    TG-70: a v2 body may carry the phone's own `id`. Its first step is the replay check (plan Rev 2 F1), before the
+    limit and the flag checks: an id this wallet has seen answers 200 with the wallet as it is now and writes nothing,
+    whatever changed since. Without `id`, today's order exactly: the limit, the flags, then the wallet."""
     flags = request.app.state.flags
+    if isinstance(body, ExpenseIn) or body.id is None:
+        _limit(WRITE_LIMITER, request, "expense")
+        if isinstance(body, ExpenseIn):
+            return _add_legacy(share_slug, body, response, flags.budget_lines)
+        _v2_allowed(share_slug, body, flags)
+        with db.get_conn() as conn:
+            wallet, logged = _add_v2(conn, _wallet_id(conn, share_slug, lock=True), body, flags, share_slug)
+    else:
+        with db.get_conn() as conn:
+            wallet_id = _wallet_id(conn, share_slug, lock=True)  # resends of one id go one at a time (B5)
+            found = _replay(conn, wallet_id, body.id, share_slug)
+            if found is not None:
+                wallet = _load(conn, wallet_id, budget=flags.budget_lines)
+                response.status_code = 200
+                _private(response)
+                logger.info("wallet expense add replay share_slug=%s found=%s rev=%d", share_slug, found, wallet.rev)
+                return wallet
+            _limit(WRITE_LIMITER, request, "expense")  # a refusal here rolls back and frees the lock
+            _v2_allowed(share_slug, body, flags)
+            wallet, logged = _add_v2(conn, wallet_id, body, flags, share_slug)
+    _private(response)
+    logger.info("wallet expense add share_slug=%s mode=%s payers=%d people=%d items=%d amount=%d category=%s budget=%s %s%s",
+                share_slug, body.mode, *logged, _counts(wallet), " client_id=yes" if body.id is not None else "")
+    return wallet
+
+
+def _v2_allowed(share_slug: str, body, flags) -> None:
+    """The v2 add's two flag checks: 404 feature_off for payers with WALLET_MULTI_PAYER off, or a non-free mode with
+    WALLET_SPLITS off."""
     if body.payers is not None and not flags.wallet_multi_payer:
         raise _feature_off(share_slug, "add")
     if body.mode not in FREE_MODES and not flags.wallet_splits:
         raise _feature_off(share_slug, "add")
+
+
+def _replay(conn, wallet_id: UUID, expense_id: UUID, share_slug: str) -> str | None:
+    """TG-70: "live" if `expense_id` is this wallet's expense, "deleted" if this wallet's activity has its
+    expense_add (the row stays after a delete: no FK, append-only), else None. Another wallet's expense is 409
+    id_taken. With the wallet row locked, so a first send and its resend can't both miss."""
+    row = conn.execute("select wallet_id from expenses where id = %s", (expense_id,)).fetchone()
+    if row is not None:
+        if row["wallet_id"] == wallet_id:
+            return "live"
+        raise _refuse(share_slug, "add", 409, "id_taken")
+    seen = conn.execute(
+        "select 1 from wallet_activity where wallet_id = %s and expense_id = %s and action = 'expense_add' limit 1",
+        (wallet_id, expense_id),
+    ).fetchone()
+    return "deleted" if seen is not None else None
+
+
+def _add_v2(conn, wallet_id: UUID, body, flags, share_slug: str) -> tuple[WalletOut, tuple]:
+    """Today's v2 add, in the caller's locked transaction: the wallet after it, and the add line's counts (payers,
+    people, items, amount, category, budget word). With `body.id`, the expense is stored under that id."""
     category = body.category if flags.wallet_splits else None  # dropped, not refused (plan §2's flag table)
     # TG-62 G9: the line is dropped, not refused, with BUDGET_LINES off, and with WALLET_SPLITS off (with the category)
     wanted = body.budget_key if flags.budget_lines and flags.wallet_splits else None
-    with db.get_conn() as conn:
-        wallet_id = _wallet_id(conn, share_slug, lock=True)
-        amount, shares, paid_by, payers = _v2_split(conn, wallet_id, body, share_slug, "add")
-        key = _sent_line(wanted, category, _line_categories(conn, wallet_id) if wanted else None, share_slug, "add")
-        _wallet_has_room(conn, wallet_id, share_slug)
+    amount, shares, paid_by, payers = _v2_split(conn, wallet_id, body, share_slug, "add")
+    key = _sent_line(wanted, category, _line_categories(conn, wallet_id) if wanted else None, share_slug, "add")
+    _wallet_has_room(conn, wallet_id, share_slug)
+    try:
         expense_id = conn.execute(
-            """insert into expenses (wallet_id, paid_by, amount_centavos, note, split_mode, category, budget_key)
-               values (%s, %s, %s, %s, %s, %s, %s) returning id""",
-            (wallet_id, paid_by, amount, body.note, body.mode, category, key),
+            """insert into expenses (id, wallet_id, paid_by, amount_centavos, note, split_mode, category, budget_key)
+               values (coalesce(%s::uuid, gen_random_uuid()), %s, %s, %s, %s, %s, %s, %s) returning id""",
+            (body.id, wallet_id, paid_by, amount, body.note, body.mode, category, key),
         ).fetchone()["id"]
-        _store_split(conn, expense_id, body, shares, payers)
-        wallet = _recorded(conn, wallet_id, "expense_add", body.by, expense_id, budget=flags.budget_lines)
-    _private(response)
-    logger.info("wallet expense add share_slug=%s mode=%s payers=%d people=%d items=%d amount=%d category=%s budget=%s %s",
-                share_slug, body.mode, len(payers or {}) or 1, len(shares), len(getattr(body, "items", None) or []),
-                amount, category, _budget_word(key), _counts(wallet))
-    return wallet
+    except psycopg.errors.UniqueViolation as e:
+        if e.diag.constraint_name != "expenses_pkey":  # N1: only the id itself; anything else is a bug, so a 500
+            raise
+        raise _refuse(share_slug, "add", 409, "id_taken") from None  # another wallet's insert won the race (B4)
+    _store_split(conn, expense_id, body, shares, payers)
+    wallet = _recorded(conn, wallet_id, "expense_add", body.by, expense_id, budget=flags.budget_lines)
+    return wallet, (len(payers or {}) or 1, len(shares), len(getattr(body, "items", None) or []), amount, category,
+                    _budget_word(key))
 
 
 def _wallet_has_room(conn, wallet_id: UUID, share_slug: str) -> None:
