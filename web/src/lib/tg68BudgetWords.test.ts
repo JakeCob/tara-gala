@@ -67,9 +67,10 @@ test("TG68-N2b no wallet in the answer, or the key isn't in it: today's `under a
 });
 
 test("TG68-N2c unknown_budget_line is unchanged, and anything else is still null", () => {
-  for (const args of [[], [BUDGET, "guide"]] as const) {
-    assert.equal(refuse("unknown_budget_line", ...args), "That budget line isn't in the plan any more. Pick another, or leave it for later.");
-    assert.equal(refuse("percent_total", ...args), null);
+  const cases: [WalletBudget | undefined, string | undefined][] = [[undefined, undefined], [BUDGET, "guide"]];
+  for (const [budget, key] of cases) {
+    assert.equal(refuse("unknown_budget_line", budget, key), "That budget line isn't in the plan any more. Pick another, or leave it for later.");
+    assert.equal(refuse("percent_total", budget, key), null);
   }
 });
 
