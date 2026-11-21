@@ -232,6 +232,8 @@ test("T69-N7b the next bus that hasn't left (G3): strictly after now, Manila's c
   const g12 = pickBus(withGone, "12:00");
   assert.equal(g12?.kind === "bus" && g12.row.trip_id, "t-1430", "a timed row still to leave beats a gone one");
   assert.deepEqual(pickBus(withGone, "15:00"), { kind: "gone", direction: "outbound" }, "once nothing timed is left, the gone row shows");
+  // tg-test Gate 3: a time with seconds compares as minutes, so a 09:00:00 bus has left at 09:00 (a string compare says not)
+  assert.equal(pickBus([{ table: "getting_there", row: bus(busTrip("t-sec", "09:00:00", "A", "B"), "2026-12-05", true) }], "09:00"), null);
   assert.equal(toMinutes("22:30"), 1350);
   assert.equal(toMinutes("22:30:00"), 1350);
   assert.equal(toMinutes("07:05"), 425);
@@ -401,6 +403,10 @@ test("T69-N13 Leaving tomorrow: the bus dated start_date, the to-dos left, all d
   const unbooked = guideOf({ ...G1, todo: [], getting_there: table([bus(OUT, "2026-11-25", false)]) });
   const ub = nextUp({ today: "2026-11-24", now: "12:00", trip: T1(), guide: unbooked, city: "Sagada" }) as Extract<NextUp, { state: "tomorrow" }>;
   assert.equal(ub.bus?.kind === "bus" && ub.bus.booked, false);
+  // tg-test Gate 3: no bus on start_date and every to-do done still gives the card (ux §8.1)
+  const doneNoBus = guideOf({ ...G1, getting_there: table([]) });
+  const allTicked = ["01", "02", "03"].map((k) => ({ key: `todo:${k}`, value: "done", updated_at: "x" }));
+  assert.deepEqual(nextUp({ today: "2026-11-24", now: "12:00", trip: T1(allTicked), guide: doneNoBus, city: "Sagada" }), { state: "tomorrow", date: "2026-11-25", bus: null, todos: { left: 0 } });
   const nothing = guideOf({ ...G1, todo: [], getting_there: table([]) });
   assert.equal(nextUp({ today: "2026-11-24", now: "12:00", trip: T1(), guide: nothing, city: "Sagada" }), null);
 });
