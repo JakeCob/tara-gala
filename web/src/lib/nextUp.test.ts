@@ -20,6 +20,21 @@ const WEB = new URL("../../", import.meta.url);
 const ROOT = new URL("../", WEB);
 /** A source file, or "" before it exists (RED), so each check fails on its own assertion */
 const read = (path: string) => (existsSync(new URL(path, WEB)) ? readFileSync(new URL(path, WEB), "utf8") : "");
+const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+/** The branch's base, as palette.test.ts finds it: where it left origin/main. CI's shallow checkout of the PR merge commit
+ * has no merge base, but there HEAD is main + the PR, so it diffs origin/main. Null when origin/main isn't there at all */
+function mergeBase(): string | null {
+  try {
+    return git("merge-base", "origin/main", "HEAD").trim();
+  } catch {
+    try {
+      git("rev-parse", "--verify", "origin/main");
+      return "origin/main";
+    } catch {
+      return null;
+    }
+  }
+}
 /** From `start` to the end of that top-level function */
 const fn = (src: string, start: string) => {
   const at = src.indexOf(start);
@@ -595,11 +610,12 @@ test("T69-F1 Who's coming folds its per-person lines during the trip; the summar
   assert.match(view(), /<TripPeople trip=\{trip\} plan=\{slot\} busy=\{busy\} apply=\{apply\} fold=\{up\?\.state === "during" \|\| undefined\} \/>/);
 });
 
-test("T69-F2 the other faces and openFace don't change: TripPeople's diff is the fold only", () => {
-  const base = execFileSync("git", ["merge-base", "origin/main", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
-  const diff = execFileSync("git", ["diff", base, "--", "web/src/components/TripPeople.tsx", "web/src/lib/people.ts"], { cwd: ROOT, encoding: "utf8" });
+test("T69-F2 the other faces and openFace don't change: TripPeople's diff is the fold only", (t) => {
+  const base = mergeBase();
+  if (!base) return t.skip("no origin/main in this checkout, so there's no diff to read");
+  // On main after the merge the diff is empty, and that passes: F1 pins the fold itself
+  const diff = git("diff", base, "--", "web/src/components/TripPeople.tsx", "web/src/lib/people.ts");
   const changed = diff.split("\n").filter((l) => /^[+-](?![+-])/.test(l));
-  assert.ok(changed.length > 0, "the fold is in");
   for (const l of changed) assert.match(l, /fold|TG-69|\}: \{$|comingLines\(list\)\.map/, l);
   assert.doesNotMatch(diff, /people\.ts/);
 });
@@ -644,10 +660,11 @@ test("T69-D3 the driver log carries no address or name", () => {
 
 // ---------------------------------------------------------------- fences
 
-test("T69-X1 only the plan's files change: no API, schema, worker or package file", () => {
-  const base = execFileSync("git", ["merge-base", "origin/main", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
-  const files = execFileSync("git", ["diff", "--name-only", base], { cwd: ROOT, encoding: "utf8" }).trim().split("\n").filter(Boolean);
-  const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: ROOT, encoding: "utf8" }).trim().split("\n").filter(Boolean);
+test("T69-X1 only the plan's files change: no API, schema, worker or package file", (t) => {
+  const base = mergeBase();
+  if (!base) return t.skip("no origin/main in this checkout, so there's no diff to read");
+  const files = git("diff", "--name-only", base).trim().split("\n").filter(Boolean);
+  const untracked = git("ls-files", "--others", "--exclude-standard").trim().split("\n").filter(Boolean);
   const allowed = [
     "README.md", "web/src/lib/nextUp.ts", "web/src/lib/nextUp.test.ts", "web/src/lib/api.ts", "web/src/lib/flags.ts", "web/src/lib/flags.test.ts",
     "web/src/components/NextUpCard.tsx", "web/src/components/DriverView.tsx", "web/src/components/TripView.tsx", "web/src/components/LevelMap.tsx",
