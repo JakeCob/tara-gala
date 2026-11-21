@@ -23,7 +23,7 @@ import {
   type Queued,
   type SentNote,
 } from "@/lib/outbox";
-import { OUTBOX_EVENT, type OutboxEvent } from "@/lib/outboxRunner";
+import { OUTBOX_EVENT, outboxSending, type OutboxEvent } from "@/lib/outboxRunner";
 import { outbox } from "@/lib/outboxStore";
 import { formatPeso, type Member, type Wallet } from "@/lib/wallet";
 import { failedLine } from "@/lib/walletRequest";
@@ -46,7 +46,7 @@ export type OutboxBox = {
 export function useOutbox(slug: string, onWallet: (w: Wallet) => void, enabled: boolean): OutboxBox {
   const [rows, setRows] = useState<Queued[]>([]);
   const [now, setNow] = useState(0);
-  const [sending, setSending] = useState<string | null>(null);
+  const [sending, setSending] = useState<string | null>(() => [...outboxSending][0] ?? null); // a run may be mid-send (M1)
   const [lines, setLines] = useState<string[]>([]);
   const run = useRef<SentNote[]>([]); // this run's sent and gone rows, for one set of lines at its end
   const wallet = useRef(onWallet);

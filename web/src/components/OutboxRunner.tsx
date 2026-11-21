@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { outbox } from "@/lib/outboxStore";
-import { OUTBOX_EVENT, OUTBOX_KICK, outboxRunner } from "@/lib/outboxRunner";
+import { OUTBOX_EVENT, OUTBOX_KICK, outboxRunner, outboxSending } from "@/lib/outboxRunner";
 import { walletApi } from "@/lib/wallet";
 
 /**
@@ -17,6 +17,7 @@ export default function OutboxRunner() {
       send: walletApi.addExpense,
       onLine: () => navigator.onLine,
       now: Date.now,
+      sending: outboxSending,
       dispatch: (e) => window.dispatchEvent(new CustomEvent(OUTBOX_EVENT, { detail: e })),
     });
     let timer: ReturnType<typeof setTimeout> | undefined;

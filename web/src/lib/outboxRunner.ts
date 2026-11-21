@@ -8,6 +8,8 @@ import type { Wallet, WalletResult } from "./wallet.ts";
 export const SEND_TIMEOUT_MS = 15000; // B11: a send with no answer by then counts as no signal
 export const OUTBOX_EVENT = "tg-outbox"; // the runner → the open wallet (WaitingList)
 export const OUTBOX_KICK = "tg-outbox-kick"; // the wallet → the runner: a row was queued, so arm the timer
+/** The page's row in flight (one at a time), for a Waiting box that mounts mid-run: its Remove is disabled (B20a). */
+export const outboxSending = new Set<string>();
 
 /** One try's news for the open wallet: `sending` before it, its outcome after, and one `end` per run that sent anything. */
 export type OutboxEvent =
@@ -21,6 +23,7 @@ export type RunnerDeps = {
   onLine: () => boolean;
   now: () => number;
   dispatch: (e: OutboxEvent) => void;
+  sending: Set<string>; // the row in flight: OutboxRunner passes outboxSending, a test its own
 };
 
 const MIN_WAIT_MS = 1000; // a held, due row waits for its confirm: never a busy loop
@@ -33,19 +36,32 @@ function nextDelay(rows: Queued[], now: number): number | null {
   return at.length ? Math.max(MIN_WAIT_MS, Math.min(...at) - now) : null;
 }
 
+/** The row as the store holds it now, if it's still waiting: Remove may have taken it since the run began (M1). */
+async function stillWaiting(d: RunnerDeps, id: string): Promise<Queued | null> {
+  const now = (await d.store.list()).find((q) => q.id === id);
+  return now && now.state === "waiting" ? now : null;
+}
+
 /** One try of one row, and what it did to the store. `dropLine` sends again at once with budget_key null (B18). */
 async function sendOne(d: RunnerDeps, row: Queued): Promise<SendOutcome> {
   let q = row;
   for (;;) {
     d.dispatch({ outcome: "sending", slug: q.slug, id: q.id });
+    d.sending.add(q.id);
+    let r: WalletResult;
     const start = d.onLine(); // D1: online at the start or the end may have reached the server
-    const r = await d.send(q.slug, q.body, { timeoutMs: SEND_TIMEOUT_MS });
+    try {
+      r = await d.send(q.slug, q.body, { timeoutMs: SEND_TIMEOUT_MS });
+    } finally {
+      d.sending.delete(q.id);
+    }
     const out = afterSend(q, r, { now: d.now(), online: { start, end: d.onLine() } });
     console.info(sendLog(out.kind, out.row.tries));
+    const kept = out.kind === "sent" || out.kind === "replayedGone" || (await stillWaiting(d, q.id)) !== null;
     if (out.kind === "sent" || out.kind === "replayedGone") await d.store.remove(q.id);
-    else await d.store.update(out.row);
+    else if (kept) await d.store.update(out.row); // never put back a row removed while it was in flight
     d.dispatch({ outcome: out.kind, slug: q.slug, id: q.id, row: out.row, wallet: r.ok ? r.wallet : undefined });
-    if (out.kind !== "dropLine") return out;
+    if (out.kind !== "dropLine" || !kept) return out;
     q = out.row;
   }
 }
@@ -63,7 +79,9 @@ async function runOnce(d: RunnerDeps, trigger: boolean): Promise<number | null> 
   let sent = 0;
   for (const row of list) {
     if (d.store.held.has(row.id)) continue; // B20a: its Remove confirm opened during this run
-    const out = await sendOne(d, row);
+    const fresh = await stillWaiting(d, row.id); // M1: removed (or failed) since the run began: never sent
+    if (!fresh) continue;
+    const out = await sendOne(d, fresh);
     sent++;
     if (out.kind === "retry" && out.row.why === "offline" && !d.onLine()) break; // no signal: the rest wait for the next trigger
   }
@@ -80,14 +98,18 @@ export function outboxRunner(d: RunnerDeps): { run: (trigger: boolean) => Promis
   let running: Promise<number | null> | null = null;
   let again: boolean | null = null; // a run asked meanwhile, and whether any of those was a trigger
   async function loop(trigger: boolean): Promise<number | null> {
-    let next = await runOnce(d, trigger);
-    while (again !== null) {
-      const t = again;
+    try {
+      let next = await runOnce(d, trigger);
+      while (again !== null) {
+        const t = again;
+        again = null;
+        next = await runOnce(d, t);
+      }
+      return next;
+    } finally {
+      running = null; // a send that throws mustn't leave the page's runner stuck
       again = null;
-      next = await runOnce(d, t);
     }
-    running = null;
-    return next;
   }
   return {
     run(trigger) {
