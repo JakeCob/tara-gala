@@ -60,6 +60,8 @@ type Props = {
   spending?: Spending;
   /** TG-67: the plan's city, for the province in a spot's Google Maps search. Without it, Baguio's */
   city?: string;
+  /** TG-69: where the trip page's Next up card sends the map; a new n each time. Only the trip page passes it */
+  jump?: { day?: number; key?: string; menu?: "buses" | "todo"; n: number };
 };
 
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
@@ -75,7 +77,7 @@ const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of t
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap, spending, city }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap, spending, city, jump }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -196,6 +198,31 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
     tabPicked.current = true;
     setWorld(n);
   };
+  // TG-69: the Next up card moves the map. A World goes through goTo, the tab tap's own path, so closing the dialog
+  // doesn't snap back to the group's day (review M1); then the level's dialog, as a tap on it opens it, or a menu panel
+  const moveTo = (to: NonNullable<Props["jump"]>) => {
+    if (to.day !== undefined) {
+      goTo(to.day);
+      tabTapped.current = true; // goTo's scroll to the lit level, on the World already showing too; no second scroll (review D1)
+    }
+    if (to.key) {
+      onOpenLevel?.();
+      setOpen((o) => ({ key: to.key!, tap: (o?.tap ?? 0) + 1 }));
+    }
+    if (to.menu) {
+      setMenu(to.menu);
+      // The Trip menu is this map's first nav, above its open panel: found from the world, so no new attribute is drawn
+      requestAnimationFrame(() => screen.current?.parentElement?.parentElement?.querySelector("nav")?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+    }
+  };
+  // Once per tap: the n seen on mount never replays, so a remount or a poll doesn't reopen anything. Like the chat's
+  // find step above: after any render
+  const lastJump = useRef(jump?.n);
+  useEffect(() => {
+    if (!jump || jump.n === lastJump.current) return;
+    lastJump.current = jump.n;
+    moveTo(jump);
+  });
 
   return (
     <div className="flex flex-col gap-4">

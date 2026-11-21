@@ -48,6 +48,11 @@ export function manilaToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 }
 
+/** TG-69: the time in Manila as HH:MM, 00 to 23, whatever the phone's own zone. */
+export function manilaNow(at: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+}
+
 export function formatClass(c: string): string {
   return c.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }

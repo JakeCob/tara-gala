@@ -53,11 +53,13 @@ function Avatar({ slug, file, name }: { slug: string; file: TripFile | undefined
   );
 }
 
-export default function TripPeople({ trip, plan, busy, apply }: {
+export default function TripPeople({ trip, plan, busy, apply, fold }: {
   trip: Trip;
   busy: boolean;
   plan: Guide | "frame" | null;
   apply: (action: string, op: () => Promise<TripResult>) => Promise<TripResult>;
+  /** TG-69: the Next up card shows during the trip, so the coming face keeps its summary and folds the names away (ux §3) */
+  fold?: boolean;
 }) {
   const slug = trip.share_slug;
   const list = peopleOf(trip);
@@ -200,7 +202,7 @@ export default function TripPeople({ trip, plan, busy, apply }: {
       {face === "coming" && (
         <>
           <p className="text-sm font-semibold">{comingSummary(list)}</p>
-          {comingLines(list).map((line) => (
+          {!fold && comingLines(list).map((line) => (
             <p key={line} className="min-w-0 text-sm break-words">{line}</p>
           ))}
         </>

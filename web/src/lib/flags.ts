@@ -15,6 +15,7 @@ export type Flags = {
   budgetLines: boolean;
   recapLinks: boolean;
   offlineExpenses: boolean;
+  nextUp: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -31,6 +32,7 @@ export const FLAG_DEFAULTS: Flags = {
   budgetLines: false, // TG-62: the wallet's budget line and the trip's Budget panel; off sends no budget_key and makes no budget request
   recapLinks: false, // TG-64: the trip page's Trip recap box and /r/<slug>, until the API's RECAP_LINKS is on
   offlineExpenses: false, // TG-70: Add expense with no signal waits here and sends itself; needs walletSplits; off sends today's add
+  nextUp: false, // TG-69: the trip page's Next up card, the Who's coming fold and Show the driver; web only
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -63,6 +65,7 @@ export function readFlags(): Flags {
     budgetLines: parseFlag(process.env.NEXT_PUBLIC_BUDGET_LINES, FLAG_DEFAULTS.budgetLines),
     recapLinks: parseFlag(process.env.NEXT_PUBLIC_RECAP_LINKS, FLAG_DEFAULTS.recapLinks),
     offlineExpenses: parseFlag(process.env.NEXT_PUBLIC_OFFLINE_EXPENSES, FLAG_DEFAULTS.offlineExpenses),
+    nextUp: parseFlag(process.env.NEXT_PUBLIC_NEXT_UP, FLAG_DEFAULTS.nextUp),
   };
 }
 
