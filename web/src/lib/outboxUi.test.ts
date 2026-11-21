@@ -174,7 +174,7 @@ test("T70-U5d the box listens to the runner: Sending..., the wallet landed by th
   assert.match(src, /if \(e\.outcome === "end"\) \{/);
   assert.match(src, /setLines\(sentLines\(run\.current, formatPeso\)\)/);
   assert.match(src, /if \(e\.slug !== slug\) return;/, "another wallet's sends say nothing here");
-  assert.match(src, /if \(e\.outcome === "sending"\) return setSending\(e\.id\);/);
+  assert.match(src, /if \(e\.outcome === "sending"\) \{\n\s+setLines\(\[\]\); \/\/ tg-ux2 S1: the save line goes once a send starts\n\s+return setSending\(e\.id\);\n\s+\}/);
   assert.match(src, /if \(e\.wallet\) wallet\.current\(e\.wallet\);/, "landWallet: a lower rev never replaces the screen");
 });
 
