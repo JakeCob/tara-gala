@@ -269,3 +269,15 @@ test("T70-U7d Put it in the form's expense isn't loaded again when the form clos
   assert.match(fn, /setFormStart\(null\);/);
   assert.match(fn, /setRefill\(null\);/, "the row stays a failed card, to put in the form again");
 });
+
+// ---------------------------------------------------------------- tg-ux2's O3 review (ux-review-O3.md)
+
+test("T70-U16 M1: with the flag on, Activity's offline or 5xx read says ACTIVITY_OFFLINE, never the write's 'wasn't saved'", () => {
+  const src = read("src/components/wallet/ActivityList.tsx");
+  assert.match(src, /export const ACTIVITY_OFFLINE = "No signal, so Activity may be missing the newest changes\.";/);
+  assert.match(src, /waitHere\?: boolean;/, "an optional prop: flag off, today's list (B24)");
+  assert.match(src, /const readFailure = \(r: WalletFailed\) => \(waitHere && \(r\.why === "offline" \|\| r\.why === "server"\) \? ACTIVITY_OFFLINE : failureMessage\(r\)\);/);
+  assert.equal(src.split("setFailed(readFailure(r))").length - 1, 2, "the first page and Older");
+  assert.doesNotMatch(src, /setFailed\(failureMessage\(/);
+  assert.match(view(), /<ActivityList slug=\{slug\} wallet=\{lineWallet\} online=\{online\} waitHere=\{parts\.outbox\} /);
+});
