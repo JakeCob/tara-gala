@@ -205,6 +205,39 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         {copyLine && <p className={PX.meta}>{copyLine}</p>}
       </header>
 
+      {/* TG-68 ux §7: the Trip menu and its open panel above the day's block, the Days row and the map: it's the whole trip's */}
+      {!recap && (
+        <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
+          {([["buses", "Buses"], ["budget", "Budget"], ["todo", "To-do"], ["sources", "Sources"], ...(photos ? [["album", "Album"]] : [])] as [Menu, string][]).map(([key, name]) => (
+            <PixelButton key={key} variant={menu === key ? "primary" : "secondary"} aria-pressed={menu === key} className="px-3 text-sm"
+              onClick={() => {
+                if (key === "budget" && menu !== "budget") shownSpending?.onOpen();
+                console.info("[tg-trip] menu %s=%s", key, menu === key ? "close" : "open"); // TG-68: the menu sits above the map now
+                setMenu(menu === key ? null : key);
+              }}>
+              <span className="font-bold">{name}</span>
+            </PixelButton>
+          ))}
+        </nav>
+      )}
+      {menu === "buses" && (
+        <div className="flex flex-col gap-5">
+          <Buses table={guide.getting_there} onSwap={editor && ((index) => setSwapping({ table: "getting_there", index }))} can={!!editor?.can} />
+          <Buses table={guide.getting_home} onSwap={editor && ((index) => setSwapping({ table: "getting_home", index }))} can={!!editor?.can} />
+        </div>
+      )}
+      {menu === "budget" &&
+        (editing && editor ? (
+          <EditPanel title="Budget per person"><BudgetEdits editor={editor} guide={guide} /></EditPanel>
+        ) : shownSpending?.load !== undefined && shownSpending.load !== "loading" && shownSpending.load.ok && shownSpending.load.budget.state === "ok" ? (
+          <BudgetPanel guide={guide} budget={shownSpending.load.budget} walletSlug={shownSpending.walletSlug} me={shownSpending.me} returnDate={shownSpending.returnDate} today={shownSpending.today} />
+        ) : (
+          <Budget guide={guide}>{shownSpending && <SpendingNote load={shownSpending.load} />}</Budget>
+        ))}
+      {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} editor={editing ? editor : undefined} />}
+      {menu === "sources" && (editing && editor ? <EditPanel title="Sources"><SourcesEdits editor={editor} guide={guide} /></EditPanel> : <Sources guide={guide} />)}
+      {menu === "album" && photos && <Album photos={photos} guide={guide} busy={busy} />}
+
       <div className="flex flex-col gap-1">
         <h3 className={cx(PX.dataHeading, "text-balance")}>{day.title}</h3>
         {day.intro && <p className="text-sm md:max-w-prose">{day.intro}</p>}
@@ -350,37 +383,6 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
           )}
         </div>
       )}
-
-      {!recap && (
-        <nav aria-label="Trip menu" className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
-          {([["buses", "Buses"], ["budget", "Budget"], ["todo", "To-do"], ["sources", "Sources"], ...(photos ? [["album", "Album"]] : [])] as [Menu, string][]).map(([key, name]) => (
-            <PixelButton key={key} variant={menu === key ? "primary" : "secondary"} aria-pressed={menu === key} className="px-3 text-sm"
-              onClick={() => {
-                if (key === "budget" && menu !== "budget") shownSpending?.onOpen();
-                setMenu(menu === key ? null : key);
-              }}>
-              <span className="font-bold">{name}</span>
-            </PixelButton>
-          ))}
-        </nav>
-      )}
-      {menu === "buses" && (
-        <div className="flex flex-col gap-5">
-          <Buses table={guide.getting_there} onSwap={editor && ((index) => setSwapping({ table: "getting_there", index }))} can={!!editor?.can} />
-          <Buses table={guide.getting_home} onSwap={editor && ((index) => setSwapping({ table: "getting_home", index }))} can={!!editor?.can} />
-        </div>
-      )}
-      {menu === "budget" &&
-        (editing && editor ? (
-          <EditPanel title="Budget per person"><BudgetEdits editor={editor} guide={guide} /></EditPanel>
-        ) : shownSpending?.load !== undefined && shownSpending.load !== "loading" && shownSpending.load.ok && shownSpending.load.budget.state === "ok" ? (
-          <BudgetPanel guide={guide} budget={shownSpending.load.budget} walletSlug={shownSpending.walletSlug} me={shownSpending.me} returnDate={shownSpending.returnDate} today={shownSpending.today} />
-        ) : (
-          <Budget guide={guide}>{shownSpending && <SpendingNote load={shownSpending.load} />}</Budget>
-        ))}
-      {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} editor={editing ? editor : undefined} />}
-      {menu === "sources" && (editing && editor ? <EditPanel title="Sources"><SourcesEdits editor={editor} guide={guide} /></EditPanel> : <Sources guide={guide} />)}
-      {menu === "album" && photos && <Album photos={photos} guide={guide} busy={busy} />}
 
       {open && current && (
         // Keyed by tap: each one gets its own dialog, because showModal runs once on mount. close() shuts a dialog at once
