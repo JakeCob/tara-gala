@@ -235,41 +235,58 @@ function retryAfterS(res: Response): number | undefined {
 /**
  * One request; `read` turns a good answer into its result. Every failure is a WalletFailed, as call() has always given.
  * TG-70 `timeoutMs`: AbortController + setTimeout, never AbortSignal's static timeout helper (iOS before 16 lacks it,
- * and a throw here would read as offline forever). Without it the fetch gets no signal, as before.
+ * and a throw here would read as offline forever). The timer stays armed through the answer's body (review S1): a 2xx
+ * whose JSON stalls or drops has landed, so it comes back as offline with timedOut (may have landed, B11b), never a
+ * hang or a throw. Without it the fetch gets no signal and a broken body throws, as before.
  */
 async function request<T>(path: string, init: Init | undefined, read: (body: unknown, res: Response) => T): Promise<T | WalletFailed> {
-  let res: Response;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const ctrl = init?.timeoutMs ? new AbortController() : null;
   let timedOut = false;
-  try {
-    const ctrl = init?.timeoutMs ? new AbortController() : null;
-    if (ctrl) {
-      timer = setTimeout(() => {
+  const timer = ctrl
+    ? setTimeout(() => {
         timedOut = true;
         ctrl.abort();
-      }, init?.timeoutMs);
+      }, init?.timeoutMs)
+    : undefined;
+  // Ends a stalled body read when the timer fires; handled here, so an abort during the fetch leaves no stray rejection
+  const aborted = ctrl ? new Promise<never>((_, reject) => ctrl.signal.addEventListener("abort", () => reject(new Error("timeout")), { once: true })) : null;
+  aborted?.catch(() => {});
+  try {
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}${path}`, {
+        cache: "no-store",
+        method: init?.method ?? "GET",
+        headers: init?.raw ? { "content-type": init.raw.type } : init?.body !== undefined ? { "content-type": "application/json" } : undefined,
+        body: init?.raw ?? (init?.body !== undefined ? JSON.stringify(init.body) : undefined),
+        ...(ctrl ? { signal: ctrl.signal } : {}),
+      });
+    } catch {
+      if (timedOut) console.info(`[tg-wallet] request timed out ms=${init?.timeoutMs}`);
+      return timedOut ? { ok: false, why: "offline", timedOut: true } : { ok: false, why: "offline" };
     }
-    res = await fetch(`${API_URL}${path}`, {
-      cache: "no-store",
-      method: init?.method ?? "GET",
-      headers: init?.raw ? { "content-type": init.raw.type } : init?.body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: init?.raw ?? (init?.body !== undefined ? JSON.stringify(init.body) : undefined),
-      ...(ctrl ? { signal: ctrl.signal } : {}),
-    });
-  } catch {
-    if (timedOut) console.info(`[tg-wallet] request timed out ms=${init?.timeoutMs}`);
-    return timedOut ? { ok: false, why: "offline", timedOut: true } : { ok: false, why: "offline" };
+    const json = () => (aborted ? Promise.race([res.json(), aborted]) : res.json()); // every body read, under the timer
+    if (res.ok && aborted) {
+      let body: unknown;
+      try {
+        body = await json();
+      } catch {
+        console.info(`[tg-wallet] answer body lost status=${res.status} timed_out=${timedOut}`);
+        return { ok: false, why: "offline", timedOut: true }; // the write landed; the outbox resends it as a replay
+      }
+      return read(body, res);
+    }
+    if (res.ok) return read(await res.json(), res);
+    if (res.status === 404) return refusal("not_found", await json().catch(() => null));
+    if (res.status === 429) {
+      const after = retryAfterS(res);
+      return after === undefined ? { ok: false, why: "rate_limited" } : { ok: false, why: "rate_limited", retryAfter: after };
+    }
+    if (res.status >= 500) return { ok: false, why: "server" };
+    return refusal("rejected", await json().catch(() => null));
   } finally {
     clearTimeout(timer);
   }
-  if (res.ok) return read(await res.json(), res);
-  if (res.status === 404) return refusal("not_found", await res.json().catch(() => null));
-  if (res.status === 429) {
-    const after = retryAfterS(res);
-    return after === undefined ? { ok: false, why: "rate_limited" } : { ok: false, why: "rate_limited", retryAfter: after };
-  }
-  if (res.status >= 500) return { ok: false, why: "server" };
-  return refusal("rejected", await res.json().catch(() => null));
 }
 
 function call(path: string, init?: Init): Promise<WalletResult> {

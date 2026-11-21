@@ -574,3 +574,52 @@ test("T70-L12 DETAIL is exported, and failureMessage still reads it", async () =
   assert.ok(DETAIL, "DETAIL is exported");
   for (const [code, line] of Object.entries(DETAIL)) assert.equal(failureMessage({ why: "rejected", detail: code }), line);
 });
+
+// ---------------------------------------------------------------- TG-70 O2 review S1: the timeout covers the body read too
+
+/** A 2xx whose JSON never finishes (`stall`) or whose stream drops mid-way (`drop`). */
+function brokenBody(kind: "stall" | "drop", status = 201): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(new TextEncoder().encode('{"share_slug":"'));
+      if (kind === "drop") c.error(new TypeError("network error"));
+    },
+  });
+  return new Response(stream, { status, headers: { "content-type": "application/json" } });
+}
+/** Fails fast instead of at the 60 s test cap when the call never settles. */
+const within = <T>(p: Promise<T>, ms = 3000) =>
+  Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`test guard: no answer in ${ms} ms`)), ms))]);
+
+test("T70-L12b review S1: a 201 whose body never ends is offline with timedOut after the timeout (it may have landed)", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  await withFetch70(brokenBody("stall"), async () => {
+    const started = Date.now();
+    assert.deepEqual(await within(walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 40 })), { ok: false, why: "offline", timedOut: true });
+    assert.ok(Date.now() - started >= 35, "it waited for the timeout, not less");
+  });
+});
+
+test("T70-L12b review S1: a 2xx whose body drops mid-way is a result, not a throw, and counts as may-have-landed", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  const { mayHaveLanded } = await import("./outbox.ts");
+  await withFetch70(brokenBody("drop"), async () => {
+    const r = await within(walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 1000 }));
+    assert.deepEqual(r, { ok: false, why: "offline", timedOut: true });
+    assert.equal(mayHaveLanded(r, { start: false, end: false }), true, "even if the phone says offline at both ends");
+  });
+});
+
+test("T70-L12b review S1: without the option a broken body still throws, as today (flag off = main)", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  await withFetch70(brokenBody("drop"), async () => {
+    await assert.rejects(within(walletApi.addExpense(W, { paid_by: "a", amount_centavos: 1000, note: "Taxi", split_among: ["a"] })), TypeError);
+  });
+});
+
+test("T70-L12b review S1: a refusal whose body stalls still ends at the timeout, as a refusal with no code", async () => {
+  const { walletApi } = await import("./wallet.ts");
+  await withFetch70(brokenBody("stall", 409), async () => {
+    assert.deepEqual(await within(walletApi.addExpense(W, { ...V2_ADD, id: "e1" } as never, { timeoutMs: 40 })), { ok: false, why: "rejected", detail: undefined });
+  });
+});
