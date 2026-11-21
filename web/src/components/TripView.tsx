@@ -7,6 +7,7 @@ import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/li
 import { type NeedLink, chatRequest } from "@/lib/chat";
 import { flags } from "@/lib/flags";
 import { cityOf } from "@/lib/itinerary";
+import { type NextUpJump, nextUp, nextUpLog } from "@/lib/nextUp";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
 import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
 import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, keepNewerPlan, shownFrom } from "@/lib/planState";
@@ -15,6 +16,7 @@ import {
   hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, planOutcome, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import LevelMap from "./LevelMap";
+import NextUpCard, { NextUpLog, useManilaClock } from "./NextUpCard";
 import { SaidText } from "./PlanBits";
 import PlanEditBar from "./PlanEditBar";
 import PlanChat from "./PlanChat";
@@ -71,6 +73,10 @@ export default function TripView({ slug }: { slug: string }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const keptFiles = useRef(new Set<string>());
   const shownAt = useRef(0); // TG-54: how new the trip on screen is: when its GET left, or when a write landed
+  // TG-69: the Next up card's Manila clock, and where its buttons last sent the map. With the flag off the clock starts
+  // nothing, and neither the jump nor the fold is passed on, so the page is main's
+  const clock = useManilaClock(flags.nextUp);
+  const [jump, setJump] = useState<(NextUpJump & { n: number }) | undefined>(undefined);
 
   // TG-57: the worker's copy shows at once, so the map doesn't wait on two API calls in a row. The GET below replaces it
   useEffect(() => {
@@ -417,6 +423,11 @@ export default function TripView({ slug }: { slug: string }) {
   const onFail = (text: string) => setNotice({ text, error: true });
   const slot = mapSlot(trip.itinerary_slug, shown ? { plan: shown.slug, guide: shown.guide } : planMiss ? { plan: planMiss, guide: null } : null);
   const theGuide = slot === "frame" ? null : slot;
+  const up = flags.nextUp ? nextUp({ today: clock.today, now: clock.now, trip, guide: slot, city }) : null;
+  const jumpTo = (j: NextUpJump) => {
+    console.info("[tg-trip] next-up jump to=%s", j.key ? "level" : j.menu ?? "world");
+    setJump((prev) => ({ ...j, n: (prev?.n ?? 0) + 1 }));
+  };
   // review M2: the newer plan didn't come, or came back older; e2e W-4: or the answer to a save was lost and still is
   const stale = (!!shown && !synced && planMiss === trip.itinerary_slug) || !!lost?.failed;
   const waiting = !!lost || behind(shown, clashAt, trip.itinerary_slug);
@@ -508,9 +519,10 @@ export default function TripView({ slug }: { slug: string }) {
   } : undefined;
   return (
     <div className="flex flex-col gap-6">
+    {up && <NextUpCard up={up} onJump={jumpTo} />}
     <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start">
       <TripHeader trip={trip} busy={busy} write={write} />
-      <TripPeople trip={trip} plan={slot} busy={busy} apply={apply} />
+      <TripPeople trip={trip} plan={slot} busy={busy} apply={apply} fold={up?.state === "during" || undefined} />
     </div>
     {slot === "frame" && (
       <section data-map-loading aria-label="Trip progress" aria-busy="true" className="flex flex-col gap-3">
@@ -566,6 +578,7 @@ export default function TripView({ slug }: { slug: string }) {
             write(done ? "tick" : "untick", () => (done ? tripApi.mark(slug, key, "done") : tripApi.unmark(slug, key)), done ? "Ticked." : "Unticked.")
           }
           onPick={(pickKey, option) => write("pick", () => tripApi.mark(slug, `pick:${pickKey}`, option), `Picked ${option}.`)}
+          jump={flags.nextUp ? jump : undefined}
         />
       </section>
     )}
@@ -607,6 +620,7 @@ export default function TripView({ slug }: { slug: string }) {
           setLinkAsk((a) => ({ need, n: (a?.n ?? 0) + 1 })); // the map opens the find step once it's drawn
         }} />
     )}
+    {flags.nextUp && <NextUpLog today={clock.today} line={nextUpLog(clock.today, trip, up)} ready={slot !== "frame"} />}
     </div>
   );
 }
@@ -876,7 +890,7 @@ function HotelSection({ trip, busy, write, onFail }: { trip: Trip; busy: boolean
   const hotel = trip.hotel;
   return (
     <section aria-labelledby="hotel-title" className="flex flex-col gap-3">
-      <SectionTitle id="hotel-title">Where we&apos;re staying</SectionTitle>
+      <SectionTitle id="hotel-title" tabIndex={flags.nextUp ? -1 : undefined}>Where we&apos;re staying</SectionTitle>
       {hotel && !editing ? (
         <PixelBox className="flex flex-col gap-2 p-4">
           <p className="break-words font-bold">{hotel.name}</p>

@@ -60,6 +60,8 @@ type Props = {
   spending?: Spending;
   /** TG-67: the plan's city, for the province in a spot's Google Maps search. Without it, Baguio's */
   city?: string;
+  /** TG-69: where the trip page's Next up card sends the map; a new n each time. Only the trip page passes it */
+  jump?: { day?: number; key?: string; menu?: "buses" | "todo"; n: number };
 };
 
 type Menu = "buses" | "budget" | "todo" | "sources" | "album";
@@ -75,7 +77,7 @@ const GROUP = lookFor("adult", 0)!; // the group on the map: the first look of t
  * level, and tapping a level opens its dialog: what to do, Done or Not yet, and that level's photos. Below the map, a
  * menu opens the buses, budget, to-dos, sources and the trip's album.
  */
-export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap, spending, city }: Props) {
+export default function LevelMap({ guide, marks, busy, problem, said, onOpenLevel, onTick, onPick, photos, editor, copyLine, recap, spending, city, jump }: Props) {
   const live = !!onTick;
   const byKey = marksByKey(marks ?? []);
   const [world, setWorld] = useState(() => startWorld(guide, marks ?? []));
@@ -196,6 +198,44 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
     tabPicked.current = true;
     setWorld(n);
   };
+  // TG-69: the Next up card moves the map. A World goes through goTo, the tab tap's own path, so closing the dialog
+  // doesn't snap back to the group's day (review M1); then the level's dialog, as a tap on it opens it, or a menu panel
+  const moveTo = (to: NonNullable<Props["jump"]>) => {
+    if (to.day !== undefined) {
+      goTo(to.day);
+      tabTapped.current = true; // goTo's scroll to the lit level, on the World already showing too; no second scroll (review D1)
+    }
+    if (to.key) {
+      onOpenLevel?.();
+      setOpen((o) => ({ key: to.key!, tap: (o?.tap ?? 0) + 1 }));
+    }
+    if (to.menu) {
+      // The panel it opens scrolls in once it's drawn (showPanel); one that's already open scrolls in now
+      if (menu === to.menu && panel.current) scrollToPanel(panel.current);
+      else {
+        panelDue.current = true;
+        setMenu(to.menu);
+      }
+    }
+  };
+  // The open Buses or To-do panel, by a ref, so the jump's target draws no attribute (TG68-T2 pins the menu's markup)
+  const panel = useRef<HTMLElement | null>(null);
+  const panelDue = useRef(false);
+  const scrollToPanel = (el: HTMLElement) => el.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  const showPanel = (el: HTMLElement | null) => {
+    panel.current = el;
+    if (!el || !panelDue.current) return;
+    panelDue.current = false;
+    scrollToPanel(el);
+  };
+  // Once per tap: the n seen on mount never replays, so a remount or a poll doesn't reopen anything. Like the chat's
+  // find step above: after any render
+  const lastJump = useRef(jump?.n);
+  useEffect(() => {
+    if (!jump || jump.n === lastJump.current) return;
+    lastJump.current = jump.n;
+    moveTo(jump);
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -222,7 +262,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         </nav>
       )}
       {menu === "buses" && (
-        <div className="flex flex-col gap-5">
+        <div ref={showPanel} className="flex flex-col gap-5">
           <Buses table={guide.getting_there} onSwap={editor && ((index) => setSwapping({ table: "getting_there", index }))} can={!!editor?.can} />
           <Buses table={guide.getting_home} onSwap={editor && ((index) => setSwapping({ table: "getting_home", index }))} can={!!editor?.can} />
         </div>
@@ -235,7 +275,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
         ) : (
           <Budget guide={guide}>{shownSpending && <SpendingNote load={shownSpending.load} />}</Budget>
         ))}
-      {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} editor={editing ? editor : undefined} />}
+      {menu === "todo" && <Todo guide={guide} byKey={byKey} live={live} busy={busy} onTick={onTick} editor={editing ? editor : undefined} panel={showPanel} />}
       {menu === "sources" && (editing && editor ? <EditPanel title="Sources"><SourcesEdits editor={editor} guide={guide} /></EditPanel> : <Sources guide={guide} />)}
       {menu === "album" && photos && <Album photos={photos} guide={guide} busy={busy} />}
 
@@ -660,8 +700,10 @@ function Budget({ guide, children }: { guide: Guide; children?: ReactNode }) {
   );
 }
 
-function Todo({ guide, byKey, live, busy, onTick, editor }: {
+function Todo({ guide, byKey, live, busy, onTick, editor, panel }: {
   guide: Guide; byKey: ReadonlyMap<string, Mark>; live: boolean; busy?: boolean; onTick?: (key: string, done: boolean) => void; editor?: PlanEditor;
+  /** TG-69: the map's ref to its open panel, so the Next up card's jump can scroll to it */
+  panel?: (el: HTMLElement | null) => void;
 }) {
   const item = (t: Guide["todo"][number]) => {
     const done = t.done || byKey.get(todoMark(t))?.value === "done";
@@ -674,7 +716,7 @@ function Todo({ guide, byKey, live, busy, onTick, editor }: {
     );
   };
   return (
-    <section className="flex flex-col gap-2">
+    <section ref={panel} className="flex flex-col gap-2">
       <h3 className={PX.dataHeading}>To do before the trip</h3>
       {editor ? (
         <TodoEdits editor={editor} guide={guide} show={item} />
