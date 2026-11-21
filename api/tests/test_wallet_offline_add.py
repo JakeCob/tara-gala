@@ -250,7 +250,7 @@ def test_a4b_the_insert_race_is_409_id_taken_with_nothing_half_written(on, dsn, 
     assert add(on, y, with_id(equal(ys, amount=1000))).status_code == 201
 
 
-def test_a4c_a_unique_violation_on_a_child_row_is_not_id_taken(on, dsn, monkeypatch):  # N1
+def test_a4c_a_unique_violation_on_a_child_row_is_not_id_taken(on, dsn, monkeypatch, caplog):  # N1
     slug, ids = new_wallet(on)
     real = w._store_split
 
@@ -259,10 +259,11 @@ def test_a4c_a_unique_violation_on_a_child_row_is_not_id_taken(on, dsn, monkeypa
         real(conn, expense_id, body, shares, payers)  # a bug: the child rows' unique keys, not expenses_pkey
 
     monkeypatch.setattr(w, "_store_split", twice)
-    with pytest.raises(Exception) as e:
-        add(on, slug, with_id(equal(ids, amount=1000)))
-    assert type(e.value).__name__ == "UniqueViolation"
+    caplog.set_level(logging.ERROR, logger="tara_gala.request")
+    r = add(on, slug, with_id(equal(ids, amount=1000)))
+    assert (r.status_code, r.json()) == (500, {"detail": "Internal server error"}), "not 409 id_taken"
     assert count(dsn, slug) == 0
+    assert any("error=UniqueViolation" in x.getMessage() for x in caplog.records if x.name == "tara_gala.request")
 
 
 # ---------------------------------------------------------------- A5 (B5): two sends at once
@@ -435,6 +436,17 @@ def test_a10_replays_dont_use_up_the_limit(on, dsn, monkeypatch):
     assert add(on, slug, equal(ids, amount=500)).status_code == 429
 
 
+def test_a10_a_body_without_an_id_keeps_todays_order_limit_first(on, flags, monkeypatch):
+    """Plan §3: no `id`, today's order exactly: `_limit`, then the flag checks, then the wallet (a bad slug's 404)."""
+    slug, ids = new_wallet(on)
+    monkeypatch.setattr(w, "WRITE_LIMITER", RateLimiter(1))
+    assert add(on, slug, equal(ids, amount=500)).status_code == 201  # uses the one slot
+    flags(wallet_splits=False, wallet_multi_payer=False)
+    for target, body in ((slug, multi_payer(ids)), (slug, percent(ids)), ("0" * 32, equal(ids, amount=500))):
+        r = add(on, target, body)
+        assert (r.status_code, detail(r)) == (429, "rate_limited"), r.text
+
+
 def _origin(client):
     cors = next(m for m in client.app.user_middleware if m.cls is CORSMiddleware)
     return cors.kwargs["allow_origins"][0]
@@ -481,7 +493,7 @@ def test_a11_the_logs_never_carry_the_id_the_note_or_a_name(on, dsn, caplog):
     other = uuid4()
     add(on, x, with_id(equal(xs, amount=1000, note=NOTE), other))
     add(on, y, with_id(equal(ys, amount=1000, note=NOTE), other))  # A4
-    text = "\n".join(r.getMessage() for r in caplog.records)
+    text = "\n".join(r.getMessage() for r in caplog.records if r.name == LOGGER)  # the request log's path is main's
     assert "replay" in text and "id_taken" in text
     for secret in (str(eid), eid.hex, str(other), other.hex, NOTE, *NAMES, *xs, *ys):
         assert secret not in text, secret
