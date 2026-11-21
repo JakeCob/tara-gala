@@ -106,19 +106,39 @@ export function bannerVariant(s: BannerState): Variant | null {
   return null;
 }
 
-/** ux.md's four strings. `lead` is shown bold; lead + rest is the whole banner. */
-export function bannerText(v: Variant, savedAt: string | null): { lead: string; rest: string } {
+/**
+ * The words after the lead: after "saved …" for A, B and D, and C's only words. TG-68 ux §3: a wallet has no schedules
+ * and no search. TG-70 swaps the wallet's A and B.
+ */
+export type BannerTails = Record<Variant, string>;
+const TAILS: BannerTails = {
+  A: "schedules may have changed",
+  B: "schedules may have changed",
+  C: "searching needs a connection",
+  D: "search again for the latest times",
+};
+export const WALLET_TAILS: BannerTails = {
+  A: "expenses you add won't save until there's signal",
+  B: "expenses you add won't save until it's back",
+  C: "open this wallet once with signal to keep a copy on this phone",
+  D: "tap Refresh for the latest",
+};
+const isWallet = (pathname: string | null | undefined) => !!pathname?.startsWith("/w/");
+
+/** ux.md's four strings (TG-68: a wallet's own four). `lead` is shown bold; lead + rest is the whole banner. */
+export function bannerText(v: Variant, savedAt: string | null, pathname?: string | null): { lead: string; rest: string } {
   const formatted = formatSavedAt(savedAt);
   const saved = formatted ? `saved ${formatted}` : "saved time unknown";
+  const tail = isWallet(pathname) ? WALLET_TAILS : TAILS;
   switch (v) {
     case "A":
-      return { lead: "Offline", rest: `${SEP}${saved}${SEP}schedules may have changed` };
+      return { lead: "Offline", rest: `${SEP}${saved}${SEP}${tail.A}` };
     case "B":
-      return { lead: "Can't reach the server", rest: `${SEP}${saved}${SEP}schedules may have changed` };
+      return { lead: "Can't reach the server", rest: `${SEP}${saved}${SEP}${tail.B}` };
     case "C":
-      return { lead: "Offline", rest: `${SEP}searching needs a connection` };
+      return { lead: "Offline", rest: `${SEP}${tail.C}` };
     case "D":
-      return { lead: "Back online", rest: `${SEP}${saved}${SEP}search again for the latest times` };
+      return { lead: "Back online", rest: `${SEP}${saved}${SEP}${tail.D}` };
   }
 }
 

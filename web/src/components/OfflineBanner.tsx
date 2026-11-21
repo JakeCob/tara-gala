@@ -39,7 +39,11 @@ export default function OfflineBanner() {
   }, []);
 
   const variant = bannerVariant(state);
-  const text = variant ? bannerText(variant, state.savedAt) : null;
+  const text = variant ? bannerText(variant, state.savedAt, pathname) : null;
+  // TG-68: which banner shows, and whether it's a wallet's (ux §3). No path, slug or time
+  useEffect(() => {
+    if (variant) console.info("[tg-offline] banner variant=%s wallet=%s", variant, pathname?.startsWith("/w/") ? "yes" : "no");
+  }, [variant, pathname]);
 
   // Always rendered so screen readers announce the change once (polite)
   return (
