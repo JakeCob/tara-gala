@@ -38,13 +38,13 @@ test("GW1-L1 G23 linesFor: the category's lines in plan order, then None of thes
   assert.deepEqual(linesFor(BUDGET, null), [], "no category picked: no row");
 });
 
-test("GW1-L2 G23 lineLabel: the item, Not in the budget, Not sorted yet, or A line no longer in the plan (tg-ux2)", async () => {
+test("GW1-L2 G23 lineLabel: the item, Not in the budget, Not sorted yet, or Removed from the plan (tg-ux2; TG-68 ux.md §4)", async () => {
   const { lineLabel } = await load();
   assert.equal(lineLabel(BUDGET, "meals"), "Meals and merienda, 2.5 days");
   assert.equal(lineLabel(BUDGET, "_none"), "Not in the budget");
   assert.equal(lineLabel(BUDGET, null), "Not sorted yet");
   assert.equal(lineLabel(BUDGET, undefined), "Not sorted yet");
-  assert.equal(lineLabel(BUDGET, "van"), "A line no longer in the plan", "a key the plan no longer has: not 'Not sorted yet'");
+  assert.equal(lineLabel(BUDGET, "van"), "Removed from the plan", "a key the plan no longer has: not 'Not sorted yet'");
 });
 
 test("GW1-L3 G24 the row shows only with a budget and a picked category", async () => {
