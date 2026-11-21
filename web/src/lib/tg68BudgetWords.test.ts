@@ -74,8 +74,25 @@ test("TG68-N2c unknown_budget_line is unchanged, and anything else is still null
   }
 });
 
-test("TG68-N2d WalletView passes the answer's wallet's lines and the key the form sent, on the add and on the edit", () => {
-  const src = readFileSync(new URL("../components/WalletView.tsx", import.meta.url), "utf8");
-  assert.equal(src.split("budgetRefusal(").length - 1, 2, "the add and the edit");
-  assert.equal(src.split("budgetRefusal(r.detail, r.wallet?.budget, sentLine(body))").length - 1, 2, "both with the lines and the sent key");
+const view = () => readFileSync(new URL("../components/WalletView.tsx", import.meta.url), "utf8");
+const lineRefusal = () => {
+  const src = view();
+  const i = src.indexOf("async function lineRefusal(");
+  assert.ok(i > 0, "WalletView has lineRefusal");
+  return src.slice(i, src.indexOf("\n  }\n", i));
+};
+
+test("TG68-N2d the add and the edit both word a line refusal through lineRefusal, with the lines and the key the form sent", () => {
+  const src = view();
+  assert.equal(src.split("await lineRefusal(r, body)").length - 1, 2, "the add and the edit");
+  assert.match(lineRefusal(), /budgetRefusal\(answer\.detail, answer\.wallet\?\.budget, sentLine\(body\)\)/);
+});
+
+test("TG68-N2e GA1's budget_line_category answer carries no wallet (wallets.py _refuse), so the lines are read again first", () => {
+  const fn = lineRefusal();
+  assert.match(fn, /if \(!r\.wallet && r\.detail === "budget_line_category"\) \{/, "only when the answer has none, and only for the moved line");
+  assert.match(fn, /await walletApi\.get\(slug\)/);
+  assert.match(fn, /if \(fresh\.ok\) answer = \{ \.\.\.r, wallet: fresh\.wallet \};/, "a failed read keeps the fallback");
+  assert.match(fn, /console\.info\("\[tg-wallet\] expense line reread ok=%s"/, "logged, with no key or name");
+  assert.match(view(), /if \(lineAlert\) return refuseLine\(lineAlert\.text, lineAlert\.r\);/, "refuseLine lands the wallet read");
 });
