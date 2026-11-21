@@ -214,6 +214,7 @@ function HotelBody({ hotel }: { hotel: HotelPart }) {
         <>
           <p className="font-bold break-words">{hotel.name}</p>
           {hotel.from === "trip" && hotel.address && <p className="text-lg select-text break-words">{hotel.address}</p>}
+          {hotel.from === "trip" && hotel.checkIn && <p className={PX.meta}>Check-in {hotelTime(hotel.checkIn)}</p>}
           {hotel.from === "trip" && hotel.checkOut && <p className={PX.meta}>Check-out {hotelTime(hotel.checkOut)}</p>}
           {hotel.from === "trip" && hotel.address && (
             <PixelButton variant="secondary" className={FULL}

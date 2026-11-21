@@ -20,9 +20,9 @@ export type StopPart =
   | { kind: "allDone" }
   | { kind: "nothingToday" }
   | { kind: "opening" };
-/** checkOut: the hotel's check_out wall time, set only on its Manila date (B19b) */
+/** checkIn and checkOut: the hotel's wall times, each set only on its own Manila date (B19b, review nit 3) */
 export type HotelPart =
-  | { from: "trip"; name: string; address: string; mapsUrl: string; checkOut: string | null }
+  | { from: "trip"; name: string; address: string; mapsUrl: string; checkIn: string | null; checkOut: string | null }
   | { from: "lodging"; name: string; mapsUrl: string }
   | { from: "none" };
 /** stop null: no plan. hotel null: after check-out (B19b). todos null: none on the plan */
@@ -138,9 +138,17 @@ function busToday(guide: Guide, date: string, now: string | null, byKey: Readonl
 function hotelFor(trip: NextUpTrip, guide: Guide | null, today: string, city: string): HotelPart | null {
   const h = trip.hotel;
   if (h) {
-    const out = h.check_out?.slice(0, 10) ?? null; // Manila wall time, so its date is the Manila date
-    if (out && today > out) return null; // after check-out: no old address at 2:30 AM in Cubao (ux §5.4)
-    return { from: "trip", name: h.name, address: h.address, mapsUrl: hotelMapsUrl(h), checkOut: out === today ? h.check_out : null };
+    // Manila wall times, so their dates are Manila dates. Before check-in the lodge's address is no use to a driver at
+    // home, and after check-out an old one at 2:30 AM in Cubao is worse than nothing (ux §5.4)
+    const inOn = h.check_in?.slice(0, 10) ?? null;
+    const out = h.check_out?.slice(0, 10) ?? null;
+    if (today < (inOn ?? trip.start_date)) return null;
+    if (out && today > out) return null;
+    return {
+      from: "trip", name: h.name, address: h.address, mapsUrl: hotelMapsUrl(h),
+      checkIn: inOn === today && inOn !== out ? h.check_in : null, // a one-night stay shows check-out only
+      checkOut: out === today ? h.check_out : null,
+    };
   }
   const lodge = guide?.lodging;
   if (lodge?.name) return { from: "lodging", name: lodge.name, mapsUrl: placeMapsUrl({ name: lodge.name, kind: lodge.kind, lat: lodge.lat, lng: lodge.lng, city }) };
