@@ -330,15 +330,15 @@ test("LM11 the world is a game screen: a pixel road, grass, framed in Ink in bot
   assert.match(map, /PX\.pressStart\)\} style=\{\{ left: `\$\{start\.x\}\$\{u\}`, top: start\.y \}\}>\s+Start\s+<\/span>/, "START");
 });
 
-test("LM11b at every width the map has the whole row, with the World toggle right on top of it and the menu under it", () => {
+test("LM11b at every width the map has the whole row, with the World toggle right on top of it and the menu above the toggle (TG-68 ux.md §7)", () => {
   const map = readFileSync("src/components/LevelMap.tsx", "utf8");
   assert.doesNotMatch(map, /lg:grid-cols-\[28rem|lg:col-start|md:max-w-md/, "no side-by-side, no cap on the world");
   assert.doesNotMatch(map, /wide\?: boolean|, wide \}/);
   assert.doesNotMatch(readFileSync("src/components/TripView.tsx", "utf8"), /<LevelMap\n\s+wide\n/);
   const at = (s: string) => map.indexOf(s);
-  const order = [at("{day.title}</h3>"), at("{day.pick && ("), at("{day.tips.length > 0 && ("), at('aria-label="Days"'), at("<section ref={screen}"), at('aria-label="Trip menu"')];
+  const order = [at("{day.title}</h3>"), at("{day.pick && ("), at("{day.tips.length > 0 && ("), at('aria-label="Trip menu"'), at('aria-label="Days"'), at("<section ref={screen}")];
   assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), `the order: ${order}`);
-  assert.equal(map.slice(at("</nav>"), at("<section ref={screen}")).match(/<(PixelBox|ul|h3|p)\b/), null, "nothing between the toggle and the map");
+  assert.equal(map.slice(map.indexOf("</nav>", at('aria-label="Days"')), at("<section ref={screen}")).match(/<(PixelBox|ul|h3|p)\b/), null, "nothing between the toggle and the map");
   assert.match(map, /min-w-0 max-w-88 flex-1 pixel-frame/, "a sign stops at 22rem");
   assert.equal(map.match(/style=\{\{ maxWidth: band \}\}/g)?.length, 2, "the stops and the levels share the road's band");
   assert.match(map, /const band = snake \? undefined : BAND_PX;/, "the band is for the zig-zag: the snake has the whole row");
