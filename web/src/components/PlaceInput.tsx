@@ -101,7 +101,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
     const pin = pinText; // as typed: the server parses it (the field caps it at 60)
     if (!pin.trim()) {
       console.info("[tg-trip] plan find kind=pin ok=no why=empty");
-      return setPinProblem("Those numbers aren't a pin. Paste two numbers, like 16.4138, 120.5964.");
+      return setPinProblem("Those numbers aren't a pin. Paste the two numbers Google Maps shows, with a comma between.");
     }
     setFinding(true);
     setPinProblem("");
@@ -192,7 +192,7 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
             <>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-semibold">Pin</span>
-                <span className={PX.meta}>Two numbers, like 16.4138, 120.5964.</span>
+                <span className={PX.meta}>In Google Maps, press and hold the spot, then copy the two numbers it shows.</span>
                 <input className={PX.input} value={pinText} maxLength={60} inputMode="decimal" autoComplete="off"
                   onChange={(e) => { setPinText(e.target.value); setPinProblem(""); }} />
               </label>

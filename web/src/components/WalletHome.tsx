@@ -24,7 +24,7 @@ export default function WalletHome() {
   const router = useRouter();
   const raw = useSyncExternalStore(subscribeNothing, knownWalletsRaw, () => null);
   const known = useMemo(() => parseKnownWallets(raw), [raw]);
-  const [tripName, setTripName] = useState("Baguio trip");
+  const [tripName, setTripName] = useState(""); // TG-68 ux §6: no Baguio default
   const [people, setPeople] = useState(["", ""]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,6 +37,8 @@ export default function WalletHome() {
     e.preventDefault();
     const name = tripName.trim();
     const check = checkPeople(people);
+    const refused = !name ? "empty" : check.ok ? null : "people"; // TG-68: the trip's name starts empty now
+    if (refused) console.info("[tg-wallet] create refused why=%s", refused);
     if (!name) return setError("Give the trip a name.");
     if (!check.ok) return setError(check.message);
     setError("");
@@ -86,7 +88,7 @@ export default function WalletHome() {
           <p className="text-sm text-muted">Everyone logs what they paid from their own phone. At the end, it works out who pays whom.</p>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">Trip name</span>
-            <input className={PX.input} value={tripName} maxLength={40} onChange={(e) => setTripName(e.target.value)} />
+            <input className={cx(PX.input, "placeholder:text-muted")} value={tripName} maxLength={40} placeholder="Like Sagada, Nov 25" onChange={(e) => setTripName(e.target.value)} />
           </label>
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-sm font-semibold">Who&apos;s coming?</legend>
