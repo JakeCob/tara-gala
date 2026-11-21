@@ -572,6 +572,12 @@ test("T69-D1 Show the driver: only for the trip's hotel with an address, full wi
   const part = fn(src, "function HotelBody(");
   assert.match(part, /hotel\.from === "trip" && hotel\.address/);
   assert.ok(part.indexOf("Show the driver") > 0 && part.indexOf("Show the driver") < part.indexOf("Open in Google Maps"), "above Maps");
+  // tg-review N1 (mutant j): the button itself sits inside the guard, not only the dialog
+  const button = part.search(/>\s*Show the driver\s*<\/PixelButton>/);
+  assert.ok(button > 0, "the button's label");
+  const block = part.slice(part.lastIndexOf("{hotel", button), button);
+  assert.match(block, /^\{hotel\.from === "trip" && hotel\.address && \(\n\s+<PixelButton /, "the guard opens the block the button is in");
+  assert.doesNotMatch(block, /\)\}/, "and nothing closes it before the button");
   assert.match(part, /<DriverView /);
 });
 
