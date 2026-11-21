@@ -123,7 +123,8 @@ export const WALLET_TAILS: BannerTails = {
   C: "open this wallet once with signal to keep a copy on this phone",
   D: "tap Refresh for the latest",
 };
-const isWallet = (pathname: string | null | undefined) => !!pathname?.startsWith("/w/");
+/** A wallet's page (/w/…): its banner talks about expenses (TG-68 ux §3). */
+export const isWallet = (pathname: string | null | undefined): boolean => !!pathname?.startsWith("/w/");
 
 /** ux.md's four strings (TG-68: a wallet's own four). `lead` is shown bold; lead + rest is the whole banner. */
 export function bannerText(v: Variant, savedAt: string | null, pathname?: string | null): { lead: string; rest: string } {
