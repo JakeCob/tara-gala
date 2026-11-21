@@ -94,7 +94,7 @@ test("TG68-N2e GA1's budget_line_category answer carries no wallet (wallets.py _
   assert.match(fn, /await walletApi\.get\(slug\)/);
   assert.match(fn, /if \(fresh\.ok\) answer = \{ \.\.\.r, wallet: fresh\.wallet \};/, "a failed read keeps the fallback");
   assert.match(fn, /console\.info\("\[tg-wallet\] expense line reread ok=%s"/, "logged, with no key or name");
-  assert.match(view(), /if \(lineAlert\) return refuseLine\(lineAlert\.text, lineAlert\.r\);/, "refuseLine lands the wallet read");
+  assert.equal(view().split("if (lineAlert) return refuseLine(lineAlert.text, lineAlert.r);").length - 1, 2, "refuseLine lands the wallet read, on the add and the edit");
 });
 
 test("TG68-N2f named only when the read's category differs from the one the form sent: a stale copy says `another category`", () => {
@@ -117,4 +117,14 @@ test("TG68-N2g sentCategory: the category a body sent, as the API reads it (miss
   assert.equal(sent({ note: "Dinner", category: "food", budget_key: "meals" }), "food");
   assert.equal(sent({ note: "Dinner", category: null, budget_key: "meals" }), null);
   assert.equal(sent({ note: "Dinner", budget_key: "meals" }), null, "today's body has none");
+});
+
+test("TG68-N2h sentLine: the budget line key a body sent (a key, or none when it's null or missing)", async () => {
+  const L = (await import("./budgetLines.ts")) as Record<string, unknown>;
+  const sent = L.sentLine as (body: object) => string | null;
+  assert.equal(typeof sent, "function", "budgetLines exports sentLine");
+  assert.equal(sent({ note: "Dinner", category: "food", budget_key: "meals" }), "meals");
+  assert.equal(sent({ note: "Dinner", category: "food", budget_key: "_none" }), "_none", "Not in the budget is passed on; budgetRefusal skips it");
+  assert.equal(sent({ note: "Dinner", category: "food", budget_key: null }), null);
+  assert.equal(sent({ note: "Dinner", category: "food" }), null, "today's body has none");
 });
