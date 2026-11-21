@@ -189,6 +189,15 @@ export function legLines(leg: LegOut): { line: string; note: string } {
   return { line: `${mode(leg.mode)}${sign}${minutes}${fare}`, note: `${formatVerified(leg.last_verified_at)} · Fares and routes change. Confirm with the driver or a local before you ride.` };
 }
 
+/** TG-68 ux §2: a pin's distance from the plan's city. One that rounds to 0 km is "under 1 km", never "about 0 km". */
+export function kmFrom(km: number, city = "Baguio"): string {
+  const shown = Math.round(km);
+  return shown === 0 ? `under 1 km from ${city}` : `about ${shown} km from ${city}`;
+}
+
+/** A line's words at the start of a sentence */
+export const atStart = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** The far warning: rounded to 10 km over 100 km, else to the km (review nit 2). */
 export function farLine(km: number, city = "Baguio"): string {
   const shown = km > 100 ? Math.round(km / 10) * 10 : Math.round(km);
@@ -286,7 +295,7 @@ export function pinLine(s: { pin_source?: "link" | "address" | "typed" | null; l
   { lead: string; link: string | null; href: string | null; rest: string } | null {
   if (!s.pin_source) return null;
   // TG-67: the API's km_from_baguio is the distance from the plan's centre (S3), so it names the plan's city
-  const km = s.km_from_baguio != null ? `, about ${Math.round(s.km_from_baguio)} km from ${city}` : "";
+  const km = s.km_from_baguio != null ? `, ${kmFrom(s.km_from_baguio, city)}` : "";
   if (s.pin_source === "address" && s.lat != null && s.lng != null) {
     return { lead: "Pin from the address, ", link: "check it on Google Maps", href: `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`, rest: "" };
   }

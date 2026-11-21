@@ -8,7 +8,7 @@ import { PX, PixelBox, PixelButton, PixelChoice, cx } from "@/components/pixel";
 import { formatTime } from "@/lib/api";
 import { type At, type Found, type PlaceIn, type Suggestion, applySuggestion, findPlaces, isLink, prefillName } from "@/lib/planEdit";
 import type { ChangeLine, Done } from "@/lib/planLines";
-import { farLine, pinLine } from "@/lib/planLines";
+import { atStart, farLine, kmFrom, pinLine } from "@/lib/planLines";
 import { type SuggestIn, planFailureMessage, planOutcome } from "@/lib/trip";
 import { ChangeList, LegLine, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
@@ -213,11 +213,11 @@ export function FindPlace({ editor, at, noteFor, startText, finding: findingLabe
                 onClick={() => { console.info("[tg-trip] plan find wrong-spot"); setNeedPin(pinned!.link); setPinned(null); }}>
                 Wrong spot? Paste the pin instead.
               </button>
-              <p className={PX.meta}>{s.km_from_baguio != null && !s.far ? `About ${Math.round(s.km_from_baguio)} km from ${editor.city}. ` : ""}{ON_FILE}</p>
+              <p className={PX.meta}>{s.km_from_baguio != null && !s.far ? `${atStart(kmFrom(s.km_from_baguio, editor.city))}. ` : ""}{ON_FILE}</p>
             </>
           ) : (
             <p className={PX.meta}>
-              {said?.lead ?? `Pinned from your link${s.km_from_baguio != null && !s.far ? `, about ${Math.round(s.km_from_baguio)} km from ${editor.city}` : ""}.`} {ON_FILE}
+              {said?.lead ?? `Pinned from your link${s.km_from_baguio != null && !s.far ? `, ${kmFrom(s.km_from_baguio, editor.city)}` : ""}.`} {ON_FILE}
             </p>
           )}
           {s.far ? (
