@@ -98,3 +98,113 @@ Two manual one-off Victory Liner first class trips, approved by the owner (TG-59
 ## Trips Victory Liner stopped listing (TG-59b), 2026-11-03
 
 Victory Liner no longer lists first class 13:15 and 14:15 from Baguio to Cubao on Sun 2026-11-08, most likely because they sold out. So those two reference rows are gone from `getting_home` in `data/itineraries/baguio-barkada-2026-11-06.json`, and the `chill` plan is gone from `data/premade_itineraries.json` for now, because it used the 14:15 return and first class 08:15 on Nov 6, which no longer resolves either. `food-trip` and `nature` stay. The owner's booked rows are unchanged. The other reference rows can drop out the same way before the trip, so re-run both dry runs after each scrape.
+
+## Sagada (TG-67, branch DATA-sagada), checked 2026-11-20
+
+For the owner's Sagada trip (Wed Nov 25 to Sun Nov 29, two people), from the owner's itinerary (`_team/tickets/TG-67/owner-itinerary.txt`) and research. Files:
+- `data/spots.csv` (21 Sagada spots) and `data/last_mile_routes.csv` (54 Sagada legs) now have a last column, `city`. It's blank on every Baguio row, so the default, `Baguio`, still applies. These rows reference no new terminal, so the main CSVs still load on a schema-only database (the tests that copy them, such as `test_scraper_stable_rows.py`, pass).
+- `supabase/data/sagada_seed.sql`: the `coda-lines` operator, the `coda-cubao` and `coda-sagada` terminals, and `operator_terminals`. These are upserts, safe to re-run, with a commented rollback block at the bottom.
+- `data/sagada-coda/`: the rows that need that seed. `routes_trips.csv` has the owner's two buses: the outbound, and the return as the 45-seater without CR (`deluxe`, ₱1,304), which the owner confirmed via the manager on 2026-11-20. `last_mile_routes.csv` has the 5 legs at the `coda-sagada` stop.
+- `data/itineraries/sagada-2026-11-25.json`: the S5 guide (key and share slug `sagada-2026-11-25`), built to plan.md §12.2 and §12.3.
+
+**Load order, after TG-67 S1 (the loader reads `city`; before that, Sagada rows would be saved as `Baguio`):**
+1. `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/data/sagada_seed.sql`
+2. `python data/load_data.py`
+3. `python data/load_data.py --data-dir data/sagada-coda`: its legs need step 2's spots, and its trips need step 1.
+4. After S2: `python data/load_itinerary.py data/itineraries/sagada-2026-11-25.json`
+
+Validated on tg-testpg (database `tg_data_sagada`: schema, migrations and `terminals_coords.sql`):
+- Step 2 dry run, before the seed: "spots: 38, trips: 2 (2 new routes), last-mile routes: 344". That's Baguio's 17, 2 and 290 plus Sagada's 21 spots and 54 legs.
+- The seed runs twice without error.
+- Steps 2 and 3 load: "trips: 2 (2 new routes), last-mile routes: 5". A re-run adds no routes.
+- Step 4's dry run reports only "the outbound trip must go to Baguio" and "the return trip must leave from Baguio", which is S2's change. With the validator's city set to `Sagada` in memory, it gives "Dry run OK, nothing saved. Would load sagada-2026-11-25: 3 days, 30 rows, 9 to-dos".
+- `pytest` for `test_scraper_stable_rows`, `test_trip_places`, `test_scraper_hardening`, `test_guide` and `test_loader_and_trips` on a throwaway tg-testpg database: 149 passed.
+
+### Sagada centre point (for TG-67 S3 `CITY_CENTRES`)
+
+**17.084373, 120.900438**: Sagada Municipal Hall, https://www.openstreetmap.org/way/185305065 (`amenity=townhall`, at Staunton Road and South Road), from Nominatim's point. It's also the `sagada-town-centre` spot. The Coda Lines stop is 20 m away, and The Poor Traveler (2019) calls this junction the town's main bus stop.
+
+### Operator, terminals and buses
+
+| Item | Source | Note |
+| --- | --- | --- |
+| Coda Lines operator, booking link, discount note | https://www.codalines.ph/ | The official site. `codalines.com` now hosts an unrelated Japanese blog. The home page links to `codalines.12go.com` for booking, and says student, senior and PWD discounts are sold only at terminal ticket booths. |
+| Stations | https://www.codalines.ph/stations | "Quezon City: HM Transport Terminal, Monte De Piedad St., corner Maryland St., Brgy. Immaculate Concepcion, Quezon City" and "Sagada, Mt. Province: Poblacion, Sagada, Mt. Province". The owner's itinerary says the bus stops in front of the Municipal Hall. |
+| `coda-cubao` lat/lng | https://www.openstreetmap.org/node/10100751717 | "Coda Lines Terminal", `amenity=bus_station`, on Maryland Street. "HM Transport Cubao" (node/1649835257) is within 15 m. |
+| `coda-sagada` lat/lng | https://www.openstreetmap.org/node/5566017629 | "Bus Stop", `amenity=bus_station`, beside the Municipal Hall. The OSM "Coda Lines Booking Office" (node/4838253221) is 7 m away. |
+| Owner's buses: dates and times | the owner's tickets, via `owner-itinerary.txt` | Wed 2026-11-25 22:30 Cubao to Sagada (loaded), and Sat 2026-11-28 14:30 Sagada to Cubao (the 45-seater without CR, `deluxe`, ₱1,304; owner via manager, 2026-11-20). The loader stores them as `source = manual`. Each row's note is exactly "from the owner's ticket", and `valid_from` = `valid_to` is the travel date. `source_url` is the Pamasahe page below, which lists both departures, 10:30 PM and 2:30 PM (manager, TG-67 test-plan F2). |
+| Class, fare, travel time | https://pamasahe.com/routes/quezon-city-sagada-and-coda-lines-schedule-fares | "Last Updated September 2026". It lists 10:30 PM as "Bus 35" only, and 2:30 PM as "Bus 35 and 45". "Bus 35 seater with CR ₱1499.00", "Bus 45 seater without CR ₱1304.00", and "12 hours", which gives `travel_minutes` 720 (the owner's itinerary also says about 12 hours each way). It warns fares "may be higher" because of fuel prices. The owner's itinerary quotes an older Pamasahe range of ₱1,232 to ₱1,377, which the page no longer shows. |
+| Class names | https://www.philippinebeaches.org/?p=15615 | Updated 2025-01-20. It calls the bus with a toilet "Super Deluxe (w/ toilet)" and the one without "Deluxe (w/o toilet)", which gives `super_deluxe` with `has_restroom` yes for the 35-seater, and `deluxe` with no restroom for the 45-seater. |
+
+Not used for times or fares:
+- The operator's own schedule image (https://www.codalines.ph/copy-of-our-routes, "As of March 26, 2022": QC > Sagada 9:00 PM, Sagada > QC 2:00 PM). It's stale, and the owner's tickets supersede it.
+- `codalines.12go.com`: returns 403 to automated requests.
+- Coda Lines' Facebook page: needs a login.
+- BusTickets.ph and other aggregators.
+- No other direct Manila–Sagada operator was found. GV Florida's official schedule (https://gvfloridatrans.com/page5.html) stops at Banaue/Bagabag.
+
+### Lodging
+
+| Row | Source | Note |
+| --- | --- | --- |
+| `kanip-aw-pines-view-lodge` name, address, check-in and check-out | https://uk.trip.com/hotels/sagada-hotel-detail-6118917/kanip-aw-pines-view-lodge | "Kanip Aw Pines View Lodge", "3WG2+VJ3, Kinlibed, … Sagada, Mountain Province". It also gives "Check-in: After 14:00", "Check-out: Before 12:00" and "Breakfast not provided". The owner's itinerary says check-in from 1 PM, so the owner should confirm with the lodge. |
+| lat/lng | https://www.openstreetmap.org/way/314651066 | "Kanip-Aw Lodge", `tourism=hostel`, South Road (Nominatim point 17.077061, 120.901525). Trip.com's plus code 3WG2+VJ3 decodes to about 17.0772, 120.9016, within 20 m. |
+| Walk legs to and from the lodge | the Trip.com page and the owner's itinerary | Trip.com's review summary says "Located within walking distance of town center and restaurants". The owner's plan walks from the tourism office to Kanip-aw. Notes give straight-line distances (the town centre is 810 m away). Walking time is not sourced. |
+
+Agoda's page for the lodge is an empty JavaScript shell, so it wasn't used.
+
+### Spots (`data/spots.csv`, city Sagada)
+
+Coordinates come from Nominatim lookups for OSM elements found with Overpass queries over the Sagada area. Each spot's element is in the `#` row above it. The owner's plan uses the first 14.
+
+| Spot | OSM element | Note |
+| --- | --- | --- |
+| `kanip-aw-pines-view-lodge` | way/314651066 | see Lodging |
+| `sagada-town-centre` | way/185305065 | Municipal Hall, the centre point above |
+| `sagada-tourist-info-center` | node/2612566236 | `tourism=information`, `information=office` |
+| `yoghurt-house` | way/242949721 | `amenity=restaurant`, Sagada South Road |
+| `lemon-pie-house` | way/235082932 | "Sagada Lemon Pie House", `amenity=cafe` |
+| `church-of-st-mary-the-virgin` | way/224067711 | Anglican church |
+| `echo-valley` | way/255575795 | `natural=wood` area, centroid |
+| `hanging-coffins` | node/2918514080 | `tourism=attraction`, inside Echo Valley |
+| `lake-danum` | way/32356334 | "Danum Lake", alt_name "Lake Banao". A separate "Banao Lake" (way/1168005572) is 300 m away; the owner should check which one guides use. |
+| `marlboro-hill` | node/2613401106 | "Marlboro Country", `natural=peak` |
+| `blue-soil-hills` | node/6284065689 | "Blue Soil", `tourism=viewpoint` |
+| `sumaguing-cave` | node/2612600152 | "Sumaguing Cave Entrance". Two other entrance points (node/3858183159, node/4750698323) are within 150 m and weren't used. |
+| `log-cabin-sagada` | node/4545732390 | "Log Cabin", `amenity=restaurant`, Sagada-Besao Road. The hotel "Log Cabin Inn" (way/300416423) is the same site. "Agape Log Cabin" (node/4842702223) is a different place. |
+| `bomod-ok-falls` | node/12180043229 | `waterway=waterfall`. "Bomod-ok Falls Registration Area" is node/4311239792. |
+| `saggas-guides-office` | node/2612566224 | "SAGGAS Information Office" (Sagada Genuine Guides Association) |
+| `lumiang-burial-cave` | node/2612600116 | `natural=cave_entrance` |
+| `kiltepan-viewpoint` | node/2613062949 | `tourism=viewpoint` |
+| `bokong-falls` | node/8406298601 | `waterway=waterfall` |
+| `sagada-pottery` | node/2613055699 | `amenity=arts_centre` |
+| `ganduyan-museum` | node/2612566174 | `tourism=museum` |
+| `sagada-public-market` | node/2612566228 | `amenity=marketplace` |
+
+Fees, guides and times:
+- Registration fee (`sagada-tourist-info-center`, `entrance_fee_php` 100): https://ptvnews.ph/?p=212052 (PTV/PNA, 2022-10-19) says "the town only charges a PHP100 registration fee for tourists, which already covers the environment fee". Guides from 2019 give P50. The town's site, https://sagada.gov.ph/, is "rebuilding" and has no content. The PNA originals returned 403 or 404.
+- Rules: https://ptvnews.ph/sagada-braces-for-tourists-influx-issues-guidelines (PTV/PNA, 2019-02-14). Visitors register at the tourism office, and the official receipt is the entrance pass to the sites. Echo Valley, Sumaguing and Lumiang are short walks from town. Bomod-ok and Marlboro are reached by shuttle. Marlboro has a visitor cap. Don't touch coffins or photograph mass.
+- Guide rates, durations and van fees: https://www.thepoortraveler.net/2019/04/sagada-itinerary-guide/ (2019) and https://www.philippinebeaches.org/?p=12965 (undated, header image 2024-06). Hanging Coffins tour P300 for 1 to 10 people, 1 hour (`visit_minutes` 60). Sumaguing guide P800 for 1 to 4 people, "around 2 hours" (`visit_minutes` 120). Marlboro guide P600; the Marlboro plus Blue Soil package is guide P1,600 for 1 to 5 people and transport P1,350 two-way, with the Blue Soil trek "around two hours". Bomod-ok guide P500 for 1 to 7 people plus a "P10" barangay fee (`entrance_fee_php` 10) and transport P500 to P650. Lake Danum transport P550 and "20 minutes away from the town proper". Kiltepan is listed as "Temporarily Closed". These are per group, so they stay in descriptions and notes.
+- Not sourced: opening hours for every spot. Log Cabin's dinner hours conflict (the owner's doc says 6 PM; search snippets from Trip.com and TableAgent say 6:30 or 7 PM; Manila Bulletin and TableAgent returned 403), so the guide row says to call ahead. Visit times are empty for every spot except the two above. Leads that aren't loaded: OSM `opening_hours` on Lemon Pie House (`Mo-Su 08:00-21:00`).
+
+### Getting-around legs (`data/last_mile_routes.csv`, city Sagada)
+
+59 legs (54 in `data/last_mile_routes.csv`, 5 at the bus stop in `data/sagada-coda/`), `minutes` empty unless sourced, fares only in notes (they're per vehicle, not per person):
+- **The owner's chain** (plan §5): `coda-sagada` → tourist office → lodge, and lodge to and from Yoghurt House, Lemon Pie House, the church, Sumaguing, Log Cabin and the town centre (walk). Also church → Echo Valley → Hanging Coffins → lodge (walk), Marlboro → Blue Soil (the guided trek), and van legs lodge ↔ Lake Danum (20 min), lodge → Marlboro, Blue Soil → lodge, and lodge ↔ Bomod-ok.
+- **The town-centre hub** (earlier batch): walks to the tourist office, SAGGAS, church, market, museum, Yoghurt House, Log Cabin, Bokong Falls, Sumaguing and Lumiang, and vans to Lumiang and Kiltepan (15 min). There's also Lumiang → Sumaguing, the guided Cave Connection.
+- Walking times aren't sourced, so the notes give OSM straight-line distances. Van legs say "Hired tour vehicle through the tourism office or SAGGAS". That's how both guides describe the transport fee; no public route is implied.
+- No leg to `sagada-pottery`: no source says how to get there.
+- Not used: the OSM "Jeepney Station to Bangaan and Bontoc" (way/255575797). It has no signboard, fare or time from any source.
+
+### The guide (`data/itineraries/sagada-2026-11-25.json`)
+
+Built to plan.md §12.2 and §12.3 (manager, 2026-11-20). The core is the strict shape: days 1 to 3 are Thu to Sat, with only the tourist information center (10:35 to 11:00) and the lodge (11:10 to 11:30) on day 1. Both legs are sourced walks with no sourced minutes, so F3's times hold. The guide has 5 days, Wed Nov 25 to Sun Nov 29, and 30 rows, word for word from the owner's itinerary. The brunch pick is two `show_if` rows (`d2-05` Yoghurt House, `d2-06` Lemon Pie House), and the to-dos are the 9 packing items. Slugs differ from §12.1's proposals, which it allows: `coda-cubao` (§12.1 `hm-cubao`), `sagada-tourist-info-center`, `church-of-st-mary-the-virgin`, `kanip-aw-pines-view-lodge`.
+
+Budget rows, per person for two (§12.3's table, `estimate` as `parse_estimate` reads it):
+- `bus` 2,803: the outbound ₱1,499 (35-seater with CR) plus the return ₱1,304 (45-seater without CR), both from Pamasahe (Sept 2026). §12.3 has `2,464 to 2,754`, from the ₱1,232 to ₱1,377 the owner's file quotes; the page no longer shows those fares, and §12.3 itself says the line becomes exact once the class is known.
+- `lodge`: "As booked".
+- `registration` 100: the owner's file (GoAsia, no URL given, so the source has `url: null`). PTV/PNA 2022 also gives ₱100.
+- `guides` 1,600 to 2,000: the owner's "~₱800 to ₱1,000 per tour for 2", halved, times 4 tours. The per-group rates on Philippine Beaches and The Poor Traveler (above) give 1,610 for the same 4 tours plus the Bomod-ok barangay fee, inside that range.
+- `lake-danum`: "Ask at tourism office", as in the owner's file. Philippine Beaches gives P550 transport (₱275 each), not loaded.
+- `food`: "Your call".
+- Not in §12.3, so not loaded: the tour vans (Marlboro and Blue Soil P1,350, Bomod-ok P500 to P650, about ₱925 to ₱1,000 each), which both guide sources charge on top of guide fees.

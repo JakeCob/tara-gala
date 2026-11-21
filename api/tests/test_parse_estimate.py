@@ -57,6 +57,8 @@ def test_g11_unreadable_estimates(text):
 
 
 def test_g11_every_estimate_in_the_data_file_reads():
+    # An estimate with no digit ("As booked", "Your call") is a text line on purpose (TG-67 plan §12.3) and is skipped:
+    # the panel shows its text with no number. Anything with a digit must still read, so a typo in a figure fails here.
     files = sorted((ROOT / "data" / "itineraries").glob("*.json"))
     assert files, "the curated plan files"
     seen = 0
@@ -64,6 +66,8 @@ def test_g11_every_estimate_in_the_data_file_reads():
         data = json.loads(f.read_text(encoding="utf-8"))
         guide = data.get("guide") or (data.get("plan") or {}).get("guide") or {}
         for row in guide.get("budget", {}).get("rows", []):
+            if not any(ch.isdigit() for ch in row["estimate"]):
+                continue
             got = parse(row["estimate"])
             assert got is not None and got[0] <= got[1], (f.name, row["estimate"])
             seen += 1

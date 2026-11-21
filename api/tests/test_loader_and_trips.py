@@ -237,12 +237,25 @@ def test_a_city_cell_with_spaces_is_stripped(dsn, tmp_path):
 
 
 def test_the_repo_csvs_load_as_baguio(dsn, tmp_path):
-    # T67-L2: today's data/spots.csv and data/last_mile_routes.csv (no city column) load every row as Baguio.
-    # Must stay green on main too; the summary's per-city counts are L6, above.
+    # T67-L2: in the repo's data/spots.csv and data/last_mile_routes.csv, every row with a blank city cell loads as
+    # Baguio, and the cities are exactly {Baguio, Sagada} (no other spelling; S2 review N3). The Sagada rows arrived with
+    # DATA-sagada (review-data M2). Must stay green on main too; the summary's per-city counts are L6, above.
     for name in ("spots.csv", "last_mile_routes.csv"):
         shutil.copy(load_data.HERE / name, tmp_path / name)
     assert load_data.run(dsn, tmp_path, dry_run=False) == 0
-    assert set(cities(dsn, "spots").values()) == {"Baguio"}
+
+    spot_rows = [row for _, row in load_data.read_csv(tmp_path / "spots.csv")]
+    blank = {row["slug"].strip() for row in spot_rows if not (row.get("city") or "").strip()}
+    assert blank, "the Baguio spots"
+    loaded = cities(dsn, "spots")
+    assert {slug: loaded[slug] for slug in blank} == dict.fromkeys(blank, "Baguio")
+    assert set(loaded.values()) == {"Baguio", "Sagada"}
+
+    leg_rows = [row for _, row in load_data.read_csv(tmp_path / "last_mile_routes.csv")]
+    blank_legs = sum(1 for row in leg_rows if not (row.get("city") or "").strip())
+    assert blank_legs, "the Baguio legs"
     with psycopg.connect(dsn) as conn:
-        assert conn.execute("select distinct city from last_mile_routes").fetchall() == [("Baguio",)]
+        by_city = dict(conn.execute("select city, count(*) from last_mile_routes group by city").fetchall())
+    assert set(by_city) == {"Baguio", "Sagada"}
+    assert by_city["Baguio"] == blank_legs
     assert count(dsn, "spots") and count(dsn, "last_mile_routes")
