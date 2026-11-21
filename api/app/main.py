@@ -74,6 +74,7 @@ app.add_middleware(
     allow_origins=[o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()],
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],  # POST for /plan (TG-20); POST and DELETE for wallets (TG-50); PUT and PATCH for trip sessions (TG-52)
     allow_headers=["*"],
+    expose_headers=["Retry-After"],  # TG-70 F2: the outbox waits out a 429 (the phone's origin can't read it otherwise)
 )
 
 
