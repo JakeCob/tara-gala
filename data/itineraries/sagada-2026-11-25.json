@@ -1,0 +1,566 @@
+{
+ "_readme": "TG-67 S5 (tg-data): the owner's Sagada trip, Nov 25 to 29, built to plan.md §12.2 (core) and §12.3 (guide) from _team/tickets/TG-67/owner-itinerary.txt. The core is the strict shape: days 1 to 3 are Thu Nov 26 to Sat Nov 28 (day 1 is the day the overnight bus arrives), minimal on purpose. The guide has 5 days, Wed Nov 25 to Sun Nov 29. Needs supabase/data/sagada_seed.sql, the Sagada rows in data/*.csv and data/sagada-coda/, and TG-67 S1 and S2 (load order in data/SOURCES.md). Load with: python data/load_itinerary.py data/itineraries/sagada-2026-11-25.json",
+ "share_slug": "sagada-2026-11-25",
+ "key": "sagada-2026-11-25",
+ "vibe": "Chill and treks",
+ "budget_php": null,
+ "party": [
+  {
+   "type": "adult"
+  },
+  {
+   "type": "adult"
+  }
+ ],
+ "outbound": {
+  "operator": "coda-lines",
+  "origin": "coda-cubao",
+  "destination": "coda-sagada",
+  "departure": "22:30",
+  "date": "2026-11-25",
+  "class": "super_deluxe",
+  "via": null
+ },
+ "return": {
+  "operator": "coda-lines",
+  "origin": "coda-sagada",
+  "destination": "coda-cubao",
+  "departure": "14:30",
+  "date": "2026-11-28",
+  "class": "deluxe",
+  "via": null
+ },
+ "days": [
+  {
+   "day": 1,
+   "stops": [
+    {
+     "spot": "sagada-tourist-info-center",
+     "arrive": "10:35",
+     "leave": "11:00",
+     "leg": {
+      "from": "coda-sagada",
+      "to": "sagada-tourist-info-center",
+      "mode": "walk",
+      "signboard": null
+     }
+    },
+    {
+     "spot": "kanip-aw-pines-view-lodge",
+     "arrive": "11:10",
+     "leave": "11:30",
+     "leg": {
+      "from": "sagada-tourist-info-center",
+      "to": "kanip-aw-pines-view-lodge",
+      "mode": "walk",
+      "signboard": null
+     }
+    }
+   ]
+  },
+  {
+   "day": 2,
+   "stops": []
+  },
+  {
+   "day": 3,
+   "stops": []
+  }
+ ],
+ "guide": {
+  "title": "Sagada Trip, Nov 25 to 29",
+  "summary": "Two full days in Sagada: overnight bus up Wed night, home by early Sunday morning. The hard day is Friday (sunrise trek plus cave); Thursday and Saturday stay light.",
+  "lodging": {
+   "spot": "kanip-aw-pines-view-lodge"
+  },
+  "getting_there": {
+   "title": "Getting there (Wed Nov 25, Cubao)",
+   "intro": "Coda Lines, HM Transport terminal, Monte de Piedad cor. Maryland St, Cubao. Be there 30 to 60 min early.",
+   "buses": [
+    {
+     "trip": {
+      "operator": "coda-lines",
+      "origin": "coda-cubao",
+      "destination": "coda-sagada",
+      "departure": "22:30",
+      "date": "2026-11-25",
+      "class": "super_deluxe",
+      "via": null
+     },
+     "note": "Booked",
+     "booked": true
+    }
+   ],
+   "tips": [
+    "The A/C runs cold, so keep a jacket and neck pillow in your carry-on."
+   ]
+  },
+  "days": [
+   {
+    "day": 1,
+    "title": "Day 1: Wed Nov 25, travel night",
+    "rows": [
+     {
+      "key": "d1-01",
+      "time": "20:45",
+      "plan": "Leave for the Cubao terminal",
+      "note": "Eat dinner before boarding"
+     },
+     {
+      "key": "d1-02",
+      "time": "21:30",
+      "plan": "Check in for Coda Lines",
+      "note": "",
+      "place": {
+       "terminal": "coda-cubao"
+      }
+     },
+     {
+      "key": "d1-03",
+      "time": "22:30",
+      "plan": "Bus departs",
+      "note": "",
+      "place": {
+       "terminal": "coda-cubao"
+      },
+      "bus": "outbound"
+     }
+    ]
+   },
+   {
+    "day": 2,
+    "title": "Day 2: Thu Nov 26, arrive and town walk",
+    "pick": {
+     "key": "brunch",
+     "title": "Brunch: pick one",
+     "options": [
+      {
+       "id": "A",
+       "label": "Yoghurt House",
+       "leave": "11:30",
+       "place": {
+        "spot": "yoghurt-house"
+       }
+      },
+      {
+       "id": "B",
+       "label": "Lemon Pie House",
+       "leave": "11:30",
+       "place": {
+        "spot": "lemon-pie-house"
+       }
+      }
+     ]
+    },
+    "rows": [
+     {
+      "key": "d2-01",
+      "time": "10:30",
+      "plan": "Arrive at the Municipal Hall stop",
+      "note": "",
+      "place": {
+       "terminal": "coda-sagada"
+      }
+     },
+     {
+      "key": "d2-02",
+      "time": "10:35",
+      "plan": "Register at the Tourist Information Center",
+      "note": "About ₱100 each. Keep the official receipt: it is your pass at every site",
+      "place": {
+       "spot": "sagada-tourist-info-center"
+      }
+     },
+     {
+      "key": "d2-03",
+      "time": "10:45",
+      "plan": "Book guides for Fri 4 AM Marlboro Hill, Fri 1 PM Sumaguing and Sat morning",
+      "note": "",
+      "place": {
+       "spot": "sagada-tourist-info-center"
+      }
+     },
+     {
+      "key": "d2-04",
+      "time": "11:00",
+      "plan": "Walk to Kanip-aw and drop your bags",
+      "note": "",
+      "place": {
+       "spot": "kanip-aw-pines-view-lodge"
+      }
+     },
+     {
+      "key": "d2-05",
+      "time": "11:30",
+      "plan": "Brunch at Yoghurt House",
+      "note": "Option A",
+      "place": {
+       "spot": "yoghurt-house"
+      },
+      "show_if": {
+       "pick": "brunch",
+       "is": "A"
+      }
+     },
+     {
+      "key": "d2-06",
+      "time": "11:30",
+      "plan": "Brunch at Lemon Pie House",
+      "note": "Option B",
+      "place": {
+       "spot": "lemon-pie-house"
+      },
+      "show_if": {
+       "pick": "brunch",
+       "is": "B"
+      }
+     },
+     {
+      "key": "d2-07",
+      "time": "13:00",
+      "plan": "Check in, shower, nap",
+      "note": "",
+      "place": {
+       "spot": "kanip-aw-pines-view-lodge"
+      }
+     },
+     {
+      "key": "d2-08",
+      "time": "15:00",
+      "plan": "Guided walk: St. Mary's Church",
+      "note": "About 2 hours for the whole walk",
+      "place": {
+       "spot": "church-of-st-mary-the-virgin"
+      }
+     },
+     {
+      "key": "d2-09",
+      "time": "15:30",
+      "plan": "Echo Valley",
+      "note": "",
+      "place": {
+       "spot": "echo-valley"
+      }
+     },
+     {
+      "key": "d2-10",
+      "time": "16:00",
+      "plan": "Hanging Coffins",
+      "note": "Be respectful, and ask before photographing locals",
+      "place": {
+       "spot": "hanging-coffins"
+      }
+     },
+     {
+      "key": "d2-11",
+      "time": "16:30",
+      "plan": "Optional: Lake Danum sunset",
+      "note": "20 min drive, arrange transport at the tourism office",
+      "place": {
+       "spot": "lake-danum"
+      }
+     },
+     {
+      "key": "d2-12",
+      "time": "18:30",
+      "plan": "Early dinner, sleep by 9 PM",
+      "note": "Restaurants close early, so eat before 8 PM"
+     }
+    ],
+    "tips": [
+     "No guide, no tour: every site needs a registered local guide booked through the tourism office.",
+     "Carry your tourism receipt every day; it is checked at the sites.",
+     "Don't do Sumaguing and Bomod-ok on the same day; both are very physical.",
+     "Dinner early: most restaurants wind down by 8 to 9 PM."
+    ]
+   },
+   {
+    "day": 3,
+    "title": "Day 3: Fri Nov 27, sunrise trek and cave",
+    "rows": [
+     {
+      "key": "d3-01",
+      "time": "03:45",
+      "plan": "Wake up, dress warm, bring a flashlight",
+      "note": "",
+      "place": {
+       "spot": "kanip-aw-pines-view-lodge"
+      }
+     },
+     {
+      "key": "d3-02",
+      "time": "04:00",
+      "plan": "Marlboro Hill sunrise and sea of clouds",
+      "note": "",
+      "place": {
+       "spot": "marlboro-hill"
+      }
+     },
+     {
+      "key": "d3-03",
+      "time": "07:00",
+      "plan": "Traverse to Blue Soil Hills, done around 9 AM",
+      "note": "",
+      "place": {
+       "spot": "blue-soil-hills"
+      }
+     },
+     {
+      "key": "d3-04",
+      "time": "09:30",
+      "plan": "Big breakfast, then nap",
+      "note": ""
+     },
+     {
+      "key": "d3-05",
+      "time": "13:00",
+      "plan": "Sumaguing Cave, about 3 hours",
+      "note": "Sandals and clothes that can get wet: you will wade",
+      "place": {
+       "spot": "sumaguing-cave"
+      }
+     },
+     {
+      "key": "d3-06",
+      "time": "16:30",
+      "plan": "Back at Kanip-aw, hot shower",
+      "note": "",
+      "place": {
+       "spot": "kanip-aw-pines-view-lodge"
+      }
+     },
+     {
+      "key": "d3-07",
+      "time": "18:00",
+      "plan": "Dinner at Log Cabin Sagada",
+      "note": "Opens 6 PM",
+      "place": {
+       "spot": "log-cabin-sagada"
+      }
+     },
+     {
+      "key": "d3-08",
+      "time": "20:30",
+      "plan": "Pack most of your bag",
+      "note": "Before bed"
+     }
+    ]
+   },
+   {
+    "day": 4,
+    "title": "Day 4: Sat Nov 28, slow morning, bus home",
+    "rows": [
+     {
+      "key": "d4-01",
+      "time": "06:30",
+      "plan": "Quick breakfast, pack fully",
+      "note": ""
+     },
+     {
+      "key": "d4-02",
+      "time": "07:00",
+      "plan": "Bomod-ok Falls trek, about 1 hour each way, back around 11 AM",
+      "note": "",
+      "place": {
+       "spot": "bomod-ok-falls"
+      }
+     },
+     {
+      "key": "d4-03",
+      "time": "11:00",
+      "plan": "Shower and check out",
+      "note": "Ask Kanip-aw to hold your bags if checkout is earlier",
+      "place": {
+       "spot": "kanip-aw-pines-view-lodge"
+      }
+     },
+     {
+      "key": "d4-04",
+      "time": "12:00",
+      "plan": "Lunch, then pasalubong: lemon pie, Sagada coffee",
+      "note": ""
+     },
+     {
+      "key": "d4-05",
+      "time": "14:00",
+      "plan": "At the Municipal Hall stop with your bags",
+      "note": "",
+      "place": {
+       "terminal": "coda-sagada"
+      }
+     },
+     {
+      "key": "d4-06",
+      "time": "14:30",
+      "plan": "Bus departs for Cubao",
+      "note": "",
+      "place": {
+       "terminal": "coda-sagada"
+      },
+      "bus": "return"
+     }
+    ]
+   },
+   {
+    "day": 5,
+    "title": "Day 5: Sun Nov 29, home",
+    "rows": [
+     {
+      "key": "d5-01",
+      "time": "02:30",
+      "plan": "Arrive Cubao",
+      "note": "Book a Grab home, or wait at the terminal until early morning",
+      "place": {
+       "terminal": "coda-cubao"
+      }
+     }
+    ]
+   }
+  ],
+  "getting_home": {
+   "title": "Going home (Sat Nov 28, Municipal Hall stop)",
+   "buses": [
+    {
+     "trip": {
+      "operator": "coda-lines",
+      "origin": "coda-sagada",
+      "destination": "coda-cubao",
+      "departure": "14:30",
+      "date": "2026-11-28",
+      "class": "deluxe",
+      "via": null
+     },
+     "note": "Booked. Be there by 2 PM.",
+     "booked": true
+    }
+   ]
+  },
+  "budget": {
+   "summary": "Per person, for two people. Approximate: guide rates change, so check the board at the tourism office.",
+   "rows": [
+    {
+     "item": "Coda Lines bus, both ways (₱1,499 out, ₱1,304 back)",
+     "estimate": "2,803",
+     "key": "bus",
+     "category": "transport"
+    },
+    {
+     "item": "Kanip-aw Pines View Lodge, 2 nights",
+     "estimate": "As booked",
+     "key": "lodge",
+     "category": "hotel"
+    },
+    {
+     "item": "Tourism registration",
+     "estimate": "100",
+     "key": "registration",
+     "category": "activities"
+    },
+    {
+     "item": "Guide fees, 4 tours (~₱800 to 1,000 a tour for 2)",
+     "estimate": "1,600 to 2,000",
+     "key": "guides",
+     "category": "activities"
+    },
+    {
+     "item": "Lake Danum transport (optional)",
+     "estimate": "Ask at tourism office",
+     "key": "lake-danum",
+     "category": "transport"
+    },
+    {
+     "item": "Food and pasalubong",
+     "estimate": "Your call",
+     "key": "food",
+     "category": "food"
+    }
+   ],
+   "excluded": "Bring cash: fees, guides, food and pasalubong."
+  },
+  "todo": [
+   {
+    "key": "todo-01",
+    "text": "Warm jacket and layers (also for the bus A/C)",
+    "done": false
+   },
+   {
+    "key": "todo-02",
+    "text": "Flashlight or headlamp for the 4 AM trek",
+    "done": false
+   },
+   {
+    "key": "todo-03",
+    "text": "Sandals or water shoes for Sumaguing Cave",
+    "done": false
+   },
+   {
+    "key": "todo-04",
+    "text": "Quick-dry clothes and a change of clothes for after the cave",
+    "done": false
+   },
+   {
+    "key": "todo-05",
+    "text": "Light rain jacket or umbrella",
+    "done": false
+   },
+   {
+    "key": "todo-06",
+    "text": "Power bank and charging cables",
+    "done": false
+   },
+   {
+    "key": "todo-07",
+    "text": "Enough cash for fees, guides, food and pasalubong",
+    "done": false
+   },
+   {
+    "key": "todo-08",
+    "text": "Valid IDs and both Coda Lines tickets",
+    "done": false
+   },
+   {
+    "key": "todo-09",
+    "text": "Small daypack, water bottle, snacks",
+    "done": false
+   }
+  ],
+  "sources": [
+   {
+    "label": "Coda Lines reviews and timing, 12Go",
+    "url": "https://12go.com/en/operator/coda-lines"
+   },
+   {
+    "label": "Sagada tour rules, Traveling Up",
+    "url": "https://traveling-up.com/things-to-do-in-sagada-new-rules-tours-2019/amp"
+   },
+   {
+    "label": "Kanip-aw Pines View Lodge, Trip.com",
+    "url": "https://uk.trip.com/hotels/sagada-hotel-detail-6118917/kanip-aw-pines-view-lodge"
+   },
+   {
+    "label": "Log Cabin Sagada, Manila Bulletin",
+    "url": "https://mb.com.ph/2026/07/15/visiting-sagada-this-beloved-restaurant-buys-what-farmers-cant-sell-turning-it-into-specialty-products"
+   },
+   {
+    "label": "Sagada trip tips, The Poor Traveler",
+    "url": "https://www.thepoortraveler.net/2019/04/sagada-itinerary-guide/"
+   },
+   {
+    "label": "Coda Lines times and fares, Pamasahe",
+    "url": "https://pamasahe.com/routes/quezon-city-sagada-and-coda-lines-schedule-fares"
+   },
+   {
+    "label": "Tourism registration, GoAsia",
+    "url": null
+   },
+   {
+    "label": "Guide rates, Philippine Beaches",
+    "url": "https://www.philippinebeaches.org/?p=12965"
+   },
+   {
+    "label": "Spot locations, OpenStreetMap",
+    "url": "https://www.openstreetmap.org/"
+   }
+  ]
+ }
+}
