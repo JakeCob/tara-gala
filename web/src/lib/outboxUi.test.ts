@@ -75,14 +75,15 @@ test("T70-U2 an add with the flag effective gets an id and 15 s; an edit never d
   const edit = fn.indexOf("if (ctx.edit) return editing ? saveEdit(editing, body as ExpensePatch) : false;");
   const id = fn.indexOf('const id = parts.outbox && "mode" in body ? newExpenseId() : null;');
   assert.ok(edit > 0 && id > edit, "the edit returns before any id is made");
-  assert.match(fn, /const startOnline = navigator\.onLine;\n\s+const r = id\n\s+\? await walletApi\.addExpense\(slug, \{ \.\.\.\(body as ExpenseBodyV2\), id \}, \{ timeoutMs: SEND_TIMEOUT_MS \}\)\n\s+: await walletApi\.addExpense\(slug, body\);/);
+  assert.match(fn, /const sent = id \? \(\{ \.\.\.\(body as ExpenseBodyV2\), id \} as QueuedBody\) : null;/, "the id goes on the body that's sent and kept");
+  assert.match(fn, /const startOnline = navigator\.onLine;\n\s+const r = sent \? await walletApi\.addExpense\(slug, sent, \{ timeoutMs: SEND_TIMEOUT_MS \}\) : await walletApi\.addExpense\(slug, body\);/);
   assert.doesNotMatch(inner(view(), "async function saveEdit("), /newExpenseId|timeoutMs/);
 });
 
 test("T70-U13 B24: with the flag off the add is today's call, byte for byte: no id, no option, no queue", () => {
   const fn = submit();
   assert.match(fn, /: await walletApi\.addExpense\(slug, body\);/);
-  assert.match(fn, /if \(id && !r\.ok && shouldQueue\(r\) && \(await queueAdd\(\{ \.\.\.\(body as ExpenseBodyV2\), id \} as QueuedBody, r, startOnline\)\)\) return true;/, "queued only with an id");
+  assert.match(fn, /if \(sent && !r\.ok && shouldQueue\(r\) && \(await queueAdd\(sent, r, startOnline\)\)\) return true;/, "queued only with an id");
   assert.equal(view().split("queueAdd(").length - 1, 2, "one definition, one call");
 });
 
