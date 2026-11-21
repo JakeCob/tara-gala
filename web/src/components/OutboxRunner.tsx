@@ -24,7 +24,11 @@ export default function OutboxRunner() {
     async function go(trigger: boolean) {
       clearTimeout(timer);
       const next = await runner.run(trigger);
-      if (!stopped && next !== null) timer = setTimeout(() => void go(false), next);
+      // One timer at a time: another run may have armed one meanwhile
+      if (!stopped && next !== null) {
+        clearTimeout(timer);
+        timer = setTimeout(() => void go(false), next);
+      }
     }
     const onOnline = () => void go(true);
     const onVisible = () => {

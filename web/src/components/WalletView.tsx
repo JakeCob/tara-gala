@@ -327,6 +327,8 @@ export default function WalletView({ slug }: { slug: string }) {
   function closeForm(backTo: string | null) {
     setEditing(null);
     setFormAlert(null);
+    setFormStart(null); // TG-70: Put it in the form's expense loads once; its row stays a failed card
+    setRefill(null);
     setFormKey((k) => k + 1);
     if (backTo) toExpense(backTo);
   }

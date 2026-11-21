@@ -111,6 +111,10 @@ export default function WaitingList({ box, members, formBusy, onToForm }: {
   onToForm: (q: Queued) => void;
 }) {
   const [asking, setAsking] = useState<string | null>(null);
+  // A confirm open when the box goes away (another page, a reload of the list) mustn't leave its row held
+  useEffect(() => () => {
+    if (asking) outbox.held.delete(asking);
+  }, [asking]);
   if (!box.rows.length && !box.lines.length) return null;
 
   function ask(id: string) {
