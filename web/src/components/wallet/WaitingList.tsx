@@ -77,7 +77,10 @@ export function useOutbox(slug: string, onWallet: (w: Wallet) => void, enabled: 
         return;
       }
       if (e.slug !== slug) return;
-      if (e.outcome === "sending") return setSending(e.id);
+      if (e.outcome === "sending") {
+        setLines([]); // tg-ux2 S1: the save line goes once a send starts
+        return setSending(e.id);
+      }
       setSending(null);
       if (e.outcome === "sent" || e.outcome === "replayedGone") run.current.push({ kind: e.outcome, row: e.row });
       if (e.wallet) wallet.current(e.wallet);
