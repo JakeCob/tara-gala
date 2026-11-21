@@ -484,3 +484,23 @@ test("T70-L17 B23 no IndexedDB (node): the default store rejects with no-indexed
   const lines = warn.mock.calls.map((c) => c.arguments.join(" "));
   assert.deepEqual(lines, ["[tg-outbox] idb unavailable"]);
 });
+
+test("T70-L4d review S2: a dropped line survives a retry, so the final send still says LINE_DROPPED", async () => {
+  const { afterSend, sentLines } = await load();
+  const dropped = afterSend(row(), rejected("unknown_budget_line"), at());
+  assert.equal(dropped.kind, "dropLine");
+  // the immediate resend times out: a retry, and the row must keep lineDropped
+  const retried = afterSend(dropped.row, timedOut, at(NOW + S, OFFLINE));
+  assert.equal(retried.kind, "retry");
+  assert.equal(retried.row.lineDropped, true);
+  assert.equal(retried.row.body.budget_key, null);
+  // a failed try after that keeps it too
+  const again = afterSend(retried.row, server, at(NOW + MIN));
+  assert.equal(again.row.lineDropped, true);
+  const sent = afterSend(again.row, ok([ID]), at(NOW + 2 * MIN));
+  assert.equal(sent.kind, "sent");
+  assert.equal(sent.row.lineDropped, true);
+  assert.deepEqual(sentLines([{ kind: "sent", row: sent.row }], formatPeso), [
+    "Sent Taxi to Echo Valley (made up), ₱450, without its budget line, because the plan's lines changed. Pick one in Details.",
+  ]);
+});
