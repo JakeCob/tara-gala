@@ -13,6 +13,7 @@ type Deps = {
   onLine: () => boolean;
   now: () => number;
   dispatch: (e: Record<string, unknown>) => void;
+  sending: Set<string>;
 };
 type Runner = { run: (trigger: boolean) => Promise<number | null> };
 
@@ -87,8 +88,8 @@ beforeEach(() => {
 afterEach(() => {
   console.info = originalInfo;
 });
-const deps = (store: OutboxStore, send: Deps["send"], onLine: () => boolean = () => true): Deps => ({
-  store, send, onLine, now: () => NOW, dispatch: (e) => void events.push(e),
+const deps = (store: OutboxStore, send: Deps["send"], onLine: () => boolean = () => true, sending = new Set<string>()): Deps => ({
+  store, send, onLine, now: () => NOW, dispatch: (e) => void events.push(e), sending,
 });
 
 test("T70-U1a oldest first, one at a time (an await in the loop, never two in flight), each with 15 s and its own id", async () => {
@@ -247,4 +248,50 @@ test("T70-U14a the runner's logs are counts and outcomes only: no slug-free leak
   assert.ok(logged.some((l) => /\[tg-outbox\] send outcome=retry tries=2/.test(l)));
   assert.ok(logged.some((l) => /\[tg-outbox\] send outcome=sent tries=\d+/.test(l)));
   for (const l of logged) assert.doesNotMatch(l, /1111-4111|Taxi|Ana|Ben|m-ana/, l);
+});
+
+// ---------------------------------------------------------------- tg-review's O3 code review M1 (review-code-O3.md)
+
+test("T70-U1m a row removed during an earlier row's send is never sent (the store is read again before each send)", async () => {
+  const { outboxRunner } = await load();
+  const store = fakeStore([row(1), row(2)]);
+  const s = fakeSend([
+    (_s, b) => {
+      store.rows.delete(ID(2)); // Remove, then Remove in the confirm, while row 1 is in flight
+      return ok([b.id]);
+    },
+  ]);
+  await outboxRunner(deps(store, s.send)).run(true);
+  assert.deepEqual(s.calls.map((c) => c.body.id), [ID(1)]);
+  assert.equal(store.rows.size, 0);
+});
+
+test("T70-U1n a retry never puts back a row removed while it was in flight", async () => {
+  const { outboxRunner } = await load();
+  for (const answer of [{ ok: false, why: "server" }, { ok: false, why: "rejected", detail: "wallet_full" }, { ok: false, why: "rejected", detail: "unknown_budget_line" }] as WalletResult[]) {
+    const store = fakeStore([row(1, { body: body(1, { budget_key: "taxi" }) })]);
+    const s = fakeSend([
+      () => {
+        store.rows.delete(ID(1)); // removed in another tab while this send ran
+        return answer;
+      },
+    ]);
+    await outboxRunner(deps(store, s.send)).run(true);
+    assert.equal(store.rows.has(ID(1)), false, `not put back after ${JSON.stringify(answer)}`);
+    assert.equal(s.calls.length, 1, "a dropLine isn't resent either");
+  }
+});
+
+test("T70-U1o the row in flight is in the page's sending set for exactly its send, so a box that mounts mid-run knows", async () => {
+  const { outboxRunner } = await load();
+  const sending = new Set<string>();
+  const seen: string[][] = [];
+  const store = fakeStore([row(1), row(2)]);
+  const s = fakeSend([(_s, b) => { seen.push([...sending]); return ok([b.id]); }, (_s, b) => { seen.push([...sending]); return ok([b.id]); }]);
+  await outboxRunner(deps(store, s.send, () => true, sending)).run(true);
+  assert.deepEqual(seen, [[ID(1)], [ID(2)]]);
+  assert.equal(sending.size, 0, "cleared after each send");
+  const failing = fakeStore([row(3)]);
+  await outboxRunner(deps(failing, async () => { throw new Error("boom"); }, () => true, sending)).run(true).catch(() => null);
+  assert.equal(sending.size, 0, "cleared even when a send throws");
 });

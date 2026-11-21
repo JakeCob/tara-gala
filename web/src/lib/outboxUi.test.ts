@@ -45,10 +45,10 @@ test("T70-U1 OutboxRunner is mounted next to ServiceWorkerManager, renders nothi
   const src = runnerTsx();
   assert.match(src, /^"use client";/);
   assert.match(src, /return null;\n\}\n/, "renders nothing");
-  assert.match(src, /outboxRunner\(\{\s*store: outbox,\s*send: walletApi\.addExpense,\s*onLine: \(\) => navigator\.onLine,\s*now: Date\.now,/);
+  assert.match(src, /outboxRunner\(\{\s*store: outbox,\s*send: walletApi\.addExpense,\s*onLine: \(\) => navigator\.onLine,\s*now: Date\.now,\s*sending: outboxSending,/);
   assert.match(src, /new CustomEvent\(OUTBOX_EVENT, \{ detail: e \}\)/);
   assert.match(src, /addEventListener\("online", onOnline\)/);
-  assert.match(src, /document\.visibilityState === "visible"/);
+  assert.match(src, /if \(document\.visibilityState === "visible"\) void go\(true\);/, "the tab coming back is a trigger (S1, B14a)");
   assert.match(src, /addEventListener\(OUTBOX_KICK, onKick\)/, "a Save that queued arms the timer");
   assert.match(src, /window\.addEventListener\(OUTBOX_KICK, onKick\);\n\s+void go\(true\);/, "the mount itself is a trigger (S1), not only online");
   assert.match(src, /clearTimeout\(timer\)/);
@@ -281,4 +281,10 @@ test("T70-U16 M1: with the flag on, Activity's offline or 5xx read says ACTIVITY
   assert.match(src, /\}, \[online, slug, rev, waitHere\]\);/);
   assert.doesNotMatch(src, /setFailed\(failureMessage\(/);
   assert.match(view(), /<ActivityList slug=\{slug\} wallet=\{lineWallet\} online=\{online\} waitHere=\{parts\.outbox\} /);
+});
+
+test("T70-U5g a box that mounts mid-run starts with the in-flight row as Sending (Remove disabled), from the page's set", () => {
+  const src = list();
+  assert.match(src, /import \{ OUTBOX_EVENT, outboxSending, type OutboxEvent \} from "@\/lib\/outboxRunner";/);
+  assert.match(src, /const \[sending, setSending\] = useState<string \| null>\(\(\) => \[\.\.\.outboxSending\]\[0\] \?\? null\);/);
 });
