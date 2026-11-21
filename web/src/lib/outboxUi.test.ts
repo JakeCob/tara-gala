@@ -250,3 +250,22 @@ test("T70-U14 the outbox's own logs carry counts, outcomes and why only: never a
   }
   assert.match(view(), /console\.info\("\[tg-outbox\] save queued=no"\)/);
 });
+
+// ---------------------------------------------------------------- found in REFACTOR (pJ): three small leaks
+
+test("T70-U6c a confirm that's open when the box goes away doesn't keep its row held (the runner would skip it)", () => {
+  const fn = slice(list(), "export default function WaitingList(", "\n}\n");
+  const hold = fn.indexOf("useEffect(() => () => {");
+  assert.ok(hold > 0 && hold < fn.indexOf("if (!box.rows.length && !box.lines.length) return null;"), "a hook, before the early return");
+  assert.match(fn, /useEffect\(\(\) => \(\) => \{\n\s+if \(asking\) outbox\.held\.delete\(asking\);\n\s+\}, \[asking\]\);/);
+});
+
+test("T70-U1c one timer at a time: a run that ends clears any timer another run armed meanwhile", () => {
+  assert.match(runnerTsx(), /if \(!stopped && next !== null\) \{\n\s+clearTimeout\(timer\);\n\s+timer = setTimeout\(\(\) => void go\(false\), next\);\n\s+\}/);
+});
+
+test("T70-U7d Put it in the form's expense isn't loaded again when the form closes after an edit", () => {
+  const fn = inner(view(), "function closeForm(");
+  assert.match(fn, /setFormStart\(null\);/);
+  assert.match(fn, /setRefill\(null\);/, "the row stays a failed card, to put in the form again");
+});
