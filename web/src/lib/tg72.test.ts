@@ -220,3 +220,27 @@ test("T72-L1 a non-Baguio city's picks are logged, with no user data", () => {
   assert.equal(calls.length, 2);
   for (const c of calls) assert.match(c, /^console\.info\("\[tg-around\] legs city=%s start=%s/, c);
 });
+
+// ---------------------------------------------------------------- plan page and ready-made trips (owner, 2026-11-22)
+
+test("T72-P1 the plan page's length hint names no city with the Around flag; off is today's", async () => {
+  const { lengthHint } = await import("./planForm.ts");
+  assert.equal(lengthHint("2026-11-06", "2026-11-08"), "3 days in Baguio", "flag off: today's");
+  assert.equal(lengthHint("2026-11-06", "2026-11-08", null), "3 days");
+  assert.equal(lengthHint("2026-11-06", "2026-11-06", null), "Day trip");
+  assert.match(read("src/components/PlanForm.tsx"), /hint=\{lengthHint\(values\.date, values\.returnDate, flags\.aroundTab \? null : "Baguio"\)\}/);
+});
+
+test("T72-P2 each ready-made card names its place with the Around flag; off, or an older API with no city, is today's", async () => {
+  const { landingCard, premadeCard, landingPremadeView } = await import("./premadeView.ts");
+  const s = { share_slug: "premade-x", vibe: "Chill", trip_date: "2026-11-06", return_date: "2026-11-08", budget_php: null, day_count: 3, stop_count: 12, spot_names: ["Burnham Park (made up)"], city: "Baguio" };
+  assert.equal(landingCard(s).dates, "3 days · 12 stops");
+  assert.equal(landingCard(s, true).dates, "Baguio · 3 days · 12 stops");
+  assert.equal(landingCard({ ...s, city: undefined }, true).dates, "3 days · 12 stops");
+  assert.match(premadeCard(s, "", "", true).dates, / · Baguio · 3 days · 12 stops$/);
+  assert.doesNotMatch(premadeCard(s, "", "").dates, /Baguio/);
+  const view = landingPremadeView({ kind: "ok", list: [s] }, true, true);
+  assert.equal(view.cards?.[0].dates, "Baguio · 3 days · 12 stops");
+  for (const f of ["src/components/landing/PremadeTrips.tsx"]) assert.equal(read(f).match(/flags\.aroundTab\)/g)?.length, 2, f);
+  assert.match(read("src/components/PlanResults.tsx"), /premadeCard\(trip, date, returnDate, siteFlags\.aroundTab\)/);
+});

@@ -152,6 +152,7 @@ export type PremadeSummary = {
   day_count: number;
   stop_count: number;
   spot_names: string[];
+  city?: string; // TG-72, where its buses go (missing from an API older than TG-72)
 };
 
 export type PremadeResult = { kind: "ok"; list: PremadeSummary[] } | { kind: "unavailable" } | { kind: "failed" };

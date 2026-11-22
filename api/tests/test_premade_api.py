@@ -16,7 +16,7 @@ from conftest import ROOT
 from premade_data import chill_entry, db_p0, load_rows, night_entry, write_premade
 
 APP = Path(__file__).resolve().parents[1] / "app"
-SUMMARY_FIELDS = {"share_slug", "vibe", "trip_date", "return_date", "budget_php", "day_count", "stop_count", "spot_names"}
+SUMMARY_FIELDS = {"share_slug", "vibe", "trip_date", "return_date", "budget_php", "day_count", "stop_count", "spot_names", "city"}
 USER_NAME = "Secret Person (made up)"
 
 
@@ -80,7 +80,9 @@ def test_lists_premade_summaries(client, loaded):
         "stop_count": 6,
         # visit order, each spot once
         "spot_names": ["Test Market (made up)", "Test Park (made up)", "Test Lodge (made up)", "Test Cafe (made up)"],
+        "city": "Baguio",  # TG-72: from its buses (plan_city)
     }
+    assert night["city"] == "Baguio"
     assert night["trip_date"] == "2026-11-05"
     assert night["budget_php"] is None
     assert (night["day_count"], night["stop_count"]) == (3, 6)
@@ -116,7 +118,7 @@ def test_plan_that_no_longer_validates_is_dropped_with_a_warning(client, loaded,
     assert warnings[0].startswith("premade itinerary dropped share_slug=premade-test-chill codes=")
     assert "trip_inactive" in warnings[0]
     infos = [r.getMessage() for r in records if r.levelno == logging.INFO and r.getMessage().startswith("premade list")]
-    assert infos == ["premade list results=1 dropped=1"]
+    assert infos == ["premade list results=1 dropped=1 cities=Baguio"]
 
 
 def test_stored_dates_are_part_of_the_recheck(client, loaded, caplog):
@@ -135,7 +137,7 @@ def test_logs_one_info_line_and_no_party_data(client, loaded, caplog):
     caplog.set_level(logging.DEBUG)
     listing(client)
     lines = [r.getMessage() for r in caplog.records if r.name == "tara_gala.api" and r.getMessage().startswith("premade list")]
-    assert lines == ["premade list results=2 dropped=0"]
+    assert lines == ["premade list results=2 dropped=0 cities=Baguio"]
     assert not any(USER_NAME in r.getMessage() for r in caplog.records)
 
 

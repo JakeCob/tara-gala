@@ -6,17 +6,20 @@ import { PLAN_COPY, matchesDates, premadeMeta, premadePlaces } from "./planForm.
 export type PremadeCard = { title: string; matches: boolean; dates: string; places: string; budget: string | null; href: string };
 
 // No fare totals, per-person costs or "fits your budget": we don't have the numbers to back them (ux §6.1)
-export function premadeCard(s: PremadeSummary, date: string, ret: string): PremadeCard {
+/** TG-72: `withCity` (the Around flag) names the trip's place before its length, e.g. `Baguio · 3 days · 12 stops`. */
+export function premadeCard(s: PremadeSummary, date: string, ret: string, withCity = false): PremadeCard {
   const peso = formatPeso(s.budget_php);
   return {
     title: s.vibe ?? PLAN_COPY.list.untitled,
     matches: matchesDates(s, date, ret),
-    dates: dateRange(s.trip_date, s.return_date) + premadeMeta(s.day_count, s.stop_count),
+    dates: dateRange(s.trip_date, s.return_date) + cityPart(s, withCity) + premadeMeta(s.day_count, s.stop_count),
     places: premadePlaces(s.spot_names),
     budget: peso ? `Budget ${peso}` : null,
     href: `/i/${encodeURIComponent(s.share_slug)}`,
   };
 }
+
+const cityPart = (s: PremadeSummary, withCity: boolean): string => (withCity && s.city ? ` · ${s.city}` : "");
 
 export type LandingCard = Omit<PremadeCard, "matches">;
 export type LandingPremadeView = {
@@ -28,16 +31,16 @@ export type LandingPremadeView = {
  * A landing card (TG-46): the same text, with no date to match against. TG-68 ux §5: and no dates, which are a past
  * trip's: only its length, `3 days · 9 stops`.
  */
-export function landingCard(s: PremadeSummary): LandingCard {
+export function landingCard(s: PremadeSummary, withCity = false): LandingCard {
   const { title, places, budget, href } = premadeCard(s, "", "");
-  return { title, dates: premadeMeta(s.day_count, s.stop_count).replace(/^ · /, ""), places, budget, href };
+  return { title, dates: (cityPart(s, withCity) + premadeMeta(s.day_count, s.stop_count)).replace(/^ · /, ""), places, budget, href };
 }
 
 /** The landing's ready-made section for one fetch outcome; null while it loads. */
-export function landingPremadeView(result: PremadeResult | null, online: boolean): LandingPremadeView {
+export function landingPremadeView(result: PremadeResult | null, online: boolean, withCity = false): LandingPremadeView {
   if (result === null) return { state: "loading" };
   if (result.kind === "unavailable") return { state: "hidden" };
   if (result.kind === "failed") return { state: online ? "failed" : "offline" };
   if (result.list.length === 0) return { state: "empty" };
-  return { state: "list", cards: result.list.map(landingCard) };
+  return { state: "list", cards: result.list.map((s) => landingCard(s, withCity)) };
 }
