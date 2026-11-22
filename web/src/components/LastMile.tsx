@@ -58,7 +58,7 @@ export default function LastMile({ city = AROUND_CITIES[0] }: { city?: AroundCit
         </div>
       </fieldset>
 
-      {status === "idle" && <BaguioIdle copy={city.idle} />}
+      {status === "idle" && <BaguioIdle copy={city.idle} row={city.idleRow} />}
 
       <div aria-live="polite" className="flex flex-col gap-3">
         {status === "loading" && <p className="text-sm text-muted md:max-w-prose">Loading routes...</p>}

@@ -152,7 +152,7 @@ test("TG44-H1 /buses: from md the hero and the form share the first row, the res
   // has something in it, and the cards sit a step under it
   assert.match(search, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4 md:col-span-full md:mt-6 md:empty:mt-0 lg:mt-8">/);
   // TG-46: the tagline sits in the hero, on its fixed light screen
-  assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">\{flags\.aroundTab \? AROUND_WORDS\.heroLine : "Every Manila to Baguio trip/);
+  assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio trip/);
   const at = page.indexOf("<TripSearch />");
   assert.ok(at > 0 && page.indexOf("<Trust />") > at, "the trust lines come after TripSearch in the DOM (tab order = visual order)");
 });

@@ -8,7 +8,8 @@ import { ICON_SIZE, TAB_ICONS } from "./pixelIcons.ts";
 import { AROUND_CITIES, AROUND_WORDS, andList, aroundCity, legsFrom } from "./around.ts";
 import { AMBAGAN_WORDS } from "./ambagan.ts";
 import { BAGUIO_TERMINALS } from "./lastMile.ts";
-import { BAGUIO_IDLE_COPY } from "./baguioIdle.ts";
+import { BAGUIO_IDLE_COPY, BAGUIO_IDLE_ROW } from "./baguioIdle.ts";
+import { SPRITES } from "./sprites.ts";
 import { FLAG_DEFAULTS } from "./flags.ts";
 
 const WEB = new URL("../../", import.meta.url);
@@ -113,6 +114,16 @@ test("T72-A3 Sagada's line names only the modes its data has (never invent)", ()
   assert.doesNotMatch(`${s.blurb} ${s.idle.line}`, /jeep|taxi|tricycle/i);
 });
 
+test("T72-A9 each city's idle box draws its own rides: Baguio's as today, Sagada's walks and vans only", () => {
+  assert.equal(AROUND_CITIES[0].idleRow, BAGUIO_IDLE_ROW);
+  const sagada = aroundCity("sagada")!.idleRow;
+  const names = sagada.map((d) => d.name);
+  assert.equal(new Set(names).size, names.length, "unique: they're the React keys");
+  for (const n of names) assert.ok(SPRITES[n], n);
+  assert.deepEqual(names.filter((n) => n.startsWith("mode-")).sort(), ["mode-van", "mode-walk"]);
+  assert.match(read("src/components/LastMile.tsx"), /<BaguioIdle copy=\{city\.idle\} row=\{city\.idleRow\} \/>/);
+});
+
 test("T72-A4 a spot start keeps only the legs that leave it; a terminal's come as they are", () => {
   const leg = (kind: string, slug: string, id: string) => ({ id, origin: { kind, slug } });
   const legs = [leg("spot", "sagada-town-centre", "out"), leg("spot", "kiltepan-viewpoint", "back"), leg("terminal", "coda-sagada", "t")];
@@ -125,14 +136,14 @@ test("T72-A5 the site words: every city, no 'Manila to Baguio' only, no own-plan
   assert.equal(andList(["Baguio", "Sagada"]), "Baguio and Sagada");
   assert.equal(andList(["Baguio", "Sagada", "Vigan"]), "Baguio, Sagada and Vigan");
   assert.equal(AROUND_WORDS.tagline, "Baguio and Sagada buses, straight from the operators.");
-  assert.equal(AROUND_WORDS.heroLine, "Bus times for Baguio and Sagada, with fares and where to book.");
   assert.equal(AROUND_WORDS.siteDescription, "Bus times for Baguio and Sagada, how to get around once you're there, and a shared wallet for the barkada.");
-  for (const w of [AROUND_WORDS.tagline, AROUND_WORDS.heroLine, AROUND_WORDS.siteDescription, AROUND_WORDS.intro]) {
+  for (const w of [AROUND_WORDS.tagline, AROUND_WORDS.siteDescription, AROUND_WORDS.intro]) {
     assert.doesNotMatch(w, /Manila to Baguio|anywhere|own plan|add your own/i, w);
   }
 });
 
 test("T72-A6 the pages: /around and /around/<city> only with the flag; /baguio goes to /around/baguio with it", () => {
+  assert.match(read("src/app/around/layout.tsx"), /if \(!flags\.aroundTab\) notFound\(\);\s*return children;/, "a real 404 for every /around page while off");
   const list = read("src/app/around/page.tsx");
   assert.match(list, /if \(!flags\.aroundTab\) notFound\(\);/);
   assert.match(list, /AROUND_CITIES\.map\(/);
@@ -149,9 +160,18 @@ test("T72-A6 the pages: /around and /around/<city> only with the flag; /baguio g
 
 test("T72-A7 the title screen, the hero and the site description switch on the flag; off is today's", () => {
   const title = read("src/components/landing/TitleScreen.tsx");
-  assert.match(title, /flags\.aroundTab \? \{ href: "\/around", label: AROUND_WORDS\.menu \} : \{ href: "\/baguio", label: "In Baguio" \}/);
   assert.match(title, /\{flags\.aroundTab \? AROUND_WORDS\.tagline : "Manila to Baguio buses, straight from the operators\."\}/);
-  assert.match(title, /\.\.\.\(flags\.ambaganTab \? \[\{ href: "\/wallet", label: "Ambagan" \}\] : \[\]\)/);
+  // the start menu's whole block, so its order and the flags-off items (Find buses, Plan a trip, In Baguio, My trip) stay
+  assert.ok(title.includes(`  const menu = [
+    { href: "/buses", label: "Find buses" },
+    ...(formMode(flags) !== "none" ? [{ href: "/plan", label: "Plan a trip" }] : []),
+    flags.aroundTab ? { href: "/around", label: AROUND_WORDS.menu } : { href: "/baguio", label: "In Baguio" }, // TG-71/72
+    { href: "/trip", label: "My trip" },
+    ...(flags.ambaganTab ? [{ href: "/wallet", label: "Ambagan" }] : []), // TG-72: the shared wallets' own way in
+  ];`), "the start menu block");
+  // the /buses hero keeps today's line: its search is still Manila ⇄ Baguio only (review, PR #115)
+  assert.match(read("src/components/landing/Hero.tsx"), />Every Manila to Baguio trip on file, with fares and where to book\.<\/p>/);
+  assert.doesNotMatch(read("src/components/landing/Hero.tsx"), /aroundTab/);
   for (const f of ["src/app/layout.tsx", "src/app/manifest.ts"]) {
     assert.match(read(f), /description: flags\.aroundTab \? AROUND_WORDS\.siteDescription : "Every Manila to Baguio bus, plus how to get around once you're there\.",/, f);
   }
