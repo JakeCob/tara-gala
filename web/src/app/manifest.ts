@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
+import { AROUND_WORDS } from "../lib/around.ts"; // relative: pwa.test.ts imports this file under node
+import { flags } from "../lib/flags.ts";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Tara Gala",
     short_name: "Tara Gala",
-    description: "Every Manila to Baguio bus, plus how to get around once you're there.",
+    description: flags.aroundTab ? AROUND_WORDS.siteDescription : "Every Manila to Baguio bus, plus how to get around once you're there.", // TG-71/72
     id: "/",
     start_url: "/",
     scope: "/",

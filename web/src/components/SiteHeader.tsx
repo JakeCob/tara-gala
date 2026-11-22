@@ -12,8 +12,9 @@ import { currentTab, visibleTabs } from "@/lib/tabs";
 /** Every page's top bar (TG-49): the signboard logo home to the title screen, the tabs from md, and the Dark mode switch.
  * Phones get the same tabs in TabBar at the bottom. */
 export default function SiteHeader() {
-  const current = currentTab(usePathname());
-  const tabs = visibleTabs(formMode(flags) !== "none");
+  const switches = { around: flags.aroundTab, ambagan: flags.ambaganTab }; // TG-71/72
+  const current = currentTab(usePathname(), switches);
+  const tabs = visibleTabs(formMode(flags) !== "none", switches);
   return (
     <header className="border-b-3 border-frame bg-card">
       <div className="mx-auto flex w-full max-w-md items-center gap-4 px-4 py-2 md:max-w-3xl md:px-6 lg:max-w-5xl lg:px-8 xl:max-w-6xl">

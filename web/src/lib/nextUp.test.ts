@@ -663,6 +663,9 @@ test("T69-D3 the driver log carries no address or name", () => {
 test("T69-X1 only the plan's files change: no API, schema, worker or package file", (t) => {
   const base = mergeBase();
   if (!base) return t.skip("no origin/main in this checkout, so there's no diff to read");
+  // TG-72: this fences TG-69's own branch; on any other branch (main's next tickets) it would refuse their files
+  const branch = git("rev-parse", "--abbrev-ref", "HEAD").trim();
+  if (!branch.startsWith("TG-69")) return t.skip(`TG-69's fence; this is ${branch}`);
   const files = git("diff", "--name-only", base).trim().split("\n").filter(Boolean);
   const untracked = git("ls-files", "--others", "--exclude-standard").trim().split("\n").filter(Boolean);
   const allowed = [

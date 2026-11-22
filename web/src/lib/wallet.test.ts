@@ -132,7 +132,7 @@ test("V9 the wallet pages: noindex capability link, one shell, and the service w
   assert.equal(view.match(/<PageShell>/g)?.length, 1);
   const home = read("src/app/wallet/page.tsx");
   assert.equal(home.match(/<PageShell>/g)?.length, 1);
-  assert.match(home, /<PageTitle className="text-balance">Trip wallet<\/PageTitle>/);
+  assert.match(home, /<PageTitle className="text-balance">\{flags\.ambaganTab \? AMBAGAN_WORDS\.title : "Trip wallet"\}<\/PageTitle>/); // TG-72
   const sw = read("public/sw.js");
   assert.match(sw, /\/\^\\\/wallets\\\/\[0-9a-f\]\{32\}\$\//, "GET /wallets/<slug> is cached for offline viewing");
   assert.match(sw, /const SAVED_PAGE = \/\^\\\/\(i\|w\|t\)\\\/\[\^\/\]\+\\\/\?\$\/;/, "/w/<slug> and TG-52's /t/<slug> pages are kept like /i/ ones");
@@ -159,7 +159,7 @@ test("V11 home: the fourth quick action is the trip wallet, which links on to ti
   // TG-49: the quick actions became the title screen's start menu
   const src = read("src/components/landing/TitleScreen.tsx");
   const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/trip"]); // TG-52: My trip links on to the wallets and tickets
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/around", "/baguio", "/trip", "/wallet"]); // TG-71/72: Around in place of Baguio, Ambagan last, each by its flag (tg72.test.ts) // TG-52: My trip links on to the wallets and tickets
   assert.match(read("src/components/TripHome.tsx"), /href="\/wallet"/);
   assert.match(read("src/components/TripHome.tsx"), /href="\/tickets"/);
   assert.match(read("src/components/WalletHome.tsx"), /href="\/tickets"/);

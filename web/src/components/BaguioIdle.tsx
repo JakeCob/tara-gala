@@ -7,7 +7,8 @@ import { BAGUIO_IDLE_COPY, BAGUIO_IDLE_ROW, BAGUIO_IDLE_SCENE_CLASS } from "@/li
 import { SHOW_CLASS } from "@/lib/homeDecor";
 import { SPRITES, spriteSrc } from "@/lib/sprites";
 
-export default function BaguioIdle() {
+/** TG-71/72: another city passes its own two lines; the scene stays (a terminal, the rides, the spots). */
+export default function BaguioIdle({ copy = BAGUIO_IDLE_COPY }: { copy?: { lead: string; line: string } }) {
   return (
     <PixelBox className="p-0 flex flex-col">
       <div aria-hidden="true" className={BAGUIO_IDLE_SCENE_CLASS} style={{ backgroundImage: `url(${spriteSrc("tile-grass")})`, backgroundSize: "32px" }}>
@@ -21,8 +22,8 @@ export default function BaguioIdle() {
         ))}
       </div>
       <div className="p-4 flex flex-col gap-1">
-        <p className="text-base font-bold">{BAGUIO_IDLE_COPY.lead}</p>
-        <p className="text-sm text-muted md:max-w-prose">{BAGUIO_IDLE_COPY.line}</p>
+        <p className="text-base font-bold">{copy.lead}</p>
+        <p className="text-sm text-muted md:max-w-prose">{copy.line}</p>
       </div>
     </PixelBox>
   );

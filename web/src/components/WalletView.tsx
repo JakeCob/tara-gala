@@ -10,6 +10,7 @@ import CategoryBox from "@/components/wallet/CategoryBox";
 import ExpenseDetails from "@/components/wallet/ExpenseDetails";
 import ExpenseForm, { type ExpenseSubmit, type SubmitContext } from "@/components/wallet/ExpenseForm";
 import WaitingList, { useOutbox } from "@/components/wallet/WaitingList";
+import { AMBAGAN_WORDS } from "@/lib/ambagan";
 import { flags } from "@/lib/flags";
 import { cardMeta, payersWords } from "@/lib/walletActivity";
 import { categoryLabel, showingLine } from "@/lib/walletCategories";
@@ -567,7 +568,7 @@ export default function WalletView({ slug }: { slug: string }) {
 
   async function share() {
     const url = `${location.origin}/w/${slug}`;
-    const outcome = await runShare(shareDeps(navigator), { title: "Tara Gala trip wallet", text: `Log what you paid on "${wallet.name}".`, url });
+    const outcome = await runShare(shareDeps(navigator), { title: flags.ambaganTab ? AMBAGAN_WORDS.shareTitle : "Tara Gala trip wallet", text: `Log what you paid on "${wallet.name}".`, url });
     console.info("[tg-wallet] share outcome=%s", outcome);
     setShareNote(SHARED[outcome]);
   }
@@ -653,7 +654,7 @@ export default function WalletView({ slug }: { slug: string }) {
             Refresh
           </PixelButton>
           <PixelLink variant="secondary" href="/wallet" className="inline-flex items-center px-4 text-sm">
-            All wallets
+            {flags.ambaganTab ? AMBAGAN_WORDS.all : "All wallets"}
           </PixelLink>
         </div>
         <p role="status" className="text-sm empty:hidden">

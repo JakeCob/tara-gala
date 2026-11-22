@@ -16,6 +16,8 @@ export type Flags = {
   recapLinks: boolean;
   offlineExpenses: boolean;
   nextUp: boolean;
+  aroundTab: boolean;
+  ambaganTab: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -33,6 +35,8 @@ export const FLAG_DEFAULTS: Flags = {
   recapLinks: false, // TG-64: the trip page's Trip recap box and /r/<slug>, until the API's RECAP_LINKS is on
   offlineExpenses: false, // TG-70: Add expense with no signal waits here and sends itself; needs walletSplits; off sends today's add
   nextUp: false, // TG-69: the trip page's Next up card, the Who's coming fold and Show the driver; web only
+  aroundTab: false, // TG-71/72: the Around tab (Baguio and Sagada pages) and site words that aren't only Manila to Baguio; web only
+  ambaganTab: false, // TG-72: the Ambagan tab (the wallet hub and shared wallets) and its words; web only
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -66,6 +70,8 @@ export function readFlags(): Flags {
     recapLinks: parseFlag(process.env.NEXT_PUBLIC_RECAP_LINKS, FLAG_DEFAULTS.recapLinks),
     offlineExpenses: parseFlag(process.env.NEXT_PUBLIC_OFFLINE_EXPENSES, FLAG_DEFAULTS.offlineExpenses),
     nextUp: parseFlag(process.env.NEXT_PUBLIC_NEXT_UP, FLAG_DEFAULTS.nextUp),
+    aroundTab: parseFlag(process.env.NEXT_PUBLIC_AROUND_TAB, FLAG_DEFAULTS.aroundTab),
+    ambaganTab: parseFlag(process.env.NEXT_PUBLIC_AMBAGAN_TAB, FLAG_DEFAULTS.ambaganTab),
   };
 }
 

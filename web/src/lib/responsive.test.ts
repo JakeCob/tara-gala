@@ -152,7 +152,7 @@ test("TG44-H1 /buses: from md the hero and the form share the first row, the res
   // has something in it, and the cards sit a step under it
   assert.match(search, /<div aria-live="polite" className="flex flex-col gap-1 empty:-mt-4 md:col-span-full md:mt-6 md:empty:mt-0 lg:mt-8">/);
   // TG-46: the tagline sits in the hero, on its fixed light screen
-  assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio trip/);
+  assert.match(read("src/components/landing/Hero.tsx"), /<p className="text-sm font-semibold text-screen-ink">\{flags\.aroundTab \? AROUND_WORDS\.heroLine : "Every Manila to Baguio trip/);
   const at = page.indexOf("<TripSearch />");
   assert.ok(at > 0 && page.indexOf("<Trust />") > at, "the trust lines come after TripSearch in the DOM (tab order = visual order)");
 });
@@ -196,7 +196,7 @@ test("TG44-L1 /baguio: the picker is capped, the destination groups are a grid f
   // the reading measure on the running text (plan §2.4)
   assert.match(src, /<p className="text-sm text-muted md:max-w-prose">Loading routes\.\.\.<\/p>/);
   assert.match(src, /<p className="text-sm text-muted md:max-w-prose">\{legs\[0\]\.confirm_note\}<\/p>/);
-  assert.match(src, /<PixelBox as="p" className="p-4 text-sm md:max-w-prose">No routes on file yet/);
+  assert.match(src, /<PixelBox as="p" className="p-4 text-sm md:max-w-prose">\{city\.empty\}<\/PixelBox>/);
   assert.match(src, /<p className="md:max-w-prose text-danger-text">Could not reach the server/); // TG-47: the red lead
   assert.match(read("src/app/baguio/page.tsx"), /<p className="text-sm text-muted md:max-w-prose">Jeeps, taxis and walks/);
 });

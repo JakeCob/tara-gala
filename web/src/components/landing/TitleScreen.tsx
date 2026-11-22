@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MenuCursor, PageTitle, Placard, PX } from "@/components/pixel";
 import { flags } from "@/lib/flags";
+import { AROUND_WORDS } from "@/lib/around";
 import { formMode } from "@/lib/planForm";
 import { spriteSrc } from "@/lib/sprites";
 import TitleBlink from "./TitleBlink";
@@ -17,8 +18,9 @@ export default function TitleScreen() {
   const menu = [
     { href: "/buses", label: "Find buses" },
     ...(formMode(flags) !== "none" ? [{ href: "/plan", label: "Plan a trip" }] : []),
-    { href: "/baguio", label: "In Baguio" },
+    flags.aroundTab ? { href: "/around", label: AROUND_WORDS.menu } : { href: "/baguio", label: "In Baguio" }, // TG-71/72
     { href: "/trip", label: "My trip" },
+    ...(flags.ambaganTab ? [{ href: "/wallet", label: "Ambagan" }] : []), // TG-72: the shared wallets' own way in
   ];
   return (
     <section
@@ -43,7 +45,7 @@ export default function TitleScreen() {
             Tara Gala
           </PageTitle>
         </Placard>
-        <p className="text-sm font-semibold text-screen-ink md:text-base">Manila to Baguio buses, straight from the operators.</p>
+        <p className="text-sm font-semibold text-screen-ink md:text-base">{flags.aroundTab ? AROUND_WORDS.tagline : "Manila to Baguio buses, straight from the operators."}</p>
         <TitleBlink>
           <p aria-hidden="true" data-blinks="" className={PX.pressStart}>
             Press start

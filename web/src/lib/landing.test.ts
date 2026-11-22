@@ -141,7 +141,7 @@ test("T49-T1 the title screen: a named start menu linking straight to each tab, 
   assert.match(src, /<span data-cursor="" data-blinks="">/);
   assert.match(source(sectionPath("TitleBlink")), /<div className="flex flex-col items-center gap-3" data-blink=\{still \|\| lit \? "on" : "off"\}>/);
   const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/trip"]); // TG-52: the trip, which holds the wallet
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/around", "/baguio", "/trip", "/wallet"]); // TG-71/72: Around in place of Baguio, Ambagan last, each by its flag (tg72.test.ts) // TG-52: the trip, which holds the wallet
   assert.match(src, /\.\.\.\(formMode\(flags\) !== "none" \? \[\{ href: "\/plan"/, "Plan a trip only when the planner is on");
   assert.match(src, /<Link href=\{item\.href\} className=\{PX\.menuItem\}>\s*<span data-cursor="" data-blinks="">\s*<MenuCursor\b/);
   assert.match(src, /<p aria-hidden="true" data-blinks="" className=\{PX\.pressStart\}>/, "PRESS START is decor, not a control");
@@ -187,7 +187,7 @@ test("T46-L4 the hero: a fixed light screen with decorative art; its text is scr
   for (const attr of [/alt=""/, /aria-hidden="true"/, /draggable=\{false\}/, /width=\{640\}/, /height=\{246\}/, /\bpixelated\b/, /fetchPriority="high"/]) {
     assert.match(img, attr, `hero img ${attr}`);
   }
-  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio trip on file, with fares and where to book\.<\/p>/);
+  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">\{flags\.aroundTab \? AROUND_WORDS\.heroLine : "Every Manila to Baguio trip on file, with fares and where to book\."\}<\/p>/);
   assert.doesNotMatch(src, /text-brand|text-foreground|text-muted|text-link/, "the hero is a fixed light screen (ux §0)");
   // The trio: decorative and static. TG-49 shows it at every width, since the scene is 2x everywhere now
   assert.match(src, /<div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1">/);

@@ -3,6 +3,8 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, SectionTitle, cx } from "@/components/pixel";
+import { AMBAGAN_WORDS } from "@/lib/ambagan";
+import { flags } from "@/lib/flags";
 import { MAX_MEMBERS, failureMessage, knownWalletsRaw, parseKnownWallets, rememberWallet, walletApi } from "@/lib/wallet";
 
 const subscribeNothing = () => () => {};
@@ -21,6 +23,7 @@ function checkPeople(names: string[]): { ok: true; names: string[] } | { ok: fal
  * start one. The first name is "you": this phone joins the new wallet as that person.
  */
 export default function WalletHome() {
+  const amb = flags.ambaganTab; // TG-72: the Ambagan tab's words; off is today's hub, word for word
   const router = useRouter();
   const raw = useSyncExternalStore(subscribeNothing, knownWalletsRaw, () => null);
   const known = useMemo(() => parseKnownWallets(raw), [raw]);
@@ -39,7 +42,7 @@ export default function WalletHome() {
     const check = checkPeople(people);
     const refused = !name ? "empty" : check.ok ? null : "people"; // TG-68: the trip's name starts empty now
     if (refused) console.info("[tg-wallet] create refused why=%s", refused);
-    if (!name) return setError("Give the trip a name.");
+    if (!name) return setError(amb ? AMBAGAN_WORDS.nameEmpty : "Give the trip a name.");
     if (!check.ok) return setError(check.message);
     setError("");
     setBusy(true);
@@ -56,16 +59,18 @@ export default function WalletHome() {
   return (
     <div className="flex flex-col gap-5 md:grid md:grid-cols-2 md:gap-6 md:items-start">
       <div className="flex flex-col gap-4">
-        <PixelCardLink href="/tickets" className="flex flex-col gap-1 p-4">
-          <span className="font-bold">My tickets</span>
-          <span className={PX.meta}>Your bus e-tickets, saved on this phone for the terminal.</span>
-        </PixelCardLink>
+        {!amb && (
+          <PixelCardLink href="/tickets" className="flex flex-col gap-1 p-4">
+            <span className="font-bold">My tickets</span>
+            <span className={PX.meta}>Your bus e-tickets, saved on this phone for the terminal.</span>
+          </PixelCardLink>
+        )}
 
         <section aria-labelledby="wallets-title" className="flex flex-col gap-3">
-          <SectionTitle id="wallets-title">Shared expenses</SectionTitle>
+          <SectionTitle id="wallets-title">{amb ? AMBAGAN_WORDS.listTitle : "Shared expenses"}</SectionTitle>
           {known.length === 0 ? (
             <p className="text-sm text-muted">
-              No shared wallet on this phone yet. Start one below, or open the link a friend shared with you.
+              {amb ? AMBAGAN_WORDS.listEmpty : "No shared wallet on this phone yet. Start one below, or open the link a friend shared with you."}
             </p>
           ) : (
             <ul className="flex flex-col gap-3">
@@ -84,11 +89,11 @@ export default function WalletHome() {
 
       <div className="flex flex-col gap-3">
         <PixelBox as="form" onSubmit={onCreate} noValidate aria-labelledby="start-title" className="flex flex-col gap-3 p-4">
-          <SectionTitle id="start-title">Start a trip wallet</SectionTitle>
+          <SectionTitle id="start-title">{amb ? AMBAGAN_WORDS.startTitle : "Start a trip wallet"}</SectionTitle>
           <p className="text-sm text-muted">Everyone logs what they paid from their own phone. At the end, it works out who pays whom.</p>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold">Trip name</span>
-            <input className={cx(PX.input, "placeholder:text-muted")} value={tripName} maxLength={40} placeholder="Like Sagada, Nov 25" onChange={(e) => setTripName(e.target.value)} />
+            <span className="font-semibold">{amb ? AMBAGAN_WORDS.nameLabel : "Trip name"}</span>
+            <input className={cx(PX.input, "placeholder:text-muted")} value={tripName} maxLength={40} placeholder={amb ? AMBAGAN_WORDS.namePlaceholder : "Like Sagada, Nov 25"} onChange={(e) => setTripName(e.target.value)} />
           </label>
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-sm font-semibold">Who&apos;s coming?</legend>
@@ -112,7 +117,7 @@ export default function WalletHome() {
             )}
           </fieldset>
           <PixelButton type="submit" variant="primary" className="px-4 py-3" disabled={busy}>
-            {busy ? "Starting..." : "Start the wallet"}
+            {busy ? "Starting..." : amb ? AMBAGAN_WORDS.start : "Start the wallet"}
           </PixelButton>
         </PixelBox>
         {error && (
