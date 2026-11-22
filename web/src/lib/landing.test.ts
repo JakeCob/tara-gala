@@ -187,7 +187,7 @@ test("T46-L4 the hero: a fixed light screen with decorative art; its text is scr
   for (const attr of [/alt=""/, /aria-hidden="true"/, /draggable=\{false\}/, /width=\{640\}/, /height=\{246\}/, /\bpixelated\b/, /fetchPriority="high"/]) {
     assert.match(img, attr, `hero img ${attr}`);
   }
-  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio trip on file, with fares and where to book\.<\/p>/);
+  assert.match(src, /<p className="text-sm font-semibold text-screen-ink">\{flags\.aroundTab \? AROUND_WORDS\.heroLine : "Every Manila to Baguio trip on file, with fares and where to book\."\}<\/p>/);
   assert.doesNotMatch(src, /text-brand|text-foreground|text-muted|text-link/, "the hero is a fixed light screen (ux §0)");
   // The trio: decorative and static. TG-49 shows it at every width, since the scene is 2x everywhere now
   assert.match(src, /<div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1">/);

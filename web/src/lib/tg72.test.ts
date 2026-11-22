@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { currentTab, visibleTabs } from "./tabs.ts";
 import { ICON_SIZE, TAB_ICONS } from "./pixelIcons.ts";
-import { AROUND_CITIES, AROUND_WORDS, andList, aroundCity, legsFrom } from "./around.ts";
+import { AROUND_CITIES, AROUND_WORDS, aroundCity, legsFrom } from "./around.ts";
 import { AMBAGAN_WORDS } from "./ambagan.ts";
 import { BAGUIO_TERMINALS } from "./lastMile.ts";
 import { BAGUIO_IDLE_COPY, BAGUIO_IDLE_ROW } from "./baguioIdle.ts";
@@ -131,14 +131,14 @@ test("T72-A4 a spot start keeps only the legs that leave it; a terminal's come a
   assert.deepEqual(legsFrom(legs, { kind: "terminal", slug: "coda-sagada", label: "" }).map((l) => l.id), ["out", "back", "t"]);
 });
 
-test("T72-A5 the site words: every city, no 'Manila to Baguio' only, no own-plan promise yet", () => {
-  assert.equal(andList(["Baguio"]), "Baguio");
-  assert.equal(andList(["Baguio", "Sagada"]), "Baguio and Sagada");
-  assert.equal(andList(["Baguio", "Sagada", "Vigan"]), "Baguio, Sagada and Vigan");
-  assert.equal(AROUND_WORDS.tagline, "Baguio and Sagada buses, straight from the operators.");
-  assert.equal(AROUND_WORDS.siteDescription, "Bus times for Baguio and Sagada, how to get around once you're there, and a shared wallet for the barkada.");
-  for (const w of [AROUND_WORDS.tagline, AROUND_WORDS.siteDescription, AROUND_WORDS.intro]) {
-    assert.doesNotMatch(w, /Manila to Baguio|anywhere|own plan|add your own/i, w);
+test("T72-A5 the site words name no city: the app is for every province (owner, 2026-11-22)", () => {
+  assert.equal(AROUND_WORDS.tagline, "Provincial buses, straight from the operators.");
+  assert.equal(AROUND_WORDS.heroLine, "Bus trips on file, with fares and where to book.");
+  assert.equal(AROUND_WORDS.siteDescription, "Provincial bus times, how to get around once you're there, and an ambagan for the barkada's costs.");
+  const cities = ["Manila", ...AROUND_CITIES.map((c) => c.name)];
+  for (const w of [AROUND_WORDS.tagline, AROUND_WORDS.heroLine, AROUND_WORDS.siteDescription, AROUND_WORDS.intro, AROUND_WORDS.title, AROUND_WORDS.menu, AROUND_WORDS.tab]) {
+    for (const city of cities) assert.ok(!w.includes(city), `${city} in "${w}"`);
+    assert.doesNotMatch(w, /anywhere|own plan|add your own|every/i, w); // no promise the data can't keep
   }
 });
 
@@ -169,9 +169,8 @@ test("T72-A7 the title screen, the hero and the site description switch on the f
     { href: "/trip", label: "My trip" },
     ...(flags.ambaganTab ? [{ href: "/wallet", label: "Ambagan" }] : []), // TG-72: the shared wallets' own way in
   ];`), "the start menu block");
-  // the /buses hero keeps today's line: its search is still Manila ⇄ Baguio only (review, PR #115)
-  assert.match(read("src/components/landing/Hero.tsx"), />Every Manila to Baguio trip on file, with fares and where to book\.<\/p>/);
-  assert.doesNotMatch(read("src/components/landing/Hero.tsx"), /aroundTab/);
+  // the /buses hero names no city with the flag on; off is today's line
+  assert.match(read("src/components/landing/Hero.tsx"), /\{flags\.aroundTab \? AROUND_WORDS\.heroLine : "Every Manila to Baguio trip on file, with fares and where to book\."\}/);
   for (const f of ["src/app/layout.tsx", "src/app/manifest.ts"]) {
     assert.match(read(f), /description: flags\.aroundTab \? AROUND_WORDS\.siteDescription : "Every Manila to Baguio bus, plus how to get around once you're there\.",/, f);
   }
