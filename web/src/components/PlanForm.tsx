@@ -25,6 +25,8 @@ import {
   validatePlanForm,
   type FormValues,
 } from "@/lib/planForm";
+import { START_CITY, planCities, planCity, premadeEmpty, premadeForCity } from "@/lib/goingTo";
+import GoingToPicker from "./GoingToPicker";
 import PartyPicker from "./PartyPicker";
 import PartyStage from "./PartyStage";
 import { BudgetBox, DatesBox, VibeBox } from "./PlanFields";
@@ -54,6 +56,13 @@ export default function PlanForm() {
   const values = formValues(form, today);
   const errors = form.attempted && today ? validatePlanForm(values, today, formatTravelDate, mode) : [];
   const busy = run.phase === "planning" || run.phase === "loadingPremade" || run.phase === "opening";
+  // TG-71 (flag goingTo): the Going to picker, on the ready-made list only; the live planner stays Baguio (goingTo.ts).
+  // No log on a pick: the plan form stays log-free (T21-S7); /buses logs its picks
+  const [picked, setPicked] = useState(START_CITY);
+  const cities = flags.goingTo ? planCities(mode) : [];
+  const city = flags.goingTo ? planCity(mode, picked) : null;
+  const listCity = cities.length > 0 ? city : null; // the city the ready-made list keeps, with the picker shown
+  const premade = listCity && run.premade ? premadeForCity(run.premade, listCity) : run.premade;
 
   async function plan(payload: PlanRequestBody) {
     const req = requests.begin();
@@ -108,6 +117,12 @@ export default function PlanForm() {
   const copy = mode === "live" ? PLAN_COPY.live : PLAN_COPY.premade;
   const label =
     run.phase === "planning" ? PLAN_COPY.live.working : run.phase === "loadingPremade" ? PLAN_COPY.premade.working : copy.submit;
+  // TG-71: with the picker, the status line counts only the kept city's trips, and names the city when it has none
+  const status = !listCity
+    ? statusText(run, mode, values)
+    : run.phase === "premade" && premade?.kind === "empty"
+      ? premadeEmpty(listCity)
+      : statusText({ ...run, premade }, mode, values);
 
   // Capture phase: a tap or key during a spawn finishes it before the button's click starts the next one
   return (
@@ -119,10 +134,21 @@ export default function PlanForm() {
       <div className="contents md:flex md:flex-col md:gap-4">
         {/* Locked while a request runs; the picker and the submit button stay out, so focus never drops */}
         <fieldset disabled={busy} role="none" className="contents">
+          {listCity && (
+            <PixelBox className="p-4">
+              <GoingToPicker
+                heading
+                name="plan-going-to"
+                cities={cities}
+                city={listCity}
+                onPick={setPicked}
+              />
+            </PixelBox>
+          )}
           <DatesBox
             values={values}
             bounds={dateBounds(today, values.date)}
-            hint={lengthHint(values.date, values.returnDate, flags.aroundTab ? null : "Baguio")}
+            hint={lengthHint(values.date, values.returnDate, city ?? (flags.aroundTab ? null : "Baguio"))}
             errors={errors}
             onDate={(value) => dispatch({ type: "setDate", value, today })}
             onReturn={(value) => dispatch({ type: "setReturn", value })}
@@ -154,7 +180,7 @@ export default function PlanForm() {
           </PixelButton>
         )}
         <p role="status" className={statusShown(run) ? PX.meta : "sr-only"}>
-          {statusText(run, mode, values)}
+          {status}
         </p>
         {run.error && (
           <PlanErrorBox
@@ -169,10 +195,11 @@ export default function PlanForm() {
             onPremade={() => loadPremade(values)}
           />
         )}
-        {run.premade && (
+        {premade && (
           <PremadeResults
             key={run.id}
-            premade={run.premade}
+            premade={premade}
+            emptyMessage={listCity ? premadeEmpty(listCity) : undefined}
             date={values.date}
             returnDate={values.returnDate}
             busy={busy}

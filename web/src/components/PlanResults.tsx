@@ -75,9 +75,17 @@ function TripCard({ trip, date, returnDate }: { trip: PremadeSummary; date: stri
 
 /**
  * The pre-made list and its states (ux §6). Scrolled into view when it appears, smoothly only without reduced
- * motion; focus stays where it is, since the status line announces the result.
+ * motion; focus stays where it is, since the status line announces the result. `emptyMessage` (TG-71, the Going to
+ * picker): the empty box names the picked city in place of LIST.empty.
  */
-export function PremadeResults(props: { premade: PremadeView; date: string; returnDate: string; busy: boolean; onRetry(): void }) {
+export function PremadeResults(props: {
+  premade: PremadeView;
+  date: string;
+  returnDate: string;
+  busy: boolean;
+  onRetry(): void;
+  emptyMessage?: string;
+}) {
   const { premade, date, returnDate } = props;
   const top = useRef<HTMLDivElement>(null);
 
@@ -86,7 +94,7 @@ export function PremadeResults(props: { premade: PremadeView; date: string; retu
     top.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   }, []);
 
-  if (premade.kind === "empty") return <div ref={top}><SearchBusesBox message={LIST.empty} /></div>;
+  if (premade.kind === "empty") return <div ref={top}><SearchBusesBox message={props.emptyMessage ?? LIST.empty} /></div>;
   if (premade.kind === "unavailable") return <div ref={top}><SearchBusesBox message={LIST.unavailable} /></div>;
   if (premade.kind === "failed") {
     return (
