@@ -141,7 +141,7 @@ test("T49-T1 the title screen: a named start menu linking straight to each tab, 
   assert.match(src, /<span data-cursor="" data-blinks="">/);
   assert.match(source(sectionPath("TitleBlink")), /<div className="flex flex-col items-center gap-3" data-blink=\{still \|\| lit \? "on" : "off"\}>/);
   const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(hrefs, ["/buses", "/plan", "/baguio", "/trip"]); // TG-52: the trip, which holds the wallet
+  assert.deepEqual(hrefs, ["/buses", "/plan", "/around", "/baguio", "/trip", "/wallet"]); // TG-71/72: Around in place of Baguio, Ambagan last, each by its flag; the whole block is pinned in tg72.test.ts
   assert.match(src, /\.\.\.\(formMode\(flags\) !== "none" \? \[\{ href: "\/plan"/, "Plan a trip only when the planner is on");
   assert.match(src, /<Link href=\{item\.href\} className=\{PX\.menuItem\}>\s*<span data-cursor="" data-blinks="">\s*<MenuCursor\b/);
   assert.match(src, /<p aria-hidden="true" data-blinks="" className=\{PX\.pressStart\}>/, "PRESS START is decor, not a control");

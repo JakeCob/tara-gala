@@ -52,11 +52,14 @@ test("TB6 no page keeps a Back to bus search link to the title screen", () => {
   for (const page of ["plan", "baguio", "wallet", "tickets", "w/[slug]", "i/[slug]"]) {
     assert.doesNotMatch(read(`src/app/${page}/page.tsx`), /href="\/"/, page);
   }
-  for (const page of ["tickets", "w/[slug]"]) assert.match(read(`src/app/${page}/page.tsx`), /href="\/wallet"[\s\S]*?Back to trip wallet/, page);
+  assert.match(read("src/app/w/[slug]/page.tsx"), /href="\/wallet"[\s\S]*?\{flags\.ambaganTab \? AMBAGAN_WORDS\.back : "Back to trip wallet"\}/);
+  // TG-72: with Ambagan on, tickets stay under Trip, so their way back is the trip
+  assert.match(read("src/app/tickets/page.tsx"), /href=\{flags\.ambaganTab \? "\/trip" : "\/wallet"\}[\s\S]*?\{flags\.ambaganTab \? AMBAGAN_WORDS\.ticketsBack : "Back to trip wallet"\}/);
 });
 
 test("TB7 one 16 by 16 pixel icon per tab, drawn only with # and .", () => {
-  assert.deepEqual(Object.keys(TAB_ICONS).sort(), visibleTabs(true).map((t) => t.href).sort());
+  const every = new Set([...visibleTabs(true), ...visibleTabs(true, { around: true, ambagan: true })].map((t) => t.href)); // TG-71/72
+  assert.deepEqual(Object.keys(TAB_ICONS).sort(), [...every].sort());
   for (const [tab, rows] of Object.entries(TAB_ICONS)) {
     assert.equal(rows.length, ICON_SIZE, `${tab}: 16 rows`);
     for (const row of rows) assert.match(row, /^[#.]{16}$/, `${tab}: ${row}`);

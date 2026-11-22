@@ -3,7 +3,7 @@
 // self.TG_SW and the event handlers. Bump SW_VERSION on every change so old static and page caches rotate.
 // Nothing at the top level may touch caches or fetch.
 
-const SW_VERSION = "2026-11-20.1"; // bump on every edit of this file
+const SW_VERSION = "2026-11-22.1"; // bump on every edit of this file
 const DATA_VERSION = "1"; // bump only if the stored data format changes
 const NETWORK_TIMEOUT_MS = 4000;
 const SAVED_PAGE_TIMEOUT_MS = 1500; // a saved /i, /w or /t page is a shell: its data loads in the browser (TG-57)
@@ -13,7 +13,7 @@ const MSG_SKIP_WAITING = "SKIP_WAITING"; // page -> waiting SW
 const API_PATHS = [/^\/(trips|last-mile|terminals|spots|premade-itineraries)$/, /^\/itineraries\/[^/]+$/, /^\/wallets\/[0-9a-f]{32}$/, /^\/sessions\/[0-9a-f]{32}$/, /^\/sessions\/[0-9a-f]{32}\/budget$/, /^\/sessions\/[0-9a-f]{32}\/files\/[0-9a-f-]{36}$/];
 const SAVED_PAGE = /^\/(i|w|t)\/[^/]+\/?$/; // shared trip plans (TG-27), trip wallets (TG-50) and trips (TG-52)
 const STATIC_FILES = ["/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/offline.html"];
-const PRECACHE_PAGES = ["/", "/buses", "/baguio", "/plan", "/tickets", "/wallet", "/trip"]; // /plan too: the pages cache rotates with every SW_VERSION; /tickets for TG-50; /buses for TG-49's tabs; /trip for TG-52
+const PRECACHE_PAGES = ["/", "/buses", "/baguio", "/plan", "/tickets", "/wallet", "/trip", "/around", "/around/baguio", "/around/sagada"]; // TG-71/72: /around and its city pages (a miss while the flag is off is only a warning); /plan too: the pages cache rotates with every SW_VERSION; /tickets for TG-50; /buses for TG-49's tabs; /trip for TG-52
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T/;
 
 const log = (...args) => console.info("[tg-sw]", ...args);

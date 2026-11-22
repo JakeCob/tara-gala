@@ -15,13 +15,14 @@ test("T49P2-E1 the box says exactly ux §3.3, as two plain paragraphs", async ()
   assert.deepEqual(BAGUIO_IDLE_COPY, { lead: "Tara, pick your terminal above.", line: "We'll show the jeeps, taxis and walks from there to the top spots." });
   const s = has(IDLE);
   assert.match(s, /<PixelBox className="p-0 flex flex-col">/);
-  assert.match(s, /<p className="text-base font-bold">\{BAGUIO_IDLE_COPY\.lead\}<\/p>/);
-  assert.match(s, /<p className="text-sm text-muted md:max-w-prose">\{BAGUIO_IDLE_COPY\.line\}<\/p>/);
+  assert.match(s, /export default function BaguioIdle\(\{ copy = BAGUIO_IDLE_COPY, row = BAGUIO_IDLE_ROW \}/, "TG-71/72: Baguio\'s copy unless a city passes its own");
+  assert.match(s, /<p className="text-base font-bold">\{copy\.lead\}<\/p>/);
+  assert.match(s, /<p className="text-sm text-muted md:max-w-prose">\{copy\.line\}<\/p>/);
   assert.doesNotMatch(s, /<h[1-6]\b|aria-live|role=/);
 });
 test("T49P2-E2 only while nothing is picked; idle never comes back", () => {
   const s = read(LM);
-  assert.match(s, /\{status === "idle" && <BaguioIdle \/>\}/);
+  assert.match(s, /\{status === "idle" && <BaguioIdle copy=\{city\.idle\} row=\{city\.idleRow\} \/>\}/); // TG-71/72: Baguio\'s city.idle is BAGUIO_IDLE_COPY (tg72.test.ts)
   assert.equal(s.match(/<BaguioIdle\b/g)?.length, 1);
   assert.doesNotMatch(s, /setStatus\("idle"\)/);
 });
@@ -36,7 +37,7 @@ test("T49P2-E4 fieldset, box, live region; the live region is always rendered", 
   const s = read(LM);
   const [a, b, c] = ["</fieldset>", "<BaguioIdle", '<div aria-live="polite" className="flex flex-col gap-3">'].map((m) => s.indexOf(m));
   assert.ok(a >= 0 && a < b && b < c, `order ${a} ${b} ${c}`);
-  assert.match(s.slice(b), /^<BaguioIdle \/>\}\s*<div aria-live="polite"/, "a sibling, not inside a condition");
+  assert.match(s.slice(b), /^<BaguioIdle copy=\{city\.idle\} row=\{city\.idleRow\} \/>\}\s*<div aria-live="polite"/, "a sibling, not inside a condition");
 });
 test("T49P2-E5 the scene is decoration: hidden from assistive tech, inert, no focus stop", async () => {
   const { BAGUIO_IDLE_SCENE_CLASS } = await data();

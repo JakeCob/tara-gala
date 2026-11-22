@@ -4,6 +4,8 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { PX, PixelBox, PixelButton, PixelCardLink, SectionTitle, cx } from "@/components/pixel";
 import { datesLine, knownTripsRaw, parseKnownTrips, rememberTrip, tripApi, tripFailureMessage, tripProblem } from "@/lib/trip";
+import { AMBAGAN_WORDS } from "@/lib/ambagan";
+import { flags } from "@/lib/flags";
 
 const subscribeNothing = () => () => {};
 
@@ -71,8 +73,8 @@ export default function TripHome() {
             <span className={PX.meta}>Your bus e-tickets, saved on this phone for the terminal.</span>
           </PixelCardLink>
           <PixelCardLink href="/wallet" className="flex flex-col gap-1 p-4">
-            <span className="font-bold">Trip wallets</span>
-            <span className={PX.meta}>Who paid what, and who pays whom at the end.</span>
+            <span className="font-bold">{flags.ambaganTab ? AMBAGAN_WORDS.title : "Trip wallets"}</span>
+            <span className={PX.meta}>{flags.ambaganTab ? AMBAGAN_WORDS.tripCard : "Who paid what, and who pays whom at the end."}</span>
           </PixelCardLink>
         </section>
       </div>

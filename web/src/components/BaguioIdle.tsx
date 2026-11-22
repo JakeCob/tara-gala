@@ -4,14 +4,15 @@
 // to load just leaves grass.
 import { cx, PixelBox } from "@/components/pixel";
 import { BAGUIO_IDLE_COPY, BAGUIO_IDLE_ROW, BAGUIO_IDLE_SCENE_CLASS } from "@/lib/baguioIdle";
-import { SHOW_CLASS } from "@/lib/homeDecor";
-import { SPRITES, spriteSrc } from "@/lib/sprites";
+import { SHOW_CLASS, type DecorShow } from "@/lib/homeDecor";
+import { SPRITES, spriteSrc, type SpriteName } from "@/lib/sprites";
 
-export default function BaguioIdle() {
+/** TG-71/72: another city passes its own two lines; the scene stays (a terminal, the rides, the spots). */
+export default function BaguioIdle({ copy = BAGUIO_IDLE_COPY, row = BAGUIO_IDLE_ROW }: { copy?: { lead: string; line: string }; row?: readonly { name: SpriteName; show: DecorShow }[] }) {
   return (
     <PixelBox className="p-0 flex flex-col">
       <div aria-hidden="true" className={BAGUIO_IDLE_SCENE_CLASS} style={{ backgroundImage: `url(${spriteSrc("tile-grass")})`, backgroundSize: "32px" }}>
-        {BAGUIO_IDLE_ROW.map((d) => (
+        {row.map((d) => (
           <span
             key={d.name}
             aria-hidden="true"
@@ -21,8 +22,8 @@ export default function BaguioIdle() {
         ))}
       </div>
       <div className="p-4 flex flex-col gap-1">
-        <p className="text-base font-bold">{BAGUIO_IDLE_COPY.lead}</p>
-        <p className="text-sm text-muted md:max-w-prose">{BAGUIO_IDLE_COPY.line}</p>
+        <p className="text-base font-bold">{copy.lead}</p>
+        <p className="text-sm text-muted md:max-w-prose">{copy.line}</p>
       </div>
     </PixelBox>
   );

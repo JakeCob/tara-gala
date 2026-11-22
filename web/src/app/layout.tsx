@@ -6,6 +6,8 @@ import OutboxRunner from "@/components/OutboxRunner";
 import ServiceWorkerManager from "@/components/ServiceWorkerManager";
 import SiteHeader from "@/components/SiteHeader";
 import TabBar from "@/components/TabBar";
+import { AROUND_WORDS } from "@/lib/around";
+import { flags } from "@/lib/flags";
 import { THEME_BOOT } from "@/lib/theme";
 import "./globals.css";
 
@@ -18,7 +20,7 @@ const signWide = localFont({ src: "../fonts/Cubao_Free_Wide.otf", display: "swap
 
 export const metadata: Metadata = {
   title: "Tara Gala",
-  description: "Every Manila to Baguio bus, plus how to get around once you're there.",
+  description: flags.aroundTab ? AROUND_WORDS.siteDescription : "Every Manila to Baguio bus, plus how to get around once you're there.", // TG-71/72
   appleWebApp: { capable: true, title: "Tara Gala", statusBarStyle: "default" },
   icons: { apple: "/apple-touch-icon.png" },
 };
