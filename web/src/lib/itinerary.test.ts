@@ -398,11 +398,18 @@ test("no new web dependency (T23-G1)", (t) => {
     return;
   }
   const now = readFileSync(new URL("package.json", WEB), "utf8");
+  // A Next.js patch upgrade may move next and eslint-config-next together (T27-17 pins the exact versions);
+  // nothing may be added or removed, and every other version stays as on main
+  const NEXT_FAMILY = ["next", "eslint-config-next"];
   const deps = (s: string) => {
     const j = JSON.parse(s);
-    return { dependencies: j.dependencies, devDependencies: j.devDependencies };
+    const strip = (o: Record<string, string>) =>
+      Object.fromEntries(Object.entries(o).map(([k, v]) => [k, NEXT_FAMILY.includes(k) ? "(next family)" : v]));
+    return { dependencies: strip(j.dependencies), devDependencies: strip(j.devDependencies) };
   };
   assert.deepEqual(deps(now), deps(base));
+  const j = JSON.parse(now);
+  assert.equal(j.devDependencies["eslint-config-next"], j.dependencies.next, "eslint-config-next matches next");
 });
 
 // ---------------------------------------------------------------- TG-43 PR B: the share page on the pixel primitives

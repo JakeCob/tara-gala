@@ -90,14 +90,14 @@ test("T27-17 sw.js static guards", () => {
 
 test("T27-17 no new dependency", () => {
   const pkg = JSON.parse(readFileSync(new URL("package.json", WEB), "utf8"));
-  assert.deepEqual(pkg.dependencies, { next: "16.4.3", react: "19.3.0", "react-dom": "19.3.0" });
+  assert.deepEqual(pkg.dependencies, { next: "16.4.5", react: "19.3.0", "react-dom": "19.3.0" });
   assert.deepEqual(pkg.devDependencies, {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     eslint: "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.5",
     tailwindcss: "^4",
     typescript: "^5",
   });
