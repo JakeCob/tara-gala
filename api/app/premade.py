@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from . import db
-from .plan_validation import MODEL_PREMADE, check_plan, load_refs, parse_plan
+from .plan_validation import MODEL_PREMADE, check_plan, load_refs, parse_plan, plan_city
 
 router = APIRouter(tags=["itineraries"])
 logger = logging.getLogger("tara_gala.api")
@@ -22,6 +22,7 @@ class PremadeSummary(BaseModel):
     day_count: int
     stop_count: int
     spot_names: list[str]  # in visit order, each once
+    city: str  # TG-72: where its buses go (plan_city), so a card can name its place
 
 
 def require_premade(request: Request) -> None:
@@ -67,7 +68,8 @@ def list_premade() -> list[PremadeSummary]:
                     day_count=len(plan.days),
                     stop_count=sum(len(day.stops) for day in plan.days),
                     spot_names=names,
+                    city=plan_city(refs.trips.get(plan.outbound.trip_id), refs.trips.get(plan.return_.trip_id)),
                 )
             )
-    logger.info("premade list results=%d dropped=%d", len(results), dropped)
+    logger.info("premade list results=%d dropped=%d cities=%s", len(results), dropped, ",".join(sorted({p.city for p in results})) or "-")
     return results

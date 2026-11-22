@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
-import type { Flags } from "@/lib/flags";
+import { flags as siteFlags, type Flags } from "@/lib/flags";
 import { PLAN_COPY, premadeCountLine, matchesDates, showPremadeAction, type ErrorView, type PremadeView } from "@/lib/planForm";
 import { premadeCard } from "@/lib/premadeView";
 import type { PremadeSummary } from "@/lib/api";
@@ -56,7 +56,7 @@ function SearchBusesBox({ message }: { message: string }) {
 
 function TripCard({ trip, date, returnDate }: { trip: PremadeSummary; date: string; returnDate: string }) {
   const titleId = useId();
-  const card = premadeCard(trip, date, returnDate);
+  const card = premadeCard(trip, date, returnDate, siteFlags.aroundTab); // TG-72: names its place
   return (
     <PixelBox as="li" className="p-4 flex flex-col items-start gap-2">
       <h3 id={titleId} className={`${PX.dataHeading} min-w-0 break-words`}>

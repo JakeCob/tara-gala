@@ -177,10 +177,11 @@ export function shiftReturn(prevTravel: string, prevReturn: string, nextTravel: 
   return addDays(nextTravel, length);
 }
 
-export function lengthHint(date: string, ret: string): string | null {
+/** TG-72: `place` null (the Around flag on) says only the length, since a plan isn't only for Baguio any more. */
+export function lengthHint(date: string, ret: string, place: string | null = "Baguio"): string | null {
   if (!isIsoDate(date) || !isIsoDate(ret) || ret < date) return null;
   const days = daysBetween(date, ret) + 1;
-  return days === 1 ? "Day trip" : `${days} days in Baguio`;
+  return days === 1 ? "Day trip" : `${days} days${place ? ` in ${place}` : ""}`;
 }
 
 // --- Budget ---

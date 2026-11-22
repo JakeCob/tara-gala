@@ -122,7 +122,7 @@ export default function PlanForm() {
           <DatesBox
             values={values}
             bounds={dateBounds(today, values.date)}
-            hint={lengthHint(values.date, values.returnDate)}
+            hint={lengthHint(values.date, values.returnDate, flags.aroundTab ? null : "Baguio")}
             errors={errors}
             onDate={(value) => dispatch({ type: "setDate", value, today })}
             onReturn={(value) => dispatch({ type: "setReturn", value })}

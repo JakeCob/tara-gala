@@ -38,7 +38,7 @@ export default function PremadeTrips() {
     let live = true;
     fetchPremade().then((r) => {
       if (!live) return;
-      const shown = landingPremadeView(r, navigator.onLine);
+      const shown = landingPremadeView(r, navigator.onLine, flags.aroundTab);
       console.info("[tg-landing] premade state=%s count=%d", shown.state, shown.cards?.length ?? 0);
       setResult(r);
     });
@@ -56,7 +56,7 @@ export default function PremadeTrips() {
 
   if (!flags.premadeItineraries) return null;
   // navigator is undefined in the server prerender, where the list is always still loading
-  const view = landingPremadeView(result, result === null || navigator.onLine);
+  const view = landingPremadeView(result, result === null || navigator.onLine, flags.aroundTab); // TG-72: each card names its place
   if (view.state === "hidden") return null;
 
   return (
