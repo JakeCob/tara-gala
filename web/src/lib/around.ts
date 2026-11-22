@@ -60,24 +60,19 @@ export const AROUND_CITIES: readonly AroundCity[] = [
 
 export const aroundCity = (slug: string): AroundCity | undefined => AROUND_CITIES.find((c) => c.slug === slug);
 
-/** "Baguio and Sagada", then "Baguio, Sagada and Vigan". */
-export function andList(names: readonly string[]): string {
-  if (names.length <= 1) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-const CITIES = andList(AROUND_CITIES.map((c) => c.name));
-
 export const AROUND_WORDS = {
   tab: "Around",
   menu: "Getting around",
   title: "Getting around",
   intro: "Jeeps, taxis, vans and walks in the places we've checked, from the bus terminal to the top spots.",
   pageTitle: (city: string) => `Getting around ${city}`,
+  // Owner, 2026-11-22: the app is for every province, so the site words name no city (only a city's own page does)
   /** The title screen's line, under the wordmark */
-  tagline: `${CITIES} buses, straight from the operators.`,
+  tagline: "Provincial buses, straight from the operators.",
+  /** /buses' hero line: true for whatever the search covers */
+  heroLine: "Bus trips on file, with fares and where to book.",
   /** layout.tsx and manifest.ts */
-  siteDescription: `Bus times for ${CITIES}, how to get around once you're there, and a shared wallet for the barkada.`,
+  siteDescription: "Provincial bus times, how to get around once you're there, and an ambagan for the barkada's costs.",
 } as const;
 
 /** Legs that start at this start: a terminal's from the API as is; a spot's query also returns legs coming back to it. */

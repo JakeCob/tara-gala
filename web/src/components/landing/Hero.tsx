@@ -1,4 +1,6 @@
 import { PageTitle } from "@/components/pixel";
+import { AROUND_WORDS } from "@/lib/around";
+import { flags } from "@/lib/flags";
 import { CAST, castSprite } from "@/lib/landingCast";
 import { spriteSrc } from "@/lib/sprites";
 
@@ -23,7 +25,7 @@ export default function Hero() {
       />
       <div className="relative flex flex-col gap-1 p-4">
         <PageTitle wordmark id="buses-title">Find buses</PageTitle>
-        <p className="text-sm font-semibold text-screen-ink">Every Manila to Baguio trip on file, with fares and where to book.</p>
+        <p className="text-sm font-semibold text-screen-ink">{flags.aroundTab ? AROUND_WORDS.heroLine : "Every Manila to Baguio trip on file, with fares and where to book."}</p>
       </div>
       <div aria-hidden="true" className="absolute bottom-1 left-3 flex gap-1">
         {CAST.heroTrio.map((slot) => (
