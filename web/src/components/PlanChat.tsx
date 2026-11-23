@@ -14,6 +14,7 @@ import { flags } from "@/lib/flags";
 import { KALOY_WORDS, replyPose } from "@/lib/kaloy";
 import { planFailureMessage } from "@/lib/trip";
 import { KaloyBeside, KaloyGreeting } from "./Kaloy";
+import KaloyChat from "./KaloyChat";
 import { ChangeList, SaidText } from "./PlanBits";
 import type { ChatTools, PlanEditor } from "./PlanEditor";
 
@@ -48,6 +49,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   const [proposal, setProposal] = useState<ChatProposal | null>(null); // the open proposal's plan: in memory only, never stored
   const [cheer, setCheer] = useState(false); // TG-75: Kaloy is happy right after an Apply, until the next turn
   const kaloy = flags.kaloy;
+  const gameUi = kaloy && flags.chatGameUi; // TG-75: the game-style chat (KaloyChat.tsx) draws this same state; off, today's form
   const focus = ask?.focus ?? null; // the stop this chat was opened about, if any
   const online = editor.online;
   const off = !editor.can || applying || !proposal;
@@ -160,6 +162,14 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   const lastAsked = [...log].reverse().find((e) => e.kind === "user")?.text ?? null;
   const lastApplied = log.findLastIndex((e) => e.kind === "bot" && e.proposal === "applied");
   const newestBot = log.findLastIndex((e) => e.kind === "bot"); // TG-75: only Kaloy's newest reply talks or cheers
+  if (gameUi) {
+    return (
+      <KaloyChat dialogRef={dialog} endRef={end} fieldId={fieldId} log={log} draft={draft} onDraft={setDraft} online={online}
+        sending={sending} applying={applying} holding={!!proposal} off={off} waiting={waiting} status={editor.status} cheer={cheer}
+        lastAsked={lastAsked} lastApplied={lastApplied} newestBot={newestBot} onClose={onClose} onSend={(text, again) => void send(text, again)}
+        onApply={onApply} onNotThis={onNotThis} onClear={onClear} onNeedLink={onNeedLink} />
+    );
+  }
   return (
     <dialog ref={dialog} aria-label={kaloy ? KALOY_WORDS.ask : "Ask the chatbot"} onClose={(e) => e.target === e.currentTarget && onClose()}
       onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}
