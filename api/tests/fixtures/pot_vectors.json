@@ -1,0 +1,1747 @@
+{
+ "about": "TG-73 pot vectors (test-plan §1, V1 to V18). Both api/tests/test_pot_math.py and web/src/lib/pot.test.ts load this file. People are made up and named by plain ids; `order` is the wallet order. people: [{id, in_goal, target}] (target null: the goal's `each`); ambag: [{member, kind in|back, amount, status sent|received}]; spends: the pot spends' amounts; treasurer: T at the close. expect: C, S, B, c (each person's received less give-backs, wallet order), pending (centavos) and pending_count, then refunds and shortfall (T first, then wallet order) and delta (every person in order; sum 0), or `refuse` with the close's code. Expected values are hand-worked from plan §4 and checked against an independent Fraction reference, not against either implementation.",
+ "cases": [
+  {
+   "name": "V1 five equal, no leftover",
+   "note": "",
+   "each": 800000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "bea",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "di",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "di",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    3745000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo",
+    "bea",
+    "di"
+   ],
+   "expect": {
+    "C": 4000000,
+    "S": 3745000,
+    "B": 255000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 800000,
+     "ben": 800000,
+     "carlo": 800000,
+     "bea": 800000,
+     "di": 800000
+    },
+    "refunds": {
+     "ana": 51000,
+     "ben": 51000,
+     "carlo": 51000,
+     "bea": 51000,
+     "di": 51000
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -204000,
+     "ben": 51000,
+     "carlo": 51000,
+     "bea": 51000,
+     "di": 51000
+    }
+   }
+  },
+  {
+   "name": "V2 rounding to centavos (plan 4.3)",
+   "note": "floors 55134 x4 + 34459 = 254995; the 2 left go to Ana (T) then Ben",
+   "each": 800000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "bea",
+     "in_goal": true,
+     "target": 500000
+    },
+    {
+     "id": "di",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "di",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    1200000,
+    2245003
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo",
+    "bea",
+    "di"
+   ],
+   "expect": {
+    "C": 3700000,
+    "S": 3445003,
+    "B": 254997,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 800000,
+     "ben": 800000,
+     "carlo": 800000,
+     "bea": 500000,
+     "di": 800000
+    },
+    "refunds": {
+     "ana": 55135,
+     "ben": 55135,
+     "carlo": 55134,
+     "bea": 34459,
+     "di": 55134
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -199862,
+     "ben": 55135,
+     "carlo": 55134,
+     "bea": 34459,
+     "di": 55134
+    }
+   }
+  },
+  {
+   "name": "V3 proportional, unequal",
+   "note": "",
+   "each": 500000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": 1000000
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 1000000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    1900000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 2000000,
+    "S": 1900000,
+    "B": 100000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 1000000,
+     "ben": 500000,
+     "carlo": 500000
+    },
+    "refunds": {
+     "ana": 50000,
+     "ben": 25000,
+     "carlo": 25000
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -50000,
+     "ben": 25000,
+     "carlo": 25000
+    }
+   }
+  },
+  {
+   "name": "V4 leftover centavo with T not first in wallet order",
+   "note": "allocate(100, w, [carlo, ana, ben])",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    299900
+   ],
+   "treasurer": "carlo",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 300000,
+    "S": 299900,
+    "B": 100,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 100000,
+     "ben": 100000,
+     "carlo": 100000
+    },
+    "refunds": {
+     "carlo": 34,
+     "ana": 33,
+     "ben": 33
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": 33,
+     "ben": 33,
+     "carlo": -66
+    }
+   }
+  },
+  {
+   "name": "V5 someone with c_i = 0",
+   "note": "Carlo is in the goal and never paid: no refund, not listed",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    150000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 200000,
+    "S": 150000,
+    "B": 50000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 100000,
+     "ben": 100000,
+     "carlo": 0
+    },
+    "refunds": {
+     "ana": 25000,
+     "ben": 25000
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -25000,
+     "ben": 25000,
+     "carlo": 0
+    }
+   }
+  },
+  {
+   "name": "V6 shortfall split",
+   "note": "",
+   "each": 1000000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 1000000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 1000000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 1000000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    3100001
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 3000000,
+    "S": 3100001,
+    "B": -100001,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 1000000,
+     "ben": 1000000,
+     "carlo": 1000000
+    },
+    "refunds": {},
+    "shortfall": {
+     "ana": 33334,
+     "ben": 33334,
+     "carlo": 33333
+    },
+    "delta": {
+     "ana": 66667,
+     "ben": -33334,
+     "carlo": -33333
+    }
+   }
+  },
+  {
+   "name": "V7 shortfall with T out of the goal",
+   "note": "T still gets +D; d over the others only",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": false,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    330001
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 300000,
+    "S": 330001,
+    "B": -30001,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 100000,
+     "ben": 100000,
+     "carlo": 100000
+    },
+    "refunds": {},
+    "shortfall": {
+     "ben": 15001,
+     "carlo": 15000
+    },
+    "delta": {
+     "ana": 30001,
+     "ben": -15001,
+     "carlo": -15000
+    }
+   }
+  },
+  {
+   "name": "V8 C = 0, S > 0",
+   "note": "all of S is shortfall",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [],
+   "spends": [
+    90001
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 0,
+    "S": 90001,
+    "B": -90001,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 0,
+     "ben": 0,
+     "carlo": 0
+    },
+    "refunds": {},
+    "shortfall": {
+     "ana": 30001,
+     "ben": 30000,
+     "carlo": 30000
+    },
+    "delta": {
+     "ana": 60000,
+     "ben": -30000,
+     "carlo": -30000
+    }
+   }
+  },
+  {
+   "name": "V9 B = 0",
+   "note": "",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    200000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben"
+   ],
+   "expect": {
+    "C": 200000,
+    "S": 200000,
+    "B": 0,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 100000,
+     "ben": 100000
+    },
+    "refunds": {},
+    "shortfall": {},
+    "delta": {
+     "ana": 0,
+     "ben": 0
+    }
+   }
+  },
+  {
+   "name": "V10 pending sent at close",
+   "note": "a sent ambag isn't in C",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 100000,
+     "status": "sent"
+    }
+   ],
+   "spends": [
+    140000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 200000,
+    "S": 140000,
+    "B": 60000,
+    "pending_count": 1,
+    "pending": 100000,
+    "c": {
+     "ana": 100000,
+     "ben": 100000,
+     "carlo": 0
+    },
+    "refunds": {
+     "ana": 30000,
+     "ben": 30000
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -30000,
+     "ben": 30000,
+     "carlo": 0
+    }
+   }
+  },
+  {
+   "name": "V11 hand-over mid-trip (Ana to Carlo), leftover",
+   "note": "the close uses the treasurer at the close: the same as Carlo all along; Ana's delta is her refund only, no settlement",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    60000,
+    40000
+   ],
+   "treasurer": "carlo",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 300000,
+    "S": 100000,
+    "B": 200000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 100000,
+     "ben": 100000,
+     "carlo": 100000
+    },
+    "refunds": {
+     "carlo": 66667,
+     "ana": 66667,
+     "ben": 66666
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": 66667,
+     "ben": 66666,
+     "carlo": -133333
+    }
+   }
+  },
+  {
+   "name": "V12 hand-over while short (plan 4.4)",
+   "note": "Carlo +600 - d_Carlo, Ana -d_Ana: not +600 for Ana (Carlo paid her the gap outside the app)",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    360000
+   ],
+   "treasurer": "carlo",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 300000,
+    "S": 360000,
+    "B": -60000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 100000,
+     "ben": 100000,
+     "carlo": 100000
+    },
+    "refunds": {},
+    "shortfall": {
+     "carlo": 20000,
+     "ana": 20000,
+     "ben": 20000
+    },
+    "delta": {
+     "ana": -20000,
+     "ben": -20000,
+     "carlo": 40000
+    }
+   }
+  },
+  {
+   "name": "V13 taken out, given back (leftover)",
+   "note": "",
+   "each": 500000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "bea",
+     "in_goal": false,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "back",
+     "amount": 500000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    900000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "bea"
+   ],
+   "expect": {
+    "C": 1000000,
+    "S": 900000,
+    "B": 100000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 500000,
+     "ben": 500000,
+     "bea": 0
+    },
+    "refunds": {
+     "ana": 50000,
+     "ben": 50000
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -50000,
+     "ben": 50000,
+     "bea": 0
+    }
+   }
+  },
+  {
+   "name": "V13b taken out, given back (short)",
+   "note": "Bea isn't in the shortfall split",
+   "each": 500000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "bea",
+     "in_goal": false,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "back",
+     "amount": 500000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    1000003
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "bea"
+   ],
+   "expect": {
+    "C": 1000000,
+    "S": 1000003,
+    "B": -3,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 500000,
+     "ben": 500000,
+     "bea": 0
+    },
+    "refunds": {},
+    "shortfall": {
+     "ana": 2,
+     "ben": 1
+    },
+    "delta": {
+     "ana": 1,
+     "ben": -1,
+     "bea": 0
+    }
+   }
+  },
+  {
+   "name": "V14 taken out, kept in the pot (leftover)",
+   "note": "Bea shares the refunds by weight 5000",
+   "each": 800000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "bea",
+     "in_goal": false,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    1890000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "bea"
+   ],
+   "expect": {
+    "C": 2100000,
+    "S": 1890000,
+    "B": 210000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 800000,
+     "ben": 800000,
+     "bea": 500000
+    },
+    "refunds": {
+     "ana": 80000,
+     "ben": 80000,
+     "bea": 50000
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -130000,
+     "ben": 80000,
+     "bea": 50000
+    }
+   }
+  },
+  {
+   "name": "V14b taken out, kept in the pot (short)",
+   "note": "out of the shortfall split, even with money in",
+   "each": 800000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "bea",
+     "in_goal": false,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    2100003
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "bea"
+   ],
+   "expect": {
+    "C": 2100000,
+    "S": 2100003,
+    "B": -3,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 800000,
+     "ben": 800000,
+     "bea": 500000
+    },
+    "refunds": {},
+    "shortfall": {
+     "ana": 2,
+     "ben": 1
+    },
+    "delta": {
+     "ana": 1,
+     "ben": -1,
+     "bea": 0
+    }
+   }
+  },
+  {
+   "name": "V15 give-back larger than the balance",
+   "note": "B goes negative; Bea is excluded from the split",
+   "each": 500000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "bea",
+     "in_goal": false,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "in",
+     "amount": 500000,
+     "status": "received"
+    },
+    {
+     "member": "bea",
+     "kind": "back",
+     "amount": 500000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    1200000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "bea"
+   ],
+   "expect": {
+    "C": 1000000,
+    "S": 1200000,
+    "B": -200000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 500000,
+     "ben": 500000,
+     "bea": 0
+    },
+    "refunds": {},
+    "shortfall": {
+     "ana": 100000,
+     "ben": 100000
+    },
+    "delta": {
+     "ana": 100000,
+     "ben": -100000,
+     "bea": 0
+    }
+   }
+  },
+  {
+   "name": "V16 everyone taken out, short",
+   "note": "",
+   "each": 100000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": false,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": false,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 100000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    300000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben"
+   ],
+   "expect": {
+    "C": 200000,
+    "S": 300000,
+    "B": -100000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 100000,
+     "ben": 100000
+    },
+    "refuse": "no_one_in_goal"
+   }
+  },
+  {
+   "name": "V17 amount above the target",
+   "note": "weight 8500 (W1: Carlo's lane is `over`)",
+   "each": 800000,
+   "people": [
+    {
+     "id": "ana",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "ben",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "carlo",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "ana",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "ben",
+     "kind": "in",
+     "amount": 800000,
+     "status": "received"
+    },
+    {
+     "member": "carlo",
+     "kind": "in",
+     "amount": 850000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    2205000
+   ],
+   "treasurer": "ana",
+   "order": [
+    "ana",
+    "ben",
+    "carlo"
+   ],
+   "expect": {
+    "C": 2450000,
+    "S": 2205000,
+    "B": 245000,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "ana": 800000,
+     "ben": 800000,
+     "carlo": 850000
+    },
+    "refunds": {
+     "ana": 80000,
+     "ben": 80000,
+     "carlo": 85000
+    },
+    "shortfall": {},
+    "delta": {
+     "ana": -165000,
+     "ben": 80000,
+     "carlo": 85000
+    }
+   }
+  },
+  {
+   "name": "V18 max values",
+   "note": "20 x PHP 100,000, S = 1 centavo: floors 9999999 each, the 19 left go to p01..p19",
+   "each": 10000000,
+   "people": [
+    {
+     "id": "p01",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p02",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p03",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p04",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p05",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p06",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p07",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p08",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p09",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p10",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p11",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p12",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p13",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p14",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p15",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p16",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p17",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p18",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p19",
+     "in_goal": true,
+     "target": null
+    },
+    {
+     "id": "p20",
+     "in_goal": true,
+     "target": null
+    }
+   ],
+   "ambag": [
+    {
+     "member": "p01",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p02",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p03",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p04",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p05",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p06",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p07",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p08",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p09",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p10",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p11",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p12",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p13",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p14",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p15",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p16",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p17",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p18",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p19",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    },
+    {
+     "member": "p20",
+     "kind": "in",
+     "amount": 10000000,
+     "status": "received"
+    }
+   ],
+   "spends": [
+    1
+   ],
+   "treasurer": "p01",
+   "order": [
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12",
+    "p13",
+    "p14",
+    "p15",
+    "p16",
+    "p17",
+    "p18",
+    "p19",
+    "p20"
+   ],
+   "expect": {
+    "C": 200000000,
+    "S": 1,
+    "B": 199999999,
+    "pending_count": 0,
+    "pending": 0,
+    "c": {
+     "p01": 10000000,
+     "p02": 10000000,
+     "p03": 10000000,
+     "p04": 10000000,
+     "p05": 10000000,
+     "p06": 10000000,
+     "p07": 10000000,
+     "p08": 10000000,
+     "p09": 10000000,
+     "p10": 10000000,
+     "p11": 10000000,
+     "p12": 10000000,
+     "p13": 10000000,
+     "p14": 10000000,
+     "p15": 10000000,
+     "p16": 10000000,
+     "p17": 10000000,
+     "p18": 10000000,
+     "p19": 10000000,
+     "p20": 10000000
+    },
+    "refunds": {
+     "p01": 10000000,
+     "p02": 10000000,
+     "p03": 10000000,
+     "p04": 10000000,
+     "p05": 10000000,
+     "p06": 10000000,
+     "p07": 10000000,
+     "p08": 10000000,
+     "p09": 10000000,
+     "p10": 10000000,
+     "p11": 10000000,
+     "p12": 10000000,
+     "p13": 10000000,
+     "p14": 10000000,
+     "p15": 10000000,
+     "p16": 10000000,
+     "p17": 10000000,
+     "p18": 10000000,
+     "p19": 10000000,
+     "p20": 9999999
+    },
+    "shortfall": {},
+    "delta": {
+     "p01": -189999999,
+     "p02": 10000000,
+     "p03": 10000000,
+     "p04": 10000000,
+     "p05": 10000000,
+     "p06": 10000000,
+     "p07": 10000000,
+     "p08": 10000000,
+     "p09": 10000000,
+     "p10": 10000000,
+     "p11": 10000000,
+     "p12": 10000000,
+     "p13": 10000000,
+     "p14": 10000000,
+     "p15": 10000000,
+     "p16": 10000000,
+     "p17": 10000000,
+     "p18": 10000000,
+     "p19": 10000000,
+     "p20": 9999999
+    }
+   }
+  }
+ ]
+}
