@@ -503,7 +503,7 @@ export default function TripView({ slug }: { slug: string }) {
             Add a place
           </PixelButton>
         </div>
-        {!online && <p className={PX.meta}>Editing needs signal. You can still tick stops.</p>}
+        {!online && <p className={PX.meta}>Editing and ticking stops need signal.</p>}
       </div>
     ),
     top: (addPlace) => (
