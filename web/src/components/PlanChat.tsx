@@ -10,7 +10,10 @@ import {
   type ChatProposal, type Entry, type NeedLink, MAX_TEXT,
   addEntry, chatFailureLines, chatStorage, clearLog, loadLog, needLinkLine, saveLog, settle,
 } from "@/lib/chat";
+import { flags } from "@/lib/flags";
+import { KALOY_WORDS, replyPose } from "@/lib/kaloy";
 import { planFailureMessage } from "@/lib/trip";
+import { KaloyBeside, KaloyGreeting } from "./Kaloy";
 import { ChangeList, SaidText } from "./PlanBits";
 import type { ChatTools, PlanEditor } from "./PlanEditor";
 
@@ -43,6 +46,8 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   const sendingRef = useRef(false); // a second tap in the same tick sees it
   const [applying, setApplying] = useState(false);
   const [proposal, setProposal] = useState<ChatProposal | null>(null); // the open proposal's plan: in memory only, never stored
+  const [cheer, setCheer] = useState(false); // TG-75: Kaloy is happy right after an Apply, until the next turn
+  const kaloy = flags.kaloy;
   const focus = ask?.focus ?? null; // the stop this chat was opened about, if any
   const online = editor.online;
   const off = !editor.can || applying || !proposal;
@@ -74,6 +79,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
     const history = again && last >= 0 ? before.slice(0, last) : before;
     sendingRef.current = true;
     setSending(true);
+    setCheer(false);
     if (!again) {
       setLog((l) => addEntry(l, { kind: "user", text: words }));
       setDraft("");
@@ -119,6 +125,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
     if (out.ok) {
       focusNext.current = "applied";
       setProposal(null);
+      setCheer(true);
       return setLog((l) => settle(l, "applied"));
     }
     if (out.ignored) return; // a tap while the newest plan isn't on screen yet: nothing was sent
@@ -141,6 +148,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
     console.info("[tg-trip] chat clear");
     clearLog(chatStorage(), chat.slug);
     setProposal(null);
+    setCheer(false);
     setLog([]);
   }
 
@@ -151,13 +159,14 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
 
   const lastAsked = [...log].reverse().find((e) => e.kind === "user")?.text ?? null;
   const lastApplied = log.findLastIndex((e) => e.kind === "bot" && e.proposal === "applied");
+  const newestBot = log.findLastIndex((e) => e.kind === "bot"); // TG-75: only Kaloy's newest reply talks or cheers
   return (
-    <dialog ref={dialog} aria-label="Ask the chatbot" onClose={(e) => e.target === e.currentTarget && onClose()}
+    <dialog ref={dialog} aria-label={kaloy ? KALOY_WORDS.ask : "Ask the chatbot"} onClose={(e) => e.target === e.currentTarget && onClose()}
       onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}
       className="m-auto h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100%-2rem))] bg-transparent p-0 text-foreground backdrop:bg-screen-ink/60">
       <div className="pixel-box flex h-full flex-col gap-3 bg-card p-4 text-foreground">
         <div className="flex items-start justify-between gap-3">
-          <p className="text-sm font-bold">Ask the chatbot</p>
+          <p className="text-sm font-bold">{kaloy ? KALOY_WORDS.ask : <>Ask the chatbot</>}</p>
           <PixelButton variant="secondary" onClick={() => dialog.current?.close()}>Close</PixelButton>
         </div>
 
@@ -167,10 +176,14 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
           )}
           <div role="log" aria-live="polite" className="flex flex-col gap-3">
             {log.length === 0 && (
-              <div className="flex flex-col gap-1 self-start">
-                <p className={PX.meta}>Chatbot</p>
-                <p className="text-sm break-words">{FIRST_MESSAGE}</p>
-              </div>
+              // TG-75: Kaloy greets first, in the phone's language; the greeting is drawn here only, never logged or sent
+              <KaloyBeside pose="talk" size={32} top className="self-start">
+                <div className="flex flex-col gap-1 self-start">
+                  <p className={PX.meta}>{kaloy ? KALOY_WORDS.name : <>Chatbot</>}</p>
+                  {kaloy && <KaloyGreeting />}
+                  <p className="text-sm break-words">{FIRST_MESSAGE}</p>
+                </div>
+              </KaloyBeside>
             )}
             {log.map((e, i) =>
               e.kind === "user" ? (
@@ -186,48 +199,54 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
                   )}
                 </div>
               ) : (
-                <div key={i} className="flex flex-col gap-2 self-start">
-                  <p className={PX.meta}>Chatbot</p>
-                  {/* no_fit's reply is the fixed NO_FIT sentence (the API's contract): said once, as the state it is */}
-                  {e.noFit ? <ChatAlert lines={[e.text || NO_FIT]} /> : <p className="text-sm break-words whitespace-pre-line">{e.text}</p>}
-                  {e.needLink && (
-                    <>
-                      <p className="text-sm break-words">{needLinkLine(e.needLink.name)}</p>
-                      <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm"
-                        onClick={() => {
-                          const at = e.needLink!.at;
-                          console.info("[tg-trip] chat pin-ask open at=%s", at ? Object.keys(at)[0] : "none");
-                          onNeedLink(e.needLink!);
-                        }}>
-                        Paste a Google Maps link
-                      </PixelButton>
-                    </>
-                  )}
-                  {e.changes && e.proposal && (
-                    <PixelBox className="flex flex-col gap-2 p-3">
-                      <p className="text-sm font-semibold">Proposed change</p>
-                      <ChangeList lines={e.changes} />
-                      {e.proposal === "open" && proposal ? (
-                        <div className="flex flex-wrap gap-2">
-                          <PixelButton variant="primary" className="px-4 py-2" aria-disabled={off || undefined} onClick={onApply}>
-                            {applying ? "Applying..." : "Apply"}
-                          </PixelButton>
-                          <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm" aria-disabled={applying || undefined}
-                            onClick={() => !applying && onNotThis()}>
-                            Not this
-                          </PixelButton>
-                        </div>
-                      ) : e.proposal === "applied" ? (
-                        <p tabIndex={-1} className={PX.meta} data-chat-focus={i === lastApplied ? "applied" : undefined}>{APPLIED}</p>
-                      ) : (
-                        <p className={PX.meta}>{NOT_APPLIED}</p>
-                      )}
-                    </PixelBox>
-                  )}
-                </div>
+                <KaloyBeside key={i} pose={replyPose({ index: i, newest: newestBot, sending, cheer })} size={32} top className="self-start">
+                  <div className="flex flex-col gap-2 self-start">
+                    <p className={PX.meta}>{kaloy ? KALOY_WORDS.name : <>Chatbot</>}</p>
+                    {/* no_fit's reply is the fixed NO_FIT sentence (the API's contract): said once, as the state it is */}
+                    {e.noFit ? <ChatAlert lines={[e.text || NO_FIT]} /> : <p className="text-sm break-words whitespace-pre-line">{e.text}</p>}
+                    {e.needLink && (
+                      <>
+                        <p className="text-sm break-words">{needLinkLine(e.needLink.name)}</p>
+                        <PixelButton variant="secondary" className="inline-flex items-center self-start px-4 text-sm"
+                          onClick={() => {
+                            const at = e.needLink!.at;
+                            console.info("[tg-trip] chat pin-ask open at=%s", at ? Object.keys(at)[0] : "none");
+                            onNeedLink(e.needLink!);
+                          }}>
+                          Paste a Google Maps link
+                        </PixelButton>
+                      </>
+                    )}
+                    {e.changes && e.proposal && (
+                      <PixelBox className="flex flex-col gap-2 p-3">
+                        <p className="text-sm font-semibold">Proposed change</p>
+                        <ChangeList lines={e.changes} />
+                        {e.proposal === "open" && proposal ? (
+                          <div className="flex flex-wrap gap-2">
+                            <PixelButton variant="primary" className="px-4 py-2" aria-disabled={off || undefined} onClick={onApply}>
+                              {applying ? "Applying..." : "Apply"}
+                            </PixelButton>
+                            <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm" aria-disabled={applying || undefined}
+                              onClick={() => !applying && onNotThis()}>
+                              Not this
+                            </PixelButton>
+                          </div>
+                        ) : e.proposal === "applied" ? (
+                          <p tabIndex={-1} className={PX.meta} data-chat-focus={i === lastApplied ? "applied" : undefined}>{APPLIED}</p>
+                        ) : (
+                          <p className={PX.meta}>{NOT_APPLIED}</p>
+                        )}
+                      </PixelBox>
+                    )}
+                  </div>
+                </KaloyBeside>
               ),
             )}
-            {sending && <p className={PX.meta}>{THINKING}</p>}
+            {sending && (
+              <KaloyBeside pose="think" size={32} className="self-start">
+                <p className={PX.meta}>{kaloy ? KALOY_WORDS.thinking : THINKING}</p>
+              </KaloyBeside>
+            )}
             {!online && <ChatAlert lines={chatFailureLines({ why: "offline" }) ?? []} />}
           </div>
           {/* ux.md §3.3: the edit bar is under this dialog's backdrop, so a chat Apply's waiting lines show here */}

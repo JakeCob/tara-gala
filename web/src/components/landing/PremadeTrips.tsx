@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { KaloyBeside } from "@/components/Kaloy";
 import { PX, PixelBox, PixelButton, PixelLink, SectionTitle } from "@/components/pixel";
 import { fetchPremade, type PremadeResult } from "@/lib/api";
 import { flags } from "@/lib/flags";
@@ -68,7 +69,11 @@ export default function PremadeTrips() {
       <p className="text-sm text-muted">No time to plan? Tara, pick one. Each is built only from buses and spots on file.</p>
       <div ref={stateArea} tabIndex={-1} className="flex flex-col gap-3 focus-pixel">
         {view.state === "loading" && <p className="text-sm text-muted">Loading trip ideas...</p>}
-        {view.state === "empty" && <p className="text-sm text-muted">No ready-made trips on file yet.</p>}
+        {view.state === "empty" && (
+          <KaloyBeside pose="idle">
+            <p className="text-sm text-muted">No ready-made trips on file yet.</p>
+          </KaloyBeside>
+        )}
         {view.state === "offline" && (
           <p className="text-sm text-muted">
             Ready-made trips need a connection the first time. Open this page once with signal and they&apos;ll be saved.

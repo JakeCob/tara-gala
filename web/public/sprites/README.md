@@ -34,6 +34,9 @@ TG-45 Philippine decor: owner request 2026-10-29, same pipeline; decorative only
 ## Diverse Filipino passengers (TG-48)
 TG-48: 10 passenger looks (owner request 2026-10-29), 3 frames each, in the TG-47 11-colour palette. Each passenger added on `/plan` gets the next look for its type (`lookFor` in `web/src/lib/party.ts`), so everyone keeps their look when another passenger is removed, and a saved party shows the same looks on the map. Every type has a woman and a man (a girl and a boy), and one Kayumanggi and one light-skinned look. The labels stay the type, never the look. The picker rows show one fixed look per type (`ROW_ICON`), and the home strip's two people are the barong and Filipiniana looks, so `chibi-barong`, `chibi-filipiniana` and the 12 classic `chibi-<type>-*` sprites are kept but no longer shown.
 
+## Kaloy (TG-75)
+Kaloy, the trip chat's mascot (owner decision 2026-11-23), is 7 hand-drawn 32×32 grids in the original 6 colours, shipped as SVG. They show only while `NEXT_PUBLIC_KALOY` is on, always with `alt=""`: the chat's title and labels name him in text.
+
 ## How the placeholders are made
 Each SVG is generated from a text grid in `web/sprites-src/` (one letter per pixel: `I` Ink, `F` Forest, `L` Leaf, `M` Mint, `C` Cream, `S` Sun, `.` transparent). To change a pixel, edit the grid and run `node web/sprites-src/build.ts` from the repo root. Never hand-edit an SVG: the tests compare each one to its grid.
 
@@ -127,3 +130,10 @@ Sprites carry no `<title>`. The component that shows one sets its alt text (`alt
 | `chibi-pwd-man-idle-1` | 32×32 | PNG | TG-48 look: a man in a wheelchair, upright and sporty, light skin; idle frame 1 |
 | `chibi-pwd-man-idle-2` | 32×32 | PNG | TG-48 look: a man in a wheelchair, upright and sporty, light skin; idle frame 2 (idle 1 one pixel lower) |
 | `chibi-pwd-man-wave` | 32×32 | PNG | TG-48 look: a man in a wheelchair, upright and sporty, light skin; waving |
+| `kaloy-idle` | 32×32 | SVG | hand-drawn placeholder (TG-75), Kaloy the chatbot carabao in a Sun salakot: standing, mouth shut |
+| `kaloy-talk` | 32×32 | SVG | hand-drawn placeholder (TG-75), Kaloy the chatbot carabao in a Sun salakot: talking, mouth open (the newest chat reply) |
+| `kaloy-think` | 32×32 | SVG | hand-drawn placeholder (TG-75), Kaloy the chatbot carabao in a Sun salakot: eyes up, three thought dots (while a message is sending) |
+| `kaloy-happy` | 32×32 | SVG | hand-drawn placeholder (TG-75), Kaloy the chatbot carabao in a Sun salakot: smiling eyes, arms up (right after a chat change is applied) |
+| `kaloy-sad` | 32×32 | SVG | hand-drawn placeholder (TG-75), Kaloy the chatbot carabao in a Sun salakot: a tear and a frown (error and no-result boxes) |
+| `kaloy-walk-1` | 32×32 | SVG | hand-drawn placeholder (TG-75), Kaloy the chatbot carabao in a Sun salakot: walking, left foot forward (title screen) |
+| `kaloy-walk-2` | 32×32 | SVG | hand-drawn placeholder (TG-75), Kaloy the chatbot carabao in a Sun salakot: walking, right foot forward (title screen) |

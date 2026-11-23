@@ -15,6 +15,7 @@ import {
   type Answer, type Hotel, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
   hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, planOutcome, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
+import { KaloyBeside } from "./Kaloy";
 import LevelMap from "./LevelMap";
 import NextUpCard, { NextUpLog, useManilaClock } from "./NextUpCard";
 import { SaidText } from "./PlanBits";
@@ -292,9 +293,11 @@ export default function TripView({ slug }: { slug: string }) {
   if (load.state === "loading") return <p className="text-sm text-muted">Opening the trip...</p>;
   if (load.state === "error") {
     return (
-      <PixelBox as="p" tone="alertText" className="p-4 text-sm">
-        {load.why === "offline" ? "No signal, and this trip isn't saved on this phone yet. Open it once with signal." : tripFailureMessage({ why: load.why })}
-      </PixelBox>
+      <KaloyBeside pose="sad" fill>
+        <PixelBox as="p" tone="alertText" className="p-4 text-sm">
+          {load.why === "offline" ? "No signal, and this trip isn't saved on this phone yet. Open it once with signal." : tripFailureMessage({ why: load.why })}
+        </PixelBox>
+      </KaloyBeside>
     );
   }
   const trip = load.trip;

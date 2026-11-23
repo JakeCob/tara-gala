@@ -13,6 +13,9 @@ import { type SuggestIn, planFailureMessage, planOutcome } from "@/lib/trip";
 import { ChangeList, LegLine, PlanProblem } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import { askLine } from "@/lib/chat";
+import { flags } from "@/lib/flags";
+import { KALOY_WORDS } from "@/lib/kaloy";
+import { KaloySprite } from "./Kaloy";
 
 /** What goes there: a spot or trip place, a link the server pins on Apply, or a note with no pin. `pin` is the pin the
  * group pasted for a link the server couldn't pin (round 5), sent again as typed with every call about that link. */
@@ -420,7 +423,7 @@ export function Proposal({ editor, chosen, at, kind, anchor, done, fit, from, ro
               console.info("[tg-trip] chat ask from=proposal kind=%s", kind);
               onAsk(askLine(chosen.name));
             }}>
-            Ask the chatbot
+            {flags.kaloy ? <><KaloySprite pose="idle" className="-my-1 mr-2" />{KALOY_WORDS.ask}</> : <>Ask the chatbot</>}
           </PixelButton>
         )}
       </div>

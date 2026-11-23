@@ -49,6 +49,38 @@ export function stepWalker(w: Walker, width: number, rng: Rng): Walker {
   return next.left <= 0 ? nextMode(next, rng) : next;
 }
 
+// TG-75 Kaloy, the chatbot carabao, trails the trio: he walks after the last of them, KALOY_GAP_PX behind it, one step
+// per beat like them, and stands idle once he's caught up. His walk is a real 2-frame cycle (kaloy-walk-1, -walk-2).
+export const KALOY_GAP_PX = 40;
+
+export type Follower = { x: number; dir: 1 | -1; moving: boolean; age: number };
+export type FollowerFrame = "idle" | "walk-1" | "walk-2";
+
+/** Where Kaloy stands when the trio stands still: next in the row, after `count` chibis */
+export function followerHomeX(count: number): number {
+  return homeX(count);
+}
+
+export function startFollower(count: number): Follower {
+  return { x: followerHomeX(count), dir: 1, moving: false, age: 0 };
+}
+
+/** One step toward the spot behind `leader` (behind: against the way it faces), inside a strip `width` pixels wide */
+export function stepFollower(f: Follower, leader: Walker, width: number): Follower {
+  const limit = maxX(width);
+  const x = Math.min(Math.max(f.x, 0), limit);
+  const target = Math.min(Math.max(leader.x - leader.dir * KALOY_GAP_PX, 0), limit);
+  const gap = target - x;
+  if (Math.abs(gap) < STEP_PX) return { x: target, dir: f.dir, moving: false, age: f.age + 1 };
+  const dir = gap > 0 ? 1 : -1;
+  return { x: x + dir * STEP_PX, dir, moving: true, age: f.age + 1 };
+}
+
+export function followerFrame(f: Follower): FollowerFrame {
+  if (!f.moving) return "idle";
+  return f.age % 2 === 0 ? "walk-1" : "walk-2";
+}
+
 /** The frame a chibi shows: feet swap every step while walking, every other step at rest; a wave is the wave frame */
 export function walkerFrame(w: Walker): ChibiFrame {
   if (w.mode === "wave") return "wave";

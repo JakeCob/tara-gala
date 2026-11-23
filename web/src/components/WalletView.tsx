@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PX, PixelBox, PixelButton, PixelLink, SectionTitle, cx } from "@/components/pixel";
+import { KaloyBeside } from "@/components/Kaloy";
 import PayoutQr, { loadMyQr } from "@/components/PayoutQr";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import ProofDialog, { type ProofTarget } from "@/components/ProofDialog";
@@ -215,9 +216,11 @@ export default function WalletView({ slug }: { slug: string }) {
   if (load.state === "loading") return <p className="text-sm text-muted">Opening the wallet...</p>;
   if (load.state === "error") {
     return (
-      <PixelBox as="p" tone="alertText" className="p-4 text-sm">
-        {load.why === "offline" ? "No signal, and this wallet isn't saved on this phone yet. Open it once with signal." : failureMessage({ why: load.why })}
-      </PixelBox>
+      <KaloyBeside pose="sad" fill>
+        <PixelBox as="p" tone="alertText" className="p-4 text-sm">
+          {load.why === "offline" ? "No signal, and this wallet isn't saved on this phone yet. Open it once with signal." : failureMessage({ why: load.why })}
+        </PixelBox>
+      </KaloyBeside>
     );
   }
 

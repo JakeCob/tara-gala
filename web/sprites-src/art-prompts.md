@@ -166,6 +166,19 @@ Owner request 2026-10-29: women and men across every passenger type, with Filipi
 | `chibi-pwd-woman-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a woman in a wheelchair, upright and waving, Kayumanggi skin |
 | `chibi-pwd-man-idle-1.png`, `-idle-2.png`, `-wave.png` | 32×32 | a man in a wheelchair, upright and sporty, light skin |
 
+## 10. Kaloy, the chatbot mascot (TG-75)
+Owner decision 2026-11-23: Kaloy is a pixel chibi carabao in a salakot, the face of the trip chat. Hand-drawn 32×32 grids in the original 6 colours, shipped as SVG like the title screen's plane. Front-facing, with `walk-1` and `walk-2` as a 2-frame walk for the title screen. **Decorative only:** no text.
+
+| File | Size | Subject |
+|---|---|---|
+| `kaloy-idle.png` | 32×32 | Kaloy standing, mouth shut |
+| `kaloy-talk.png` | 32×32 | Kaloy talking, mouth open |
+| `kaloy-think.png` | 32×32 | Kaloy thinking, eyes up, thought dots |
+| `kaloy-happy.png` | 32×32 | Kaloy cheering, smiling eyes, arms up |
+| `kaloy-sad.png` | 32×32 | Kaloy sad, a tear and a frown |
+| `kaloy-walk-1.png` | 32×32 | Kaloy walking, left foot forward |
+| `kaloy-walk-2.png` | 32×32 | Kaloy walking, right foot forward |
+
 ---
 
 ## Checklist for the owner

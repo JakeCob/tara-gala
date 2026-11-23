@@ -62,7 +62,7 @@ test("T61-P13 the chat dialog: native dialog, a polite log, the composer, the pr
   assert.match(src, /\{PRIVACY_LINE\}/);
   assert.match(src, /\{FIRST_MESSAGE\}/);
   assert.match(src, /Sending\.\.\./);
-  assert.match(src, /\{THINKING\}/);
+  assert.match(src, /\{kaloy \? KALOY_WORDS\.thinking : THINKING\}/, "THINKING with TG-75's flag off");
   assert.doesNotMatch(src, /animate-|transition|@keyframes|setInterval/, "no typing animation (guide §6)");
   assert.doesNotMatch(src, /\bfetch\(/, "the dialog never talks to the server itself");
   assert.doesNotMatch(src, /localStorage/, "the log is stored only through chat.ts, which survives a throwing store");

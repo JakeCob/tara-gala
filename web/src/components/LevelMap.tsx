@@ -11,6 +11,8 @@ import {
   BAND_PX, SIGN_DROP, SIGN_GAP, SNAKE_MIN_PX, START_POINT, TILE_PX, type Level, goalPoint, levelPoints, levelScenery, levels, nextLevel, pixelRoad, placeMapsUrl, roadStops, runsPath, snakeMap, snakeRoad, snakeScenery,
   startWorld, worldHeight, worldTabs,
 } from "@/lib/levelMap";
+import { flags } from "@/lib/flags";
+import { KALOY_WORDS } from "@/lib/kaloy";
 import { lookFor } from "@/lib/party";
 import { chibiLook, spriteSrc } from "@/lib/sprites";
 import { busChangedLine, busNotice, busWarningLine } from "@/lib/planLines";
@@ -19,6 +21,7 @@ import type { TripFile } from "@/lib/trip";
 import { fnv1a, usableWidth } from "@/lib/world";
 import type { NeedLink } from "@/lib/chat";
 import BusSwap, { type BusAt, swapTitle } from "./BusSwap";
+import { KaloySprite } from "./Kaloy";
 import { LegLine } from "./PlanBits";
 import type { Focus, PlanEditor } from "./PlanEditor";
 import { BudgetEdits, PickEdits, SourcesEdits, TodoEdits } from "./PlanTextEditors";
@@ -419,7 +422,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
                 console.info("[tg-trip] chat open from=map");
                 editor.chat?.open(null);
               }}>
-              Ask the chatbot
+              {flags.kaloy ? <><KaloySprite pose="idle" className="-my-1 mr-2" />{KALOY_WORDS.ask}</> : <>Ask the chatbot</>}
             </PixelButton>
           )}
         </div>
