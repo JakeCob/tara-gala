@@ -6,6 +6,8 @@ export const KALOY_WORDS = {
   name: "Kaloy",
   ask: "Ask Kaloy",
   thinking: "Kaloy is thinking...",
+  /** Under his greeting, in place of FIRST_MESSAGE: its examples and the Apply line, without a second hello */
+  howTo: 'For example, "add merienda after Burnham Park" or "mas chill ang Day 2". I only use places on Tara Gala and ones your group added. Nothing changes until someone taps Apply.',
   /** Shown when the chat opens with an empty log. Display only: never kept in tg-chat:<slug>, never sent */
   greeting: {
     fil: "Uy! Ako si Kaloy. Ano'ng gusto mong baguhin sa plan?",

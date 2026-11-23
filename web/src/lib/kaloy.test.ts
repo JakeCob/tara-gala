@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { chatRequest, loadLog, saveLog, type Entry } from "./chat.ts";
+import { FIRST_MESSAGE, chatRequest, loadLog, saveLog, type Entry } from "./chat.ts";
 import { FLAG_DEFAULTS, readFlags } from "./flags.ts";
 import { KALOY_POSES, KALOY_WALK, KALOY_WORDS, greetingLang, kaloyGreeting, kaloySprite, replyPose } from "./kaloy.ts";
 import { parseGrid } from "./pixelSvg.ts";
@@ -41,8 +41,13 @@ test("TK2 the owner's words, exactly", () => {
     name: "Kaloy",
     ask: "Ask Kaloy",
     thinking: "Kaloy is thinking...",
+    howTo: `For example, "add merienda after Burnham Park" or "mas chill ang Day 2". I only use places on Tara Gala and ones your group added. Nothing changes until someone taps Apply.`,
     greeting: { fil: FIL, en: EN },
   });
+  // Under his greeting: FIRST_MESSAGE's examples and Apply line, without its own "Kumusta! Tell me what to change"
+  const rest = FIRST_MESSAGE.slice(FIRST_MESSAGE.indexOf('"add merienda'));
+  assert.ok(KALOY_WORDS.howTo.endsWith(rest), "the same examples and the same Apply line");
+  assert.doesNotMatch(KALOY_WORDS.howTo, /Kumusta|Hi\b|Uy\b/, "one hello per bubble");
   assert.equal(kaloyGreeting("fil-PH"), FIL);
   assert.equal(kaloyGreeting("tl"), FIL);
   assert.equal(kaloyGreeting("en-US"), EN);
@@ -112,7 +117,11 @@ test("TK6 every pose and both walk frames are 32x32 SVG sprites; the walk frames
     const grid = parseGrid(read(`sprites-src/${name}.txt`), name);
     rows.set(name, grid.rows.join("\n"));
   }
-  assert.equal(new Set(rows.values()).size, names.length, "seven different drawings");
+  // The art is the lead's: the poses may share a drawing, but the walk needs two different steps that aren't standing
+  const [idle, one, two] = ["kaloy-idle", "kaloy-walk-1", "kaloy-walk-2"].map((n) => rows.get(n));
+  assert.notEqual(one, two, "two different steps");
+  assert.notEqual(one, idle, "walk-1 isn't standing");
+  assert.notEqual(two, idle, "walk-2 isn't standing");
   for (const name of names) assert.match(rows.get(name)!, /S/, `${name}: the Sun salakot`);
 });
 

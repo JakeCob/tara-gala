@@ -60,7 +60,7 @@ test("T61-P13 the chat dialog: native dialog, a polite log, the composer, the pr
   assert.match(src, />Close</);
   assert.match(src, /<label[^>]*>[\s\S]*?Message[\s\S]*?<\/label>|htmlFor=\{?["'`]?[\w-]*["'`]?\}?>\s*Message\s*</);
   assert.match(src, /\{PRIVACY_LINE\}/);
-  assert.match(src, /\{FIRST_MESSAGE\}/);
+  assert.match(src, /\{kaloy \? KALOY_WORDS\.howTo : FIRST_MESSAGE\}/, "FIRST_MESSAGE with TG-75's flag off");
   assert.match(src, /Sending\.\.\./);
   assert.match(src, /\{kaloy \? KALOY_WORDS\.thinking : THINKING\}/, "THINKING with TG-75's flag off");
   assert.doesNotMatch(src, /animate-|transition|@keyframes|setInterval/, "no typing animation (guide §6)");

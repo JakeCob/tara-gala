@@ -181,7 +181,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
                 <div className="flex flex-col gap-1 self-start">
                   <p className={PX.meta}>{kaloy ? KALOY_WORDS.name : <>Chatbot</>}</p>
                   {kaloy && <KaloyGreeting />}
-                  <p className="text-sm break-words">{FIRST_MESSAGE}</p>
+                  <p className="text-sm break-words">{kaloy ? KALOY_WORDS.howTo : FIRST_MESSAGE}</p>
                 </div>
               </KaloyBeside>
             )}
