@@ -27,7 +27,7 @@ from .limits import RateLimiter
 from .sessions import RETAIN_DAYS
 from .storage import MAX_BYTES, sniff
 from .wallet_activity import check_by, record
-from .wallets import NOINDEX, WalletOut, _limit, _load, _private, _wallet_id, forget_proof
+from .wallets import NOINDEX, WalletOut, _limit, _load, _private, _wallet_id, forget_proof, load_opts
 
 router = APIRouter(tags=["wallets"])
 logger = logging.getLogger("tara_gala.api")
@@ -61,7 +61,7 @@ def _not_found(share_slug: str, detail: str, **kwargs) -> HTTPException:
     return HTTPException(404, detail, **kwargs)
 
 
-def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes, by: UUID | None = None, budget: bool = False) -> WalletOut:
+def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes, by: UUID | None = None, opts: dict | None = None) -> WalletOut:
     """Stores the bytes first and locks the wallet after, unlike trip_files._save: see the module docstring."""
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug)
@@ -91,7 +91,7 @@ def _save(share_slug: str, settlement_id: UUID, content_type: str, data: bytes, 
                     (path, content_type, len(data), settlement_id),
                 )
                 _record(conn, wallet_id, "proof_change" if old else "proof_add", by, settlement_id, payment)
-                wallet = _load(conn, wallet_id, budget=budget)
+                wallet = _load(conn, wallet_id, **(opts or {}))
     except Exception:  # no row took these bytes, so nothing would ever find them
         forget_proof(path, share_slug)
         raise
@@ -125,7 +125,7 @@ async def add_proof(
     if sniffed is None or sniffed != declared:
         logger.info("wallet proof refused share_slug=%s reason=not_an_image bytes=%d", share_slug, len(data))
         raise HTTPException(422, "not_an_image")
-    wallet = await run_in_threadpool(_save, share_slug, settlement_id, sniffed, data, by, request.app.state.flags.budget_lines)
+    wallet = await run_in_threadpool(_save, share_slug, settlement_id, sniffed, data, by, load_opts(request.app.state.flags))
     _private(response)
     return wallet
 
@@ -169,7 +169,7 @@ def delete_proof(
             (settlement_id,),
         )
         _record(conn, wallet_id, "proof_remove", by, settlement_id, payment)
-        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
+        wallet = _load(conn, wallet_id, **load_opts(request.app.state.flags))
     forget_proof(payment["proof_path"], share_slug)
     _private(response)
     logger.info("wallet proof delete share_slug=%s proofs=%d", share_slug, _proofs(wallet))

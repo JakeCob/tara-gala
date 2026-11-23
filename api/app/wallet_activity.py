@@ -21,6 +21,9 @@ logger = logging.getLogger("tara_gala.api")
 ACTIONS = frozenset({
     "expense_add", "expense_edit", "expense_delete", "comment_add", "comment_delete", "settle", "settle_undo",
     "proof_add", "proof_change", "proof_remove", "member_join",
+    # TG-73: the Ipon goal's lines (plan §2.3). `after` is ids, centavos and dates only, never a name.
+    "pot_on", "pot_edit", "pot_off", "pot_person", "ambag_sent", "ambag_received", "ambag_unreceive", "ambag_undo",
+    "ambag_back", "ambag_proof_add", "ambag_proof_change", "ambag_proof_remove", "pot_handover", "pot_close", "pot_reopen",
 })
 
 
@@ -184,7 +187,7 @@ def add_comment(share_slug: str, expense_id: UUID, body: CommentIn, request: Req
             "insert into expense_comments (expense_id, author, body) values (%s, %s, %s)", (expense_id, body.by, body.body)
         )
         record(conn, wallet_id, "comment_add", by=body.by, expense_id=expense_id)  # never the text
-        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id, budget=request.app.state.flags.budget_lines), comments=_comments(conn, expense_id))
+        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id, **wallets.load_opts(request.app.state.flags)), comments=_comments(conn, expense_id))
     wallets._private(response)
     logger.info(
         "wallet comment add share_slug=%s comments=%d rev=%d by=%s",
@@ -215,7 +218,7 @@ def delete_comment(
             logger.info("wallet comment delete not found share_slug=%s", share_slug)
             raise HTTPException(404, COMMENT_NOT_FOUND)
         record(conn, wallet_id, "comment_delete", by=by, expense_id=expense_id)
-        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id, budget=request.app.state.flags.budget_lines), comments=_comments(conn, expense_id))
+        answer = CommentWriteOut(wallet=wallets._load(conn, wallet_id, **wallets.load_opts(request.app.state.flags)), comments=_comments(conn, expense_id))
     wallets._private(response)
     logger.info(
         "wallet comment delete share_slug=%s comments=%d rev=%d by=%s",

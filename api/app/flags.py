@@ -30,6 +30,7 @@ class Flags:
     chatbot_live: bool = False  # CHATBOT_LIVE: the chatbot that proposes plan edits (TG-61 PR 2); needs PLAN_EDITING
     budget_lines: bool = False  # BUDGET_LINES: budget vs actual, the wallet's line pick and the trip's Budget panel (TG-62); needs WALLET_SPLITS
     recap_links: bool = False  # RECAP_LINKS: the read-only recap link (TG-64); every recap route is 404 while it's off
+    wallet_pot: bool = False  # WALLET_POT: the Ipon goal → trip pot (TG-73); its routes are 404 feature_off and WalletOut has no `pot` while it's off
 
 
 def parse_flag(name: str, raw: str | None, default: bool) -> bool:

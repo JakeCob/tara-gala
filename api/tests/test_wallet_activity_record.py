@@ -35,8 +35,13 @@ def wallet(conn):
 def test_actions_are_the_tables():
     sql = MIGRATION.read_text(encoding="utf-8")
     check = re.search(r"action\s+text not null check \(action in \(([^)]*)\)\)", sql, re.S)
-    assert check and set(re.findall(r"'(\w+)'", check.group(1))) == wallet_activity.ACTIONS
-    assert len(wallet_activity.ACTIONS) == 11
+    tg66 = set(re.findall(r"'(\w+)'", check.group(1))) if check else set()
+    assert len(tg66) == 11 and tg66 <= wallet_activity.ACTIONS
+    # TG-73 widened the check (its migration, and schema.sql in place): the 11 plus the pot's 15
+    tg73 = (ROOT / "supabase" / "migrations" / "2026-11-29_tg73_pot.sql").read_text(encoding="utf-8")
+    widened = re.search(r"check \(action in \(([^)]*)\)\)", tg73, re.S)
+    assert widened and set(re.findall(r"'(\w+)'", widened.group(1))) == wallet_activity.ACTIONS
+    assert len(wallet_activity.ACTIONS) == 26
 
 
 def test_record_writes_one_row_and_bumps_rev(dsn):
