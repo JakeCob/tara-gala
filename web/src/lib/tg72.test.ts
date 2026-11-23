@@ -228,7 +228,8 @@ test("T72-P1 the plan page's length hint names no city with the Around flag; off
   assert.equal(lengthHint("2026-11-06", "2026-11-08"), "3 days in Baguio", "flag off: today's");
   assert.equal(lengthHint("2026-11-06", "2026-11-08", null), "3 days");
   assert.equal(lengthHint("2026-11-06", "2026-11-06", null), "Day trip");
-  assert.match(read("src/components/PlanForm.tsx"), /hint=\{lengthHint\(values\.date, values\.returnDate, flags\.aroundTab \? null : "Baguio"\)\}/);
+  // TG-71: `city` is null unless NEXT_PUBLIC_GOING_TO is on (goingTo.test.ts T71-P3), so this is still the hint's flag-off rule
+  assert.match(read("src/components/PlanForm.tsx"), /hint=\{lengthHint\(values\.date, values\.returnDate, city \?\? \(flags\.aroundTab \? null : "Baguio"\)\)\}/);
 });
 
 test("T72-P2 each ready-made card names its place with the Around flag; off, or an older API with no city, is today's", async () => {

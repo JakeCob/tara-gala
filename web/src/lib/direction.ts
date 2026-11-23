@@ -1,20 +1,23 @@
 // Search direction (Manila to Baguio and back) and the search form's state.
 // Pure TS with no imports so `node --test` can run it with type stripping.
 
-/** Same names as the scraper's --direction (scraper/victory_liner.py). */
+/**
+ * Same names as the scraper's --direction (scraper/victory_liner.py). TG-71: with a picked city, "baguio" reads as
+ * "the city": to-baguio is Metro Manila to it, from-baguio is it to Metro Manila. The names stay so old state still works.
+ */
 export type Direction = "to-baguio" | "from-baguio";
 
 export const DEFAULT_DIRECTION: Direction = "to-baguio";
 
-// "Metro Manila" is both the label and the API value: the API maps it to every NCR terminal.
-const ENDS: Record<Direction, { originCity: string; destinationCity: string }> = {
-  "to-baguio": { originCity: "Metro Manila", destinationCity: "Baguio" },
-  "from-baguio": { originCity: "Baguio", destinationCity: "Metro Manila" },
-};
+/** TG-71: the city every label names when none is given. Flag off it's the only one, so every line is today's. */
+export const DEFAULT_CITY = "Baguio";
 
-/** searchTrips() params for a direction. A fresh object each call. */
-export function endpoints(d: Direction): { originCity: string; destinationCity: string } {
-  return { ...ENDS[d] };
+// "Metro Manila" is both the label and the API value: the API maps it to every NCR terminal.
+const MANILA = "Metro Manila";
+
+/** searchTrips() params for a direction and (TG-71) a city. A fresh object each call. */
+export function endpoints(d: Direction, city: string = DEFAULT_CITY): { originCity: string; destinationCity: string } {
+  return d === "to-baguio" ? { originCity: MANILA, destinationCity: city } : { originCity: city, destinationCity: MANILA };
 }
 
 export function swapDirection(d: Direction): Direction {
@@ -22,13 +25,15 @@ export function swapDirection(d: Direction): Direction {
 }
 
 /** "Metro Manila → Baguio", for the eye. Screen-reader text uses words instead (swapLabel, the live region). */
-export function routeLabel(d: Direction): string {
-  return `${ENDS[d].originCity} → ${ENDS[d].destinationCity}`;
+export function routeLabel(d: Direction, city?: string): string {
+  const e = endpoints(d, city);
+  return `${e.originCity} → ${e.destinationCity}`;
 }
 
 /** The swap button's accessible name: what tapping it will do. */
-export function swapLabel(d: Direction): string {
-  return `Swap direction, search ${ENDS[d].destinationCity} to ${ENDS[d].originCity} instead`;
+export function swapLabel(d: Direction, city?: string): string {
+  const e = endpoints(d, city);
+  return `Swap direction, search ${e.destinationCity} to ${e.originCity} instead`;
 }
 
 /** "2026-11-08" -> "Sun, Nov 8". Read and formatted in UTC, so the day never shifts with the device's time zone. */
@@ -44,27 +49,33 @@ export function formatTravelDate(iso: string): string {
 }
 
 /** "Baguio → Metro Manila · Sun, Nov 8" */
-export function resultsHeading(d: Direction, iso: string): string {
-  return `${routeLabel(d)} · ${formatTravelDate(iso)}`;
+export function resultsHeading(d: Direction, iso: string, city?: string): string {
+  return `${routeLabel(d, city)} · ${formatTravelDate(iso)}`;
 }
 
-export function emptyMessage(d: Direction, iso: string): string {
-  return `No trips on file from ${ENDS[d].originCity} to ${ENDS[d].destinationCity} on ${formatTravelDate(iso)} yet.`;
+export function emptyMessage(d: Direction, iso: string, city?: string): string {
+  const e = endpoints(d, city);
+  return `No trips on file from ${e.originCity} to ${e.destinationCity} on ${formatTravelDate(iso)} yet.`;
 }
 
 export type SearchStatus = "idle" | "loading" | "done" | "error";
+
+/** The query shown (or loading) results are for. `city` only once one was picked (TG-71); missing is DEFAULT_CITY. */
+export type Searched = { direction: Direction; date: string; city?: string };
 
 export type SearchState<T> = {
   direction: Direction;
   date: string; // the date the user picked, or "" (the form then shows today)
   status: SearchStatus;
   trips: T[];
-  searched: { direction: Direction; date: string } | null; // the query the shown (or loading) results are for
+  searched: Searched | null; // the query the shown (or loading) results are for
   requestId: number;
+  city?: string; // TG-71 (flag goingTo): the picked city. Only pickCity sets it, so flag off the state is today's
 };
 
 export type SearchAction<T> =
   | { type: "swap" }
+  | { type: "pickCity"; city: string }
   | { type: "pickDate"; date: string }
   | { type: "searchStarted"; date: string }
   | { type: "searchDone"; requestId: number; trips: T[] }
@@ -91,6 +102,10 @@ export function searchReducer<T>(state: SearchState<T>, action: SearchAction<T>)
         searched: null,
         requestId: state.requestId + 1,
       };
+    case "pickCity":
+      // TG-71: like a swap, but the direction stays too. Picking the city already shown changes nothing
+      if (action.city === (state.city ?? DEFAULT_CITY)) return state;
+      return { ...state, city: action.city, status: "idle", trips: [], searched: null, requestId: state.requestId + 1 };
     case "pickDate":
       // Shown results keep their own heading (searched.date) until the next search
       return { ...state, date: action.date };
@@ -100,7 +115,10 @@ export function searchReducer<T>(state: SearchState<T>, action: SearchAction<T>)
         ...state,
         status: "loading",
         trips: [],
-        searched: { direction: state.direction, date: action.date },
+        searched:
+          state.city === undefined
+            ? { direction: state.direction, date: action.date }
+            : { direction: state.direction, date: action.date, city: state.city },
         requestId: state.requestId + 1,
       };
     case "searchDone":

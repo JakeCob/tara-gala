@@ -3,6 +3,7 @@
 import { useEffect, useReducer, useState, useSyncExternalStore } from "react";
 import { manilaToday, searchTrips, type Trip } from "@/lib/api";
 import {
+  DEFAULT_CITY,
   emptyMessage,
   endpoints,
   initialSearchState,
@@ -10,7 +11,10 @@ import {
   searchReducer,
   swapLabel,
 } from "@/lib/direction";
+import { flags } from "@/lib/flags";
+import { GOING_TO_CITIES } from "@/lib/goingTo";
 import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
+import GoingToPicker from "@/components/GoingToPicker";
 import TripCard from "@/components/TripCard";
 
 const subscribeNothing = () => () => {};
@@ -34,7 +38,8 @@ export default function TripSearch() {
   // Native validation blocks submitting dates outside today to a year from now (Manila), e.g. a mistyped year 0008
   const minDate = today || undefined;
   const maxDate = today ? addDays(today, 365) : undefined;
-  const { originCity, destinationCity } = endpoints(direction);
+  // TG-71: state.city is set only by the Going to picker (flag goingTo); unset, every line is today's Baguio one
+  const { originCity, destinationCity } = endpoints(direction, state.city);
 
   // A link to the date input (TG-46's "Find buses" quick action) moves focus there too: next/link's in-page jump only
   // scrolls, so a keyboard user would Tab on from the link. Enter on a link fires click as well. The input's scroll-mt-44
@@ -67,6 +72,17 @@ export default function TripSearch() {
   return (
     <div className="flex flex-col gap-4 md:contents">
       <PixelBox as="form" onSubmit={onSearch} className="p-4 flex flex-col gap-3 md:justify-center">
+        {flags.goingTo && (
+          <GoingToPicker
+            name="going-to"
+            cities={GOING_TO_CITIES}
+            city={state.city ?? DEFAULT_CITY}
+            onPick={(city) => {
+              console.info("[tg-buses] going-to city=%s", city);
+              dispatch({ type: "pickCity", city });
+            }}
+          />
+        )}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
           <div className="min-w-0 break-words">
             <div className="text-muted">From</div>
@@ -76,7 +92,7 @@ export default function TripSearch() {
             variant="iconBrand"
             onClick={() => dispatch({ type: "swap" })}
             disabled={status === "loading"}
-            aria-label={swapLabel(direction)}
+            aria-label={swapLabel(direction, state.city)}
           >
             <span aria-hidden>⇄</span>
           </PixelButton>
@@ -122,13 +138,13 @@ export default function TripSearch() {
 
         {status === "done" && searched && trips.length === 0 && (
           <PixelBox as="p" className="p-4 text-sm">
-            {emptyMessage(searched.direction, searched.date)}
+            {emptyMessage(searched.direction, searched.date, searched.city)}
           </PixelBox>
         )}
 
         {status === "done" && searched && trips.length > 0 && (
           <>
-            <h2 className={PX.dataHeading}>{resultsHeading(searched.direction, searched.date)}</h2>
+            <h2 className={PX.dataHeading}>{resultsHeading(searched.direction, searched.date, searched.city)}</h2>
             <p className="text-sm text-muted">
               {trips.length} trip{trips.length === 1 ? "" : "s"} · {trips[0].confirm_note}
             </p>
