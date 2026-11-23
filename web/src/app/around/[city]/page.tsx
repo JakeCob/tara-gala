@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import LastMile from "@/components/LastMile";
+import WarmLegs from "@/components/WarmLegs";
 import { PageShell, PageTitle, PixelLink } from "@/components/pixel";
 import { AROUND_CITIES, AROUND_WORDS, aroundCity } from "@/lib/around";
 import { flags } from "@/lib/flags";
@@ -28,6 +29,8 @@ export default async function AroundCityPage({ params }: PageProps<"/around/[cit
         <p className="text-sm text-muted md:max-w-prose">{city.blurb}</p>
       </header>
       <LastMile key={city.slug} city={city} />
+      {/* Pre-trip check 2026-11-23: every start saved for offline; Baguio stays as it was (it asks for nothing until a tap) */}
+      {city.slug !== "baguio" && <WarmLegs city={city} />}
     </PageShell>
   );
 }
