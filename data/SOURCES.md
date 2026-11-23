@@ -1,6 +1,6 @@
 # Data sources
 
-Every agent-researched row is marked `agent-researched (tg-data), owner to verify`. Dates are Manila time.
+Every agent-researched row is marked. In `spots.csv` the comment says `agent-researched (tg-data), owner to verify`. In `last_mile_routes.csv` (and `sagada-coda/`) the note is shown in the app, so since the 2026-11-23 pre-trip check it starts `Not checked on the ground yet.` instead. Dates are Manila time.
 
 ## Terminals (`supabase/data/terminals_coords.sql`), checked 2026-10-29
 
