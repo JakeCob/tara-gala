@@ -39,9 +39,18 @@ Filipino when they write in Filipino or Taglish. Keep it short: one to three sen
 """
 
 
+_LANGUAGE = "Filipino when they write in Filipino or Taglish."
+# Live check 2026-11-23: on a Sagada plan an English question got a Filipino reply (twice), though the context is all
+# English and Baguio's got English. So another city's prompt says the last message alone decides the language.
+_LANGUAGE_ONLY = (" Only their last <turn> decides the language: the city, its place names and the plan's notes don't, "
+                  "so an English message gets an English reply.")
+
+
 def system_prompt(city: str = "Baguio") -> str:
-    """The prompt for a plan in `city` (plan_edit.guide_city). Only the city's name changes, so Baguio's is today's."""
-    return _PROMPT.replace("{city}", city)
+    """The prompt for a plan in `city` (plan_edit.guide_city). Baguio's is today's, byte for byte; another city's
+    changes the city's name and adds the language line."""
+    prompt = _PROMPT.replace("{city}", city)
+    return prompt if city == "Baguio" else prompt.replace(_LANGUAGE, _LANGUAGE + _LANGUAGE_ONLY, 1)
 
 
 SYSTEM_PROMPT = system_prompt()  # Baguio's, as before CHAT_ALL_CITIES

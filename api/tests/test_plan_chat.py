@@ -756,8 +756,12 @@ def test_t76_a5_with_all_cities_off_a_sagada_plan_is_still_refused(sg_chat, clie
     assert r.status_code == 422 and r.json() == {"detail": "chat_not_here"} and llm.calls == []
 
 
-def test_t76_a6_the_prompt_changes_only_the_citys_name():
+def test_t76_a6_another_citys_prompt_changes_its_name_and_ties_the_language_to_the_last_turn():
     from app.plan_chat_prompt import SYSTEM_PROMPT, system_prompt
 
-    assert system_prompt("Baguio") == SYSTEM_PROMPT
-    assert system_prompt("Sagada") == SYSTEM_PROMPT.replace("Baguio", "Sagada")
+    assert system_prompt("Baguio") == SYSTEM_PROMPT and "Only their last <turn>" not in SYSTEM_PROMPT
+    sagada = system_prompt("Sagada")
+    assert "Baguio" not in sagada and "trip plan for Sagada, Philippines" in sagada
+    extra = (" Only their last <turn> decides the language: the city, its place names and the plan's notes don't, "
+             "so an English message gets an English reply.")
+    assert sagada == SYSTEM_PROMPT.replace("Baguio", "Sagada").replace("Filipino or Taglish.", "Filipino or Taglish." + extra, 1)

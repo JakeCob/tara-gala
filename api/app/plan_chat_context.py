@@ -1,6 +1,7 @@
 """TG-61 PR 2: what the chatbot sees (options.md §7). The current guide, compacted, with its keys; the trip's dates and
 party size; the plan city's spots (Baguio's, or with CHAT_ALL_CITIES another city's); the trip's own places; the routes
-from the plan's places; and, for the buses, only the active trips on the plan's bus dates. Every id the model may name is in here, and nothing else is allowed.
+from the plan's places; and, for the buses, only the active trips on the plan's bus dates. Every id the model may name
+is in here, and nothing else is allowed.
 
 No names (review S4): no party names and no attendee names, only the party's size. The plan's own notes go as
 written, and those can name people, which is what the chat's privacy line says. No links and no pins either: a trip
