@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import { KaloyBeside } from "@/components/Kaloy";
 import { PX, PixelBox, PixelButton, PixelCardLink, SectionTitle, cx } from "@/components/pixel";
 import { AMBAGAN_WORDS } from "@/lib/ambagan";
 import { flags } from "@/lib/flags";
@@ -69,9 +70,11 @@ export default function WalletHome() {
         <section aria-labelledby="wallets-title" className="flex flex-col gap-3">
           <SectionTitle id="wallets-title">{amb ? AMBAGAN_WORDS.listTitle : "Shared expenses"}</SectionTitle>
           {known.length === 0 ? (
-            <p className="text-sm text-muted">
-              {amb ? AMBAGAN_WORDS.listEmpty : "No shared wallet on this phone yet. Start one below, or open the link a friend shared with you."}
-            </p>
+            <KaloyBeside pose="idle">
+              <p className="text-sm text-muted">
+                {amb ? AMBAGAN_WORDS.listEmpty : "No shared wallet on this phone yet. Start one below, or open the link a friend shared with you."}
+              </p>
+            </KaloyBeside>
           ) : (
             <ul className="flex flex-col gap-3">
               {known.map((w) => (

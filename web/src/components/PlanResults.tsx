@@ -6,6 +6,7 @@ import { PLAN_COPY, premadeCountLine, matchesDates, showPremadeAction, type Erro
 import { premadeCard } from "@/lib/premadeView";
 import type { PremadeSummary } from "@/lib/api";
 import { PX, PixelBox, PixelButton, PixelLink, SectionTitle } from "@/components/pixel";
+import { KaloyBeside } from "@/components/Kaloy";
 
 const LIST = PLAN_COPY.list;
 
@@ -94,7 +95,7 @@ export function PremadeResults(props: {
     top.current?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   }, []);
 
-  if (premade.kind === "empty") return <div ref={top}><SearchBusesBox message={props.emptyMessage ?? LIST.empty} /></div>;
+  if (premade.kind === "empty") return <div ref={top}><KaloyBeside pose="idle" fill><SearchBusesBox message={props.emptyMessage ?? LIST.empty} /></KaloyBeside></div>;
   if (premade.kind === "unavailable") return <div ref={top}><SearchBusesBox message={LIST.unavailable} /></div>;
   if (premade.kind === "failed") {
     return (

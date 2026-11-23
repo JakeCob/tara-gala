@@ -53,6 +53,9 @@ export const SPRITES = {
   "chibi-senior-lolo-idle-1": CHIBI, "chibi-senior-lolo-idle-2": CHIBI, "chibi-senior-lolo-wave": CHIBI,
   "chibi-pwd-woman-idle-1": CHIBI, "chibi-pwd-woman-idle-2": CHIBI, "chibi-pwd-woman-wave": CHIBI,
   "chibi-pwd-man-idle-1": CHIBI, "chibi-pwd-man-idle-2": CHIBI, "chibi-pwd-man-wave": CHIBI,
+  // TG-75 Kaloy, the chatbot carabao in a salakot: hand-drawn grids in the 6 colours, so SVG (kaloy.ts picks the pose)
+  "kaloy-idle": CHIBI, "kaloy-talk": CHIBI, "kaloy-think": CHIBI, "kaloy-happy": CHIBI, "kaloy-sad": CHIBI,
+  "kaloy-walk-1": CHIBI, "kaloy-walk-2": CHIBI,
 } as const satisfies Record<string, { w: number; h: number }>;
 export type SpriteName = keyof typeof SPRITES;
 

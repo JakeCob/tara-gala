@@ -15,6 +15,7 @@ import { flags } from "@/lib/flags";
 import { GOING_TO_CITIES } from "@/lib/goingTo";
 import { PX, PixelBox, PixelButton, cx } from "@/components/pixel";
 import GoingToPicker from "@/components/GoingToPicker";
+import { KaloyBeside } from "@/components/Kaloy";
 import TripCard from "@/components/TripCard";
 
 const subscribeNothing = () => () => {};
@@ -137,9 +138,11 @@ export default function TripSearch() {
         )}
 
         {status === "done" && searched && trips.length === 0 && (
-          <PixelBox as="p" className="p-4 text-sm">
-            {emptyMessage(searched.direction, searched.date, searched.city)}
-          </PixelBox>
+          <KaloyBeside pose="sad" fill>
+            <PixelBox as="p" className="p-4 text-sm">
+              {emptyMessage(searched.direction, searched.date, searched.city)}
+            </PixelBox>
+          </KaloyBeside>
         )}
 
         {status === "done" && searched && trips.length > 0 && (
