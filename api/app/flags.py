@@ -30,6 +30,7 @@ class Flags:
     chatbot_live: bool = False  # CHATBOT_LIVE: the chatbot that proposes plan edits (TG-61 PR 2); needs PLAN_EDITING
     budget_lines: bool = False  # BUDGET_LINES: budget vs actual, the wallet's line pick and the trip's Budget panel (TG-62); needs WALLET_SPLITS
     recap_links: bool = False  # RECAP_LINKS: the read-only recap link (TG-64); every recap route is 404 while it's off
+    chat_all_cities: bool = False  # CHAT_ALL_CITIES: the chatbot on a plan for any city we serve (Sagada too), not only Baguio; needs CHATBOT_LIVE
 
 
 def parse_flag(name: str, raw: str | None, default: bool) -> bool:

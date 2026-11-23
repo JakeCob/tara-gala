@@ -678,3 +678,86 @@ def test_t67_c5_with_the_chat_off_a_sagada_plan_gets_chat_off(sg_trip, client): 
     assert client.app.state.flags.chatbot_live is False
     r = ask(client, sg_trip)
     assert r.status_code == 503 and r.json() == {"detail": "chat_off"}
+
+
+# ---------------------------------------------------------------- CHAT_ALL_CITIES: the chat on a Sagada plan (T76-A1 to A6)
+
+def all_cities(client, on=True):
+    client.app.state.flags = dataclasses.replace(client.app.state.flags, chat_all_cities=on)
+
+
+def names(dsn, city) -> list[str]:
+    return [r["name"] for r in rows(dsn, "select name from spots where city = %s order by slug", city)]
+
+
+def test_t76_a1_with_all_cities_on_a_sagada_plan_gets_sagadas_chat(sg_chat, client, dsn, caplog):
+    slug, llm, _ = sg_chat
+    all_cities(client)
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    r = ask(client, slug, text="what time does our bus leave?")
+    assert r.status_code == 200 and r.json()["outcome"] == "answer", r.text
+    call = llm.calls[0]
+    assert "trip plan for Sagada, Philippines" in call["system"] and "Baguio" not in call["system"]
+    user = call["user"]
+    spots = user.split("<spots>")[1].split("</spots>")[0]
+    assert names(dsn, "Baguio") and names(dsn, "Sagada")
+    assert all(n in spots for n in names(dsn, "Sagada")), "the plan city's spots"
+    assert not any(n in spots for n in names(dsn, "Baguio")), "never the other town's"
+    buses = json.loads(user.split("<buses>")[1].split("</buses>")[0])
+    assert {(b["table"], b["departs"]) for b in buses} == {("getting_there", "22:30"), ("getting_there", "21:00"), ("getting_home", "14:30")}
+    lines = [x.getMessage() for x in caplog.records if x.getMessage().startswith("plan chat city ")]
+    assert lines == [f"plan chat city share_slug={slug} city=Sagada spots=2 buses=3"]
+
+
+def test_t76_a2_a_baguio_spot_on_a_sagada_plan_is_an_unknown_id(sg_chat, client, dsn):
+    slug, _, bot = sg_chat
+    all_cities(client)
+    baguio = str(rows(dsn, "select id from spots where city = 'Baguio' order by slug limit 1")[0]["id"])
+    sagada = str(rows(dsn, "select id from spots where slug = 'test-sg-lodge'")[0]["id"])
+    bot.client = llm = FakeLLM(say("Swapped it.", [op("set_row", key="d2-01", spot_id=baguio, why="You asked")]),
+                               say("Swapped it.", [op("set_row", key="d2-01", spot_id=sagada, why="You asked")]))
+    out = ask(client, slug, text="register at the lodge instead").json()
+    assert out["outcome"] == "proposal", out
+    assert "unknown_id" in llm.calls[1]["user"]
+    row0 = out["proposal"]["stored"]["days"][1]["rows"][0]
+    assert row0["key"] == "d2-01" and row0["place"]["spot_id"] == sagada
+
+
+def test_t76_a3_a_sagada_proposal_applies_as_a_chat_version(sg_chat, client):
+    slug, _, bot = sg_chat
+    all_cities(client)
+    bot.client = FakeLLM(say("Moved registering to 10:40.", [op("set_row", key="d2-01", time="10:40")]))
+    out = ask(client, slug, text="pwede bang 10:40 na lang mag-register?").json()
+    assert out["outcome"] == "proposal", out
+    p = out["proposal"]
+    applied = save(client, slug, p["stored"], p["base"], source="chat")
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["itinerary"]["city"] == "Sagada"
+
+
+def test_t76_a4_baguio_is_byte_for_byte_the_same_with_all_cities_on(chat, t, client):
+    from app.plan_chat_prompt import SYSTEM_PROMPT
+
+    chat.script(say("Ok."))
+    ask(client, t, "hello")
+    off = chat.llm.calls[0]
+    all_cities(client)
+    chat.script(say("Ok."))
+    ask(client, t, "hello")
+    on = chat.llm.calls[0]
+    assert on["system"] == off["system"] == SYSTEM_PROMPT and "trip plan for Baguio, Philippines" in SYSTEM_PROMPT
+    assert on["user"] == off["user"]
+
+
+def test_t76_a5_with_all_cities_off_a_sagada_plan_is_still_refused(sg_chat, client):
+    slug, llm, _ = sg_chat
+    all_cities(client, on=False)
+    r = ask(client, slug)
+    assert r.status_code == 422 and r.json() == {"detail": "chat_not_here"} and llm.calls == []
+
+
+def test_t76_a6_the_prompt_changes_only_the_citys_name():
+    from app.plan_chat_prompt import SYSTEM_PROMPT, system_prompt
+
+    assert system_prompt("Baguio") == SYSTEM_PROMPT
+    assert system_prompt("Sagada") == SYSTEM_PROMPT.replace("Baguio", "Sagada")

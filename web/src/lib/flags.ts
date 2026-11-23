@@ -20,6 +20,7 @@ export type Flags = {
   ambaganTab: boolean;
   goingTo: boolean;
   kaloy: boolean;
+  chatAllCities: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -40,6 +41,7 @@ export const FLAG_DEFAULTS: Flags = {
   aroundTab: false, // TG-71/72: the Around tab (Baguio and Sagada pages) and site words that aren't only Manila to Baguio; web only
   ambaganTab: false, // TG-72: the Ambagan tab (the wallet hub and shared wallets) and its words; web only
   goingTo: false, // TG-71: the Going to city picker on /buses and on /plan's ready-made trips; web only
+  chatAllCities: false, // the chatbot on a Sagada (or any served city's) plan, not only Baguio; needs chatbotLive and the API's CHAT_ALL_CITIES
   kaloy: false, // TG-75: Kaloy, the chatbot carabao: the chat's name, greeting and poses, the title screen walk and the sad and empty boxes; web only
 };
 
@@ -78,6 +80,7 @@ export function readFlags(): Flags {
     ambaganTab: parseFlag(process.env.NEXT_PUBLIC_AMBAGAN_TAB, FLAG_DEFAULTS.ambaganTab),
     goingTo: parseFlag(process.env.NEXT_PUBLIC_GOING_TO, FLAG_DEFAULTS.goingTo),
     kaloy: parseFlag(process.env.NEXT_PUBLIC_KALOY, FLAG_DEFAULTS.kaloy),
+    chatAllCities: parseFlag(process.env.NEXT_PUBLIC_CHAT_ALL_CITIES, FLAG_DEFAULTS.chatAllCities),
   };
 }
 

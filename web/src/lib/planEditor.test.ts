@@ -209,7 +209,7 @@ test("T67-W9 TripView: spots filtered by the plan's city at render, chat hidden 
   const want = v.slice(v.indexOf("const wantSpots = useCallback("), v.indexOf("}, []);", v.indexOf("const wantSpots = useCallback(")));
   assert.match(want, /if \(list\) setRawSpots\(list\);/, "the raw list is kept as it came");
   assert.doesNotMatch(want, /\.filter\(/, "never filtered in the setter (M-W1)");
-  assert.match(v, /const chatTools: ChatTools \| null = flags\.planEditing && flags\.chatbotLive && city === "Baguio" \? \{/, "the chat stays Baguio's (M-W2)");
+  assert.match(v, /const chatTools: ChatTools \| null = flags\.planEditing && flags\.chatbotLive && chatHere\(city, flags\.chatAllCities\) \? \{/, "the chat stays Baguio's unless chatAllCities (M-W2)");
   const ed = v.slice(v.indexOf("const editor: PlanEditor | undefined ="), v.indexOf("chat: chatTools,"));
   assert.match(ed, /\n    city,\n/, "the editor carries the city");
   assert.match(v, /<LevelMap\n\s+guide=\{theGuide\}\n\s+city=\{city\}/, "the map gets it");
@@ -243,7 +243,9 @@ test("T67-W12 the three [tg-trip] lines with the city, the hidden-chat line once
   assert.match(once, /chatHiddenLogged\.current = true;/);
   const swap = /console\.info\("\[tg-trip\] plan swap list trips=%d near=%s city=%s", trips\.length, oldTime \? swapWindow\(oldTime, trips\)\.near\.length : "none", city\);/;
   assert.match(comp("BusSwap"), swap);
-  for (const line of [...v.matchAll(/console\.info\("\[tg-trip\] plan (spots|chat hidden)[^\n]*/g), ...comp("BusSwap").matchAll(/console\.info\("\[tg-trip\] plan swap list trips[^\n]*/g)]) {
+  assert.match(once, /if \(chatHere\(city, flags\.chatAllCities\)\) console\.info\("\[tg-trip\] plan chat shown city=%s all_cities=on", city\);/,
+    "a non-Baguio chat that shows is said once too");
+  for (const line of [...v.matchAll(/console\.info\("\[tg-trip\] plan (spots|chat hidden|chat shown)[^\n]*/g), ...comp("BusSwap").matchAll(/console\.info\("\[tg-trip\] plan swap list trips[^\n]*/g)]) {
     assert.doesNotMatch(line[0], /name|note|link|lat|lng|pin\b|\.plan\b/, `no name, note, link or pin: ${line[0]}`);
   }
 });

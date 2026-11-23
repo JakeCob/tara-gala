@@ -56,7 +56,7 @@ def fresh_cache():
 
 
 def test_defaults_when_unset():
-    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP", "PLAN_EDITING", "WALLET_SPLITS", "WALLET_MULTI_PAYER", "WALLET_ACTIVITY", "CHATBOT_LIVE", "BUDGET_LINES", "RECAP_LINKS"}
+    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP", "PLAN_EDITING", "WALLET_SPLITS", "WALLET_MULTI_PAYER", "WALLET_ACTIVITY", "CHATBOT_LIVE", "BUDGET_LINES", "RECAP_LINKS", "CHAT_ALL_CITIES"}
     flags = load_flags({})
     assert flags == Flags()
     assert flags.planner_live is False
@@ -67,6 +67,7 @@ def test_defaults_when_unset():
     assert flags.chatbot_live is False  # TG-61 PR 2
     assert flags.budget_lines is False  # TG-62: every PR merges with it off; on after TG-66's WALLET_SPLITS
     assert flags.recap_links is False  # TG-64: every recap route is 404 until it's turned on
+    assert flags.chat_all_cities is False  # the chat stays Baguio's until CHAT_ALL_CITIES is turned on
 
 
 @pytest.mark.parametrize("name", sorted(ENV_NAMES))

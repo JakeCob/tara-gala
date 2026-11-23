@@ -1,6 +1,6 @@
 """TG-61 PR 2: what the chatbot sees (options.md §7). The current guide, compacted, with its keys; the trip's dates and
-party size; the Baguio spots; the trip's own places; the routes from the plan's places; and, for the buses, only the
-active trips on the plan's bus dates. Every id the model may name is in here, and nothing else is allowed.
+party size; the plan city's spots (Baguio's, or with CHAT_ALL_CITIES another city's); the trip's own places; the routes
+from the plan's places; and, for the buses, only the active trips on the plan's bus dates. Every id the model may name is in here, and nothing else is allowed.
 
 No names (review S4): no party names and no attendee names, only the party's size. The plan's own notes go as
 written, and those can name people, which is what the chat's privacy line says. No links and no pins either: a trip
@@ -13,7 +13,8 @@ from datetime import date as Date
 from uuid import UUID
 
 from . import guide as guides
-from .plan_suggest import BAGUIO_CENTRE, haversine_km
+from .plan_suggest import BAGUIO_CENTRE, CITY_CENTRES, haversine_km
+from .plan_validation import BAGUIO
 from .schedule import arrival, postgres_dow, to_minutes
 from .trip_rows import TRIP_ROWS_SQL
 
@@ -31,8 +32,9 @@ BUSES_SQL = """
     order by departure_time, operator_name, trip_id
     limit %(cap)s
 """
-TO_BAGUIO = "destination_city = 'Baguio' and origin_city <> 'Baguio'"
-FROM_BAGUIO = "origin_city = 'Baguio' and destination_city <> 'Baguio'"
+# the plan's city (plan_edit.guide_city): Baguio's buses are the same rows as before, with the city as a parameter
+TO_CITY = "destination_city = %(city)s and origin_city <> %(city)s"
+FROM_CITY = "origin_city = %(city)s and destination_city <> %(city)s"
 
 
 @dataclass
@@ -87,8 +89,9 @@ def _party(raw) -> str:
     return ", ".join(f"{n} {t}" for t, n in counts.items() if n) or "not given"  # the size only, never a name
 
 
-def load(conn, session_id: UUID, row: dict, g: guides.Guide, focus: str | None) -> ChatContext:
-    """The context for one chat turn, from the trip's current plan (`row` is plan_edit.current's)."""
+def load(conn, session_id: UUID, row: dict, g: guides.Guide, focus: str | None, city: str = BAGUIO) -> ChatContext:
+    """The context for one chat turn, from the trip's current plan (`row` is plan_edit.current's). `city` is the plan's
+    city: its spots, its centre when the lodging has no pin, and the buses to and from it."""
     ctx = ChatContext(text="")
     trip = conn.execute("select start_date, return_date from trip_sessions where id = %s", (session_id,)).fetchone()
 
@@ -97,9 +100,9 @@ def load(conn, session_id: UUID, row: dict, g: guides.Guide, focus: str | None) 
         pin = conn.execute("select lat, lng from spots where id = %s", (g.lodging.spot_id,)).fetchone()
         if pin and pin["lat"] is not None and pin["lng"] is not None:
             lodging = (float(pin["lat"]), float(pin["lng"]))
-    home = lodging or BAGUIO_CENTRE
+    home = lodging or CITY_CENTRES.get(city, BAGUIO_CENTRE)
     spots = []
-    for r in conn.execute("select id, name, category::text as category, lat, lng from spots where city = 'Baguio' order by slug limit %s", (MAX_SPOTS,)):
+    for r in conn.execute("select id, name, category::text as category, lat, lng from spots where city = %s order by slug limit %s", (city, MAX_SPOTS)):
         km = round(haversine_km(home, (float(r["lat"]), float(r["lng"]))), 1) if r["lat"] is not None and r["lng"] is not None else None
         spots.append({"id": str(r["id"]), "name": r["name"], "category": r["category"], "km_from_lodging": km})
         ctx.spot_ids.add(r["id"])
@@ -126,9 +129,9 @@ def load(conn, session_id: UUID, row: dict, g: guides.Guide, focus: str | None) 
         ctx.amounts |= {float(x) for x in (r["fare_min_php"], r["fare_max_php"]) if x is not None}
 
     buses = []
-    for name, where in (("getting_there", TO_BAGUIO), ("getting_home", FROM_BAGUIO)):
+    for name, where in (("getting_there", TO_CITY), ("getting_home", FROM_CITY)):
         for d in sorted({b.date for b in getattr(g, name).buses}):
-            for r in conn.execute(BUSES_SQL.format(direction=where), {"dow": postgres_dow(d), "d": d, "cap": MAX_BUSES}):
+            for r in conn.execute(BUSES_SQL.format(direction=where), {"dow": postgres_dow(d), "d": d, "cap": MAX_BUSES, "city": city}):
                 arrives, _ = arrival(d, r["departure_time"], r["travel_minutes"])
                 dep = r["departure_time"].strftime("%H:%M")
                 buses.append({"table": name, "date": d.isoformat(), "trip_id": str(r["trip_id"]), "operator": r["operator_name"],
