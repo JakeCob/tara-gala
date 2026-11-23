@@ -119,7 +119,7 @@ def test_the_snapshotted_fields_are_unchanged(name):  # G3: the other fields of 
 
 
 @pytest.mark.parametrize("name", ["WalletIn", "MemberIn", "ShareIn", "ExpenseIn", "SettlementIn", "MemberOut", "ShareOut",
-                                  "SettlementOut", "BalanceOut", "TransferOut"])
+                                  "SettlementOut", "TransferOut"])  # BalanceOut: TG-73 A2 adds pot_centavos (test_wallet_models)
 def test_the_other_snapshotted_models_are_untouched(name):
     assert getattr(m, name).model_json_schema() == SNAPSHOT[name]
 
