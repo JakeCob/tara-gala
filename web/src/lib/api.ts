@@ -53,8 +53,11 @@ export function manilaNow(at: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
 }
 
+// Pre-trip check 2026-11-23: classes whose name isn't plain words ("p2p" read "P2p")
+const CLASS_NAMES: Readonly<Record<string, string>> = { p2p: "P2P" };
+
 export function formatClass(c: string): string {
-  return c.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  return CLASS_NAMES[c] ?? c.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 export function formatTime(hhmm: string): string {
