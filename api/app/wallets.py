@@ -31,7 +31,7 @@ import psycopg
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
-from . import db, storage, wallet_activity, wallet_splits
+from . import db, storage, wallet_activity, wallet_pot, wallet_splits
 from .limits import RateLimiter, client_ip, ip_hash
 from .wallet_activity import record  # defined above wallet_activity's own import of this module, so either loads first
 from .wallet_models import (  # TG-66: the models moved, and every name is still importable from here
@@ -179,8 +179,15 @@ def budget_lines(conn, wallet_id: UUID) -> WalletBudget | None:
     return WalletBudget(trip_name=trips[0]["name"], lines=lines) if lines else None
 
 
-def _load(conn, wallet_id: UUID, *, budget: bool = False) -> WalletOut:
-    """The whole wallet. `budget`: BUDGET_LINES, read from the request by every route that answers a wallet (TG-62)."""
+def load_opts(flags) -> dict:
+    """_load's flag keywords, from the request's flags: every route that answers a wallet passes all of them."""
+    return {"budget": flags.budget_lines, "pot": flags.wallet_pot}
+
+
+def _load(conn, wallet_id: UUID, *, budget: bool = False, pot: bool = False) -> WalletOut:
+    """The whole wallet. `budget`: BUDGET_LINES (TG-62); `pot`: WALLET_POT (TG-73), the Ipon goal as `pot`. Off, the
+    `pot` key isn't in the answer at all (WalletOut's serializer), so today's wallets read byte for byte as before.
+    Both come from load_opts(request.app.state.flags) in every route that answers a wallet."""
     wallet = conn.execute("select share_slug, name, created_at, rev from wallets where id = %s", (wallet_id,)).fetchone()
     members = conn.execute("select id, name from wallet_members where wallet_id = %s order by seq", (wallet_id,)).fetchall()
     order = [m["id"] for m in members]
@@ -253,7 +260,9 @@ def _load(conn, wallet_id: UUID, *, budget: bool = False) -> WalletOut:
     for s in settlements:
         net[s.from_member] += s.amount_centavos
         net[s.to_member] -= s.amount_centavos
+    extra = {"pot": wallet_pot.load_pot(conn, wallet_id, wallet["name"], order)} if pot else {}  # TG-73
     return WalletOut(
+        **extra,
         share_slug=wallet["share_slug"],
         name=wallet["name"],
         created_at=wallet["created_at"],
@@ -443,7 +452,7 @@ def create_wallet(body: WalletIn, request: Request, response: Response) -> Walle
         wallet_id = conn.execute("insert into wallets (name) values (%s) returning id", (body.name,)).fetchone()["id"]
         for name in body.members:
             conn.execute("insert into wallet_members (wallet_id, name) values (%s, %s)", (wallet_id, name))
-        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
+        wallet = _load(conn, wallet_id, **load_opts(request.app.state.flags))
     _private(response)
     logger.info("wallet create share_slug=%s %s", wallet.share_slug, _counts(wallet))
     return wallet
@@ -452,7 +461,7 @@ def create_wallet(body: WalletIn, request: Request, response: Response) -> Walle
 @router.get("/wallets/{share_slug}", response_model=WalletOut, responses={404: {"description": NOT_FOUND}})
 def get_wallet(share_slug: str, request: Request, response: Response) -> WalletOut:
     with db.get_conn() as conn:
-        wallet = _load(conn, _wallet_id(conn, share_slug), budget=request.app.state.flags.budget_lines)
+        wallet = _load(conn, _wallet_id(conn, share_slug), **load_opts(request.app.state.flags))
     _private(response)
     logger.info("wallet get share_slug=%s %s", share_slug, _counts(wallet))
     return wallet
@@ -475,10 +484,16 @@ def add_member(share_slug: str, body: MemberIn, request: Request, response: Resp
         member_id = conn.execute(
             "insert into wallet_members (wallet_id, name) values (%s, %s) returning id", (wallet_id, body.name)
         ).fetchone()["id"]
+        # TG-73 B6: a newcomer joins an open Ipon goal at its amount each. Only with WALLET_POT on, so this route never
+        # touches the pot tables while it's off (nor before the TG-73 migration); the treasurer can put them in later.
+        joined = request.app.state.flags.wallet_pot and conn.execute(
+            """insert into pot_people (wallet_id, member_id) select wallet_id, %s from wallet_pots
+               where wallet_id = %s and closed_at is null returning 1""", (member_id, wallet_id),
+        ).fetchone()
         record(conn, wallet_id, "member_join", by=by, member_id=member_id)
-        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
+        wallet = _load(conn, wallet_id, **load_opts(request.app.state.flags))
     _private(response)
-    logger.info("wallet member add share_slug=%s %s", share_slug, _counts(wallet))
+    logger.info("wallet member add share_slug=%s pot=%s %s", share_slug, "joined" if joined else "none", _counts(wallet))
     return wallet
 
 
@@ -497,7 +512,7 @@ def add_expense(share_slug: str, body: Union[ExpenseIn, ExpenseInV2], request: R
     if isinstance(body, ExpenseIn) or body.id is None:
         _limit(WRITE_LIMITER, request, "expense")
         if isinstance(body, ExpenseIn):
-            return _add_legacy(share_slug, body, response, flags.budget_lines)
+            return _add_legacy(share_slug, body, response, load_opts(flags))
         _v2_allowed(share_slug, body, flags)
         with db.get_conn() as conn:
             wallet, logged = _add_v2(conn, _wallet_id(conn, share_slug, lock=True), body, flags, share_slug)
@@ -506,7 +521,7 @@ def add_expense(share_slug: str, body: Union[ExpenseIn, ExpenseInV2], request: R
             wallet_id = _wallet_id(conn, share_slug, lock=True)  # resends of one id go one at a time (B5)
             found = _replay(conn, wallet_id, body.id, share_slug)
             if found is not None:
-                wallet = _load(conn, wallet_id, budget=flags.budget_lines)
+                wallet = _load(conn, wallet_id, **load_opts(flags))
                 response.status_code = 200
                 _private(response)
                 logger.info("wallet expense add replay share_slug=%s found=%s rev=%d", share_slug, found, wallet.rev)
@@ -565,7 +580,7 @@ def _add_v2(conn, wallet_id: UUID, body, flags, share_slug: str) -> tuple[Wallet
             raise
         raise _refuse(share_slug, "add", 409, "id_taken") from None  # another wallet's insert won the race (B4)
     _store_split(conn, expense_id, body, shares, payers)
-    wallet = _recorded(conn, wallet_id, "expense_add", body.by, expense_id, budget=flags.budget_lines)
+    wallet = _recorded(conn, wallet_id, "expense_add", body.by, expense_id, **load_opts(flags))
     return wallet, (len(payers or {}) or 1, len(shares), len(getattr(body, "items", None) or []), amount, category,
                     _budget_word(key))
 
@@ -578,15 +593,15 @@ def _wallet_has_room(conn, wallet_id: UUID, share_slug: str) -> None:
 
 
 def _recorded(conn, wallet_id: UUID, action: str, by: UUID | None, expense_id: UUID, before: dict | None = None, *,
-              budget: bool = False) -> WalletOut:
+              budget: bool = False, pot: bool = False) -> WalletOut:
     """The wallet after an expense add or edit, with its activity row written: `after` is the expense as saved."""
-    wallet = _load(conn, wallet_id, budget=budget)
+    wallet = _load(conn, wallet_id, budget=budget, pot=pot)
     wallet.rev = record(conn, wallet_id, action, by=by, expense_id=expense_id, before=before,
                         after=snapshot(_find(wallet, expense_id)))
     return wallet
 
 
-def _add_legacy(share_slug: str, body: ExpenseIn, response: Response, budget: bool) -> WalletOut:
+def _add_legacy(share_slug: str, body: ExpenseIn, response: Response, opts: dict) -> WalletOut:
     """Today's body, unchanged: stored with split_mode null (B9). It records expense_add, so rev still moves."""
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
@@ -611,7 +626,7 @@ def _add_legacy(share_slug: str, body: ExpenseIn, response: Response, budget: bo
                 "insert into expense_shares (expense_id, member_id, share_centavos) values (%s, %s, %s)",
                 (expense_id, member_id, part),
             )
-        wallet = _recorded(conn, wallet_id, "expense_add", None, expense_id, budget=budget)
+        wallet = _recorded(conn, wallet_id, "expense_add", None, expense_id, **opts)
     _private(response)
     split = "equal" if body.split_among is not None else "custom"
     logger.info("wallet expense add share_slug=%s mode=legacy split=%s people=%d amount=%d budget=null %s", share_slug,
@@ -636,7 +651,7 @@ def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request:
         raise _feature_off(share_slug, "edit")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
-        current = _load(conn, wallet_id, budget=flags.budget_lines)
+        current = _load(conn, wallet_id, **load_opts(flags))
         old = _find(current, expense_id)
         if old is None:
             raise _refuse(share_slug, "edit", 404, "expense_gone", _with_wallet("expense_gone", current))
@@ -665,7 +680,7 @@ def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request:
             conn.execute(f"delete from {table} where expense_id = %s", (expense_id,))  # items' people cascade
         _store_split(conn, expense_id, body, shares, payers)
         wallet = _recorded(conn, wallet_id, "expense_edit", body.by, expense_id, before=snapshot(old),
-                           budget=flags.budget_lines)
+                           **load_opts(flags))
     _private(response)
     logger.info("wallet expense edit share_slug=%s mode=%s version=%d amount_before=%d amount_after=%d people=%d "
                 "budget=%s %s", share_slug, body.mode, old.version + 1, old.amount_centavos, amount, len(shares),
@@ -681,7 +696,7 @@ def delete_expense(share_slug: str, expense_id: UUID, request: Request, response
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)
         wallet_activity.check_by(conn, wallet_id, by, share_slug, "expense delete")
-        current = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
+        current = _load(conn, wallet_id, **load_opts(request.app.state.flags))
         old = _find(current, expense_id)
         if old is None:
             if version is not None:
@@ -692,7 +707,7 @@ def delete_expense(share_slug: str, expense_id: UUID, request: Request, response
             raise _refuse(share_slug, "delete", 409, "expense_changed", _with_wallet("expense_changed", current))
         conn.execute("delete from expenses where id = %s and wallet_id = %s", (expense_id, wallet_id))
         record(conn, wallet_id, "expense_delete", by=by, expense_id=expense_id, before=snapshot(old))
-        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
+        wallet = _load(conn, wallet_id, **load_opts(request.app.state.flags))
     _private(response)
     logger.info("wallet expense delete share_slug=%s amount=%d %s", share_slug, old.amount_centavos, _counts(wallet))
     return wallet
@@ -719,7 +734,7 @@ def add_settlement(share_slug: str, body: SettlementIn, request: Request, respon
             (wallet_id, body.from_member, body.to_member, body.amount_centavos),
         ).fetchone()
         record(conn, wallet_id, "settle", by=by, settlement_id=row["id"], after=_payment(row))
-        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
+        wallet = _load(conn, wallet_id, **load_opts(request.app.state.flags))
     _private(response)
     logger.info("wallet settlement add share_slug=%s %s", share_slug, _counts(wallet))
     return wallet
@@ -740,7 +755,7 @@ def delete_settlement(share_slug: str, settlement_id: UUID, request: Request, re
             logger.info("wallet settlement delete not found share_slug=%s", share_slug)
             raise HTTPException(404, "Payment not found")
         record(conn, wallet_id, "settle_undo", by=by, settlement_id=gone["id"], after=_payment(gone))
-        wallet = _load(conn, wallet_id, budget=request.app.state.flags.budget_lines)
+        wallet = _load(conn, wallet_id, **load_opts(request.app.state.flags))
     forget_proof(gone["proof_path"], share_slug)
     _private(response)
     logger.info("wallet settlement delete share_slug=%s proof=%d %s", share_slug, 1 if gone["proof_path"] else 0, _counts(wallet))

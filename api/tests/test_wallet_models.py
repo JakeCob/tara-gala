@@ -74,12 +74,15 @@ def test_unchanged_models_have_the_same_schema(name):
 
 def test_expense_and_wallet_out_only_gain_defaulted_fields():
     """Every old field keeps its schema, and each new one has a default, so today's _load still validates."""
-    for name, new in (("ExpenseOut", NEW_EXPENSE_FIELDS), ("WalletOut", {"rev": 0, "budget": None})):
+    for name, new in (("ExpenseOut", NEW_EXPENSE_FIELDS), ("WalletOut", {"rev": 0, "budget": None, "pot": None})):
         old, now = SNAPSHOT[name], getattr(m, name).model_json_schema()
         for field, spec in old["properties"].items():
             assert now["properties"][field] == spec, f"{name}.{field}"
         assert set(now["properties"]) - set(old["properties"]) == set(new), name
         assert set(now.get("required", [])) == set(old["required"]), f"{name}: a new field is required"
+    # TG-73: ExpenseOut.mode reads the two stored modes too (pot, libre); nothing else about it moved
+    mode = m.ExpenseOut.model_json_schema()["properties"]["mode"]
+    assert mode["anyOf"][0]["enum"] == ["equal", "exact", "percent", "shares", "adjust", "itemized", "pot", "libre"]
     row = {"id": uuid4(), "paid_by": uuid4(), "amount_centavos": 1000, "note": "E2E", "created_at": datetime.now(timezone.utc)}
     assert {k: v for k, v in m.ExpenseOut(**row, shares=[]).model_dump().items() if k in NEW_EXPENSE_FIELDS} == NEW_EXPENSE_FIELDS
 

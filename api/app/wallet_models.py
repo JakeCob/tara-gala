@@ -12,7 +12,9 @@ from datetime import datetime
 from typing import Annotated, Literal, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, StringConstraints, field_validator, model_serializer, model_validator
+
+from .pot_models import PotOut
 
 MAX_MEMBERS = 20
 MAX_CENTAVOS = 10_000_000  # PHP 100,000, the same cap as the table's check
@@ -22,6 +24,9 @@ MemberName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=
 Note = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
 Centavos = Annotated[int, Field(ge=1, le=MAX_CENTAVOS)]
 SplitMode = Literal["equal", "exact", "percent", "shares", "adjust", "itemized"]  # TG-66
+# TG-73: what a stored expense may carry. 'pot' (paid from the pot) and 'libre' (a treat) are written only behind their
+# flags (A2, A4), but every read takes them from A1 on, so a later code revert to A1 still reads a wallet that has them.
+StoredMode = Literal["equal", "exact", "percent", "shares", "adjust", "itemized", "pot", "libre"]
 Category = Literal["transport", "hotel", "food", "activities", "other"]  # TG-66; null is "Not sorted yet"
 # TG-62: a budget line's key, the slug a guide budget row carries (guide.BudgetRow.key) and expenses.budget_key's check.
 # An expense also takes "_none" ("Not in the budget"); null is "Not sorted yet". Never logged: it's the group's own text.
@@ -132,7 +137,7 @@ class ExpenseOut(BaseModel):
     shares: list[ShareOut]
     # TG-66, all defaulted so today's _load still validates. mode null: from before TG-66 (or the old request shape)
     category: Category | None = None
-    mode: SplitMode | None = None
+    mode: StoredMode | None = None
     inputs: list[InputOut] = []
     items: list[ItemOut] = []
     charges: list[ChargeOut] = []
@@ -193,6 +198,20 @@ class WalletOut(BaseModel):
     total_centavos: int
     rev: int = 0  # TG-66: the wallet's write counter
     budget: WalletBudget | None = None  # TG-62: null with BUDGET_LINES off, or unless the wallet is on exactly one trip with keyed lines
+    # TG-73: the Ipon goal, null with no goal. With WALLET_POT off _load never sets it, and the key is left out of the
+    # answer (below), so a flag-off wallet is byte for byte today's.
+    pot: PotOut | None = None
+
+    @model_serializer(mode="wrap")
+    def _flag_off_keys(self, handler: SerializerFunctionWrapHandler):
+        data = handler(self)
+        for key in FLAG_OFF_KEYS:
+            if key not in self.model_fields_set:
+                data.pop(key, None)
+        return data
+
+
+FLAG_OFF_KEYS = ("pot",)  # WalletOut's keys that appear only when _load set them (their flag on)
 
 
 # ---------------------------------------------------------------- TG-66: the new request shapes
@@ -388,7 +407,11 @@ class CommentWriteOut(BaseModel):
 
 
 Action = Literal["expense_add", "expense_edit", "expense_delete", "comment_add", "comment_delete", "settle", "settle_undo",
-                 "proof_add", "proof_change", "proof_remove", "member_join"]
+                 "proof_add", "proof_change", "proof_remove", "member_join",
+                 # TG-73: the Ipon goal's lines
+                 "pot_on", "pot_edit", "pot_off", "pot_person", "ambag_sent", "ambag_received", "ambag_unreceive",
+                 "ambag_undo", "ambag_back", "ambag_proof_add", "ambag_proof_change", "ambag_proof_remove",
+                 "pot_handover", "pot_close", "pot_reopen"]
 
 
 class ActivityRowOut(BaseModel):

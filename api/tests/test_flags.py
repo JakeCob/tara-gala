@@ -13,6 +13,8 @@ from app.flags import Flags, get_flags, load_flags, parse_flag
 ROOT = Path(__file__).resolve().parents[2]
 LOGGER = "tara_gala.flags"
 ENV_NAMES = {f.name.upper(): f for f in dataclasses.fields(Flags)}
+# An API flag whose web twin has its own name (TG-73 options §7: the web's switch is named for what it shows)
+WEB_TWIN = {"WALLET_POT": "NEXT_PUBLIC_IPON_GOAL"}
 
 # (raw, default, expected). Keep identical to the table in web/src/lib/flags.test.ts.
 CASES = [
@@ -56,7 +58,7 @@ def fresh_cache():
 
 
 def test_defaults_when_unset():
-    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP", "PLAN_EDITING", "WALLET_SPLITS", "WALLET_MULTI_PAYER", "WALLET_ACTIVITY", "CHATBOT_LIVE", "BUDGET_LINES", "RECAP_LINKS"}
+    assert set(ENV_NAMES) == {"PLANNER_LIVE", "PREMADE_ITINERARIES", "REAL_MAP", "PLAN_EDITING", "WALLET_SPLITS", "WALLET_MULTI_PAYER", "WALLET_ACTIVITY", "CHATBOT_LIVE", "BUDGET_LINES", "RECAP_LINKS", "WALLET_POT"}
     flags = load_flags({})
     assert flags == Flags()
     assert flags.planner_live is False
@@ -67,6 +69,7 @@ def test_defaults_when_unset():
     assert flags.chatbot_live is False  # TG-61 PR 2
     assert flags.budget_lines is False  # TG-62: every PR merges with it off; on after TG-66's WALLET_SPLITS
     assert flags.recap_links is False  # TG-64: every recap route is 404 until it's turned on
+    assert flags.wallet_pot is False  # TG-73: every PR merges with it off; nothing goes live before the owner's yes
 
 
 @pytest.mark.parametrize("name", sorted(ENV_NAMES))
@@ -152,7 +155,7 @@ def test_flags_documented():
 
     for name, field in ENV_NAMES.items():
         default = "true" if field.default else "false"
-        web_name = f"NEXT_PUBLIC_{name}"
+        web_name = WEB_TWIN.get(name, f"NEXT_PUBLIC_{name}")
         rows = [line for line in section.splitlines() if f"`{name}`" in line and web_name in line]
         assert rows, f"README section 7 has no row for {name}"
         assert f"`{default}`" in rows[0], f"README default for {name}"
