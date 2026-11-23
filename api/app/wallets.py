@@ -484,8 +484,9 @@ def add_member(share_slug: str, body: MemberIn, request: Request, response: Resp
         member_id = conn.execute(
             "insert into wallet_members (wallet_id, name) values (%s, %s) returning id", (wallet_id, body.name)
         ).fetchone()["id"]
-        # TG-73 B6: a newcomer joins an open Ipon goal at its amount each (rows only: the answer shows it with WALLET_POT on)
-        joined = conn.execute(
+        # TG-73 B6: a newcomer joins an open Ipon goal at its amount each. Only with WALLET_POT on, so this route never
+        # touches the pot tables while it's off (nor before the TG-73 migration); the treasurer can put them in later.
+        joined = request.app.state.flags.wallet_pot and conn.execute(
             """insert into pot_people (wallet_id, member_id) select wallet_id, %s from wallet_pots
                where wallet_id = %s and closed_at is null returning 1""", (member_id, wallet_id),
         ).fetchone()

@@ -331,6 +331,14 @@ OTHER_ROUTES = {
     # TG-66 A2: a comment on an expense, posted and deleted, behind WALLET_ACTIVITY
     ("POST", "/wallets/{share_slug}/expenses/{expense_id}/comments"),
     ("DELETE", "/wallets/{share_slug}/expenses/{expense_id}/comments/{comment_id}"),
+    # TG-73 A1: the Ipon goal, its people and each ambag, inside one wallet only, behind WALLET_POT
+    ("POST", "/wallets/{share_slug}/pot"),
+    ("PATCH", "/wallets/{share_slug}/pot"),
+    ("DELETE", "/wallets/{share_slug}/pot"),
+    ("PUT", "/wallets/{share_slug}/pot/people/{member_id}"),
+    ("POST", "/wallets/{share_slug}/pot/ambag"),
+    ("PATCH", "/wallets/{share_slug}/pot/ambag/{ambag_id}"),
+    ("DELETE", "/wallets/{share_slug}/pot/ambag/{ambag_id}"),
     # TG-52 trip sessions: every route is under one exact session slug; there is no session listing. Linking an
     # itinerary needs its exact slug, as reading it does
     ("POST", "/sessions"),

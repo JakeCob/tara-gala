@@ -379,6 +379,19 @@ def test_b6_a_new_member_joins_an_open_goal_at_the_amount_each(on, dsn, caplog):
     assert any(m.startswith(f"wallet member add share_slug={slug} pot=joined") for m in caplog.messages)
 
 
+def test_b6_with_the_flag_off_add_person_never_touches_the_pot_tables(client, dsn, flags):
+    flags(wallet_pot=True)
+    slug, ids, _ = started(client, 2)
+    flags(wallet_pot=False)
+    sql(dsn, "alter table pot_people rename to pot_people_away")  # as before the migration: it must not be read
+    try:
+        assert client.post(f"/wallets/{slug}/members", json={"name": "Carlo Testname"}).status_code == 201
+    finally:
+        sql(dsn, "alter table pot_people_away rename to pot_people")
+    flags(wallet_pot=True)
+    assert len(client.get(f"/wallets/{slug}").json()["pot"]["people"]) == 2  # not joined: the treasurer puts them in
+
+
 def test_b6_a_closed_goal_or_no_goal_takes_no_newcomer(on, dsn):
     slug, ids, _ = started(on, 2)
     sql(dsn, "update wallet_pots set closed_at = now()")
