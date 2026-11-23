@@ -24,7 +24,7 @@ Version = Annotated[int, Field(ge=1)]
 # feature_off). pot_changed and ambag_gone carry {"code", "wallet"}, as TG-66's 409/404.
 POT_CODES = ("by_required", "not_treasurer", "pot_exists", "pot_changed", "pot_in_use", "pot_closed", "due_after_trip",
              "due_past", "not_in_goal", "ambag_gone", "ambag_received", "ambag_given_back", "pot_full", "id_taken",
-             "unknown_member", "feature_off", "no_pot")
+             "unknown_member", "feature_off", "no_pot", "pot_open", "no_one_in_goal")
 
 
 # ---------------------------------------------------------------- requests
@@ -88,6 +88,24 @@ class AmbagPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     by: UUID | None = None
     status: Literal["received", "sent"]
+
+
+class HandoverIn(BaseModel):
+    """POST /pot/handover (A2): the treasurer hands the pot to someone in the goal. No settlement is made (plan §4.4):
+    the cash, or the gap, moves outside the app, and the sheet says who hands what."""
+
+    model_config = ConfigDict(extra="forbid")
+    by: UUID | None = None
+    version: Version
+    to_member: UUID
+
+
+class CloseIn(BaseModel):
+    """POST /pot/close and /pot/reopen (A2): the treasurer, with the version the sheet opened."""
+
+    model_config = ConfigDict(extra="forbid")
+    by: UUID | None = None
+    version: Version
 
 
 # ---------------------------------------------------------------- answers (WalletOut.pot)
