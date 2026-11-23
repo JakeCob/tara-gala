@@ -193,7 +193,7 @@ create table itineraries (
 -- ---------------------------------------------------------------------------
 -- Shared trip wallets (TG-50): who paid what on the trip, and who pays whom at the end.
 -- Private by link: no public policy; the API serves a wallet by its share_slug. Money is whole centavos.
--- Payout QRs are never stored here: they stay on each person's phone.
+-- Payout QRs stay on each person's phone, except a receive QR a member chooses to share (TG-73's wallet_qrs).
 -- ---------------------------------------------------------------------------
 create table wallets (
   id            uuid primary key default gen_random_uuid(),
@@ -221,7 +221,8 @@ create table expenses (
   created_at      timestamptz not null default now(),
   -- TG-66: how the shares were worked out (null: before TG-66, equal or exact), the category (null: not sorted yet),
   -- and the edit counter. These come last, as the migration adds them.
-  split_mode      text check (split_mode in ('equal', 'exact', 'percent', 'shares', 'adjust', 'itemized')),
+  -- TG-73 adds 'pot' (paid from the pot) and 'libre' (a treat): both store one share, the payer's.
+  split_mode      text check (split_mode in ('equal', 'exact', 'percent', 'shares', 'adjust', 'itemized', 'pot', 'libre')),
   category        text check (category in ('transport', 'hotel', 'food', 'activities', 'other')),
   version         integer not null default 1 check (version >= 1),
   updated_at      timestamptz,
@@ -318,7 +319,11 @@ create table wallet_activity (
   at          timestamptz not null default now(),
   actor       uuid references wallet_members(id) on delete set null,  -- the phone's pick; null = "Someone"
   action      text not null check (action in ('expense_add', 'expense_edit', 'expense_delete', 'comment_add',
-                'comment_delete', 'settle', 'settle_undo', 'proof_add', 'proof_change', 'proof_remove', 'member_join')),
+                'comment_delete', 'settle', 'settle_undo', 'proof_add', 'proof_change', 'proof_remove', 'member_join',
+                -- TG-73: the pot's actions
+                'pot_on', 'pot_edit', 'pot_off', 'pot_person', 'ambag_sent', 'ambag_received', 'ambag_unreceive',
+                'ambag_undo', 'ambag_back', 'ambag_proof_add', 'ambag_proof_change', 'ambag_proof_remove',
+                'pot_handover', 'pot_close', 'pot_reopen')),
   expense_id  uuid,      -- no FK: a deleted expense's lines stay
   settlement_id uuid,    -- no FK, the same reason
   member_id   uuid references wallet_members(id) on delete set null,  -- member_join
@@ -327,6 +332,65 @@ create table wallet_activity (
 );
 create index wallet_activity_wallet on wallet_activity (wallet_id, id desc);
 create index wallet_activity_expense on wallet_activity (expense_id) where expense_id is not null;
+
+-- ---------------------------------------------------------------------------
+-- Ipon goal → trip pot (TG-73, owner-approved 2026-11-23). The app records money and never moves it. A pot spend is
+-- an expenses row with split_mode 'pot' (its only share is the treasurer's, so it nets to zero until the pot closes).
+-- ---------------------------------------------------------------------------
+-- the Ipon goal: at most one per wallet. treasurer is always a member of the same wallet (checked in the API).
+create table wallet_pots (
+  wallet_id      uuid primary key references wallets(id) on delete cascade,
+  name           text check (name is null or char_length(name) between 1 and 40),  -- null: the wallet's (or trip's) name
+  each_centavos  integer not null check (each_centavos between 100 and 10000000),
+  due_date       date not null,
+  treasurer      uuid not null references wallet_members(id),  -- members are never deleted; the wallet's cascade takes both
+  version        integer not null default 1 check (version >= 1),
+  created_at     timestamptz not null default now(),
+  closed_at      timestamptz
+);
+
+-- who's in the goal, and any person's own amount (null: the goal's each_centavos)
+create table pot_people (
+  wallet_id        uuid not null references wallet_pots(wallet_id) on delete cascade,
+  member_id        uuid not null references wallet_members(id) on delete cascade,
+  target_centavos  integer check (target_centavos is null or target_centavos between 0 and 10000000),
+  in_goal          boolean not null default true,
+  primary key (wallet_id, member_id)
+);
+
+-- each ambag: 'in' = sent to the pot (pending until Received), 'back' = the treasurer gave it back (always received)
+create table pot_ambag (
+  id               uuid primary key default gen_random_uuid(),
+  wallet_id        uuid not null references wallet_pots(wallet_id) on delete cascade,
+  member_id        uuid not null references wallet_members(id) on delete cascade,
+  kind             text not null default 'in' check (kind in ('in', 'back')),
+  amount_centavos  integer not null check (amount_centavos between 1 and 10000000),
+  status           text not null check (status in ('sent', 'received')),
+  created_at       timestamptz not null default now(),
+  received_at      timestamptz,
+  proof_path       text unique,
+  proof_type       text check (proof_type in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')),
+  proof_bytes      integer check (proof_bytes between 1 and 5242880),
+  proof_at         timestamptz,
+  constraint pot_ambag_received check ((status = 'received') = (received_at is not null)),
+  constraint pot_ambag_back_received check (kind = 'in' or status = 'received'),
+  constraint pot_ambag_proof_whole check (
+    ((proof_path is null) = (proof_type is null)) and ((proof_path is null) = (proof_bytes is null))
+    and (proof_path is null or proof_at is not null))
+);
+create index pot_ambag_wallet on pot_ambag (wallet_id, created_at desc);
+
+-- a member's receive QR for this wallet, shown only to someone paying them (the API gates the read)
+create table wallet_qrs (
+  member_id     uuid primary key references wallet_members(id) on delete cascade,
+  wallet_id     uuid not null references wallets(id) on delete cascade,
+  storage_path  text unique not null,  -- wallets/<wallet id>/qr/<uuid>
+  content_type  text not null check (content_type in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')),
+  bytes         integer not null check (bytes between 1 and 5242880),
+  added_at      timestamptz not null default now(),
+  delete_after  date  -- a trip's wallet: the trip's return + 14 days (owner Q4); null: until its owner removes it
+);
+create index wallet_qrs_wallet on wallet_qrs (wallet_id);
 
 -- ---------------------------------------------------------------------------
 -- Trip sessions (TG-52): one secret link for the whole trip. It points at an itinerary and a wallet, and holds the
@@ -516,6 +580,10 @@ alter table expense_item_people enable row level security;
 alter table expense_charges     enable row level security;
 alter table expense_comments    enable row level security;
 alter table wallet_activity     enable row level security;
+alter table wallet_pots         enable row level security;
+alter table pot_people          enable row level security;
+alter table pot_ambag           enable row level security;
+alter table wallet_qrs          enable row level security;
 alter table trip_sessions      enable row level security;
 alter table session_hotels     enable row level security;
 alter table session_attendees  enable row level security;
@@ -539,6 +607,7 @@ create policy public_read on last_mile_routes   for select using (true);
 -- itinerary_versions, trip_places: no public policy (TG-61)
 -- expense_inputs, expense_payers, expense_items, expense_item_people, expense_charges, expense_comments, wallet_activity:
 -- no public policy (TG-66). Same as the wallets.
+-- wallet_pots, pot_people, pot_ambag, wallet_qrs: no public policy (TG-73). Same as the wallets.
 
 -- ---------------------------------------------------------------------------
 -- Seed: operators and terminals for the MVP
