@@ -339,6 +339,10 @@ OTHER_ROUTES = {
     ("POST", "/wallets/{share_slug}/pot/ambag"),
     ("PATCH", "/wallets/{share_slug}/pot/ambag/{ambag_id}"),
     ("DELETE", "/wallets/{share_slug}/pot/ambag/{ambag_id}"),
+    # TG-73 A2: hand-over, close and reopen, behind WALLET_POT
+    ("POST", "/wallets/{share_slug}/pot/handover"),
+    ("POST", "/wallets/{share_slug}/pot/close"),
+    ("POST", "/wallets/{share_slug}/pot/reopen"),
     # TG-52 trip sessions: every route is under one exact session slug; there is no session listing. Linking an
     # itinerary needs its exact slug, as reading it does
     ("POST", "/sessions"),

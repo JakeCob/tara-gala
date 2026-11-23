@@ -67,9 +67,18 @@ def test_wallets_py_defines_no_model_itself():
 
 
 @pytest.mark.parametrize("name", ["WalletIn", "MemberIn", "ShareIn", "ExpenseIn", "SettlementIn", "MemberOut", "ShareOut",
-                                  "SettlementOut", "BalanceOut", "TransferOut"])
+                                  "SettlementOut", "TransferOut"])
 def test_unchanged_models_have_the_same_schema(name):
     assert getattr(m, name).model_json_schema() == SNAPSHOT[name]
+
+
+def test_balance_out_only_gains_the_defaulted_pot_part():  # TG-73 A2: the close-out's part, left out of the answer when off
+    now, old = m.BalanceOut.model_json_schema(), SNAPSHOT["BalanceOut"]
+    assert {k: v for k, v in now["properties"].items() if k != "pot_centavos"} == old["properties"]
+    assert now["properties"]["pot_centavos"] == {"default": 0, "title": "Pot Centavos", "type": "integer"}
+    assert now["required"] == old["required"]
+    row = m.BalanceOut(member_id=uuid4(), paid_centavos=1, share_centavos=1, net_centavos=0)
+    assert "pot_centavos" not in row.model_dump() and "pot_centavos" in m.BalanceOut(**row.model_dump(), pot_centavos=0).model_dump()
 
 
 def test_expense_and_wallet_out_only_gain_defaulted_fields():
@@ -231,4 +240,5 @@ def test_refusal_bodies_carry_codes_never_names():
         "shares_mismatch", "percent_total", "shares_zero", "extras_too_big", "item_no_one", "too_many_items", "amount_mismatch",
         "items_zero", "amount_too_big", "charge_too_big", "payers_mismatch",
         "feature_off", "expense_changed", "expense_gone", "comments_full", "unknown_member", "id_taken",
+        "no_pot", "by_required",  # TG-73 A2: a pot spend (ux.md TG-73 §14)
     )

@@ -160,9 +160,19 @@ class SettlementOut(BaseModel):
 
 class BalanceOut(BaseModel):
     member_id: UUID
-    paid_centavos: int  # what they paid for the group
-    share_centavos: int  # their part of everything
+    paid_centavos: int  # what they paid for the group (TG-73: pot spends and Libre left out)
+    share_centavos: int  # their part of everything (TG-73: pot spends and Libre left out)
     net_centavos: int  # paid - share, plus payments sent, minus payments received: above zero means they're owed
+    # TG-73: the closed pot's part of the net (+ gets back, - pays of the short), 0 while it's open. With WALLET_POT off
+    # _load never sets it and the key is left out, as WalletOut.pot.
+    pot_centavos: int = 0
+
+    @model_serializer(mode="wrap")
+    def _flag_off_keys(self, handler: SerializerFunctionWrapHandler):
+        data = handler(self)
+        if "pot_centavos" not in self.model_fields_set:
+            data.pop("pot_centavos", None)
+        return data
 
 
 class TransferOut(BaseModel):
@@ -224,7 +234,8 @@ MAX_ITEMS_SENT = 100  # a body bound only: the 40-item rule is the split's too_m
 SPLIT_CODES = ("shares_mismatch", "percent_total", "shares_zero", "extras_too_big", "item_no_one", "too_many_items",
                "amount_mismatch", "items_zero", "amount_too_big", "charge_too_big", "payers_mismatch")
 REFUSALS = SPLIT_CODES + ("feature_off", "expense_changed", "expense_gone", "comments_full", "unknown_member",
-                         "id_taken")  # TG-70: an add's `id` is another wallet's expense
+                         "id_taken",  # TG-70: an add's `id` is another wallet's expense
+                         "no_pot", "by_required")  # TG-73: a pot spend with no goal, or with nobody named as logging it
 
 
 def _once(member_ids: list[UUID]) -> None:
@@ -349,7 +360,25 @@ class ItemizedIn(_ExpenseV2):
         return charges
 
 
-ExpenseInV2 = Annotated[Union[EqualIn, ExactIn, PercentIn, SharesIn, AdjustIn, ItemizedIn], Field(discriminator="mode")]
+class PotExpenseIn(BaseModel):
+    """TG-73: "Paid from the pot". No payer, payers or inputs: the API stores the current treasurer as paid_by and one
+    share, theirs, for the full amount, so it nets to zero until the pot closes. `by` (who logged it) is required:
+    422 by_required. WALLET_POT off: 404 feature_off."""
+
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["pot"]
+    amount_centavos: Centavos
+    note: Note
+    category: Category | None = None
+    by: UUID | None = None
+    budget_key: Literal["_none"] | BudgetKey | None = None
+    id: UUID | None = None
+    paid_by: None = None  # never sent; _v2_split's shared reads (body.paid_by, body.payers) find nothing
+    payers: None = None
+
+
+ExpenseInV2 = Annotated[Union[EqualIn, ExactIn, PercentIn, SharesIn, AdjustIn, ItemizedIn, PotExpenseIn],
+                        Field(discriminator="mode")]
 
 
 class _Versioned(BaseModel):
@@ -369,10 +398,12 @@ class PercentPatch(PercentIn, _Versioned): ...
 class SharesPatch(SharesIn, _Versioned): ...
 class AdjustPatch(AdjustIn, _Versioned): ...
 class ItemizedPatch(ItemizedIn, _Versioned): ...
+class PotExpensePatch(PotExpenseIn, _Versioned): ...  # TG-73
 
 
 ExpensePatch = Annotated[
-    Union[EqualPatch, ExactPatch, PercentPatch, SharesPatch, AdjustPatch, ItemizedPatch], Field(discriminator="mode")
+    Union[EqualPatch, ExactPatch, PercentPatch, SharesPatch, AdjustPatch, ItemizedPatch, PotExpensePatch],
+    Field(discriminator="mode"),
 ]
 
 

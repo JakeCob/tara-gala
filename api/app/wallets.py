@@ -79,6 +79,7 @@ SNAPSHOT_FIELDS = frozenset({"budget_key",  # TG-62 GA1 (plan G8)
                              "amount_centavos", "note", "category", "paid_by", "payers", "mode", "inputs", "items",
                              "charges", "shares", "version"})
 FREE_MODES = ("equal", "exact")  # what WALLET_SPLITS off still takes (category dropped): the common case, after a rollback
+OWN_SHARE_MODES = ("pot", "libre")  # TG-73: stored with one share, the payer's; never in Balances' paid or share
 CHARGE_ORDER = {"service": 0, "vat": 1}
 
 # Per-IP limits, in process memory like the planner's (limits.py): reset on every deploy
@@ -249,6 +250,8 @@ def _load(conn, wallet_id: UUID, *, budget: bool = False, pot: bool = False) -> 
     paid = dict.fromkeys(order, 0)
     owed = dict.fromkeys(order, 0)
     for e in expenses:
+        if e.mode in OWN_SHARE_MODES:  # TG-73: one self-share, net zero: Balances' paid and share leave them out
+            continue
         if e.payers:  # TG-66: several payers, each counted for what they paid
             for p in e.payers:
                 paid[p.member_id] += p.paid_centavos
@@ -260,7 +263,11 @@ def _load(conn, wallet_id: UUID, *, budget: bool = False, pot: bool = False) -> 
     for s in settlements:
         net[s.from_member] += s.amount_centavos
         net[s.to_member] -= s.amount_centavos
-    extra = {"pot": wallet_pot.load_pot(conn, wallet_id, wallet["name"], order)} if pot else {}  # TG-73
+    extra, delta = {}, {}
+    if pot:  # TG-73: the goal, and a closed pot's close-out folded into the nets before settle_up (plan §4.2)
+        extra["pot"], delta = wallet_pot.pot_view(conn, wallet_id, wallet["name"], order)
+        for m, d in delta.items():
+            net[m] += d
     return WalletOut(
         **extra,
         share_slug=wallet["share_slug"],
@@ -269,7 +276,8 @@ def _load(conn, wallet_id: UUID, *, budget: bool = False, pot: bool = False) -> 
         members=[MemberOut(**m) for m in members],
         expenses=expenses,
         settlements=settlements,
-        balances=[BalanceOut(member_id=m, paid_centavos=paid[m], share_centavos=owed[m], net_centavos=net[m]) for m in order],
+        balances=[BalanceOut(member_id=m, paid_centavos=paid[m], share_centavos=owed[m], net_centavos=net[m],
+                             **({"pot_centavos": delta.get(m, 0)} if pot else {})) for m in order],
         transfers=[TransferOut(from_member=f, to_member=t, amount_centavos=a) for f, t, a in settle_up(net, order)],
         total_centavos=sum(e.amount_centavos for e in expenses),
         rev=wallet["rev"],  # TG-66: moved by wallet_activity.record() on every write
@@ -328,6 +336,14 @@ def _v2_split(conn, wallet_id: UUID, body, share_slug: str, what: str):
     people |= {m for m in (body.paid_by, body.by) if m is not None}
     if not people <= set(order):
         raise _refuse(share_slug, what, 422, "unknown_member")
+    if body.mode == "pot":  # TG-73 B13, B15: paid by the treasurer now, one share theirs; `by` is who logged it
+        if body.by is None:
+            raise _refuse(share_slug, what, 422, "by_required")
+        found = conn.execute("select treasurer from wallet_pots where wallet_id = %s", (wallet_id,)).fetchone()
+        if found is None:
+            raise _refuse(share_slug, what, 422, "no_pot")
+        amount, shares = wallet_splits.split("pot", body.amount_centavos, [], [], [], found["treasurer"], order)
+        return amount, shares, found["treasurer"], None
     try:
         payer = wallet_splits.first_payer(body.paid_by, payers, order)
         amount, shares = wallet_splits.split(body.mode, body.amount_centavos, inputs, items, charges, payer, order)
@@ -538,6 +554,10 @@ def add_expense(share_slug: str, body: Union[ExpenseIn, ExpenseInV2], request: R
 def _v2_allowed(share_slug: str, body, flags) -> None:
     """The v2 add's two flag checks: 404 feature_off for payers with WALLET_MULTI_PAYER off, or a non-free mode with
     WALLET_SPLITS off."""
+    if body.mode == "pot":  # TG-73: a pot spend needs WALLET_POT only (it has no split to switch on)
+        if not flags.wallet_pot:
+            raise _feature_off(share_slug, "add")
+        return
     if body.payers is not None and not flags.wallet_multi_payer:
         raise _feature_off(share_slug, "add")
     if body.mode not in FREE_MODES and not flags.wallet_splits:
@@ -648,6 +668,8 @@ def edit_expense(share_slug: str, expense_id: UUID, body: ExpensePatch, request:
     _limit(WRITE_LIMITER, request, "expense_edit")
     flags = request.app.state.flags  # WALLET_SPLITS: splits_on, above
     if body.payers is not None and not flags.wallet_multi_payer:
+        raise _feature_off(share_slug, "edit")
+    if body.mode == "pot" and not flags.wallet_pot:  # TG-73: an edit into a pot spend needs WALLET_POT too
         raise _feature_off(share_slug, "edit")
     with db.get_conn() as conn:
         wallet_id = _wallet_id(conn, share_slug, lock=True)

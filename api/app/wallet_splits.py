@@ -196,6 +196,12 @@ def split(mode: str, amount: int | None, inputs, items, charges, payer_first: UU
     try:
         if mode == "itemized":
             amount, shares = _itemized(amount, items, charges, payer_first, wallet_order)
+        elif mode in ("pot", "libre"):  # TG-73: one share, the payer's (the treasurer for pot), so it nets to zero
+            if amount is None or amount < 1:
+                raise ValueError("this mode needs an amount of at least 1 centavo")
+            if amount > MAX_CENTAVOS:
+                raise SplitError("amount_too_big")
+            shares = {payer_first: amount}
         elif mode in ("equal", "exact", "percent", "shares", "adjust"):
             if amount is None or amount < 1:
                 raise ValueError("this mode needs an amount of at least 1 centavo")

@@ -1,4 +1,5 @@
-"""The Ipon goal → trip pot (TG-73 A1): the goal, who's in it, and each ambag. Behind WALLET_POT.
+"""The Ipon goal → trip pot (TG-73 A1, A2): the goal, who's in it, each ambag, and the hand-over, close and reopen.
+Behind WALLET_POT. Pot spends are ordinary expenses with mode "pot" (wallets.py); their sum is the pot's `spent`.
 
 The app records money and never moves it: an ambag is "I sent ₱X" (pending) until the treasurer taps Received, and only
 received money fills the pot. Whoever starts the goal is its treasurer. Every write locks the wallet row, checks `by`
@@ -6,7 +7,9 @@ received money fills the pot. Whoever starts the goal is its treasurer. Every wr
 so the activity list and the wallet's rev move together. Each answers the whole wallet, as every wallet write does.
 
 The pot stays out of the nets while it's open (plan §4): an ambag is not an expense, and nothing here touches
-expenses, shares or settlements. load_pot() is WalletOut.pot, built by wallets._load with the flag on.
+expenses, shares or settlements. pot_view() is WalletOut.pot plus, once the treasurer closes the pot, its close-out:
+the change to each net that wallets._load adds before settle_up. Close is a state, not a copy: the close-out is
+recomputed from the rows on every load, so an edit after the close changes it (and Activity shows the edit).
 
 WALLET_POT off: every route is 404 feature_off before its body is judged (as TG-66's activity_on), and _load leaves the
 `pot` key out of the answer, so today's wallets read byte for byte as before. The rows stay either way.
@@ -24,6 +27,8 @@ from . import pot_math
 from .limits import manila_today
 from .pot_models import (
     AmbagIn,
+    CloseIn,
+    HandoverIn,
     AmbagOut,
     AmbagPatch,
     CloseOutOut,
@@ -84,21 +89,33 @@ def numbers(people, ambag, spends, each: int, order: list[UUID]) -> pot_math.Pot
 
 def load_pot(conn, wallet_id: UUID, wallet_name: str, order: list[UUID]) -> PotOut | None:
     """The goal as the phone shows it, or None with no goal. `order` is the wallet's member order."""
+    return pot_view(conn, wallet_id, wallet_name, order)[0]
+
+
+def pot_view(conn, wallet_id: UUID, wallet_name: str, order: list[UUID]) -> tuple[PotOut | None, dict]:
+    """(WalletOut.pot, the change to each net). The change is the close-out (plan §4.2) only while the pot is closed,
+    else {}: an open pot leaves the nets exactly as they'd be without it (B16). A closed pot that went short after
+    everyone left the goal can't be split (no_one_in_goal): it adds nothing and logs a warning."""
     found = _rows(conn, wallet_id)
     if found is None:
-        return None
+        return None, {}
     pot, people, ambag, spends = found
     n = numbers(people, ambag, spends, pot["each_centavos"], order)
     sent: dict[UUID, int] = {}
     for a in ambag:
         if a["status"] == "sent":
             sent[a["member_id"]] = sent.get(a["member_id"], 0) + a["amount_centavos"]
+    delta: dict = {}
     try:
         out = pot_math.close_out(n, pot["treasurer"], order)
         close = CloseOutOut(refunds=[PotAmount(member_id=m, amount_centavos=v) for m, v in out.refunds.items()],
                             shortfall=[PotAmount(member_id=m, amount_centavos=v) for m, v in out.shortfall.items()])
+        if pot["closed_at"] is not None:
+            delta = out.delta
     except pot_math.PotError:  # short, with nobody left in the goal: the close is refused, so there's no preview
         close = None
+        if pot["closed_at"] is not None:
+            logger.warning("wallet pot close-out skipped reason=no_one_in_goal short=%d", -n.balance)
     trip = wallet_trip(conn, wallet_id)
     return PotOut(
         name=pot["name"] or (trip.name if trip else wallet_name),
@@ -112,7 +129,7 @@ def load_pot(conn, wallet_id: UUID, wallet_name: str, order: list[UUID]) -> PotO
         received_centavos=n.received, spent_centavos=n.spent, balance_centavos=n.balance,
         target_centavos=sum(n.targets.values()), pending_centavos=n.pending_centavos, pending_count=n.pending_count,
         close_out=close,
-    )
+    ), delta
 
 
 # ---------------------------------------------------------------- the routes
@@ -514,4 +531,94 @@ def undo_ambag(share_slug: str, ambag_id: UUID, request: Request, response: Resp
     _done(response)
     logger.info("wallet ambag undo share_slug=%s amount=%d proof=%d rev=%d", share_slug, row["amount_centavos"],
                 1 if row["proof_path"] else 0, wallet.rev)
+    return wallet
+
+
+# ---------------------------------------------------------------- A2: hand-over, close and reopen
+
+@router.post("/wallets/{share_slug}/pot/handover", response_model=WalletOut, dependencies=[Depends(pot_on)])
+def hand_over(share_slug: str, body: HandoverIn, request: Request, response: Response):
+    """B21: the treasurer hands the pot to someone in the goal. Only the treasurer changes: no settlement is made, since
+    the pot's cash between treasurers is internal to the pot (plan §4.4), and a later close-out uses the new one.
+    Pending sends simply wait for the new treasurer's Received. Refused on a closed pot (reopen it first)."""
+    wallets._limit(wallets.WRITE_LIMITER, request, "pot_handover")
+    with db.get_conn() as conn:
+        wallet_id = wallets._wallet_id(conn, share_slug, lock=True)
+        by = _by(conn, wallet_id, body.by, share_slug, "handover")
+        pot = _pot(conn, wallet_id, share_slug, "handover")
+        _treasurer(pot, by, share_slug, "handover")
+        _fresh(pot, body.version, conn, wallet_id, request, share_slug, "handover")
+        _open(pot, share_slug, "handover")
+        if body.to_member not in wallets._member_ids(conn, wallet_id):
+            raise _refuse(share_slug, "handover", 422, "unknown_member")
+        to = conn.execute("select in_goal from pot_people where wallet_id = %s and member_id = %s",
+                          (wallet_id, body.to_member)).fetchone()
+        if to is None or not to["in_goal"]:
+            raise _refuse(share_slug, "handover", 422, "not_in_goal")
+        if body.to_member == pot["treasurer"]:
+            wallet = _answer(conn, wallet_id, request)
+            _done(response)
+            logger.info("wallet pot handover noop share_slug=%s rev=%d", share_slug, wallet.rev)
+            return wallet
+        n = _contributed(conn, wallet_id, pot)
+        conn.execute("update wallet_pots set treasurer = %s, version = version + 1 where wallet_id = %s",
+                     (body.to_member, wallet_id))
+        wallet_activity.record(conn, wallet_id, "pot_handover", by=by, member_id=body.to_member,
+                               after={"from": str(pot["treasurer"]), "to": str(body.to_member),
+                                      "balance_centavos": n.balance})
+        wallet = _answer(conn, wallet_id, request)
+    _done(response)
+    logger.info("wallet pot handover share_slug=%s balance=%d short=%s pending=%d rev=%d", share_slug, n.balance,
+                "yes" if n.balance < 0 else "no", n.pending_count, wallet.rev)
+    return wallet
+
+
+@router.post("/wallets/{share_slug}/pot/close", response_model=WalletOut, dependencies=[Depends(pot_on)])
+def close_pot(share_slug: str, body: CloseIn, request: Request, response: Response):
+    """B17 to B20: the treasurer closes the pot. From then on _load folds its close-out into the nets (refunds by
+    ambag, or the shortfall owed to the treasurer), recomputed from the rows on every load. A pending send doesn't
+    count; the answer's pot.pending_count says how many (the sheet's warning). Short with nobody left in the goal is
+    409 no_one_in_goal."""
+    wallets._limit(wallets.WRITE_LIMITER, request, "pot_close")
+    with db.get_conn() as conn:
+        wallet_id = wallets._wallet_id(conn, share_slug, lock=True)
+        by = _by(conn, wallet_id, body.by, share_slug, "close")
+        pot = _pot(conn, wallet_id, share_slug, "close")
+        _treasurer(pot, by, share_slug, "close")
+        _fresh(pot, body.version, conn, wallet_id, request, share_slug, "close")
+        _open(pot, share_slug, "close")
+        n = _contributed(conn, wallet_id, pot)
+        try:
+            out = pot_math.close_out(n, pot["treasurer"], _order(conn, wallet_id))
+        except pot_math.PotError as e:
+            raise _refuse(share_slug, "close", 409, e.code) from None
+        conn.execute("update wallet_pots set closed_at = now(), version = version + 1 where wallet_id = %s", (wallet_id,))
+        refund, short = max(n.balance, 0), max(-n.balance, 0)
+        people = len(out.refunds) if refund else len(out.shortfall)
+        wallet_activity.record(conn, wallet_id, "pot_close", by=by,
+                               after={"refund_centavos": refund, "short_centavos": short, "people": people})
+        wallet = _answer(conn, wallet_id, request)
+    _done(response)
+    logger.info("wallet pot close share_slug=%s received=%d spent=%d refund=%d short=%d people=%d pending=%d rev=%d",
+                share_slug, n.received, n.spent, refund, short, people, n.pending_count, wallet.rev)
+    return wallet
+
+
+@router.post("/wallets/{share_slug}/pot/reopen", response_model=WalletOut, dependencies=[Depends(pot_on)])
+def reopen_pot(share_slug: str, body: CloseIn, request: Request, response: Response):
+    """B19: the close-out leaves the nets until the pot is closed again (with the same numbers, unless rows changed)."""
+    wallets._limit(wallets.WRITE_LIMITER, request, "pot_reopen")
+    with db.get_conn() as conn:
+        wallet_id = wallets._wallet_id(conn, share_slug, lock=True)
+        by = _by(conn, wallet_id, body.by, share_slug, "reopen")
+        pot = _pot(conn, wallet_id, share_slug, "reopen")
+        _treasurer(pot, by, share_slug, "reopen")
+        _fresh(pot, body.version, conn, wallet_id, request, share_slug, "reopen")
+        if pot["closed_at"] is None:
+            raise _refuse(share_slug, "reopen", 409, "pot_open")
+        conn.execute("update wallet_pots set closed_at = null, version = version + 1 where wallet_id = %s", (wallet_id,))
+        wallet_activity.record(conn, wallet_id, "pot_reopen", by=by)
+        wallet = _answer(conn, wallet_id, request)
+    _done(response)
+    logger.info("wallet pot reopen share_slug=%s rev=%d", share_slug, wallet.rev)
     return wallet
