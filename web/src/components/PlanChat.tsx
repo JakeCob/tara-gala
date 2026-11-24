@@ -11,7 +11,7 @@ import {
   addEntry, chatFailureLines, chatStorage, clearLog, loadLog, needLinkLine, saveLog, settle,
 } from "@/lib/chat";
 import { flags } from "@/lib/flags";
-import { KALOY_WORDS, replyPose } from "@/lib/kaloy";
+import { KALOY_WORDS, clock12, firstMessageFor, kaloyHowTo, replyPose } from "@/lib/kaloy";
 import { planFailureMessage } from "@/lib/trip";
 import { KaloyBeside, KaloyGreeting } from "./Kaloy";
 import KaloyChat from "./KaloyChat";
@@ -50,6 +50,11 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   const [cheer, setCheer] = useState(false); // TG-75: Kaloy is happy right after an Apply, until the next turn
   const kaloy = flags.kaloy;
   const gameUi = kaloy && flags.chatGameUi; // TG-75: the game-style chat (KaloyChat.tsx) draws this same state; off, today's form
+  // TG-75 NEXT_PUBLIC_KALOY_TIDY: the how-to's example names this plan's city, and new replies read 22:30 as 10:30 PM
+  const tidy = flags.kaloyTidy;
+  const howTo = tidy ? kaloyHowTo(chat.city) : KALOY_WORDS.howTo;
+  const firstMessage = tidy ? firstMessageFor(chat.city, FIRST_MESSAGE) : FIRST_MESSAGE;
+  const times = (text: string) => (tidy ? clock12(text) : text);
   const focus = ask?.focus ?? null; // the stop this chat was opened about, if any
   const online = editor.online;
   const off = !editor.can || applying || !proposal;
@@ -103,8 +108,8 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
     setProposal(out.proposal);
     setLog((l) => addEntry(l, {
       kind: "bot",
-      text: out.reply,
-      ...(out.proposal ? { changes: out.proposal.changes, proposal: "open" as const } : {}),
+      text: times(out.reply),
+      ...(out.proposal ? { changes: tidy ? out.proposal.changes.map((c) => ({ ...c, text: clock12(c.text), ...(c.why ? { why: clock12(c.why) } : {}) })) : out.proposal.changes, proposal: "open" as const } : {}),
       ...(out.need_link ? { needLink: out.need_link } : {}),
       ...(out.outcome === "no_fit" ? { noFit: true } : {}),
     }));
@@ -164,7 +169,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
   const newestBot = log.findLastIndex((e) => e.kind === "bot"); // TG-75: only Kaloy's newest reply talks or cheers
   if (gameUi) {
     return (
-      <KaloyChat dialogRef={dialog} endRef={end} fieldId={fieldId} log={log} draft={draft} onDraft={setDraft} online={online}
+      <KaloyChat dialogRef={dialog} endRef={end} fieldId={fieldId} howTo={howTo} log={log} draft={draft} onDraft={setDraft} online={online}
         sending={sending} applying={applying} holding={!!proposal} off={off} waiting={waiting} status={editor.status} cheer={cheer}
         lastAsked={lastAsked} lastApplied={lastApplied} newestBot={newestBot} onClose={onClose} onSend={(text, again) => void send(text, again)}
         onApply={onApply} onNotThis={onNotThis} onClear={onClear} onNeedLink={onNeedLink} />
@@ -191,7 +196,7 @@ export default function PlanChat({ editor, chat, ask, onClose, onNeedLink }: {
                 <div className="flex flex-col gap-1 self-start">
                   <p className={PX.meta}>{kaloy ? KALOY_WORDS.name : <>Chatbot</>}</p>
                   {kaloy && <KaloyGreeting />}
-                  <p className="text-sm break-words">{kaloy ? KALOY_WORDS.howTo : FIRST_MESSAGE}</p>
+                  <p className="text-sm break-words">{kaloy ? howTo : firstMessage}</p>
                 </div>
               </KaloyBeside>
             )}

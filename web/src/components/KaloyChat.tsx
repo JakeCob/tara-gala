@@ -53,6 +53,8 @@ function ChatAlert({ lines, pose }: { lines: string[]; pose: KaloyPose }) {
 }
 
 type Props = {
+  /** The how-to line under his greeting (PlanChat picks it: TG-75 NEXT_PUBLIC_KALOY_TIDY names the plan's city) */
+  howTo: string;
   dialogRef: RefObject<HTMLDialogElement | null>;
   endRef: RefObject<HTMLDivElement | null>;
   fieldId: string;
@@ -155,7 +157,7 @@ export default function KaloyChat({ dialogRef, endRef, ...p }: Props) {
               // The greeting is drawn here only, never logged or sent (TG-75)
               <KaloySays pose="talk">
                 <KaloyGreeting />
-                <p className="text-sm break-words">{KALOY_WORDS.howTo}</p>
+                <p className="text-sm break-words">{p.howTo}</p>
               </KaloySays>
             )}
             {log.map((e, i) =>

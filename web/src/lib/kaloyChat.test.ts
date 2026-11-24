@@ -71,7 +71,7 @@ test("T75-G5 every state of today's chat: greeting, thinking, proposal, applied,
   const src = game();
   const empty = between(src, "{log.length === 0 && (", "{log.map(");
   assert.match(empty, /<KaloyGreeting \/>/);
-  assert.match(empty, /\{KALOY_WORDS\.howTo\}/);
+  assert.match(empty, /\{p\.howTo\}/);
   assert.equal(src.match(/<KaloyGreeting\b/g)?.length, 1);
   assert.doesNotMatch(src, /KALOY_WORDS\.greeting|kaloyGreeting/, "the greeting's words live in Kaloy.tsx only");
   assert.match(src, /\{sending && \(\s*<KaloySays pose="think">\s*<p className="text-sm">\{KALOY_WORDS\.thinking\}<\/p>/);
