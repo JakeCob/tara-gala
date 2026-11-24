@@ -21,6 +21,7 @@ export type Flags = {
   goingTo: boolean;
   kaloy: boolean;
   chatGameUi: boolean;
+  kaloyFab: boolean;
   chatAllCities: boolean;
 };
 
@@ -45,6 +46,7 @@ export const FLAG_DEFAULTS: Flags = {
   chatAllCities: false, // the chatbot on a Sagada (or any served city's) plan, not only Baguio; needs chatbotLive and the API's CHAT_ALL_CITIES
   kaloy: false, // TG-75: Kaloy, the chatbot carabao: the chat's name, greeting and poses, the title screen walk and the sad and empty boxes; web only
   chatGameUi: false, // TG-75: the game-style Ask Kaloy chat (speech bubbles, a one-row text entry); needs kaloy; web only
+  kaloyFab: false, // TG-75: the floating Ask Kaloy button at the trip page's bottom-right; needs kaloy and the chat's flags; web only
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -83,6 +85,7 @@ export function readFlags(): Flags {
     goingTo: parseFlag(process.env.NEXT_PUBLIC_GOING_TO, FLAG_DEFAULTS.goingTo),
     kaloy: parseFlag(process.env.NEXT_PUBLIC_KALOY, FLAG_DEFAULTS.kaloy),
     chatGameUi: parseFlag(process.env.NEXT_PUBLIC_CHAT_GAME_UI, FLAG_DEFAULTS.chatGameUi),
+    kaloyFab: parseFlag(process.env.NEXT_PUBLIC_KALOY_FAB, FLAG_DEFAULTS.kaloyFab),
     chatAllCities: parseFlag(process.env.NEXT_PUBLIC_CHAT_ALL_CITIES, FLAG_DEFAULTS.chatAllCities),
   };
 }

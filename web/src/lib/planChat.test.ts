@@ -128,7 +128,7 @@ test("T61-P18 Clear this chat asks first, and only once the log has messages", (
 test("T61-P19 Ask the chatbot: beside Add a stop to World N in edit mode, and on a stop's proposal with its place in the message", () => {
   const map = read("src/components/LevelMap.tsx");
   const add = between(map, "Add a stop to World {day.day}", "<nav ");
-  assert.match(add, /\{editor\.chat && \(/);
+  assert.match(add, /\{editor\.chat && !\(flags\.kaloy && flags\.kaloyFab\) && \(/);
   assert.match(add, />\s*Ask the chatbot\s*</);
   assert.match(view(), /<PlanChat\b/);
   const input = read("src/components/PlaceInput.tsx");

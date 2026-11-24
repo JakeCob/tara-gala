@@ -24,6 +24,7 @@ const ENV_KEYS: Record<keyof Flags, string> = {
   goingTo: "NEXT_PUBLIC_GOING_TO",
   kaloy: "NEXT_PUBLIC_KALOY",
   chatGameUi: "NEXT_PUBLIC_CHAT_GAME_UI",
+  kaloyFab: "NEXT_PUBLIC_KALOY_FAB",
   chatAllCities: "NEXT_PUBLIC_CHAT_ALL_CITIES",
 };
 
@@ -67,7 +68,7 @@ afterEach(() => {
 
 test("defaults when unset", () => {
   clearFlagEnv();
-  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false, budgetLines: false, recapLinks: false, offlineExpenses: false, nextUp: false, aroundTab: false, ambaganTab: false, goingTo: false, kaloy: false, chatGameUi: false, chatAllCities: false });
+  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false, budgetLines: false, recapLinks: false, offlineExpenses: false, nextUp: false, aroundTab: false, ambaganTab: false, goingTo: false, kaloy: false, chatGameUi: false, chatAllCities: false, kaloyFab: false });
   assert.deepEqual(readFlags(), FLAG_DEFAULTS);
 });
 
