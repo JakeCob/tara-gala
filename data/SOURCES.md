@@ -208,3 +208,26 @@ Budget rows, per person for two (§12.3's table, `estimate` as `parse_estimate` 
 - `lake-danum`: "Ask at tourism office", as in the owner's file. Philippine Beaches gives P550 transport (₱275 each), not loaded.
 - `food`: "Your call".
 - Not in §12.3, so not loaded: the tour vans (Marlboro and Blue Soil P1,350, Bomod-ok P500 to P650, about ₱925 to ₱1,000 each), which both guide sources charge on top of guide fees.
+
+## Regular Coda Lines Cubao ⇄ Sagada departures (TG-71, branch TG-71-coda-schedule), checked 2026-11-22
+
+31 rows in `data/sagada-coda/routes_trips.csv`, below the owner's two ticket rows, which are unchanged. Every row is agent-researched (tg-data), owner to verify. Confidence per row and the open questions are in `data/sagada-coda/RESEARCH-2026-11-22.md`.
+
+- **18 departures a day from `coda-cubao`:** 19:00, 19:30, 20:00, 20:30, 21:00, 21:15, 21:30, 21:45, 22:00, 22:30 and 23:00. That's 11 times, some in both classes.
+- **11 departures a day from `coda-sagada`:** 12:30, 13:30, 14:00, 14:30, 15:00, 15:15, 15:30 and 15:45. That's 8 times, some in both classes.
+- **Every row:** `days` is `daily`, `travel_minutes` is 720, and `valid_from` and `valid_to` are blank, with two exceptions (below).
+- **Two exceptions:** the 22:30 `super_deluxe` from Cubao and the 14:30 `deluxe` from Sagada each have two rows. The rows split around the owner's dates, Wed 2026-11-25 and Sat 2026-11-28. On those dates the owner's ticket row is the only trip in that slot and class, so `data/itineraries/sagada-2026-11-25.json` still resolves to the ticket rows. Without the split, `_resolve_trip` would find two `manual` trips and reject the guide.
+
+| Item | Source | Note |
+| --- | --- | --- |
+| Times, classes per time, fares, "daily", 12 hours | https://pamasahe.com/routes/quezon-city-sagada-and-coda-lines-schedule-fares | "Last Updated September 2026" (`dateModified` 2026-09). Each time is labelled "(Bus 35)", "(Bus 45)" or "(Bus 35 and 45)". Fares: "Bus 35 seater with CR ₱1499.00" (`super_deluxe`, restroom yes) and "Bus 45 seater without CR ₱1304.00" (`deluxe`, no restroom), the mapping already used for the owner's tickets. Arrival is 12 hours after every departure. It warns that fuel surcharges may make fares higher. Pamasahe is a directory, not the operator. It is the newest dated source with a full timetable, and the owner's two booked slots (22:30 Bus 35 and 14:30 Bus 45) match it. |
+| Operator site | https://www.codalines.ph/ and https://www.codalines.ph/copy-of-our-routes | The home page says "Limited trips are available online" and that more may run in peak season. It links to `codalines.12go.com` for booking. The only timetable is the 2022 image ("As of March 26, 2022": QC > Sagada 9:00 PM, Sagada > QC 2:00 PM, "There may be additional trips whenever necessary"). Too old to load, but both of its times are in Pamasahe's list. |
+| Older corroboration | https://www.philippinebeaches.org/?p=15615 | Page updated 2025-01-20; "The schedule below was last updated on November 19, 2024", with images credited to Coda Lines' official Facebook page. It lists Manila > Sagada 8:00 PM and 9:00 PM, and Sagada > Manila 2:00 PM and 3:00 PM. Its fares are older: Deluxe P1,225 to P1,259 and Super Deluxe P1,362 to P1,399. |
+| Older corroboration | https://www.lakwatsero.com/info/sagada-bus-schedule-and-fare/ | "8PM, and 9PM (as of May 2025)", "around P1,100". |
+| Range check only | https://roberttramp.com/guides/how-to-get-to-sagada-from-manila (published 2026-10-12), https://mappedatlas.com/navigate/philippines-commute-guides/cubao-to-sagada-commute-guide/ (March 2026) | Both say evenings from about 7 PM to 11 PM. Mapped Atlas also gives Sagada departures of about 12:30 PM to 4 PM, and ₱1,304 and ₱1,499 (roberttramp, "as of September 2026"). Neither cites a source, so neither is used for a row. |
+
+Not used:
+- `codalines.12go.com` (the operator's booking partner): it returned 403 on 2026-11-20, and on 2026-11-22 it returned a 202 bot-check page. `12go.asia` pages came back empty.
+- Coda Lines' Facebook page (https://www.facebook.com/codalinescorporation/, per Pamasahe's operator page): it redirects to a login.
+- https://sagada.com.ph/operators/coda-lines and https://codalinesbus.com/: third-party pages with no source and no date. sagada.com.ph gives "9:00 PM to 10:00 PM" and ₱650 to ₱1,200. codalinesbus.com ("Coda Lines Bus Guide") gives no times.
+- `ph.commutetour.com`: returned 403.
