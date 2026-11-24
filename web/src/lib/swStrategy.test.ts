@@ -1378,3 +1378,68 @@ test("T70-U12 (B25) an expense add, with or without the outbox's id, is never th
     }
   }
 });
+
+// ---------------------------------------------------------------- pre-trip check 2026-11-25: a first visit opens offline
+
+test("save-page: a first visit's trip and plan pages are saved once the worker is in charge; nothing else", async () => {
+  const pages: string[] = [];
+  const env = swEnv(async (r) => {
+    pages.push(urlOf(r));
+    return new Response("<html>trip</html>", { status: 200, headers: { "content-type": "text/html" } });
+  });
+  assert.equal(env.sw.MSG_SAVE_PAGE, "tg-sw:save-page");
+  const ev = fakeEvent({ data: { type: "tg-sw:save-page", paths: [`/t/${"a".repeat(32)}`, "/i/sagada-2026-11-25", "/t/third-is-dropped"] } });
+  ev.dispatch(env.handlers.message);
+  await Promise.all(ev.log.waits.map((w) => w.promise));
+  assert.deepEqual(pages, [`${APP}/t/${"a".repeat(32)}`, `${APP}/i/sagada-2026-11-25`], "two at most");
+  const data = await env.caches.open(env.names.data);
+  const saved = await data.match(`${APP}/t/${"a".repeat(32)}`);
+  assert.equal(await saved?.text(), "<html>trip</html>");
+  assert.ok(env.sw.readSavedAt(saved), "stamped with when it left");
+  assert.equal(await env.sw.savePage(`/t/${"a".repeat(32)}`, env.names), "had", "a saved page is left alone");
+  assert.equal(pages.length, 2);
+  for (const bad of ["/", "/buses", "//evil.example/t/x", "/t/a/b", "https://evil.example/t/x", 7, null]) {
+    assert.equal(await env.sw.savePage(bad, env.names), "ignored", String(bad));
+  }
+  assert.equal(pages.length, 2, "nothing fetched for those");
+  assert.equal(env.scope.skipWaitingCalls, 0);
+});
+
+test("save-page: a failed answer isn't saved; a network failure is a warning", async () => {
+  const env = swEnv(async (r) => (urlOf(r).includes("/t/") ? new Response("no", { status: 404 }) : Promise.reject(new TypeError("offline"))));
+  assert.equal(await env.sw.savePage("/t/x", env.names), "status-404");
+  const ev = fakeEvent({ data: { type: "tg-sw:save-page", paths: ["/i/y"] } });
+  ev.dispatch(env.handlers.message);
+  await Promise.all(ev.log.waits.map((w) => w.promise));
+  assert.ok(env.logs.some((l) => l.level === "warn" && l.args.join(" ").includes("save-page failed error=TypeError")));
+  assert.equal(await (await env.caches.open(env.names.data)).match(`${APP}/t/x`), undefined);
+});
+
+test("save-page: TripView asks for its own page and its plan's when the worker takes over", () => {
+  const view = readFileSync(new URL("../components/TripView.tsx", import.meta.url), "utf8");
+  assert.match(view, /navigator\.serviceWorker\?\.controller\?\.postMessage\(\{ type: "tg-sw:save-page", paths: \[`\/t\/\$\{slug\}`, \.\.\.\(planSlug \? \[`\/i\/\$\{planSlug\}`\] : \[\]\)\] \}\)/);
+  assert.match(view, /savePages\(\);\n {4}const keepCopies = \(\) => \{/, "on each load, once the plan is known");
+  assert.match(view, /if \(planSlug\) fetchItinerary\(planSlug\)\.catch\(\(\) => undefined\);\n {6}savePages\(\);/, "and when the worker takes over");
+});
+
+test("save-page: the page's own chunks are saved with it; a page whose chunks can't be fetched isn't saved", async () => {
+  const html = '<script src="/_next/static/chunks/plan-1.js"></script><link href="/_next/static/css/a.css">';
+  const fetched: string[] = [];
+  let chunkFails = false;
+  const env = swEnv(async (r) => {
+    const u = urlOf(r);
+    fetched.push(u.replace(APP, ""));
+    if (u.includes("/_next/static/")) return chunkFails ? Promise.reject(new TypeError("offline")) : new Response("x", { status: 200 });
+    return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
+  });
+  await env.seed(env.names.static, `${APP}/_next/static/css/a.css`, new Response("css"));
+  chunkFails = true;
+  assert.equal(await env.sw.savePage("/i/plan-a", env.names), "assets-missing-1");
+  assert.equal(await (await env.caches.open(env.names.data)).match(`${APP}/i/plan-a`), undefined, "not saved without its chunks");
+  chunkFails = false;
+  fetched.length = 0;
+  assert.equal(await env.sw.savePage("/i/plan-a", env.names), "saved assets=1");
+  assert.deepEqual(fetched, ["/i/plan-a", "/_next/static/chunks/plan-1.js"], "only the chunk it lacked");
+  assert.ok(await (await env.caches.open(env.names.static)).match(`${APP}/_next/static/chunks/plan-1.js`));
+  assert.ok(await (await env.caches.open(env.names.data)).match(`${APP}/i/plan-a`));
+});

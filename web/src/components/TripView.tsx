@@ -286,10 +286,16 @@ export default function TripView({ slug }: { slug: string }) {
   // TG-57: a first open's GETs go past the service worker: ask again once it's here, so the next open has its copies.
   // Only the worker needs these answers, so the GET the screen is waiting on carries on
   useEffect(() => {
+    // Pre-trip check 2026-11-25: this page and its plan's page, or a first visit doesn't open offline. The worker skips
+    // a page it already has, so asking on each load costs a cache look-up; the plan is known only once the trip loads
+    const savePages = () =>
+      navigator.serviceWorker?.controller?.postMessage({ type: "tg-sw:save-page", paths: [`/t/${slug}`, ...(planSlug ? [`/i/${planSlug}`] : [])] });
+    savePages();
     const keepCopies = () => {
       console.info("[tg-trip] worker took over, saving copies");
       void tripApi.get(slug);
       if (planSlug) fetchItinerary(planSlug).catch(() => undefined);
+      savePages();
     };
     navigator.serviceWorker?.addEventListener("controllerchange", keepCopies);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", keepCopies);
