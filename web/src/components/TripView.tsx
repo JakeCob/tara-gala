@@ -6,7 +6,7 @@ import { PX, PixelBox, PixelButton, PixelCardLink, PixelLink, SectionTitle, cx }
 import { fetchPremade, fetchSpots, manilaToday, type PremadeSummary } from "@/lib/api";
 import { type NeedLink, chatRequest } from "@/lib/chat";
 import { flags } from "@/lib/flags";
-import { cityOf } from "@/lib/itinerary";
+import { chatHere, cityOf } from "@/lib/itinerary";
 import { type NextUpJump, nextUp, nextUpLog } from "@/lib/nextUp";
 import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdit";
 import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
@@ -245,12 +245,14 @@ export default function TripView({ slug }: { slug: string }) {
       else spotsAsked.current = false; // try again on the next find
     });
   }, []);
-  // TG-67: the chat stays Baguio's (owner decision 2), so a plan elsewhere has no chat entry. Said once per page
+  // TG-67: the chat stays Baguio's (owner decision 2) unless NEXT_PUBLIC_CHAT_ALL_CITIES is on, so a plan elsewhere has
+  // no chat entry. Said once per page, and so is a non-Baguio chat that shows
   const chatHiddenLogged = useRef(false);
   useEffect(() => {
     if (chatHiddenLogged.current || city === "Baguio" || !flags.planEditing || !flags.chatbotLive) return;
     chatHiddenLogged.current = true;
-    console.info("[tg-trip] plan chat hidden city=%s", city);
+    if (chatHere(city, flags.chatAllCities)) console.info("[tg-trip] plan chat shown city=%s all_cities=on", city);
+    else console.info("[tg-trip] plan chat hidden city=%s", city);
   }, [city]);
 
   // A newer plan landed: after a clash, say what changed; from another phone, say so above the tabs (ux.md §6)
@@ -438,7 +440,7 @@ export default function TripView({ slug }: { slug: string }) {
   const barStatus = !online
     ? typeof planSaid === "string" && planSaid.startsWith("Editing needs signal") ? planSaid : "Editing needs signal. Your last change was saved."
     : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : (!synced && !planWriting && shown) || waiting ? "Updating the map..." : planSaid;
-  const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && city === "Baguio" ? {
+  const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && chatHere(city, flags.chatAllCities) ? {
     slug,
     send: async (log, text, focus) => {
       const s = shownRef.current;

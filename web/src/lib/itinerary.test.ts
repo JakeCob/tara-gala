@@ -500,6 +500,15 @@ test("T67-W1 cityOf: a missing, null or empty city is Baguio; any other is the i
   assert.equal(cityOf({ city: "Baguio" }), "Baguio");
 });
 
+test("T76-W1 chatHere: Baguio always gets the chat; another destination only with chatAllCities; a city we don't serve never", async () => {
+  const { chatHere } = await itineraryLib();
+  assert.equal(chatHere("Baguio", false), true, "Baguio's chat is today's with the flag off");
+  assert.equal(chatHere("Baguio", true), true);
+  assert.equal(chatHere("Sagada", false), false, "TG-67: hidden off Baguio while the flag is off");
+  assert.equal(chatHere("Sagada", true), true);
+  assert.equal(chatHere("Vigan", true), false, "only the API's CITIES, which the server would refuse anyway");
+});
+
 test("T67-W2 DESTINATIONS matches the API's CITIES, and PROVINCE has one entry per destination (F6)", async (t) => {
   const { DESTINATIONS, PROVINCE } = await itineraryLib();
   assert.ok(Array.isArray(DESTINATIONS), "DESTINATIONS is exported");

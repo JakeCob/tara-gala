@@ -31,8 +31,8 @@ from .guide import ROW_KEY
 from .limits import MANILA_TZ, RateLimiter, SpendTracker, client_ip, ip_hash
 from .llm import LLMClient, LLMConfig, LLMConfigError, LLMUnavailable, _number, make_llm_client
 from .plan_diff import ChangeLine
-from .plan_validation import BAGUIO
-from .plan_chat_prompt import SYSTEM_PROMPT, Turn, build_user_message
+from .plan_validation import BAGUIO, CITIES
+from .plan_chat_prompt import Turn, build_user_message, system_prompt
 from .schedule import to_minutes
 from .sessions import NOINDEX, SLUG, _session_id
 
@@ -230,22 +230,25 @@ class Chat:
 
     # ---- one turn
 
-    def run(self, share_slug: str, body: ChatIn) -> ChatOut | JSONResponse:
+    def run(self, share_slug: str, body: ChatIn, all_cities: bool = False) -> ChatOut | JSONResponse:
+        """One chat turn. `all_cities` is CHAT_ALL_CITIES: off, only a Baguio plan gets the chat (TG-67)."""
         s = self.settings
         try:
             with db.get_conn() as conn:  # short-lived: no connection is held during a model call
                 session_id = _session_id(conn, share_slug)
                 cur = plan_edit.current(conn, session_id)
-                # TG-67: the chat knows Baguio's spots and buses only, so another city's plan gets no chat (owner, 11-20),
-                # before the base check, the context and any spend
+                # TG-67: with CHAT_ALL_CITIES off the chat is Baguio's only, so another city's plan gets no chat (owner,
+                # 11-20), before the base check, the context and any spend. On, any city we serve gets that city's chat
                 city = plan_edit.guide_city(conn, cur.guide)
-                if city != BAGUIO:
+                if city != BAGUIO and not (all_cities and city in CITIES):
                     logger.info("plan chat refused share_slug=%s reason=not_baguio city=%s", share_slug, city)
                     return _flat(422, "chat_not_here")
                 if (body.base.itinerary_slug, body.base.seq) != (cur.row["share_slug"], cur.seq):
                     logger.info("plan chat refused share_slug=%s reason=plan_changed base_seq=%d seq=%d", share_slug, body.base.seq, cur.seq)
                     return _flat(409, "plan_changed", itinerary_slug=cur.row["share_slug"], seq=cur.seq)
-                ctx = plan_chat_context.load(conn, session_id, cur.row, cur.guide, body.focus.key if body.focus else None)
+                ctx = plan_chat_context.load(conn, session_id, cur.row, cur.guide, body.focus.key if body.focus else None, city)
+                if city != BAGUIO:  # Baguio's lines stay as they were
+                    logger.info("plan chat city share_slug=%s city=%s spots=%d buses=%d", share_slug, city, len(ctx.spot_ids), len(ctx.trip_ids))
         except plan_edit.Refused as r:
             return _flat(r.status, r.body["detail"])
         turns = [Turn(m.role, m.text) for m in body.messages]
@@ -254,7 +257,7 @@ class Chat:
             if not self.spend.allowed():  # before every attempt, not once a message (review S3)
                 return self._cap(share_slug)
             try:
-                reply = self.client.complete(model=model, system=SYSTEM_PROMPT, user=build_user_message(ctx.text, turns, codes),
+                reply = self.client.complete(model=model, system=system_prompt(city), user=build_user_message(ctx.text, turns, codes),
                                              schema=plan_ops.REPLY_SCHEMA, max_tokens=s.max_tokens, timeout=s.timeout_s)
             except LLMUnavailable as e:
                 if e.kind == "timeout":
@@ -386,7 +389,7 @@ def plan_chat(share_slug: str, body: ChatIn, request: Request, bot: Chat = Depen
     limited = bot.limit(share_slug, client_ip(request))
     if limited is not None:
         return limited
-    out = bot.run(share_slug, body)
+    out = bot.run(share_slug, body, request.app.state.flags.chat_all_cities)
     if isinstance(out, ChatOut):
         return JSONResponse(out.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "private, no-cache", **NOINDEX})
     return out

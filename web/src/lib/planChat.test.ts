@@ -24,7 +24,7 @@ test("T61-P10 the chatbot is behind NEXT_PUBLIC_CHATBOT_LIVE, off by default, an
   assert.match(read("src/lib/flags.ts"), /chatbotLive: parseFlag\(process\.env\.NEXT_PUBLIC_CHATBOT_LIVE, FLAG_DEFAULTS\.chatbotLive\)/);
   const editor = between(view(), "const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {", "} : undefined;");
   assert.match(editor, /chat: chatTools,/, "the editor hands the map the page's chat tools");
-  assert.match(view(), /const chatTools: ChatTools \| null = flags\.planEditing && flags\.chatbotLive && city === "Baguio" \? \{/, "no chat tools unless the flag is on, and never without the plan editor");
+  assert.match(view(), /const chatTools: ChatTools \| null = flags\.planEditing && flags\.chatbotLive && chatHere\(city, flags\.chatAllCities\) \? \{/, "no chat tools unless the flag is on, and never without the plan editor");
   assert.match(read("src/components/PlanEditor.ts"), /chat: ChatTools \| null;/);
   for (const file of ["src/components/ItineraryList.tsx", "src/components/ItineraryView.tsx"]) {
     assert.doesNotMatch(read(file), /PlanChat|Ask the chatbot/, `${file}: the /i/ page has no chatbot`);
@@ -32,7 +32,7 @@ test("T61-P10 the chatbot is behind NEXT_PUBLIC_CHATBOT_LIVE, off by default, an
 });
 
 test("T61-P11 asking sends the plan on screen's own base, through tripApi.chat, and the answer is read by chatAnswer", () => {
-  const editor = between(view(), "const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && city === \"Baguio\" ? {", "} : null;");
+  const editor = between(view(), "const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && chatHere(city, flags.chatAllCities) ? {", "} : null;");
   assert.match(editor, /tripApi\.chat\(slug, chatRequest\(baseOf\((\w+)\), /, "the base comes from the plan on screen as the question goes (review M1)");
   const trip = read("src/lib/trip.ts");
   assert.match(trip, /chat: \(slug: string, body: ChatIn\) => askChat\(`\$\{at\(slug\)\}\/plan\/chat`, body\)/);
@@ -43,7 +43,7 @@ test("T61-P11 asking sends the plan on screen's own base, through tripApi.chat, 
 });
 
 test("T61-P12 Apply saves the proposal's own plan with the proposal's own base, as a chat version, through planWrite", () => {
-  const editor = between(view(), "const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && city === \"Baguio\" ? {", "} : null;");
+  const editor = between(view(), "const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && chatHere(city, flags.chatAllCities) ? {", "} : null;");
   assert.match(editor, /planWrite\("plan-chat-apply", \(\) => tripApi\.savePlan\(slug, (\w+)\.base, \1\.stored, "chat", \1\.whys\), \{ kind: "chat" \}, null, "chat"\)/,
     "never the base of a newer plan: a stale proposal must get the server's 409, not be re-based (review M1)");
   assert.doesNotMatch(chat(), /savePlan|tripApi/, "the dialog only asks the page to save");

@@ -43,6 +43,8 @@ export const DESTINATIONS: readonly string[] = ["Baguio", "Sagada"];
 export const PROVINCE: Readonly<Record<string, string>> = { Baguio: "Benguet", Sagada: "Mountain Province" };
 /** The plan's city: an answer from before TG-67, or a saved copy that old, has none, and is Baguio's. */
 export const cityOf = (it: { city?: string | null }): string => it.city || "Baguio";
+/** Whether a plan in `city` gets the chat: Baguio's always (TG-67), any other destination only with chatAllCities. */
+export const chatHere = (city: string, allCities: boolean): boolean => city === "Baguio" || (allCities && DESTINATIONS.includes(city));
 
 // Same pattern as SLUG in api/app/itineraries.py (a test compares them). An invalid slug shows the 404
 // without a request.
