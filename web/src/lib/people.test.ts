@@ -290,8 +290,19 @@ test("T58-W27 plain words, and no colour on a time", () => {
 test("T58-W29 fences: these files don't change, and TripPeople writes nothing to a wallet", () => {
   // TG-61 changes LevelMap.tsx (the plan editor), so it's no longer fenced here; TG-61 doesn't touch sw.js either
   // TG-62 GW2 changes sw.js (plan §1, G31); swStrategy.test.ts's GW2-SW1 and SW2 pin that change instead
-  const changed = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/package.json", "web/package-lock.json", "package.json", "package-lock.json"], { cwd: new URL("../", WEB), encoding: "utf8" });
-  assert.equal(changed.trim(), "");
+  // The package fence is PR-scoped, like the TG-43/44/47 fences: once TG-58 is on main it no longer applies
+  // (T23-G1 in itinerary.test.ts and T27-17 in pwa.test.ts still guard the dependency set)
+  let merged = false;
+  try {
+    execFileSync("git", ["cat-file", "-e", "origin/main:web/src/lib/people.test.ts"], { cwd: new URL("../", WEB), stdio: "ignore" });
+    merged = true;
+  } catch {
+    // TG-58 isn't on main yet (or origin/main isn't fetched): the fence applies
+  }
+  if (!merged) {
+    const changed = execFileSync("git", ["diff", "--name-only", "origin/main", "--", "web/package.json", "web/package-lock.json", "package.json", "package-lock.json"], { cwd: new URL("../", WEB), encoding: "utf8" });
+    assert.equal(changed.trim(), "");
+  }
   const src = box();
   assert.match(src, /walletApi\.get\(/, "the count comes from the wallet's GET");
   assert.equal(src.match(/walletApi\.\w+/g)?.filter((c) => c !== "walletApi.get").length ?? 0, 0);
