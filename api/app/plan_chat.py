@@ -40,6 +40,7 @@ router = APIRouter(tags=["plan-chat"])
 logger = logging.getLogger("tara_gala.api")
 
 NO_FIT = "The chatbot couldn't make a change that fits the plan. Try asking another way."
+KEYS_ONLY_PROPOSAL = "Here's the change. Tap Apply if you want it."
 CONFIG_STATUSES = {400, 401, 402, 403, 404}  # a broken deploy, as the planner logs it
 
 
@@ -84,6 +85,32 @@ def check_text(text: str, allowed_times: set[int], allowed_amounts: set[float]) 
         if _amount(m[1]) not in allowed_amounts:
             codes.append("made_up_fare")
     return list(dict.fromkeys(codes))
+
+
+# ---------------------------------------------------------------- row keys never show (the prompt alone doesn't hold)
+
+# guide.ROW_KEY and TODO_KEY, and the marks' row:<key> and todo:<nn>, as they can appear in a sentence
+_KEY = r"(?:row:)?d[1-9]-\d{2}|todo[-:]\d{2}"
+_KEY_AT = re.compile(rf"(?<![\w:-])(?:{_KEY})(?![\w-])", re.I)
+_KEY_GROUP = re.compile(rf"\s*[(\[]\s*(?:{_KEY})(?:\s*(?:,|/|&|and)\s*(?:{_KEY}))*\s*[)\]]", re.I)  # "(d1-02)", "[d2-07, todo:03]"
+
+
+def strip_keys(text: str) -> tuple[str, int]:
+    """The text with every row or to-do key taken out, and how many there were. Deterministic: a key in brackets goes
+    with its brackets, a bare one by itself, then the spaces and commas it leaves are tidied."""
+    n = len(_KEY_AT.findall(text))
+    if not n:
+        return text, 0
+    out = _KEY_AT.sub("", _KEY_GROUP.sub("", text))
+    out = re.sub(r"\(\s*\)|\[\s*\]", "", out)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\s+([,.;:!?)\]])", r"\1", out)
+    out = re.sub(r"([(\[])\s+", r"\1", out)
+    out = re.sub(r",\s*(?=[,.;:!?])", "", out)
+    out = re.sub(r"^\s*[,;:]\s*", "", out).strip()
+    if out[:1].islower() and text[:1].isalpha() and not text[:1].islower():
+        out = out[0].upper() + out[1:]  # "D1-01, the bus, stays." starts "The bus"
+    return out, n
 
 
 def _guide_times(g: guides.Guide) -> set[int]:
@@ -270,7 +297,11 @@ class Chat:
             answer = plan_ops.Reply.model_validate_json(reply.text)
         except ValidationError:
             return None, ["bad_json"], 0
-        ops = answer.ops
+        ops, why_keys = [], 0
+        for o in answer.ops:  # a why shows on the plan's change line, so it loses its keys too, before any check
+            why, k = strip_keys(o.why) if o.why else (o.why, 0)
+            ops.append(o.model_copy(update={"why": why}) if k else o)
+            why_keys += k
         if any((o.spot_id and o.spot_id not in ctx.spot_ids) or (o.trip_place_id and o.trip_place_id not in ctx.trip_place_ids)
                or (o.trip_id and o.trip_id not in ctx.trip_ids) for o in ops):
             return None, ["unknown_id"], len(ops)  # only ids it was given
@@ -299,7 +330,11 @@ class Chat:
         if codes:
             return None, list(dict.fromkeys(codes)), len(ops)
         outcome = "proposal" if proposal else "answer"
-        return ChatOut(reply=answer.reply, proposal=proposal, outcome=outcome, need_link=self._need_link(answer.need_link, cur.guide)), [], len(ops)
+        text, reply_keys = strip_keys(answer.reply)
+        text = text or (KEYS_ONLY_PROPOSAL if proposal else NO_FIT)  # a reply that was only keys
+        if reply_keys or why_keys:
+            logger.info("plan chat reply key stripped n=%d whys=%d", reply_keys, why_keys)
+        return ChatOut(reply=text, proposal=proposal, outcome=outcome, need_link=self._need_link(answer.need_link, cur.guide)), [], len(ops)
 
     @staticmethod
     def _need_link(n: plan_ops.NeedLink | None, g: guides.Guide) -> NeedLinkOut | None:

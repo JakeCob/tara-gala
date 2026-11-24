@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   SLUG_PATTERN,
+  cityOf,
   dateRange,
   dayHeading,
   formatPeso,
@@ -237,9 +238,12 @@ test("date range: en dash, open-ended, single day; any device time zone", () => 
   assert.equal(dateRange("2026-11-06", "2026-11-08"), `${formatTravelDate("2026-11-06")} – ${formatTravelDate("2026-11-08")}`);
 });
 
-test("share text has the dates only: never names, budget or vibe", () => {
+test("share text has the city and dates only: never names, budget or vibe", () => {
   assert.equal(shareText("2026-11-06", "2026-11-08"), "Our Baguio trip, Fri, Nov 6 – Sun, Nov 8");
   assert.equal(shareText("2026-11-06", null), "Our Baguio trip, From Fri, Nov 6");
+  // pre-trip check 2026-11-23: the plan's own city, so the Sagada plan doesn't say Baguio
+  assert.equal(shareText("2026-11-25", "2026-11-29", "Sagada"), "Our Sagada trip, Wed, Nov 25 – Sun, Nov 29");
+  assert.equal(shareText("2026-11-06", "2026-11-08", cityOf({})), "Our Baguio trip, Fri, Nov 6 – Sun, Nov 8", "an older plan with no city is Baguio's");
 });
 
 // --- per-card notices (ux.md 3.2) ------------------------------------------------------------------
@@ -378,7 +382,8 @@ test("share page is noindex and sends no referrer (review nit 3)", () => {
 test("ShareButton hands the tap to runShare with shareDeps(navigator) (RED re-audits B and C)", () => {
   const src = readFileSync(new URL("src/components/ShareButton.tsx", WEB), "utf8");
   assert.match(src, /runShare\(\s*shareDeps\(navigator\)\s*,/);
-  assert.match(src, /shareText\(/); // the payload text has dates only
+  assert.match(src, /shareText\(tripDate, returnDate, city\)/); // the payload text has the city and dates only
+  assert.match(readFileSync(new URL("src/components/ItineraryList.tsx", WEB), "utf8"), /<ShareButton [^>]*city=\{cityOf\(it\)\}/, "the plan's own city");
   // the component never builds or calls the browser APIs itself, so the fallbacks can't be bypassed
   assert.doesNotMatch(src, /navigator\.share|navigator\.clipboard/);
   assert.doesNotMatch(src, /\.writeText\(/);

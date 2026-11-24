@@ -21,7 +21,9 @@ test("T61-W11b every edit control checks for signal: Edit the plan, Change this 
   const v = view();
   assert.match(v, /const online = useSyncExternalStore\(subscribeOnline, \(\) => navigator\.onLine, \(\) => true\);/);
   assert.match(v, /aria-disabled=\{!online \|\| undefined\}/, "Edit the plan");
-  assert.match(v, /Editing needs signal\. You can still tick stops\./);
+  // pre-trip check 2026-11-23: a tick with no signal isn't saved ("No signal, so this wasn't saved"), so the note doesn't promise it
+  assert.match(v, /Editing and ticking stops need signal\./);
+  assert.doesNotMatch(v, /You can still tick stops/);
   assert.match(v, /const waiting = !!lost \|\| behind\(shown, clashAt, trip\.itinerary_slug\);/, "a lost answer, or a 409's newer plan not on screen yet");
   assert.match(v, /const editable = canEdit\(shown, trip, online, planWriting \|\| busy \|\| waiting\);/);
   assert.match(v, /can: editable,/);

@@ -173,9 +173,10 @@ export function dateRange(from: string, to: string | null): string {
   return `${travelDate(from)} – ${travelDate(to)}`;
 }
 
-/** Share-sheet text: the dates only. Never names, budget or vibe, which would land in a chat in plain view. */
-export function shareText(from: string, to: string | null): string {
-  return `Our Baguio trip, ${dateRange(from, to)}`;
+/** Share-sheet text: the plan's city and dates only. Never names, budget or vibe, which would land in a chat in plain view.
+ * Pre-trip check 2026-11-23: the city is the plan's own (cityOf), so a Sagada plan no longer says "Our Baguio trip". */
+export function shareText(from: string, to: string | null, city: string = "Baguio"): string {
+  return `Our ${city} trip, ${dateRange(from, to)}`;
 }
 
 export function dayHeading(d: DayOut): string {

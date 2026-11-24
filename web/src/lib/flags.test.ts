@@ -23,6 +23,7 @@ const ENV_KEYS: Record<keyof Flags, string> = {
   ambaganTab: "NEXT_PUBLIC_AMBAGAN_TAB",
   goingTo: "NEXT_PUBLIC_GOING_TO",
   kaloy: "NEXT_PUBLIC_KALOY",
+  chatGameUi: "NEXT_PUBLIC_CHAT_GAME_UI",
   chatAllCities: "NEXT_PUBLIC_CHAT_ALL_CITIES",
 };
 
@@ -66,7 +67,7 @@ afterEach(() => {
 
 test("defaults when unset", () => {
   clearFlagEnv();
-  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false, budgetLines: false, recapLinks: false, offlineExpenses: false, nextUp: false, aroundTab: false, ambaganTab: false, goingTo: false, kaloy: false, chatAllCities: false });
+  assert.deepEqual(FLAG_DEFAULTS, { plannerLive: false, premadeItineraries: true, realMap: false, serviceWorker: true, overworldMap: true, planEditing: false, walletSplits: false, walletMultiPayer: false, walletActivity: false, chatbotLive: false, budgetLines: false, recapLinks: false, offlineExpenses: false, nextUp: false, aroundTab: false, ambaganTab: false, goingTo: false, kaloy: false, chatGameUi: false, chatAllCities: false });
   assert.deepEqual(readFlags(), FLAG_DEFAULTS);
 });
 
@@ -154,4 +155,19 @@ test("T70-L13 NEXT_PUBLIC_OFFLINE_EXPENSES: default off, documented in README se
   for (const env of ["web/.env.example", ".env.example"]) {
     assert.match(readFileSync(new URL(env, root), "utf8"), /^NEXT_PUBLIC_OFFLINE_EXPENSES=false$/m, env);
   }
+});
+
+test("T75-G1 NEXT_PUBLIC_CHAT_GAME_UI: default off, documented in README section 7 (needs Kaloy) and web/.env.example", () => {
+  clearFlagEnv();
+  assert.equal(readFlags().chatGameUi, false);
+  setEnv("NEXT_PUBLIC_CHAT_GAME_UI", "true");
+  assert.equal(readFlags().chatGameUi, true);
+  const root = new URL("../../../", import.meta.url);
+  const readme = readFileSync(new URL("README.md", root), "utf8");
+  const section = readme.slice(readme.indexOf("## 7."));
+  const row = section.split("\n").find((line) => line.includes("`NEXT_PUBLIC_CHAT_GAME_UI`"));
+  assert.ok(row, "README section 7 has a row for NEXT_PUBLIC_CHAT_GAME_UI");
+  assert.ok(row.includes("`false`"), "default false");
+  assert.ok(row.includes("NEXT_PUBLIC_KALOY"), "it needs Kaloy on");
+  assert.match(readFileSync(new URL("web/.env.example", root), "utf8"), /^NEXT_PUBLIC_CHAT_GAME_UI=false$/m);
 });

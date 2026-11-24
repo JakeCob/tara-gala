@@ -312,6 +312,7 @@ const ALERT_BOXES: [file: string, marker: string, tone: "alert" | "alertText"][]
   ["src/components/StopChange.tsx", "{lead}", "alert"], // TG-61 ux §6: someone else changed the plan first
   ["src/components/LevelMap.tsx", "busNotice(", "alert"], // TG-61 ux §7: a bus in the plan isn't on the schedule any more
   ["src/components/PlanChat.tsx", "{lines.map(", "alertText"], // TG-61 PR 2 ux §10: the chat's states (limits, no signal, no fit, a clash)
+  ["src/components/KaloyChat.tsx", "{lines.map(", "alertText"], // TG-75: the game chat's same states, with Kaloy beside them
   ["src/components/wallet/ExpenseDetails.tsx", "{notice.text}", "alertText"], // TG-66 W2 ux §9: a comment write that failed, in the details
   ["src/components/wallet/WaitingList.tsx", "failedLine(", "alertText"], // TG-70 O3 ux §2: a waiting expense the wallet refused
   ["src/components/RecapView.tsx", "Couldn't open the recap", "alertText"], // TG-64 ux §4: the recap didn't load (no signal or the server)

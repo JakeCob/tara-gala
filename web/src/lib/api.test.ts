@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { API_URL, fetchPremade, postPlan, type PlanRequestBody } from "./api.ts";
+import { API_URL, fetchPremade, formatClass, postPlan, type PlanRequestBody } from "./api.ts";
 
 const BODY: PlanRequestBody = {
   date: "2026-11-06",
@@ -187,4 +187,11 @@ test("T21-N11 the default fetch is read at call time, so the test guard can catc
   assert.deepEqual(await fetchPremade(), { kind: "failed" });
   assert.deepEqual(leaked, [`${API_URL}/plan`, `${API_URL}/premade-itineraries`]);
   leaked = [];
+});
+
+test("formatClass: words in title case, and P2P in capitals (pre-trip check 2026-11-23)", () => {
+  assert.equal(formatClass("super_deluxe"), "Super Deluxe");
+  assert.equal(formatClass("regular_aircon"), "Regular Aircon");
+  assert.equal(formatClass("first_class"), "First Class");
+  assert.equal(formatClass("p2p"), "P2P");
 });
