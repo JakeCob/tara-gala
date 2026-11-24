@@ -489,3 +489,40 @@ export function forgetTrip(slug: string, store: Storage | null = storage()): Kno
   }
   return next;
 }
+
+// TG-75: the home page's Ask Kaloy asks the trip page it opens to start with the chat open. A note in this tab's
+// sessionStorage, read once: the address changes only after the trip page mounts on a client move, so ?chat=1 can't.
+const CHAT_KEY = "tg-chat-on-open";
+type Session = Pick<globalThis.Storage, "getItem" | "setItem" | "removeItem">;
+function session(): Session | null {
+  try {
+    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function askChatOnOpen(slug: string, store: Session | null = session()): void {
+  try {
+    store?.setItem(CHAT_KEY, slug);
+  } catch {
+    // blocked: the trip opens with the chat closed, and Ask Kaloy is there
+  }
+}
+
+/** Whether the home page asked this trip to open with the chat; doesn't clear the note (chatAskDone does). */
+export function chatAskedFor(slug: string, store: Session | null = session()): boolean {
+  try {
+    return store?.getItem(CHAT_KEY) === slug;
+  } catch {
+    return false;
+  }
+}
+
+export function chatAskDone(store: Session | null = session()): void {
+  try {
+    store?.removeItem(CHAT_KEY);
+  } catch {
+    // as above
+  }
+}

@@ -12,7 +12,7 @@ import { type GuideIn, type SpotLite, focusAfter, toStored } from "@/lib/planEdi
 import { type Done, type PlanVersion, type Said, barSaid, copyLine, justChanged, newerPlan, undoConfirm, undoLabel } from "@/lib/planLines";
 import { type Shown, acceptPlan, acceptSaved, afterPlanSaved, baseOf, canEdit, inStep, keepNewerPlan, shownFrom } from "@/lib/planState";
 import {
-  type Answer, type Hotel, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
+  type Answer, type Hotel, chatAskDone, chatAskedFor, type PlanBase, type PlanSaved, type Trip, type TripLoad, type TripResult, afterGet, afterSaved, answerFrom, datesLine, fetchFile, forgetTrip,
   hotelMapsUrl, hotelTime, mapSlot, planFailureMessage, planOutcome, rememberTrip, savedTrip, slugFromLink, toInput, toWallTime, tripApi, tripFailureMessage, tripProblem,
 } from "@/lib/trip";
 import { KaloyBeside } from "./Kaloy";
@@ -211,7 +211,9 @@ export default function TripView({ slug }: { slug: string }) {
   const [planSaid, setPlanSaid] = useState<Said | string>("");
   const [otherLine, setOtherLine] = useState<Said | string>("");
   // TG-61 PR 2: the chat is the page's, so it outlives the map's slot while a first copy loads (audit G1)
-  const [chatting, setChatting] = useState<{ ask: ChatAsk | null } | null>(null);
+  // TG-75: the home page's Ask Kaloy asked for this trip, so the chat starts open; it draws once the plan's chat can open
+  const [chatting, setChatting] = useState<{ ask: ChatAsk | null } | null>(() =>
+    flags.kaloyFabHome && typeof window !== "undefined" && chatAskedFor(slug) ? { ask: null } : null);
   const [linkAsk, setLinkAsk] = useState<{ need: NeedLink; n: number } | null>(null);
   const clashWait = useRef<"edit" | "undo" | null>(null);
   // e2e W-4 (ux §3.3): a save whose answer was lost may have landed. Editing waits until a live session answer says
@@ -292,6 +294,15 @@ export default function TripView({ slug }: { slug: string }) {
     navigator.serviceWorker?.addEventListener("controllerchange", keepCopies);
     return () => navigator.serviceWorker?.removeEventListener("controllerchange", keepCopies);
   }, [slug, planSlug]);
+
+  // TG-75: the floating Ask Kaloy shows once this plan's chat can open (the chatTools test below) with a plan on screen
+  const fabReady = flags.kaloy && flags.kaloyFab && flags.planEditing && flags.chatbotLive && chatHere(city, flags.chatAllCities) && !!shown;
+  // TG-75: the home page's note is read once: clear it as the trip mounts, so a reload or Back opens the chat closed
+  useEffect(() => {
+    if (!flags.kaloyFabHome || !chatAskedFor(slug)) return;
+    console.info("[tg-trip] chat open from=home-page");
+    chatAskDone();
+  }, [slug]);
 
   if (load.state === "loading") return <p className="text-sm text-muted">Opening the trip...</p>;
   if (load.state === "error") {
@@ -457,7 +468,7 @@ export default function TripView({ slug }: { slug: string }) {
     took: (n) => setLinkAsk((a) => (a?.n === n ? null : a)),
   } : null;
   // TG-75: the floating Ask Kaloy (owner, 2026-11-24): any time this plan has a chat, not only in Edit the plan
-  const fab = flags.kaloy && flags.kaloyFab && !!chatTools && !!shown;
+  const fab = fabReady && !!chatTools;
   const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {
     editing,
     city,
