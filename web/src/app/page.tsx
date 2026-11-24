@@ -1,5 +1,6 @@
 import { PageShell } from "@/components/pixel";
 import HomeDecor from "@/components/HomeDecor";
+import HomeKaloy from "@/components/HomeKaloy";
 import HowItWorks from "@/components/landing/HowItWorks";
 import PremadeTrips from "@/components/landing/PremadeTrips";
 import TitleScreen from "@/components/landing/TitleScreen";
@@ -16,6 +17,8 @@ export default function Home() {
         <p>Directions to your terminal are on each trip.</p>
         <p>Tara Gala isn&apos;t affiliated with any bus operator. Ingat sa biyahe!</p>
       </footer>
+      {/* TG-75: Ask Kaloy opens the last trip this phone opened, with the chat open; behind NEXT_PUBLIC_KALOY_FAB_HOME */}
+      <HomeKaloy />
     </PageShell>
   );
 }
