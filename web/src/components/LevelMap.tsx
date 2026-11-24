@@ -416,7 +416,7 @@ export default function LevelMap({ guide, marks, busy, problem, said, onOpenLeve
           <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm" aria-disabled={!editor.can || undefined} onClick={() => editor.can && setAdding(true)}>
             Add a stop to World {day.day}
           </PixelButton>
-          {editor.chat && (
+          {editor.chat && !(flags.kaloy && flags.kaloyFab) && (
             <PixelButton variant="secondary" className="inline-flex items-center px-4 text-sm"
               onClick={() => {
                 console.info("[tg-trip] chat open from=map");

@@ -3,7 +3,7 @@
 // self.TG_SW and the event handlers. Bump SW_VERSION on every change so old static and page caches rotate.
 // Nothing at the top level may touch caches or fetch.
 
-const SW_VERSION = "2026-11-24.1"; // bump on every edit of this file
+const SW_VERSION = "2026-11-24.2"; // bump on every edit of this file
 const DATA_VERSION = "1"; // bump only if the stored data format changes
 const NETWORK_TIMEOUT_MS = 4000;
 const SAVED_PAGE_TIMEOUT_MS = 1500; // a saved /i, /w or /t page is a shell: its data loads in the browser (TG-57)
@@ -13,6 +13,9 @@ const MSG_SKIP_WAITING = "SKIP_WAITING"; // page -> waiting SW
 const API_PATHS = [/^\/(trips|last-mile|terminals|spots|premade-itineraries)$/, /^\/itineraries\/[^/]+$/, /^\/wallets\/[0-9a-f]{32}$/, /^\/sessions\/[0-9a-f]{32}$/, /^\/sessions\/[0-9a-f]{32}\/budget$/, /^\/sessions\/[0-9a-f]{32}\/files\/[0-9a-f-]{36}$/];
 const SAVED_PAGE = /^\/(i|w|t)\/[^/]+\/?$/; // shared trip plans (TG-27), trip wallets (TG-50) and trips (TG-52)
 const STATIC_FILES = ["/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/offline.html"];
+// TG-75: Kaloy's sprites, saved at install so sad Kaloy shows with no signal even if this phone never drew him online.
+// Into the data cache, the one the /sprites/ route reads (strategyFor)
+const PRECACHE_SPRITES = ["/sprites/kaloy-idle.svg", "/sprites/kaloy-talk.svg", "/sprites/kaloy-think.svg", "/sprites/kaloy-happy.svg", "/sprites/kaloy-sad.svg", "/sprites/kaloy-walk-1.svg", "/sprites/kaloy-walk-2.svg"];
 const PRECACHE_PAGES = ["/", "/buses", "/baguio", "/plan", "/tickets", "/wallet", "/trip", "/around", "/around/baguio", "/around/sagada"]; // TG-71/72: /around and its city pages (a miss while the flag is off is only a warning); /plan too: the pages cache rotates with every SW_VERSION; /tickets for TG-50; /buses for TG-49's tabs; /trip for TG-52
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T/;
 
@@ -193,6 +196,7 @@ self.TG_SW = {
   MSG_DATA,
   MSG_SKIP_WAITING,
   PRECACHE_PAGES,
+  PRECACHE_SPRITES,
   STATIC_FILES,
   cacheNames,
   cachesToDelete,
@@ -243,7 +247,19 @@ async function precache() {
     if (r.status === "rejected") warn(`precache miss url=${assetList[i]} ${reasonOf(r.reason)}`);
   });
   const staticCount = results.filter((r) => r.status === "fulfilled").length;
-  log(`install v=${SW_VERSION} precached pages=${pageCount} static=${staticCount}`);
+  const data = await caches.open(names.data);
+  const sprites = await Promise.allSettled(
+    PRECACHE_SPRITES.map(async (path) => {
+      const res = await fetch(absolute(path), { cache: "reload" });
+      if (!shouldStore(res)) throw new Error(`status ${res.status}`);
+      await data.put(absolute(path), res);
+    }),
+  );
+  sprites.forEach((r, i) => {
+    if (r.status === "rejected") warn(`precache miss url=${PRECACHE_SPRITES[i]} ${reasonOf(r.reason)}`);
+  });
+  const spriteCount = sprites.filter((r) => r.status === "fulfilled").length;
+  log(`install v=${SW_VERSION} precached pages=${pageCount} static=${staticCount} sprites=${spriteCount}`);
 }
 
 /** Saved /i/* pages reference hashed chunks; copy them into the new static cache before the old one goes. */

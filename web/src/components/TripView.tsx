@@ -21,6 +21,7 @@ import NextUpCard, { NextUpLog, useManilaClock } from "./NextUpCard";
 import { SaidText } from "./PlanBits";
 import PlanEditBar from "./PlanEditBar";
 import PlanChat from "./PlanChat";
+import { KaloyFab } from "./KaloyFab";
 import type { ChatAsk, ChatTools, PlanEditor, SaveOutcome } from "./PlanEditor";
 import { HotelProof, PayoutQrs, SharedTickets } from "./TripFiles";
 import TripPeople from "./TripPeople";
@@ -455,6 +456,8 @@ export default function TripView({ slug }: { slug: string }) {
     need: linkAsk,
     took: (n) => setLinkAsk((a) => (a?.n === n ? null : a)),
   } : null;
+  // TG-75: the floating Ask Kaloy (owner, 2026-11-24): any time this plan has a chat, not only in Edit the plan
+  const fab = flags.kaloy && flags.kaloyFab && !!chatTools && !!shown;
   const editor: PlanEditor | undefined = flags.planEditing && theGuide ? {
     editing,
     city,
@@ -625,6 +628,8 @@ export default function TripView({ slug }: { slug: string }) {
           setLinkAsk((a) => ({ need, n: (a?.n ?? 0) + 1 })); // the map opens the find step once it's drawn
         }} />
     )}
+    {fab && !chatting && <KaloyFab onOpen={() => chatTools?.open(null)} />}
+    {fab && <div aria-hidden="true" className="h-20" />}
     {flags.nextUp && <NextUpLog today={clock.today} line={nextUpLog(clock.today, trip, up)} ready={slot !== "frame"} />}
     </div>
   );
