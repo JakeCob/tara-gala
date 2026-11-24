@@ -47,3 +47,20 @@ export function replyPose(at: { index: number; newest: number; sending: boolean;
   if (at.sending || at.index !== at.newest) return "idle";
   return at.cheer ? "happy" : "talk";
 }
+
+/**
+ * TG-75 the game-style chat (flags.chatGameUi, owner 2026-11-23: "looks like a plain form"): its own words, so
+ * KALOY_WORDS stays the owner's. privacy is PRIVACY_LINE made short; it still says where the chat is kept and where the
+ * messages go.
+ */
+export const KALOY_CHAT = {
+  /** Read before each of your bubbles by a screen reader: who said it never rests on side or colour */
+  you: "You:",
+  placeholder: "Message Kaloy",
+  privacy: "This chat stays on this phone. To answer, your messages and the plan go to an AI service.",
+} as const;
+
+/** Kaloy beside a limit, no-signal or no-fit box in the game chat: sad while it's the newest line, idle once it isn't */
+export function alertPose(at: { newest: boolean; sending: boolean }): KaloyPose {
+  return at.newest && !at.sending ? "sad" : "idle";
+}
