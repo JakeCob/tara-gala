@@ -11,6 +11,7 @@ import { BAGUIO_TERMINALS } from "./lastMile.ts";
 import { BAGUIO_IDLE_COPY, BAGUIO_IDLE_ROW } from "./baguioIdle.ts";
 import { SPRITES } from "./sprites.ts";
 import { FLAG_DEFAULTS } from "./flags.ts";
+import { EN } from "./words/en.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const ROOT = new URL("../../../", import.meta.url);
@@ -160,15 +161,18 @@ test("T72-A6 the pages: /around and /around/<city> only with the flag; /baguio g
 
 test("T72-A7 the title screen, the hero and the site description switch on the flag; off is today's", () => {
   const title = read("src/components/landing/TitleScreen.tsx");
-  assert.match(title, /\{flags\.aroundTab \? AROUND_WORDS\.tagline : "Manila to Baguio buses, straight from the operators\."\}/);
+  assert.match(title, /\{flags\.aroundTab \? <Say w=\{\(d\) => d\.title\.tagline\} \/> : "Manila to Baguio buses, straight from the operators\."\}/); // TG-74: EN.title.tagline is AROUND_WORDS.tagline
   // the start menu's whole block, so its order and the flags-off items (Find buses, Plan a trip, In Baguio, My trip) stay
+  // TG-74: the words are in words/en.ts and each item reads its key (EN pinned below)
   assert.ok(title.includes(`  const menu = [
-    { href: "/buses", label: "Find buses" },
-    ...(formMode(flags) !== "none" ? [{ href: "/plan", label: "Plan a trip" }] : []),
-    flags.aroundTab ? { href: "/around", label: AROUND_WORDS.menu } : { href: "/baguio", label: "In Baguio" }, // TG-71/72
-    { href: "/trip", label: "My trip" },
-    ...(flags.ambaganTab ? [{ href: "/wallet", label: "Ambagan" }] : []), // TG-72: the shared wallets' own way in
+    { href: "/buses", label: <Say w={(d) => d.title.findBuses} /> },
+    ...(formMode(flags) !== "none" ? [{ href: "/plan", label: <Say w={(d) => d.title.planTrip} /> }] : []),
+    flags.aroundTab ? { href: "/around", label: <Say w={(d) => d.title.gettingAround} /> } : { href: "/baguio", label: "In Baguio" }, // TG-71/72
+    { href: "/trip", label: <Say w={(d) => d.title.myTrip} /> },
+    ...(flags.ambaganTab ? [{ href: "/wallet", label: <Say w={(d) => d.title.ambagan} /> }] : []), // TG-72: the shared wallets' own way in
   ];`), "the start menu block");
+  assert.deepEqual([EN.title.findBuses, EN.title.planTrip, EN.title.gettingAround, EN.title.myTrip, EN.title.ambagan], ["Find buses", "Plan a trip", AROUND_WORDS.menu, "My trip", "Ambagan"]);
+  assert.equal(EN.title.tagline, AROUND_WORDS.tagline);
   // the /buses hero names no city with the flag on; off is today's line
   assert.match(read("src/components/landing/Hero.tsx"), /\{flags\.aroundTab \? AROUND_WORDS\.heroLine : "Every Manila to Baguio trip on file, with fares and where to book\."\}/);
   for (const f of ["src/app/layout.tsx", "src/app/manifest.ts"]) {

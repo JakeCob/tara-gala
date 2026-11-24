@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { PixelButton } from "@/components/pixel";
+import Say from "@/components/Say";
 import { THEME_EVENT, THEME_KEY, effectiveTheme, nextTheme, parseTheme, type Theme } from "@/lib/theme";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
@@ -50,8 +51,8 @@ export default function ThemeToggle() {
 
   return (
     <PixelButton variant="secondary" role="switch" aria-checked={dark} onClick={flip} className="inline-flex items-center gap-2 px-3 text-sm">
-      Dark mode
-      <span aria-hidden="true" className="text-muted">{theme === null ? "" : dark ? "On" : "Off"}</span>
+      <Say w={(d) => d.header.darkMode} />
+      <span aria-hidden="true" className="text-muted">{theme === null ? "" : dark ? <Say w={(d) => d.header.on} /> : <Say w={(d) => d.header.off} />}</span>
     </PixelButton>
   );
 }

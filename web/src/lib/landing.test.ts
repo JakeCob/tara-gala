@@ -11,6 +11,7 @@ import { decodePng, paletteProblems } from "./png.testutil.ts";
 import { PALETTE } from "./pixelSvg.ts";
 import { bannerReducer, initialBanner, type BannerEvent, type BannerState } from "./offline.ts";
 import type { PremadeResult, PremadeSummary } from "./api.ts";
+import { EN } from "./words/en.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
@@ -137,7 +138,8 @@ test("T49-T1 the title screen: a named start menu linking straight to each tab, 
   const src = source(sectionPath("TitleScreen"));
   assert.doesNotMatch(src, /use client|\buse(State|Effect|Ref|Memo|Callback|Reducer|SyncExternalStore)\b/, "a server component");
   assert.match(src, /<section\s+aria-labelledby="landing-title"/);
-  assert.match(src, /<TitleBlink>\s*<p aria-hidden="true" data-blinks="" className=\{PX\.pressStart\}>\s*Press start\s*<\/p>\s*<nav aria-label="Start menu" className="title-menu mt-1">/);
+  // TG-74: PRESS START's words are in the dictionary (words/en.ts)
+  assert.match(src, /<TitleBlink>\s*<p aria-hidden="true" data-blinks="" className=\{PX\.pressStart\}>\s*<Say w=\{\(d\) => d\.title\.pressStart\} \/>\s*<\/p>\s*<nav aria-label="Start menu" className="title-menu mt-1">/);
   assert.match(src, /<span data-cursor="" data-blinks="">/);
   assert.match(source(sectionPath("TitleBlink")), /<div className="flex flex-col items-center gap-3" data-blink=\{still \|\| lit \? "on" : "off"\}>/);
   const hrefs = [...src.matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
@@ -253,9 +255,16 @@ test("T46-C2 the title screen and the /buses hero say exactly what the owner app
   const text = copyIn([sectionPath("TitleScreen"), sectionPath("Hero")]);
   for (const s of [
     "Tara Gala", "Manila to Baguio buses, straight from the operators.", // the owner's S1 call: honest, no "every"
-    "Press start", "Find buses", "Plan a trip", "In Baguio", "My trip", // TG-52: the owner chose "My trip"
+    "In Baguio",
     "Every Manila to Baguio trip on file, with fares and where to book.", // "on file" keeps it honest
   ]) assert.ok(text.includes(s), s);
+  // TG-74: the title screen's other words moved to the dictionary; TitleScreen reads each key
+  assert.equal(EN.title.pressStart, "Press start");
+  assert.equal(EN.title.findBuses, "Find buses");
+  assert.equal(EN.title.planTrip, "Plan a trip");
+  assert.equal(EN.title.myTrip, "My trip"); // TG-52: the owner chose "My trip"
+  const src = source(sectionPath("TitleScreen"));
+  for (const key of ["pressStart", "findBuses", "planTrip", "myTrip"]) assert.ok(src.includes(`<Say w={(d) => d.title.${key}} />`), key);
 });
 
 test("T46-C3 the ready-made section says exactly ux §5.4, in every state", () => {

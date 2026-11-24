@@ -8,6 +8,7 @@ import SiteHeader from "@/components/SiteHeader";
 import TabBar from "@/components/TabBar";
 import { AROUND_WORDS } from "@/lib/around";
 import { flags } from "@/lib/flags";
+import { LANG_BOOT } from "@/lib/lang";
 import { THEME_BOOT } from "@/lib/theme";
 import "./globals.css";
 
@@ -33,11 +34,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    // suppressHydrationWarning: THEME_BOOT sets data-theme on the html element before React hydrates (TG-51)
+    // suppressHydrationWarning: THEME_BOOT sets data-theme (TG-51) and LANG_BOOT lang and data-lang (TG-74) on the html
+    // element before React hydrates
     <html lang="en" className={`${nunito.variable} ${sign.variable} ${signWide.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         {/* The saved light or dark choice, applied before first paint (TG-51) */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        {/* TG-74: the saved language (or the phone's, on the first visit) as <html lang data-lang>, before first paint */}
+        {flags.langPicker && <script dangerouslySetInnerHTML={{ __html: LANG_BOOT }} />}
       </head>
       {/* Phones keep room under the page for the fixed tab bar (TG-49) */}
       <body className="min-h-full flex flex-col pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">

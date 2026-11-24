@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PX, cx } from "@/components/pixel";
+import Say from "@/components/Say";
 import TabIcon from "@/components/TabIcon";
+import { useWords } from "@/components/useLang";
 import { flags } from "@/lib/flags";
 import { formMode } from "@/lib/planForm";
 import { currentTab, visibleTabs } from "@/lib/tabs";
@@ -18,14 +20,15 @@ export default function TabBar() {
   const switches = { around: flags.aroundTab, ambagan: flags.ambaganTab }; // TG-71/72
   const current = currentTab(usePathname(), switches);
   const tabs = visibleTabs(formMode(flags) !== "none", switches);
+  const words = useWords(); // TG-74: the nav's name; the visible words swap by CSS (Say)
   return (
-    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t-3 border-frame bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav aria-label={words.tabs.nav} className="fixed inset-x-0 bottom-0 z-30 border-t-3 border-frame bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
       <ul className={cx("mx-auto grid max-w-md", GRID_COLS[tabs.length] ?? "grid-cols-4")}>
         {tabs.map((tab) => (
           <li key={tab.href} className="grid">
             <Link href={tab.href} aria-current={current === tab.href ? "page" : undefined} className={cx(PX.tab, "min-h-16 flex-col gap-0.5 border-t-4 pt-1 text-sm")}>
               <TabIcon tab={tab.href} scale={2} />
-              {tab.label}
+              <Say w={(d) => d.tabs[tab.word]} />
             </Link>
           </li>
         ))}
