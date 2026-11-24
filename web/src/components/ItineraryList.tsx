@@ -5,6 +5,7 @@
 import { formatTime } from "@/lib/api";
 import { formatTravelDate } from "@/lib/direction";
 import {
+  cityOf,
   dateRange,
   dayHeading,
   formatPeso,
@@ -55,7 +56,7 @@ export default function ItineraryList({ itinerary: it, map = false }: { itinerar
         ) : (
           /* A guide's page is a whole row wide from lg: Copy link keeps its own width there */
           <div className={it.guide ? "lg:[&_button]:w-auto lg:[&_button]:self-start" : undefined}>
-            <ShareButton slug={it.share_slug} tripDate={it.trip_date} returnDate={it.return_date} />
+            <ShareButton slug={it.share_slug} tripDate={it.trip_date} returnDate={it.return_date} city={cityOf(it)} />
           </div>
         )}
       </PixelBox>

@@ -13,7 +13,7 @@ const STATUS: Record<ShareOutcome, string> = {
   manual: "Your phone didn't let us copy it. Press and hold the link to copy it.",
 };
 
-export default function ShareButton({ slug, tripDate, returnDate }: { slug: string; tripDate: string; returnDate: string | null }) {
+export default function ShareButton({ slug, tripDate, returnDate, city }: { slug: string; tripDate: string; returnDate: string | null; city: string }) {
   const [outcome, setOutcome] = useState<ShareOutcome | null>(null);
   const pending = useRef(false);
   const field = useRef<HTMLInputElement>(null);
@@ -33,11 +33,11 @@ export default function ShareButton({ slug, tripDate, returnDate }: { slug: stri
     try {
       const result = await runShare(shareDeps(navigator), {
         title: "Tara Gala trip plan",
-        text: shareText(tripDate, returnDate),
+        text: shareText(tripDate, returnDate, city),
         url,
       });
       // method is the first one tried; outcome shows the path (method=share outcome=copied is the fallback). No URL.
-      console.info("[tg-itinerary] share method=%s outcome=%s", canShare ? "share" : "copy", result);
+      console.info("[tg-itinerary] share method=%s outcome=%s city=%s", canShare ? "share" : "copy", result, city);
       setOutcome(result);
     } finally {
       pending.current = false;
