@@ -678,3 +678,56 @@ def test_t67_c5_with_the_chat_off_a_sagada_plan_gets_chat_off(sg_trip, client): 
     assert client.app.state.flags.chatbot_live is False
     r = ask(client, sg_trip)
     assert r.status_code == 503 and r.json() == {"detail": "chat_off"}
+
+
+# ---------------------------------------------------------------- row keys never reach the group (live check 2026-11-23)
+
+@pytest.mark.parametrize("text,want,n", [
+    # the live reply on prod's model: "…the 10:15 First Class row (d1-02)."
+    ("Your bus leaves Cubao at 10:15 AM on Fri Nov 6, the 10:15 First Class row (d1-02). It's booked as a bus row.",
+     "Your bus leaves Cubao at 10:15 AM on Fri Nov 6, the 10:15 First Class row. It's booked as a bus row.", 1),
+    ("I moved d2-08 to Day 3.", "I moved to Day 3.", 1),
+    ("Done (row:d2-07, todo:03).", "Done.", 2),
+    ("Ticked todo-03 for you.", "Ticked for you.", 1),
+    ("Moved the farm [d2-08] after lunch (d2-05).", "Moved the farm after lunch.", 2),
+    ("D1-01, the bus, stays.", "The bus, stays.", 1),
+    ("Sige, inilipat ko (d2-11) sa Day 3.", "Sige, inilipat ko sa Day 3.", 1),
+    ("d2-08", "", 1),
+    # not keys: a day, a time, a budget key, a word that only contains one
+    ("Day 2 at 10:30, d1 is fine, ad1-02x too, and the bus line stays.", "Day 2 at 10:30, d1 is fine, ad1-02x too, and the bus line stays.", 0),
+])
+def test_strip_keys_takes_out_row_and_todo_keys_and_tidies(text, want, n):
+    from app.plan_chat import strip_keys
+
+    assert strip_keys(text) == (want, n)
+
+
+def test_a_key_in_a_reply_is_stripped_and_logged(chat, t, client, caplog):
+    chat.script(say("Your bus home is the 16:15 row (d3-10).", []))
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    out = ask(client, t, "what time is our bus home?").json()
+    assert out["reply"] == "Your bus home is the 16:15 row." and out["outcome"] == "answer"
+    assert len(chat.llm.calls) == 1, "no extra model call"
+    assert [r.getMessage() for r in caplog.records if "key stripped" in r.getMessage()] == ["plan chat reply key stripped n=1 whys=0"]
+
+
+def test_a_key_in_a_why_is_stripped_on_the_proposal_and_its_change_line(chat, t, client):
+    chat.script(say("Tinanggal ko ang park (d2-05).", [op("remove_row", key="d2-05", why="You asked for a slower Day 2, so d2-05 goes")]))
+    p = ask(client, t, "gawin nating chill ang Day 2").json()
+    assert p["reply"] == "Tinanggal ko ang park."
+    why = "You asked for a slower Day 2, so goes"
+    assert p["proposal"]["whys"] == {"row:d2-05": why}
+    assert next(c for c in p["proposal"]["changes"] if c["word"] == "Dropped")["why"] == why
+
+
+def test_a_reply_that_was_only_a_key_gets_a_plain_line(chat, t, client):
+    chat.script(say("d2-08", [op("move_row", key="d2-08", day=3, after=None)]))
+    out = ask(client, t).json()
+    assert out["outcome"] == "proposal" and out["reply"] == "Here's the change. Tap Apply if you want it."
+
+
+def test_a_reply_with_no_key_is_unchanged_and_not_logged(chat, t, client, caplog):
+    chat.script(say("Day 2 starts with sunrise, then breakfast."))
+    caplog.set_level(logging.INFO, logger="tara_gala.api")
+    assert ask(client, t, "ano ang una sa Day 2?").json()["reply"] == "Day 2 starts with sunrise, then breakfast."
+    assert not [r for r in caplog.records if "key stripped" in r.getMessage()]
