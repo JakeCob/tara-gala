@@ -92,8 +92,13 @@ input[type=date]:focus-within { outline: 3px solid var(--focus); outline-offset:
 @utility title-menu {
   & [data-cursor] { visibility: hidden; }
   &:not(:hover, :focus-within) li:first-child [data-cursor], & a:is(:hover, :focus-visible) [data-cursor] { visibility: visible; }
+  & button:is(:hover, :focus-visible) [data-cursor] { visibility: visible; } /* TG-74: the Language row */
 }
 /* TitleBlink flips data-blink to flash PRESS START and the cursor; a keyboard focus ring keeps its cursor lit, so the
    focused item never loses its marker */
 [data-blink="off"] [data-blinks] { opacity: 0; }
 [data-blink="off"] a:focus-visible [data-blinks] { opacity: 1; }
+[data-blink="off"] button:focus-visible [data-blinks] { opacity: 1; }
+/* TG-74: Say renders every language's words; show the one matching <html data-lang>. No data-lang (the flag off, or
+   before the boot script) is English */
+html:not([data-lang="tl"]) [data-lang-only="tl"], html[data-lang="tl"] [data-lang-only="en"] { display: none; }

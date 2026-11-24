@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { THEME_BOOT, THEME_KEY, effectiveTheme, nextTheme, parseTheme } from "./theme.ts";
+import { EN } from "./words/en.ts";
 
 const WEB = new URL("../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, WEB), "utf8");
@@ -46,7 +47,8 @@ test("TH3 the boot script applies a saved choice and ignores anything else", () 
 
 test("TH4 layout runs the boot script in <head>; the switch is in every page's header (TG-49)", () => {
   const layout = read("src/app/layout.tsx");
-  assert.match(layout, /<head>\s*(\{\/\*[^]*?\*\/\}\s*)?<script dangerouslySetInnerHTML=\{\{ __html: THEME_BOOT \}\} \/>\s*<\/head>/);
+  // TG-74: the language's boot script may follow it, only with the flag on
+  assert.match(layout, /<head>\s*(\{\/\*[^]*?\*\/\}\s*)?<script dangerouslySetInnerHTML=\{\{ __html: THEME_BOOT \}\} \/>\s*(\{\/\*[^]*?\*\/\}\s*\{flags\.langPicker && <script dangerouslySetInnerHTML=\{\{ __html: LANG_BOOT \}\} \/>\}\s*)?<\/head>/);
   assert.match(layout, /<html\b[^>]*\bsuppressHydrationWarning\b[^>]*>/);
   assert.match(layout, /<SiteHeader \/>/);
   assert.match(read("src/components/SiteHeader.tsx"), /<div className="ml-auto">\s*<ThemeToggle \/>\s*<\/div>/);
@@ -56,7 +58,9 @@ test("TH5 the switch is a labelled switch, saves on this device only and logs no
   const src = read("src/components/ThemeToggle.tsx");
   assert.match(src, /role="switch"/);
   assert.match(src, /aria-checked=\{dark\}/);
-  assert.match(src, />\s*Dark mode\s*</);
+  assert.match(src, />\s*<Say w=\{\(d\) => d\.header\.darkMode\} \/>/); // TG-74: the words are in words/en.ts
+  assert.equal(EN.header.darkMode, "Dark mode");
+  assert.deepEqual([EN.header.on, EN.header.off], ["On", "Off"]);
   assert.match(src, /localStorage\.setItem\(THEME_KEY, next\)/);
   assert.doesNotMatch(src, /fetch\(|sessionStorage|indexedDB/);
   for (const call of src.match(/console\.\w+\([^)]*\)/g) ?? []) {

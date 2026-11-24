@@ -24,6 +24,7 @@ export type Flags = {
   kaloyFab: boolean;
   kaloyFabHome: boolean;
   chatAllCities: boolean;
+  langPicker: boolean;
 };
 
 export const FLAG_DEFAULTS: Flags = {
@@ -49,6 +50,7 @@ export const FLAG_DEFAULTS: Flags = {
   chatGameUi: false, // TG-75: the game-style Ask Kaloy chat (speech bubbles, a one-row text entry); needs kaloy; web only
   kaloyFab: false, // TG-75: the floating Ask Kaloy button at the trip page's bottom-right; needs kaloy and the chat's flags; web only
   kaloyFabHome: false, // TG-75: Ask Kaloy on the home page too: opens the last trip this phone opened, with the chat open; needs kaloyFab; web only
+  langPicker: false, // TG-74: the 🌐 language picker (English, Tagalog) in the header and on the title screen, and area 1's Tagalog words; off renders today's pages; web only
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -90,6 +92,7 @@ export function readFlags(): Flags {
     kaloyFab: parseFlag(process.env.NEXT_PUBLIC_KALOY_FAB, FLAG_DEFAULTS.kaloyFab),
     kaloyFabHome: parseFlag(process.env.NEXT_PUBLIC_KALOY_FAB_HOME, FLAG_DEFAULTS.kaloyFabHome),
     chatAllCities: parseFlag(process.env.NEXT_PUBLIC_CHAT_ALL_CITIES, FLAG_DEFAULTS.chatAllCities),
+    langPicker: parseFlag(process.env.NEXT_PUBLIC_LANG_PICKER, FLAG_DEFAULTS.langPicker),
   };
 }
 

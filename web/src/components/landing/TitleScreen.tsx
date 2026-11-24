@@ -1,7 +1,8 @@
 import Link from "next/link";
+import LangPicker from "@/components/LangPicker";
 import { MenuCursor, PageTitle, Placard, PX } from "@/components/pixel";
+import Say from "@/components/Say";
 import { flags } from "@/lib/flags";
-import { AROUND_WORDS } from "@/lib/around";
 import { formMode } from "@/lib/planForm";
 import { spriteSrc } from "@/lib/sprites";
 import TitleBlink from "./TitleBlink";
@@ -15,12 +16,13 @@ import TitleTraffic from "./TitleTraffic";
  * Traffic drives and drifts behind the menu (TitleTraffic), and the trio walks in front (TitleCast).
  */
 export default function TitleScreen() {
+  // TG-74: each label in the picked language (Say); the flags-off In Baguio stays English
   const menu = [
-    { href: "/buses", label: "Find buses" },
-    ...(formMode(flags) !== "none" ? [{ href: "/plan", label: "Plan a trip" }] : []),
-    flags.aroundTab ? { href: "/around", label: AROUND_WORDS.menu } : { href: "/baguio", label: "In Baguio" }, // TG-71/72
-    { href: "/trip", label: "My trip" },
-    ...(flags.ambaganTab ? [{ href: "/wallet", label: "Ambagan" }] : []), // TG-72: the shared wallets' own way in
+    { href: "/buses", label: <Say w={(d) => d.title.findBuses} /> },
+    ...(formMode(flags) !== "none" ? [{ href: "/plan", label: <Say w={(d) => d.title.planTrip} /> }] : []),
+    flags.aroundTab ? { href: "/around", label: <Say w={(d) => d.title.gettingAround} /> } : { href: "/baguio", label: "In Baguio" }, // TG-71/72
+    { href: "/trip", label: <Say w={(d) => d.title.myTrip} /> },
+    ...(flags.ambaganTab ? [{ href: "/wallet", label: <Say w={(d) => d.title.ambagan} /> }] : []), // TG-72: the shared wallets' own way in
   ];
   return (
     <section
@@ -45,10 +47,10 @@ export default function TitleScreen() {
             Tara Gala
           </PageTitle>
         </Placard>
-        <p className="text-sm font-semibold text-screen-ink md:text-base">{flags.aroundTab ? AROUND_WORDS.tagline : "Manila to Baguio buses, straight from the operators."}</p>
+        <p className="text-sm font-semibold text-screen-ink md:text-base">{flags.aroundTab ? <Say w={(d) => d.title.tagline} /> : "Manila to Baguio buses, straight from the operators."}</p>
         <TitleBlink>
           <p aria-hidden="true" data-blinks="" className={PX.pressStart}>
-            Press start
+            <Say w={(d) => d.title.pressStart} />
           </p>
           <nav aria-label="Start menu" className="title-menu mt-1">
             <ul className="pixel-box flex min-w-60 flex-col border-screen-ink bg-screen-paper py-2 text-left">
@@ -62,6 +64,12 @@ export default function TitleScreen() {
                   </Link>
                 </li>
               ))}
+              {/* TG-74: the 🌐 Language row opens English and Tagalog in a small box over the menu */}
+              {flags.langPicker && (
+                <li>
+                  <LangPicker place="title" />
+                </li>
+              )}
             </ul>
           </nav>
         </TitleBlink>
