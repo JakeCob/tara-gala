@@ -454,6 +454,7 @@ export default function TripView({ slug }: { slug: string }) {
     : stale ? "Saved, but the map hasn't caught up. Check your signal, then tap Reload the plan." : (!synced && !planWriting && shown) || waiting ? "Updating the map..." : planSaid;
   const chatTools: ChatTools | null = flags.planEditing && flags.chatbotLive && chatHere(city, flags.chatAllCities) ? {
     slug,
+    city,
     send: async (log, text, focus) => {
       const s = shownRef.current;
       if (!s) return { ok: false, why: "rejected" };

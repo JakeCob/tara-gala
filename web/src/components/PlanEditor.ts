@@ -21,6 +21,8 @@ export type ChatAsk = { text: string; focus: string | null };
 export type ChatTools = {
   /** This trip's slug: the log is kept per trip, on this phone only */
   slug: string;
+  /** TG-75: the plan's city (cityOf), for the how-to example's place */
+  city: string;
   send: (log: readonly Entry[], text: string, focus: string | null) => Promise<ChatAnswer>;
   apply: (proposal: ChatProposal) => Promise<SaveOutcome>;
   open: (ask: ChatAsk | null) => void;

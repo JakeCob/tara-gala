@@ -23,6 +23,7 @@ export type Flags = {
   chatGameUi: boolean;
   kaloyFab: boolean;
   kaloyFabHome: boolean;
+  kaloyTidy: boolean;
   chatAllCities: boolean;
 };
 
@@ -49,6 +50,7 @@ export const FLAG_DEFAULTS: Flags = {
   chatGameUi: false, // TG-75: the game-style Ask Kaloy chat (speech bubbles, a one-row text entry); needs kaloy; web only
   kaloyFab: false, // TG-75: the floating Ask Kaloy button at the trip page's bottom-right; needs kaloy and the chat's flags; web only
   kaloyFabHome: false, // TG-75: Ask Kaloy on the home page too: opens the last trip this phone opened, with the chat open; needs kaloyFab; web only
+  kaloyTidy: false, // TG-75: Kaloy's greeting example names the plan's own city, and his replies read times as 10:30 PM; web only
 };
 
 const TRUE_WORDS = ["1", "true", "yes", "on"];
@@ -89,6 +91,7 @@ export function readFlags(): Flags {
     chatGameUi: parseFlag(process.env.NEXT_PUBLIC_CHAT_GAME_UI, FLAG_DEFAULTS.chatGameUi),
     kaloyFab: parseFlag(process.env.NEXT_PUBLIC_KALOY_FAB, FLAG_DEFAULTS.kaloyFab),
     kaloyFabHome: parseFlag(process.env.NEXT_PUBLIC_KALOY_FAB_HOME, FLAG_DEFAULTS.kaloyFabHome),
+    kaloyTidy: parseFlag(process.env.NEXT_PUBLIC_KALOY_TIDY, FLAG_DEFAULTS.kaloyTidy),
     chatAllCities: parseFlag(process.env.NEXT_PUBLIC_CHAT_ALL_CITIES, FLAG_DEFAULTS.chatAllCities),
   };
 }

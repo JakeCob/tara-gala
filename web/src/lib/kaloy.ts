@@ -15,6 +15,35 @@ export const KALOY_WORDS = {
   },
 } as const;
 
+/** TG-75: the how-to line's example place, by the plan's city (cityOf). Every place named is a spots row of that city.
+ * A city with no example here gets one with no place in it, never Baguio's. */
+const HOW_TO_EXAMPLE: Readonly<Record<string, string>> = {
+  Baguio: '"add merienda after Burnham Park"',
+  Sagada: '"add lemon pie after Echo Valley"',
+};
+const HOW_TO_PLAIN = '"add merienda on Day 1"';
+
+/** Under his greeting with NEXT_PUBLIC_KALOY_TIDY: KALOY_WORDS.howTo with the plan's own city in the example */
+export function kaloyHowTo(city: string): string {
+  return KALOY_WORDS.howTo.replace('"add merienda after Burnham Park"', HOW_TO_EXAMPLE[city] ?? HOW_TO_PLAIN);
+}
+
+/** FIRST_MESSAGE (the chat with Kaloy off) the same way */
+export function firstMessageFor(city: string, first: string): string {
+  return first.replace('"add merienda after Burnham Park"', HOW_TO_EXAMPLE[city] ?? HOW_TO_PLAIN);
+}
+
+/**
+ * TG-75: a reply's 24-hour times read as the trip card's ("22:30" reads "10:30 PM", "08:00" reads "8:00 AM"). A time
+ * already followed by AM or PM, or part of a longer number (12:30:00, 1.22:30), is left alone.
+ */
+export function clock12(text: string): string {
+  return text.replace(/(?<![\d:.])([01]?\d|2[0-3]):([0-5]\d)(?![\d:])(?!\s?[AaPp]\.?[Mm]\b)/g, (_, h: string, m: string) => {
+    const hour = Number(h);
+    return `${hour % 12 === 0 ? 12 : hour % 12}:${m} ${hour < 12 ? "AM" : "PM"}`;
+  });
+}
+
 export type KaloyLang = keyof typeof KALOY_WORDS.greeting;
 export type KaloyPose = "idle" | "talk" | "think" | "happy" | "sad";
 export const KALOY_POSES: readonly KaloyPose[] = ["idle", "talk", "think", "happy", "sad"];
