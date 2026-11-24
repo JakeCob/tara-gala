@@ -3,13 +3,14 @@
 // self.TG_SW and the event handlers. Bump SW_VERSION on every change so old static and page caches rotate.
 // Nothing at the top level may touch caches or fetch.
 
-const SW_VERSION = "2026-11-24.2"; // bump on every edit of this file
+const SW_VERSION = "2026-11-25.1"; // bump on every edit of this file
 const DATA_VERSION = "1"; // bump only if the stored data format changes
 const NETWORK_TIMEOUT_MS = 4000;
 const SAVED_PAGE_TIMEOUT_MS = 1500; // a saved /i, /w or /t page is a shell: its data loads in the browser (TG-57)
 const SAVED_AT_HEADER = "X-TG-Saved-At";
 const MSG_DATA = "tg-sw:data"; // SW -> page, after every API GET handled
 const MSG_SKIP_WAITING = "SKIP_WAITING"; // page -> waiting SW
+const MSG_SAVE_PAGE = "tg-sw:save-page"; // page -> SW: save these /t, /i or /w pages, a first visit's own load came before this worker
 const API_PATHS = [/^\/(trips|last-mile|terminals|spots|premade-itineraries)$/, /^\/itineraries\/[^/]+$/, /^\/wallets\/[0-9a-f]{32}$/, /^\/sessions\/[0-9a-f]{32}$/, /^\/sessions\/[0-9a-f]{32}\/budget$/, /^\/sessions\/[0-9a-f]{32}\/files\/[0-9a-f-]{36}$/];
 const SAVED_PAGE = /^\/(i|w|t)\/[^/]+\/?$/; // shared trip plans (TG-27), trip wallets (TG-50) and trips (TG-52)
 const STATIC_FILES = ["/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/offline.html"];
@@ -188,6 +189,39 @@ function dataMessage(source, savedAt, url) {
   return { type: MSG_DATA, source, savedAt, url };
 }
 
+/**
+ * Pre-trip check 2026-11-25: on a phone's first visit the trip page loaded before this worker took over, so its
+ * navigation was never saved and the trip didn't open offline until a second visit. The page asks once the worker is
+ * in charge (TripView). Only a SAVED_PAGE path on this origin; a page already saved is left alone, since the next visit
+ * refreshes it. The page's own /_next/static files are saved too: a page this phone never drew (the trip's plan page)
+ * has chunks no visit fetched. Resolves "saved", "had", "ignored" or "status-<n>"; a network failure rejects.
+ */
+async function savePage(path, names) {
+  if (typeof path !== "string" || !SAVED_PAGE.test(path)) return "ignored";
+  const url = new URL(path, self.location.origin).href;
+  const data = await caches.open(names.data);
+  if (await data.match(url, { ignoreVary: true })) return "had";
+  const leftAt = nowIso();
+  const res = await fetch(url, { credentials: "same-origin" });
+  if (!shouldStore(res)) return `status-${res.status}`;
+  const html = await res.clone().text();
+  const statics = await caches.open(names.static);
+  const missing = [];
+  for (const asset of extractStaticUrls(html)) {
+    const at = new URL(asset, self.location.origin).href;
+    if (!(await caches.match(at))) missing.push(at);
+  }
+  const got = await Promise.allSettled(missing.map(async (at) => {
+    const r = await fetch(at);
+    if (!shouldStore(r)) throw new Error(`status-${r.status}`);
+    await statics.put(at, r);
+  }));
+  const failed = got.filter((g) => g.status === "rejected").length;
+  if (failed) return `assets-missing-${failed}`; // not saved: a page without its chunks would sit on "Loading..." offline
+  await data.put(url, stampSavedAt(res, leftAt));
+  return missing.length ? `saved assets=${missing.length}` : "saved";
+}
+
 self.TG_SW = {
   SW_VERSION,
   DATA_VERSION,
@@ -195,6 +229,7 @@ self.TG_SW = {
   SAVED_PAGE_TIMEOUT_MS,
   MSG_DATA,
   MSG_SKIP_WAITING,
+  MSG_SAVE_PAGE,
   PRECACHE_PAGES,
   PRECACHE_SPRITES,
   STATIC_FILES,
@@ -210,6 +245,7 @@ self.TG_SW = {
   networkFirst,
   extractStaticUrls,
   dataMessage,
+  savePage,
 };
 
 // ---------------------------------------------------------------- event glue (thin; logic lives above)
@@ -395,6 +431,20 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === MSG_SKIP_WAITING) {
     log(`skip-waiting v=${SW_VERSION}`);
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === MSG_SAVE_PAGE && Array.isArray(event.data.paths)) {
+    const names = cacheNames(SW_VERSION);
+    const paths = event.data.paths.slice(0, 2); // the trip and its plan
+    event.waitUntil(
+      Promise.all(
+        paths.map((path) =>
+          savePage(path, names).then(
+            (result) => log(`save-page path=${typeof path === "string" ? path.slice(0, 80) : "?"} result=${result}`),
+            (err) => warn(`save-page failed error=${errorName(err)}`),
+          ),
+        ),
+      ),
+    );
   }
 });
 
