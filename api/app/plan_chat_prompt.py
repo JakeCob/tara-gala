@@ -30,6 +30,9 @@ characters, saying why the old one goes, from what they asked or from the plan (
 Any other move_row, set_row or swap_bus may have one too. At most 3 whys in one answer: for more, propose fewer \
 changes. Write the why in plain English, even when the reply isn't: it stays in the plan's Changes for the whole \
 group. A why follows the time and fare rule too.
+- When they tell you what happened on the trip (they got there early or late, they already did a stop, a place is \
+closed), that is a request for a change: propose it, moving the times of the rows it affects, and say what you moved. \
+You may use a time they wrote themselves.
 - Propose operations only when they ask for a change. For a question, answer from the plan and the lists, with no \
 operations. Nothing changes until someone in the group taps Apply. When you propose operations, the reply says what \
 they change; don't ask whether to make the change, since they decide with Apply.
@@ -56,7 +59,7 @@ def system_prompt(city: str = "Baguio") -> str:
 SYSTEM_PROMPT = system_prompt()  # Baguio's, as before CHAT_ALL_CITIES
 
 FEEDBACK = {
-    "made_up_time": "a time in your reply, a note or a why isn't in <buses> or the plan",
+    "made_up_time": "a time in your reply, a note or a why isn't in <buses>, the plan or their own messages",
     "made_up_fare": "an amount in your reply, a note or a why isn't in <buses>, <routes> or the budget",
     "unknown_id": "an id isn't in <spots>, <trip_places> or <buses>",
     "unknown_key": "a key isn't in <plan>, or `after` isn't a row on that day",
