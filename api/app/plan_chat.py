@@ -68,6 +68,23 @@ def amounts_in(text: str) -> set[float]:
     return {_amount(x) for x in _NUMBER.findall(text or "")}
 
 
+def said_times(turns: list[Turn]) -> set[int]:
+    """Times the group wrote in their own turns ("we got here at 9 am"). Kaloy may repeat them and plan by them: the
+    rule is that he never makes one up, and theirs isn't made up (owner, 2026-11-26, on the trip). Bus times still
+    come only from <buses>, since swap_bus takes a trip id."""
+    said: set[int] = set()
+    for t in turns:
+        if t.role == "user":
+            spans = []
+            for m in _TIME.finditer(t.text):
+                spans.append(m.span())
+                said |= _clock(int(m[1]), int(m[2]), m[3])
+            for m in _HOUR.finditer(t.text):
+                if not any(a <= m.start() < b for a, b in spans):
+                    said |= _clock(int(m[1]), 0, m[2])
+    return said
+
+
 def check_text(text: str, allowed_times: set[int], allowed_amounts: set[float]) -> list[str]:
     """made_up_time and made_up_fare: every time and peso amount written in `text` must be one it was given.
     Spelled-out ones ("alas-kwatro") pass: the stated gap (plan.md §11), which the prompt forbids."""
@@ -252,6 +269,7 @@ class Chat:
         except plan_edit.Refused as r:
             return _flat(r.status, r.body["detail"])
         turns = [Turn(m.role, m.text) for m in body.messages]
+        said = said_times(turns)
         model, used_fallback, codes = s.model, False, []
         for attempt in range(1, s.max_attempts + 1):
             if not self.spend.allowed():  # before every attempt, not once a message (review S3)
@@ -266,7 +284,7 @@ class Chat:
                 logger.log(level, "plan chat failed share_slug=%s code=chat_failed kind=%s status=%s attempts=%d", share_slug, e.kind, e.status, attempt)
                 return _flat(502, "chat_failed")
             cost = self.spend.add(reply.model, reply.input_tokens, reply.output_tokens)
-            out, codes_now, n_ops = self._judge(reply, session_id, cur, ctx, body.base)
+            out, codes_now, n_ops = self._judge(reply, session_id, cur, ctx, body.base, said)
             logger.info(
                 "plan chat share_slug=%s attempt=%d/%d model=%s stop=%s input_tokens=%d output_tokens=%d cost_usd=%.4f "
                 "spent_today_usd=%.4f ops=%d proposal=%s whys=%d codes=%s",
@@ -285,7 +303,8 @@ class Chat:
         logger.warning("plan chat failed share_slug=%s code=no_fit attempts=%d last_codes=%s", share_slug, attempt, ",".join(codes) or "-")
         return ChatOut(reply=NO_FIT, proposal=None, outcome="no_fit", need_link=None)
 
-    def _judge(self, reply, session_id, cur: plan_edit.Current, ctx, base: plan_edit.Base) -> tuple[ChatOut | None, list[str], int]:
+    def _judge(self, reply, session_id, cur: plan_edit.Current, ctx, base: plan_edit.Base,
+               said: frozenset[int] | set[int] = frozenset()) -> tuple[ChatOut | None, list[str], int]:
         """The answer, if this reply is good; else None and the codes to retry with."""
         if reply.stop == "refused":
             return None, ["refused"], 0
@@ -308,7 +327,7 @@ class Chat:
         stored, codes = plan_ops.apply(cur.guide, ops) if ops else (None, [])
         if codes:
             return None, codes, len(ops)
-        times, amounts = ctx.times | _guide_times(cur.guide), ctx.amounts | _budget_amounts(cur.guide)
+        times, amounts = ctx.times | _guide_times(cur.guide) | said, ctx.amounts | _budget_amounts(cur.guide)
         proposal = None
         if ops:
             try:

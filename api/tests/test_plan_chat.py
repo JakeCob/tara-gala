@@ -356,6 +356,33 @@ def test_a_made_up_time_in_a_note_is_retried(chat, t, client):  # P5, M5
     assert out["outcome"] == "proposal" and "made_up_time" in chat.llm.calls[1]["user"]
 
 
+def test_a_time_the_group_wrote_can_be_used(chat, t, client):  # owner, 2026-11-26: "I arrived early at 9 am"
+    from app.plan_chat import said_times
+    from app.plan_chat_prompt import Turn
+
+    assert said_times([Turn("user", "I arrived early at 9 am, then 10:15")]) == {9 * 60, 10 * 60 + 15, 22 * 60 + 15}
+    assert said_times([Turn("assistant", "The bus is at 11 PM")]) == set(), "only the group's own turns"
+    chat.script(say("You got here at 9 AM, so I moved it to 9:30 AM.", [op("set_row", key="d2-08", time="09:30")]))
+    out = ask(client, t, "I arrived early at 9 am. kindly adjust the itinerary").json()
+    assert out["outcome"] == "proposal" and len(chat.llm.calls) == 1
+
+
+def test_a_time_nobody_wrote_is_still_retried(chat, t, client):  # the rule holds for every other time
+    lie = say("The last bus home is at 11 PM")
+    chat.script(lie, lie, lie)
+    out = ask(client, t, "we got here at 9 am, anong oras ang last bus?",
+              history=[{"role": "user", "text": "hi"}, {"role": "assistant", "text": "Bus at 11 PM"}]).json()
+    assert out["outcome"] == "no_fit" and "made_up_time" in chat.llm.calls[1]["user"]
+
+
+def test_the_prompt_says_a_trip_update_is_a_change():
+    from app.plan_chat_prompt import FEEDBACK, SYSTEM_PROMPT, system_prompt
+
+    for prompt in (SYSTEM_PROMPT, system_prompt("Sagada")):
+        assert "When they tell you what happened on the trip" in prompt and "a time they wrote themselves" in prompt
+    assert "their own messages" in FEEDBACK["made_up_time"]
+
+
 # ---------------------------------------------------------------- P6: Taglish
 
 def test_a_taglish_reply_is_passed_through_as_written(chat, t, client):  # P6, B43
